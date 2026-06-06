@@ -1299,75 +1299,103 @@ function createHitChurn(system, position, heading) {
   const right = getRightVector(heading);
 
   for (let i = 0; i < 4; i += 1) {
-    const column = MeshBuilder.CreateCylinder(`torpedo_hit_column_${system.hits}_${i}`, {
-      diameter: 0.38 + i * 0.1,
-      height: 0.9 + i * 0.42,
-      tessellation: 8
-    }, system.scene);
-    column.parent = system.root;
-    column.material = system.materials.foam;
-    column.position.copyFrom(position.add(forward.scale(i * 0.08)).add(new Vector3(0, 0.28 + i * 0.15, 0)));
+    const wall = createJaggedHitWall(`torpedo_hit_wall_${system.hits}_${i}`, system.scene, 1.0 + i * 0.28, 1.35 + i * 0.32, i);
+    wall.parent = system.root;
+    wall.material = system.materials.foam;
+    wall.position.copyFrom(position.add(forward.scale(i * 0.06)).add(new Vector3(0, 0.45 + i * 0.12, 0)));
+    wall.rotation.y = heading + i * 0.74;
     system.hitEffects.push({
-      mesh: column,
+      mesh: wall,
       age: 0,
-      lifetime: 0.8 + i * 0.08,
-      origin: column.position.clone(),
-      velocity: new Vector3(0, 0.6 + i * 0.14, 0),
-      gravity: 0.48 + i * 0.08,
-      baseScale: column.scaling.clone(),
-      grow: new Vector3(0.7 + i * 0.14, 0.3, 0.7 + i * 0.14),
+      lifetime: 0.72 + i * 0.08,
+      origin: wall.position.clone(),
+      velocity: new Vector3(0, 0.42 + i * 0.12, 0),
+      gravity: 0.28 + i * 0.05,
+      baseScale: wall.scaling.clone(),
+      grow: new Vector3(0.55 + i * 0.1, 0.28 + i * 0.05, 0.55 + i * 0.1),
       seed: i
     });
   }
 
-  for (let i = 0; i < 14; i += 1) {
-    const side = i % 2 === 0 ? -1 : 1;
-    const row = Math.floor(i / 2);
-    const patch = MeshBuilder.CreateBox(`torpedo_hit_spray_${system.hits}_${i}`, {
-      width: 0.22 + row * 0.04,
-      height: 0.018,
-      depth: 0.5 + row * 0.08
-    }, system.scene);
-    patch.parent = system.root;
-    patch.material = system.materials.foam;
-    patch.position.copyFrom(position.add(right.scale(side * (0.18 + row * 0.12))).subtract(forward.scale(row * 0.08)).add(new Vector3(0, 0.06, 0)));
-    patch.rotation.y = heading + side * (0.55 + row * 0.05);
+  for (let i = 0; i < 6; i += 1) {
+    const surface = createJaggedSurfacePatch(`torpedo_hit_surface_${system.hits}_${i}`, system.scene, 0.85 + i * 0.28, 0.62 + i * 0.18, i);
+    surface.parent = system.root;
+    surface.material = system.materials.foam;
+    surface.position.copyFrom(position.add(forward.scale((i - 2) * 0.08)).add(right.scale(((i % 3) - 1) * 0.12)).add(new Vector3(0, 0.055 + i * 0.002, 0)));
+    surface.rotation.y = heading + i * 0.43;
     system.hitEffects.push({
-      mesh: patch,
+      mesh: surface,
       age: 0,
-      lifetime: 1.05 + row * 0.05,
-      origin: patch.position.clone(),
-      velocity: right.scale(side * (0.55 + row * 0.15)).add(forward.scale(-0.1 - row * 0.03)).add(new Vector3(0, 0.32 + row * 0.05, 0)),
-      gravity: 0.42,
-      baseScale: patch.scaling.clone(),
-      grow: new Vector3(1.3 + row * 0.12, 0.2, 0.8 + row * 0.08),
-      seed: i + 10
+      lifetime: 1.18 + i * 0.06,
+      origin: surface.position.clone(),
+      velocity: forward.scale(-0.04 * i).add(right.scale(((i % 2) * 2 - 1) * 0.08)).add(new Vector3(0, 0.02, 0)),
+      gravity: 0.03,
+      baseScale: surface.scaling.clone(),
+      grow: new Vector3(2.1 + i * 0.25, 0.12, 1.5 + i * 0.18),
+      seed: i + 20
     });
   }
 
-  for (let i = 0; i < 5; i += 1) {
-    const ring = MeshBuilder.CreateTorus(`torpedo_hit_ring_${system.hits}_${i}`, {
-      diameter: 0.52 + i * 0.24,
-      thickness: 0.035,
-      tessellation: 20
-    }, system.scene);
-    ring.parent = system.root;
-    ring.material = system.materials.foam;
-    ring.position.copyFrom(position.add(new Vector3(0, 0.045 + i * 0.004, 0)));
-    ring.rotation.x = Math.PI / 2;
-    ring.rotation.y = heading + i * 0.08;
+  for (let i = 0; i < 18; i += 1) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const row = Math.floor(i / 2);
+    const spray = createJaggedHitWall(`torpedo_hit_spray_${system.hits}_${i}`, system.scene, 0.24 + row * 0.03, 0.46 + row * 0.06, i + 10);
+    spray.parent = system.root;
+    spray.material = system.materials.foam;
+    spray.position.copyFrom(position.add(right.scale(side * (0.2 + row * 0.13))).subtract(forward.scale(row * 0.07)).add(new Vector3(0, 0.18 + row * 0.035, 0)));
+    spray.rotation.y = heading + side * (0.82 + row * 0.06);
     system.hitEffects.push({
-      mesh: ring,
+      mesh: spray,
       age: 0,
-      lifetime: 1.2 + i * 0.08,
-      origin: ring.position.clone(),
-      velocity: new Vector3(0, 0.02, 0),
-      gravity: 0.04,
-      baseScale: ring.scaling.clone(),
-      grow: new Vector3(3.6 + i * 0.45, 3.6 + i * 0.45, 3.6 + i * 0.45),
-      seed: i + 30
+      lifetime: 0.92 + row * 0.04,
+      origin: spray.position.clone(),
+      velocity: right.scale(side * (0.62 + row * 0.12)).add(forward.scale(-0.14 - row * 0.035)).add(new Vector3(0, 0.46 + row * 0.045, 0)),
+      gravity: 0.52,
+      baseScale: spray.scaling.clone(),
+      grow: new Vector3(0.9 + row * 0.08, 0.38, 0.65 + row * 0.06),
+      seed: i + 10
     });
   }
+}
+
+function createJaggedHitWall(name, scene, width, height, seed) {
+  const positions = [0, 0, 0];
+  const indices = [];
+  const points = 14;
+
+  for (let i = 0; i < points; i += 1) {
+    const angle = (i / points) * Math.PI * 2;
+    const jag = 0.74 + pseudoRandom(seed + i, 151) * 0.48;
+    const x = Math.cos(angle) * width * 0.5 * jag;
+    const y = Math.sin(angle) * height * 0.5 * (0.82 + pseudoRandom(seed + i, 163) * 0.36);
+    positions.push(x, y, 0);
+  }
+
+  for (let i = 1; i <= points; i += 1) {
+    indices.push(0, i, i === points ? 1 : i + 1);
+  }
+
+  return createMeshFromData(name, scene, positions, indices);
+}
+
+function createJaggedSurfacePatch(name, scene, width, depth, seed) {
+  const positions = [0, 0, 0];
+  const indices = [];
+  const points = 18;
+
+  for (let i = 0; i < points; i += 1) {
+    const angle = (i / points) * Math.PI * 2;
+    const jag = 0.62 + pseudoRandom(seed + i, 181) * 0.68;
+    const x = Math.cos(angle) * width * 0.5 * jag;
+    const z = Math.sin(angle) * depth * 0.5 * (0.7 + pseudoRandom(seed + i, 193) * 0.6);
+    positions.push(x, 0, z);
+  }
+
+  for (let i = 1; i <= points; i += 1) {
+    indices.push(0, i, i === points ? 1 : i + 1);
+  }
+
+  return createMeshFromData(name, scene, positions, indices);
 }
 
 function disposeTorpedo(torpedo) {
