@@ -882,7 +882,7 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
 
   const forward = getForwardVector(heading);
   const right = getRightVector(heading);
-  const tubeX = tubeSide * 0.32;
+  const tubeX = tubeSide * 0.22;
   const tubeStartZ = 2.45;
   const muzzleZ = 3.05;
   const launchStart = shipRoot.position
@@ -980,7 +980,7 @@ function createLaunchPuff(system, position, heading, tubeSide) {
     patch.position.copyFrom(
       position
         .add(forward.scale(i * 0.08))
-        .add(right.scale(tubeSide * (0.02 + i * 0.025)))
+        .add(right.scale(tubeSide * (0.01 + i * 0.012)))
         .add(new Vector3(0, -0.02, 0))
     );
     patch.rotation.y = heading + tubeSide * (0.15 + i * 0.05);
@@ -1015,7 +1015,7 @@ function createMuzzleEffect(system, position, heading, tubeSide) {
     jet.position.copyFrom(
       position
         .add(forward.scale(0.18 + i * 0.16))
-        .add(right.scale(tubeSide * (0.02 + i * 0.018)))
+        .add(right.scale(tubeSide * (0.006 + i * 0.008)))
         .add(new Vector3(0, 0.0, 0))
     );
     jet.rotation.y = heading + tubeSide * (0.05 + i * 0.025);
