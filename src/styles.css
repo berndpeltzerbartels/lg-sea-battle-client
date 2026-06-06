@@ -123,6 +123,62 @@ body {
   color: #9be5df;
 }
 
+.depth-gauge {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.depth-gauge strong {
+  margin-top: 0;
+}
+
+.depth-gauge-track {
+  position: relative;
+  width: 14px;
+  height: 54px;
+  border: 1px solid rgb(255 255 255 / 34%);
+  border-radius: 999px;
+  background:
+    linear-gradient(to top, #9be5df 0 12%, rgb(247 251 255 / 28%) 12% 100%),
+    rgb(5 27 40 / 44%);
+}
+
+.depth-gauge-track::after {
+  position: absolute;
+  left: -3px;
+  right: -3px;
+  bottom: calc(var(--depth-ratio) * 100%);
+  height: 3px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 0 10px rgb(255 255 255 / 72%);
+  content: "";
+  transform: translateY(50%);
+}
+
+.depth-gauge-track span {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  height: 1px;
+  background: rgb(255 255 255 / 42%);
+}
+
+.depth-gauge-track span:nth-child(1) {
+  bottom: 25%;
+}
+
+.depth-gauge-track span:nth-child(2) {
+  bottom: 50%;
+}
+
+.depth-gauge-track span:nth-child(3) {
+  bottom: 75%;
+}
+
 .telegraph {
   position: absolute;
   right: 24px;

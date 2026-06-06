@@ -37,6 +37,7 @@ scene.fogDensity = 0.007;
 
 const speedValue = document.getElementById("speedValue");
 const depthValue = document.getElementById("depthValue");
+const depthGauge = document.querySelector(".depth-gauge");
 const engineValue = document.getElementById("engineValue");
 const telegraphScale = document.getElementById("telegraphScale");
 
@@ -209,7 +210,8 @@ scene.onBeforeRenderObservable.add(() => {
   speedValue.textContent = displayedSpeed.toFixed(1);
   engineValue.textContent = engineOrders[engineOrder].label;
   updateTelegraphSteps(telegraphSteps, engineOrder);
-  depthValue.textContent = nextWaterSafety.isBlocked ? "Ground" : `${waterDepth.toFixed(0)} m`;
+  depthValue.textContent = nextWaterSafety.isBlocked ? "Ground" : `${waterDepth.meters.toFixed(0)} m`;
+  depthGauge?.style.setProperty("--depth-ratio", String(waterDepth.ratio));
 });
 
 engine.runRenderLoop(() => {
@@ -964,6 +966,7 @@ function getWaterSafety(position, zones) {
 }
 
 function getWaterDepth(position, zones) {
+  const maxDepth = 110;
   let nearestCoastDistance = Number.POSITIVE_INFINITY;
 
   for (const zone of zones) {
@@ -974,11 +977,14 @@ function getWaterDepth(position, zones) {
   }
 
   if (nearestCoastDistance <= 0) {
-    return 0;
+    return { meters: 0, ratio: 0 };
   }
 
-  const openWater = smoothstep(0, 1.6, nearestCoastDistance);
-  return 2 + openWater * 98;
+  const ratio = clamp(1 - Math.exp(-nearestCoastDistance / 1.25), 0, 1);
+  return {
+    meters: 2 + ratio * (maxDepth - 2),
+    ratio
+  };
 }
 
 function getWaterEscapeVector(position, zones) {
