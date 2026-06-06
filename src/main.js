@@ -152,6 +152,7 @@ const worldLandmasses = [
   { kind: "island", name: "southern_outer_stack", x: 332, z: -698, radius: 20, heightScale: 1.05, rx: 28, rz: 21 }
 ];
 const radarOcclusionScale = 0.72;
+const mapTileSize = 1200;
 
 const materials = createMaterials(scene);
 const world = new TransformNode("world", scene);
@@ -399,7 +400,8 @@ function drawMapInstrument(canvas, playerPosition, landZones) {
   const ctx = prepareInstrumentCanvas(canvas);
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
-  const bounds = getMapBounds(landZones, 70);
+  const tile = getMapTile(playerPosition);
+  const bounds = getMapTileBounds(tile);
   const scale = Math.min(width / (bounds.maxX - bounds.minX), height / (bounds.maxZ - bounds.minZ));
 
   ctx.clearRect(0, 0, width, height);
@@ -421,7 +423,7 @@ function drawMapInstrument(canvas, playerPosition, landZones) {
     ctx.stroke();
   }
 
-  landZones.forEach((zone) => {
+  landZones.filter((zone) => zoneIntersectsBounds(zone, bounds)).forEach((zone) => {
     const point = worldToMapPoint(zone, bounds, width, height, scale);
     drawInstrumentEllipse(ctx, point.x, point.y, getZoneVisualRx(zone) * scale, getZoneVisualRz(zone) * scale, "rgba(98, 129, 89, 0.95)", "rgba(238, 218, 164, 0.74)");
   });
@@ -431,7 +433,7 @@ function drawMapInstrument(canvas, playerPosition, landZones) {
 
   ctx.fillStyle = "rgba(247, 251, 255, 0.78)";
   ctx.font = "700 10px Inter, sans-serif";
-  ctx.fillText("World", 9, height - 10);
+  ctx.fillText(`Tile ${tile.x},${tile.z}`, 9, height - 10);
 }
 
 function drawRadarInstrument(canvas, statusElement, playerPosition, enemyPosition, landZones, heading) {
@@ -629,18 +631,32 @@ function distance2D(a, b) {
   return Math.sqrt(dx * dx + dz * dz);
 }
 
-function getMapBounds(landZones, padding) {
-  return landZones.reduce((bounds, zone) => ({
-    minX: Math.min(bounds.minX, zone.x - getZoneVisualRx(zone) - padding),
-    maxX: Math.max(bounds.maxX, zone.x + getZoneVisualRx(zone) + padding),
-    minZ: Math.min(bounds.minZ, zone.z - getZoneVisualRz(zone) - padding),
-    maxZ: Math.max(bounds.maxZ, zone.z + getZoneVisualRz(zone) + padding)
-  }), {
-    minX: Number.POSITIVE_INFINITY,
-    maxX: Number.NEGATIVE_INFINITY,
-    minZ: Number.POSITIVE_INFINITY,
-    maxZ: Number.NEGATIVE_INFINITY
-  });
+function getMapTile(position) {
+  return {
+    x: Math.floor((position.x + mapTileSize * 0.5) / mapTileSize),
+    z: Math.floor((position.z + mapTileSize * 0.5) / mapTileSize)
+  };
+}
+
+function getMapTileBounds(tile) {
+  const centerX = tile.x * mapTileSize;
+  const centerZ = tile.z * mapTileSize;
+
+  return {
+    minX: centerX - mapTileSize * 0.5,
+    maxX: centerX + mapTileSize * 0.5,
+    minZ: centerZ - mapTileSize * 0.5,
+    maxZ: centerZ + mapTileSize * 0.5
+  };
+}
+
+function zoneIntersectsBounds(zone, bounds) {
+  return (
+    zone.x + getZoneVisualRx(zone) >= bounds.minX &&
+    zone.x - getZoneVisualRx(zone) <= bounds.maxX &&
+    zone.z + getZoneVisualRz(zone) >= bounds.minZ &&
+    zone.z - getZoneVisualRz(zone) <= bounds.maxZ
+  );
 }
 
 function getZoneVisualRx(zone) {
