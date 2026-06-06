@@ -277,6 +277,7 @@ let cameraPosition = camera.position.clone();
 let cameraTarget = boat.root.position.clone();
 let time = 0;
 let nextRamHitTime = 0;
+let ramShake = 0;
 const maxRudderDegrees = 35;
 const rudderStepDegrees = 5;
 const rudderHoldDegreesPerSecond = 18;
@@ -359,7 +360,8 @@ scene.onBeforeRenderObservable.add(() => {
   if (ramHit) {
     nextRamHitTime = time + 2.2;
     torpedoSystem.hits += 1;
-    createHitChurn(torpedoSystem, ramHit.position, heading);
+    ramShake = 1;
+    enemyMotion.rollImpulse += ramHit.side * 0.42;
     speed *= -0.18;
     turnVelocity *= 0.25;
     enemyMotion.speed *= 0.35;
@@ -372,10 +374,12 @@ scene.onBeforeRenderObservable.add(() => {
     .subtract(forward.scale(cameraDistance))
     .add(new Vector3(0, cameraHeight, 0));
   const desiredTarget = boat.root.position.add(forward.scale(24.0)).add(new Vector3(0, 0.95, 0));
+  const shakeOffset = getRamShakeOffset(heading, ramShake, time);
+  ramShake = Math.max(0, ramShake - dt * 2.6);
 
-  cameraPosition.copyFrom(desiredCameraPosition);
+  cameraPosition.copyFrom(desiredCameraPosition.add(shakeOffset));
   cameraTarget.copyFrom(desiredTarget);
-  camera.position.copyFrom(desiredCameraPosition);
+  camera.position.copyFrom(cameraPosition);
   camera.setTarget(desiredTarget);
   camera.rotation.x = -Math.abs(camera.rotation.x);
   document.body.dataset.camera = `${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)}`;
@@ -799,6 +803,7 @@ function createEnemyMotion(root, bowWake, heading, engineOrder) {
     heading,
     speed: 0,
     turnVelocity: 0,
+    rollImpulse: 0,
     engineOrder,
     rudder: 0,
     timers: []
@@ -845,6 +850,7 @@ function updateEnemyMotion(motion, dt, time) {
   const targetTurnVelocity = motion.rudder * turnStrength * clamp(Math.abs(motion.speed) / 5.2, 0.12, 1);
   motion.turnVelocity += (targetTurnVelocity - motion.turnVelocity) * Math.min(1, dt * 1.5);
   motion.heading += motion.turnVelocity * dt;
+  motion.rollImpulse += (0 - motion.rollImpulse) * Math.min(1, dt * 1.8);
 
   const forward = new Vector3(Math.sin(motion.heading), 0, Math.cos(motion.heading));
   motion.root.position.addInPlace(forward.scale(motion.speed * dt));
@@ -852,7 +858,7 @@ function updateEnemyMotion(motion, dt, time) {
   motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
     Math.sin(time * 1.9 + 0.8) * 0.015,
     motion.heading,
-    -motion.turnVelocity * 0.42 + Math.sin(time * 1.4) * 0.01
+    -motion.turnVelocity * 0.42 + motion.rollImpulse + Math.sin(time * 1.4) * 0.01
   );
   updateEnemyBowWake(motion.bowWake, motion.speed, time);
 
@@ -1194,7 +1200,21 @@ function getPlayerRamHit(playerPosition, playerHeading, playerSpeed, enemyMotion
   ];
 
   const hitPoint = bowProbePoints.find((point) => pointHitsEnemyHull(point, enemyMotion, 0.16));
-  return hitPoint ? { position: hitPoint } : null;
+  if (!hitPoint) return null;
+
+  const enemyLocalHit = getEnemyHitLocalPoint(hitPoint, enemyMotion.root.position, enemyMotion.heading);
+  return {
+    position: hitPoint,
+    side: enemyLocalHit.right >= 0 ? -1 : 1
+  };
+}
+
+function getRamShakeOffset(heading, strength, time) {
+  if (strength <= 0.001) return Vector3.Zero();
+
+  const right = getRightVector(heading);
+  const pulse = Math.sin(time * 42) * strength;
+  return right.scale(pulse * 0.08).add(new Vector3(0, strength * 0.035, 0));
 }
 
 function torpedoHitsEnemy(torpedoPosition, enemyMotion) {
