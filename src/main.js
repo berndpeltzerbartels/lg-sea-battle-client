@@ -160,10 +160,10 @@ scene.onBeforeRenderObservable.add(() => {
     .add(new Vector3(0, cameraHeight, 0));
   const desiredTarget = boat.root.position.add(forward.scale(24.0)).add(new Vector3(0, 0.95, 0));
 
-  cameraPosition = Vector3.Lerp(cameraPosition, desiredCameraPosition, 1 - Math.pow(0.035, dt));
-  cameraTarget = Vector3.Lerp(cameraTarget, desiredTarget, 1 - Math.pow(0.02, dt));
-  camera.position.copyFrom(cameraPosition);
-  camera.setTarget(cameraTarget);
+  cameraPosition.copyFrom(desiredCameraPosition);
+  cameraTarget.copyFrom(desiredTarget);
+  camera.position.copyFrom(desiredCameraPosition);
+  camera.setTarget(desiredTarget);
   camera.rotation.x = -Math.abs(camera.rotation.x);
   document.body.dataset.camera = `${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)}`;
   document.body.dataset.cameraRotation = `${camera.rotation.x.toFixed(2)},${camera.rotation.y.toFixed(2)},${camera.rotation.z.toFixed(2)}`;
@@ -282,27 +282,27 @@ function createFoamPatches(scene, materials, parent) {
   const patches = [];
   const area = 180;
   const count = 128;
+  const windAngle = Math.PI * 0.56;
 
   for (let i = 0; i < count; i += 1) {
     const seed = seededFoam(i);
     const patch = MeshBuilder.CreateBox(`foam_patch_${i}`, {
-      width: 0.06 + seed.width * 0.05,
+      width: 0.025 + seed.width * 0.018,
       height: 0.012,
-      depth: 0.55 + seed.length * 1.25
+      depth: 0.42 + seed.length * 0.85
     }, scene);
     patch.parent = root;
     patch.material = materials.foam;
     patch.position.y = 0.13 + seed.lift * 0.025;
-    patch.rotation.y = seed.angle;
-    patch.scaling.x = 1 + seed.width * 1.2;
+    patch.rotation.y = windAngle;
+    patch.scaling.x = 1 + seed.width * 0.55;
     patches.push({
       mesh: patch,
       x: (seed.x - 0.5) * area,
       z: (seed.z - 0.5) * area,
-      driftX: -0.06 + seed.driftX * 0.12,
-      driftZ: 0.12 + seed.driftZ * 0.18,
-      spin: -0.025 + seed.spin * 0.05,
-      baseAngle: seed.angle
+      driftX: Math.sin(windAngle) * (0.12 + seed.driftX * 0.08),
+      driftZ: Math.cos(windAngle) * (0.12 + seed.driftZ * 0.08),
+      baseAngle: windAngle
     });
   }
 
@@ -316,7 +316,7 @@ function updateFoamPatches(foam, center, time) {
     patch.mesh.position.x = center.x + wrapCentered(patch.x + time * patch.driftX - center.x, foam.area);
     patch.mesh.position.z = center.z + wrapCentered(patch.z + time * patch.driftZ - center.z, foam.area);
     patch.mesh.position.y = 0.13 + Math.sin(time * 0.9 + patch.x * 0.07 + patch.z * 0.03) * 0.012;
-    patch.mesh.rotation.y = patch.baseAngle + Math.sin(time * patch.spin) * 0.18;
+    patch.mesh.rotation.y = patch.baseAngle;
 
     const distanceFromCenter = Math.max(
       Math.abs(patch.mesh.position.x - center.x),
