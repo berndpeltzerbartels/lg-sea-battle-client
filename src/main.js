@@ -259,14 +259,15 @@ function createEnemyMotion(root, bowWake, heading, engineOrder) {
 
 function startLocalEnemyEventSource(motion) {
   const events = [
-    { delay: 1400, engineOrder: 3, rudder: 0.12 },
-    { delay: 4800, engineOrder: 4, rudder: -0.35 },
-    { delay: 8600, engineOrder: 5, rudder: 0.28 },
-    { delay: 12600, engineOrder: 3, rudder: 0.08 },
-    { delay: 16800, engineOrder: 2, rudder: -0.18 },
-    { delay: 20500, engineOrder: 3, rudder: -0.26 },
-    { delay: 25500, engineOrder: 4, rudder: 0.18 },
-    { delay: 31800, engineOrder: 3, rudder: 0 }
+    { delay: 1000, engineOrder: 3, rudder: 0.1 },
+    { delay: 3600, engineOrder: 7, rudder: -0.2 },
+    { delay: 7600, engineOrder: 3, rudder: -0.08 },
+    { delay: 11600, engineOrder: 5, rudder: 0.22 },
+    { delay: 15400, engineOrder: 2, rudder: 0 },
+    { delay: 19000, engineOrder: 8, rudder: -0.18 },
+    { delay: 22400, engineOrder: 3, rudder: -0.25 },
+    { delay: 28600, engineOrder: 4, rudder: 0.16 },
+    { delay: 34000, engineOrder: 3, rudder: 0 }
   ];
 
   events.forEach((event) => {
@@ -289,7 +290,7 @@ function applyEnemyMotionEvent(motion, event) {
 
 function updateEnemyMotion(motion, dt, time) {
   const targetSpeed = engineOrders[motion.engineOrder].speed;
-  const speedResponse = Math.abs(targetSpeed) > Math.abs(motion.speed) ? 0.32 : 0.62;
+  const speedResponse = Math.abs(targetSpeed) > Math.abs(motion.speed) ? 0.58 : 0.78;
   motion.speed += (targetSpeed - motion.speed) * Math.min(1, dt * speedResponse);
 
   const turnStrength = motion.speed >= 0 ? 0.22 : -0.16;
@@ -309,6 +310,7 @@ function updateEnemyMotion(motion, dt, time) {
 
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
   document.body.dataset.enemyEngineOrder = engineOrders[motion.engineOrder].label;
+  document.body.dataset.enemySpeed = motion.speed.toFixed(1);
 }
 
 function updateEnemyBowWake(wake, speed, time) {
@@ -335,10 +337,10 @@ function updateEnemyBowWake(wake, speed, time) {
 }
 
 function getVisibleWakeRows(strength) {
-  if (strength >= 0.62) return 5;
-  if (strength >= 0.48) return 4;
-  if (strength >= 0.32) return 3;
-  if (strength >= 0.18) return 2;
+  if (strength >= 0.52) return 5;
+  if (strength >= 0.38) return 4;
+  if (strength >= 0.24) return 3;
+  if (strength >= 0.12) return 2;
   return 1;
 }
 
