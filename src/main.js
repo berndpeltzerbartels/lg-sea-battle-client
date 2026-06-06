@@ -9,6 +9,7 @@ import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
+import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import "@babylonjs/core/Meshes/Builders/boxBuilder";
 import "@babylonjs/core/Meshes/Builders/cylinderBuilder";
@@ -66,7 +67,7 @@ blockedWaters.push(
   { x: -92, z: -26, rx: 22, rz: 17 }
 );
 
-const boat = createBoat(scene, materials);
+const boat = createPlayerBow(scene, materials);
 boat.root.position = new Vector3(0, 0.28, 0);
 document.body.dataset.meshCount = String(scene.meshes.length);
 
@@ -150,8 +151,8 @@ scene.onBeforeRenderObservable.add(() => {
   materials.water.diffuseTexture.uOffset += dt * 0.01;
   materials.water.diffuseTexture.vOffset += dt * 0.018;
 
-  const cameraDistance = -1.45;
-  const cameraHeight = 1.38;
+  const cameraDistance = 0.65;
+  const cameraHeight = 1.48;
   const desiredCameraPosition = boat.root.position
     .subtract(forward.scale(cameraDistance))
     .add(new Vector3(0, cameraHeight, 0));
@@ -265,6 +266,144 @@ function createWaterTexture(scene) {
 
   texture.update(false);
   return texture;
+}
+
+function createPlayerBow(scene, materials, name = "player_bow") {
+  const root = new TransformNode(name, scene);
+
+  const hull = createTaperedHull(`${name}_hull`, scene, [
+    { z: -1.35, width: 1.7, top: 0.72, bottom: 0.12 },
+    { z: 2.55, width: 1.18, top: 0.68, bottom: 0.02 },
+    { z: 5.15, width: 0.14, top: 0.52, bottom: 0.0 }
+  ]);
+  hull.parent = root;
+  hull.material = materials.hull;
+
+  const deck = createTaperedDeck(`${name}_foredeck`, scene, [
+    { z: -1.08, width: 1.35, y: 0.78 },
+    { z: 2.55, width: 0.96, y: 0.76 },
+    { z: 4.75, width: 0.18, y: 0.62 }
+  ]);
+  deck.parent = root;
+  deck.material = materials.deck;
+
+  const rearDeck = MeshBuilder.CreateBox(`${name}_rear_deck`, { width: 1.42, height: 0.12, depth: 0.72 }, scene);
+  rearDeck.parent = root;
+  rearDeck.position.y = 0.82;
+  rearDeck.position.z = -1.02;
+  rearDeck.material = materials.deck;
+
+  for (let i = 0; i < 2; i += 1) {
+    const tube = MeshBuilder.CreateCylinder(`${name}_torpedo_tube_${i}`, {
+      diameter: 0.18,
+      height: 2.65,
+      tessellation: 12
+    }, scene);
+    tube.parent = root;
+    tube.position.x = i === 0 ? -0.32 : 0.32;
+    tube.position.y = 0.98;
+    tube.position.z = 1.55;
+    tube.rotation.x = Math.PI / 2;
+    tube.material = materials.funnel;
+
+    const cap = MeshBuilder.CreateCylinder(`${name}_tube_cap_${i}`, {
+      diameter: 0.21,
+      height: 0.08,
+      tessellation: 12
+    }, scene);
+    cap.parent = root;
+    cap.position.x = tube.position.x;
+    cap.position.y = tube.position.y;
+    cap.position.z = 2.9;
+    cap.rotation.x = Math.PI / 2;
+    cap.material = materials.funnel;
+  }
+
+  for (let i = 0; i < 2; i += 1) {
+    const rail = MeshBuilder.CreateBox(`${name}_deck_edge_${i}`, { width: 0.08, height: 0.16, depth: 3.55 }, scene);
+    rail.parent = root;
+    rail.position.x = i === 0 ? -0.68 : 0.68;
+    rail.position.y = 0.86;
+    rail.position.z = 0.75;
+    rail.material = materials.hull;
+  }
+
+  const hatch = MeshBuilder.CreateBox(`${name}_deck_hatch`, { width: 0.46, height: 0.11, depth: 0.52 }, scene);
+  hatch.parent = root;
+  hatch.position.y = 0.91;
+  hatch.position.z = -0.36;
+  hatch.material = materials.cabin;
+
+  return { root };
+}
+
+function createTaperedHull(name, scene, sections) {
+  const positions = [];
+  const indices = [];
+
+  sections.forEach((section) => {
+    const halfWidth = section.width / 2;
+    positions.push(
+      -halfWidth, section.top, section.z,
+      halfWidth, section.top, section.z,
+      -halfWidth, section.bottom, section.z,
+      halfWidth, section.bottom, section.z
+    );
+  });
+
+  for (let i = 0; i < sections.length - 1; i += 1) {
+    const a = i * 4;
+    const b = (i + 1) * 4;
+    pushQuad(indices, a, a + 1, b + 1, b);
+    pushQuad(indices, a + 2, b + 2, b + 3, a + 3);
+    pushQuad(indices, a, b, b + 2, a + 2);
+    pushQuad(indices, a + 1, a + 3, b + 3, b + 1);
+  }
+
+  pushQuad(indices, 0, 2, 3, 1);
+  const last = (sections.length - 1) * 4;
+  pushQuad(indices, last, last + 1, last + 3, last + 2);
+
+  return createMeshFromData(name, scene, positions, indices);
+}
+
+function createTaperedDeck(name, scene, sections) {
+  const positions = [];
+  const indices = [];
+
+  sections.forEach((section) => {
+    const halfWidth = section.width / 2;
+    positions.push(
+      -halfWidth, section.y, section.z,
+      halfWidth, section.y, section.z
+    );
+  });
+
+  for (let i = 0; i < sections.length - 1; i += 1) {
+    const a = i * 2;
+    const b = (i + 1) * 2;
+    pushQuad(indices, a, a + 1, b + 1, b);
+  }
+
+  return createMeshFromData(name, scene, positions, indices);
+}
+
+function pushQuad(indices, a, b, c, d) {
+  indices.push(a, b, c, a, c, d);
+}
+
+function createMeshFromData(name, scene, positions, indices) {
+  const mesh = new Mesh(name, scene);
+  const normals = [];
+  VertexData.ComputeNormals(positions, indices, normals);
+
+  const vertexData = new VertexData();
+  vertexData.positions = positions;
+  vertexData.indices = indices;
+  vertexData.normals = normals;
+  vertexData.applyToMesh(mesh);
+
+  return mesh;
 }
 
 function createBoat(scene, materials, name = "boat") {
