@@ -208,7 +208,7 @@ scene.onBeforeRenderObservable.add(() => {
     speed = 0;
     turnVelocity *= 0.4;
   } else if (nextWaterSafety.isShallow) {
-    speed *= 0.985;
+    speed *= 0.994;
   }
 
   const bob = Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035;
@@ -328,7 +328,7 @@ function drawMapInstrument(canvas, playerPosition, landZones) {
 
   landZones.forEach((zone) => {
     const point = worldToMapPoint(zone, bounds, width, height, scale);
-    drawInstrumentEllipse(ctx, point.x, point.y, zone.rx * scale, zone.rz * scale, "rgba(98, 129, 89, 0.95)", "rgba(238, 218, 164, 0.74)");
+    drawInstrumentEllipse(ctx, point.x, point.y, getZoneVisualRx(zone) * scale, getZoneVisualRz(zone) * scale, "rgba(98, 129, 89, 0.95)", "rgba(238, 218, 164, 0.74)");
   });
 
   const playerPoint = clampInstrumentPoint(worldToMapPoint(playerPosition, bounds, width, height, scale), width, height, 6);
@@ -364,7 +364,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, enemyPositio
 
   landZones.forEach((zone) => {
     const point = worldToRadarPoint(zone, playerPosition, centerX, centerY, scale, heading);
-    drawInstrumentEllipse(ctx, point.x, point.y, zone.rx * scale, zone.rz * scale, "rgba(96, 124, 83, 0.92)", "rgba(232, 217, 159, 0.4)", -heading);
+    drawInstrumentEllipse(ctx, point.x, point.y, getZoneVisualRx(zone) * scale, getZoneVisualRz(zone) * scale, "rgba(96, 124, 83, 0.92)", "rgba(232, 217, 159, 0.4)", -heading);
   });
 
   const enemyDistance = distance2D(playerPosition, enemyPosition);
@@ -483,7 +483,7 @@ function drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, r
   const dx = zone.x - playerPosition.x;
   const dz = zone.z - playerPosition.z;
   const distance = Math.sqrt(dx * dx + dz * dz);
-  const landRadius = Math.max(zone.rx, zone.rz) * radarOcclusionScale;
+  const landRadius = Math.max(getZoneVisualRx(zone), getZoneVisualRz(zone)) * radarOcclusionScale;
 
   if (distance < 1 || distance - landRadius > radarRange) return;
 
@@ -513,8 +513,8 @@ function lineIntersectsEllipse(from, to, zone) {
   const dz = to.z - from.z;
   const ox = from.x - zone.x;
   const oz = from.z - zone.z;
-  const rx = zone.rx * radarOcclusionScale;
-  const rz = zone.rz * radarOcclusionScale;
+  const rx = getZoneVisualRx(zone) * radarOcclusionScale;
+  const rz = getZoneVisualRz(zone) * radarOcclusionScale;
   const a = (dx * dx) / (rx * rx) + (dz * dz) / (rz * rz);
   const b = 2 * ((ox * dx) / (rx * rx) + (oz * dz) / (rz * rz));
   const c = (ox * ox) / (rx * rx) + (oz * oz) / (rz * rz) - 1;
@@ -536,16 +536,32 @@ function distance2D(a, b) {
 
 function getMapBounds(landZones, padding) {
   return landZones.reduce((bounds, zone) => ({
-    minX: Math.min(bounds.minX, zone.x - zone.rx - padding),
-    maxX: Math.max(bounds.maxX, zone.x + zone.rx + padding),
-    minZ: Math.min(bounds.minZ, zone.z - zone.rz - padding),
-    maxZ: Math.max(bounds.maxZ, zone.z + zone.rz + padding)
+    minX: Math.min(bounds.minX, zone.x - getZoneVisualRx(zone) - padding),
+    maxX: Math.max(bounds.maxX, zone.x + getZoneVisualRx(zone) + padding),
+    minZ: Math.min(bounds.minZ, zone.z - getZoneVisualRz(zone) - padding),
+    maxZ: Math.max(bounds.maxZ, zone.z + getZoneVisualRz(zone) + padding)
   }), {
     minX: Number.POSITIVE_INFINITY,
     maxX: Number.NEGATIVE_INFINITY,
     minZ: Number.POSITIVE_INFINITY,
     maxZ: Number.NEGATIVE_INFINITY
   });
+}
+
+function getZoneVisualRx(zone) {
+  return zone.visualRx ?? zone.rx;
+}
+
+function getZoneVisualRz(zone) {
+  return zone.visualRz ?? zone.rz;
+}
+
+function getZoneShallowRx(zone) {
+  return zone.shallowRx ?? zone.rx * 1.08;
+}
+
+function getZoneShallowRz(zone) {
+  return zone.shallowRz ?? zone.rz * 1.08;
 }
 
 function createEnemyMotion(root, bowWake, heading, engineOrder) {
@@ -1269,11 +1285,18 @@ function createWorldLandmasses(landmasses, scene, materials, parent) {
 }
 
 function getLandZone(land) {
+  const navigationScale = land.kind === "island" ? 0.58 : 1;
+  const shallowScale = land.kind === "island" ? 0.9 : 1.12;
+
   return {
     x: land.x,
     z: land.z,
-    rx: land.rx,
-    rz: land.rz,
+    rx: land.rx * navigationScale,
+    rz: land.rz * navigationScale,
+    visualRx: land.rx,
+    visualRz: land.rz,
+    shallowRx: land.rx * shallowScale,
+    shallowRz: land.rz * shallowScale,
     name: land.name,
     kind: land.kind,
     fjords: land.fjords ?? []
@@ -1358,7 +1381,7 @@ function createIsland(name, position, radius, heightScale, scene, materials, par
     stack.parent = islandRoot;
     stack.position.x = Math.cos(angle) * distance;
     stack.position.z = Math.sin(angle) * distance * 0.68;
-    stack.position.y = height * 0.5 + radius * 0.1;
+    stack.position.y = height * 0.5 - radius * 0.14;
     stack.rotation.x = Math.sin(angle) * 0.09;
     stack.rotation.z = Math.cos(angle) * 0.08;
     stack.rotation.y = angle * 0.65;
@@ -1436,13 +1459,16 @@ function getWaterSafety(position, zones) {
     const nz = (position.z - zone.z) / zone.rz;
     const distance = Math.sqrt(nx * nx + nz * nz);
     const fjordWater = isInFjordWater(position, zone);
+    const shallowNx = (position.x - zone.x) / getZoneShallowRx(zone);
+    const shallowNz = (position.z - zone.z) / getZoneShallowRz(zone);
+    const shallowDistance = Math.sqrt(shallowNx * shallowNx + shallowNz * shallowNz);
 
     if (distance < 1 && !fjordWater) {
       return { isBlocked: true, isShallow: true };
     }
 
-    if (distance < 1.18 || fjordWater) {
-      shallowAmount = Math.max(shallowAmount, 1 - (distance - 1) / 0.18);
+    if (shallowDistance < 1 || fjordWater) {
+      shallowAmount = Math.max(shallowAmount, fjordWater ? 0.45 : 1 - shallowDistance);
     }
   }
 
