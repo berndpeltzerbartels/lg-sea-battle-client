@@ -2198,102 +2198,120 @@ function createCoastline(land, position, scene, materials, parent) {
   const heightScale = land.heightScale ?? 1;
   const peakBoost = land.peakBoost ?? 0;
 
-  const beach = MeshBuilder.CreateGround(`${name}_beach`, {
-    width: rx * 2.1,
-    height: rz * 2.1,
-    subdivisions: 42,
-    updatable: true
-  }, scene);
+  const beach = createCoastlineBeachMesh(`${name}_beach`, land, rx, rz, scene);
   beach.parent = parent;
   beach.position = position;
   beach.material = materials.sand;
-  shapeCoastlineBeach(beach, land, rx, rz);
 
-  const terrain = MeshBuilder.CreateGround(`${name}_terrain`, {
-    width: rx * 2.05,
-    height: rz * 2.05,
-    subdivisions: 54,
-    updatable: true
-  }, scene);
+  const terrain = createCoastlineTerrainMesh(`${name}_terrain`, land, rx, rz, heightScale, peakBoost, scene);
   terrain.parent = parent;
   terrain.position = position;
   terrain.material = materials.terrain;
-
-  const positions = terrain.getVerticesData("position");
-  const indices = terrain.getIndices();
-  const normals = [];
-  const landMask = [];
-
-  for (let i = 0; i < positions.length; i += 3) {
-    const localX = positions[i];
-    const localZ = positions[i + 2];
-    const shape = getCoastShape(localX, localZ, rx, rz, land);
-    const distance = shape.distance;
-    const nx = shape.nx;
-    const nz = shape.nz;
-    const coast = 1 - smoothstep(0.58, 0.96, distance);
-    const inland = clamp(1 - distance, 0, 1);
-    const ridgeA = Math.sin(localX * 0.065 + localZ * 0.035) * 0.5 + 0.5;
-    const ridgeB = Math.sin(localX * -0.028 + localZ * 0.082 + 2.4) * 0.5 + 0.5;
-    const roughness = terrainNoise(localX, localZ);
-    const cliffLift = smoothstep(0.68, 0.9, distance) * smoothstep(1.04, 0.86, distance) * 5.5;
-    const mountainLift = Math.pow(inland, 0.65) * (9 + ridgeA * 10 + ridgeB * 5) * heightScale;
-    const peakLift = peakBoost * Math.pow(clamp(1 - Math.sqrt((nx * 1.35) ** 2 + (nz * 1.15) ** 2), 0, 1), 2.4);
-    const fjord = getFjordCarve(localX, localZ, rx, rz, land.fjords ?? []);
-    const isLand = distance <= 0.98 && fjord <= 0.55;
-    landMask[i / 3] = isLand;
-
-    positions[i + 1] = isLand
-      ? 0.48 + coast * (cliffLift + mountainLift + peakLift + roughness * 3.2) * (1 - fjord * 0.35)
-      : 0.12;
-  }
-
-  const terrainIndices = getMaskedTriangleIndices(indices, landMask);
-  terrain.setIndices(terrainIndices);
-  VertexData.ComputeNormals(positions, terrainIndices, normals);
-  terrain.updateVerticesData("position", positions);
-  terrain.updateVerticesData("normal", normals);
 }
 
-function shapeCoastlineBeach(beach, land, rx, rz) {
-  const positions = beach.getVerticesData("position");
-  const indices = beach.getIndices();
+function createCoastlineTerrainMesh(name, land, rx, rz, heightScale, peakBoost, scene) {
+  const mesh = new Mesh(name, scene);
+  const positions = [];
+  const indices = [];
   const normals = [];
-  const sandMask = [];
+  const rings = [0, 0.22, 0.42, 0.6, 0.74, 0.86, 0.98];
+  const samples = 112;
+  const mask = [];
 
-  for (let i = 0; i < positions.length; i += 3) {
-    const localX = positions[i];
-    const localZ = positions[i + 2];
-    const distance = getCoastShape(localX, localZ, rx, rz, land).distance;
-    const fjord = getFjordCarve(localX, localZ, rx, rz, land.fjords ?? []);
-    const sandBand = 1 - smoothstep(0.78, 1.08, distance);
-    const isSand = distance <= 1.08 && fjord <= 0.55;
-    sandMask[i / 3] = isSand;
+  rings.forEach((ring) => {
+    for (let i = 0; i < samples; i += 1) {
+      const angle = (i / samples) * Math.PI * 2;
+      const radiusFactor = getCoastRadiusFactor(angle, land);
+      const localX = Math.cos(angle) * rx * ring * radiusFactor;
+      const localZ = Math.sin(angle) * rz * ring * radiusFactor;
+      const fjord = getFjordCarve(localX, localZ, rx, rz, land.fjords ?? []);
+      const coast = 1 - smoothstep(0.58, 0.96, ring);
+      const inland = clamp(1 - ring, 0, 1);
+      const nx = localX / rx;
+      const nz = localZ / rz;
+      const ridgeA = Math.sin(localX * 0.065 + localZ * 0.035) * 0.5 + 0.5;
+      const ridgeB = Math.sin(localX * -0.028 + localZ * 0.082 + 2.4) * 0.5 + 0.5;
+      const roughness = terrainNoise(localX, localZ);
+      const cliffLift = smoothstep(0.68, 0.9, ring) * smoothstep(1.04, 0.86, ring) * 5.5;
+      const mountainLift = Math.pow(inland, 0.65) * (9 + ridgeA * 10 + ridgeB * 5) * heightScale;
+      const peakLift = peakBoost * Math.pow(clamp(1 - Math.sqrt((nx * 1.35) ** 2 + (nz * 1.15) ** 2), 0, 1), 2.4);
+      const isLand = ring < 0.98 && fjord <= 0.58;
 
-    positions[i + 1] = isSand ? 0.24 + sandBand * 0.08 : 0.12;
-  }
+      positions.push(
+        localX,
+        isLand ? 0.48 + coast * (cliffLift + mountainLift + peakLift + roughness * 3.2) * (1 - fjord * 0.35) : 0.18,
+        localZ
+      );
+      mask.push(isLand);
+    }
+  });
 
-  const sandIndices = getMaskedTriangleIndices(indices, sandMask);
-  beach.setIndices(sandIndices);
-  VertexData.ComputeNormals(positions, sandIndices, normals);
-  beach.updateVerticesData("position", positions);
-  beach.updateVerticesData("normal", normals);
-}
+  for (let ring = 0; ring < rings.length - 1; ring += 1) {
+    for (let i = 0; i < samples; i += 1) {
+      const next = (i + 1) % samples;
+      const a = ring * samples + i;
+      const b = ring * samples + next;
+      const c = (ring + 1) * samples + i;
+      const d = (ring + 1) * samples + next;
 
-function getMaskedTriangleIndices(indices, mask) {
-  const filtered = [];
-
-  for (let i = 0; i < indices.length; i += 3) {
-    const a = indices[i];
-    const b = indices[i + 1];
-    const c = indices[i + 2];
-
-    if (mask[a] && mask[b] && mask[c]) {
-      filtered.push(a, b, c);
+      if (mask[a] && mask[c] && mask[b]) indices.push(a, c, b);
+      if (mask[b] && mask[c] && mask[d]) indices.push(b, c, d);
     }
   }
 
-  return filtered;
+  VertexData.ComputeNormals(positions, indices, normals);
+  const vertexData = new VertexData();
+  vertexData.positions = positions;
+  vertexData.indices = indices;
+  vertexData.normals = normals;
+  vertexData.applyToMesh(mesh);
+  return mesh;
+}
+
+function createCoastlineBeachMesh(name, land, rx, rz, scene) {
+  const mesh = new Mesh(name, scene);
+  const positions = [];
+  const indices = [];
+  const normals = [];
+  const rings = [0.86, 0.96, 1.06];
+  const samples = 112;
+  const mask = [];
+
+  rings.forEach((ring) => {
+    for (let i = 0; i < samples; i += 1) {
+      const angle = (i / samples) * Math.PI * 2;
+      const radiusFactor = getCoastRadiusFactor(angle, land);
+      const localX = Math.cos(angle) * rx * ring * radiusFactor;
+      const localZ = Math.sin(angle) * rz * ring * radiusFactor;
+      const fjord = getFjordCarve(localX, localZ, rx, rz, land.fjords ?? []);
+      const sandBand = 1 - smoothstep(0.78, 1.08, ring);
+      const isSand = fjord <= 0.58;
+
+      positions.push(localX, isSand ? 0.24 + sandBand * 0.08 : 0.16, localZ);
+      mask.push(isSand);
+    }
+  });
+
+  for (let ring = 0; ring < rings.length - 1; ring += 1) {
+    for (let i = 0; i < samples; i += 1) {
+      const next = (i + 1) % samples;
+      const a = ring * samples + i;
+      const b = ring * samples + next;
+      const c = (ring + 1) * samples + i;
+      const d = (ring + 1) * samples + next;
+
+      if (mask[a] && mask[c] && mask[b]) indices.push(a, c, b);
+      if (mask[b] && mask[c] && mask[d]) indices.push(b, c, d);
+    }
+  }
+
+  VertexData.ComputeNormals(positions, indices, normals);
+  const vertexData = new VertexData();
+  vertexData.positions = positions;
+  vertexData.indices = indices;
+  vertexData.normals = normals;
+  vertexData.applyToMesh(mesh);
+  return mesh;
 }
 
 function createIsland(name, position, radius, heightScale, scene, materials, parent) {
