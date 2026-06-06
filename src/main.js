@@ -49,11 +49,42 @@ const rudderValue = document.getElementById("rudderValue");
 
 // One source for visible land, collision, depth, map, and radar occlusion.
 const worldLandmasses = [
-  { kind: "coastline", name: "western_coast", x: -126, z: 58, rx: 72, rz: 66 },
+  { kind: "coastline", name: "western_coast", x: -126, z: 58, rx: 72, rz: 66, heightScale: 1 },
   { kind: "island", name: "north_island", x: -32, z: 54, radius: 21, heightScale: 1.1, rx: 28, rz: 22 },
   { kind: "island", name: "east_island", x: 58, z: 10, radius: 28, heightScale: 0.9, rx: 36, rz: 27 },
   { kind: "island", name: "south_island", x: 18, z: -76, radius: 24, heightScale: 1.25, rx: 32, rz: 25 },
-  { kind: "island", name: "far_island", x: -92, z: -26, radius: 16, heightScale: 0.75, rx: 22, rz: 17 }
+  { kind: "island", name: "far_island", x: -92, z: -26, radius: 16, heightScale: 0.75, rx: 22, rz: 17 },
+  {
+    kind: "coastline",
+    name: "volcanic_highland",
+    x: 312,
+    z: -214,
+    rx: 86,
+    rz: 74,
+    heightScale: 1.55,
+    peakBoost: 34,
+    fjords: [
+      { angle: 2.72, width: 0.17, reach: 0.88 },
+      { angle: -1.18, width: 0.14, reach: 0.76 }
+    ]
+  },
+  {
+    kind: "coastline",
+    name: "fjord_coast",
+    x: 194,
+    z: -344,
+    rx: 64,
+    rz: 54,
+    heightScale: 1.05,
+    peakBoost: 10,
+    fjords: [
+      { angle: 0.42, width: 0.18, reach: 0.82 },
+      { angle: -2.38, width: 0.13, reach: 0.7 }
+    ]
+  },
+  { kind: "island", name: "outer_stack", x: 410, z: -315, radius: 22, heightScale: 1.0, rx: 30, rz: 23 },
+  { kind: "island", name: "needle_rocks", x: 240, z: -112, radius: 17, heightScale: 1.35, rx: 24, rz: 18 },
+  { kind: "island", name: "low_skerries", x: 118, z: -238, radius: 14, heightScale: 0.82, rx: 20, rz: 16 }
 ];
 const radarOcclusionScale = 0.72;
 
@@ -69,7 +100,7 @@ ambient.intensity = 0.58;
 ambient.groundColor = new Color3(0.1, 0.18, 0.19);
 
 const worldLimit = 5000;
-const ocean = MeshBuilder.CreateGround("ocean", { width: 1050, height: 1050, subdivisions: 120 }, scene);
+const ocean = MeshBuilder.CreateGround("ocean", { width: 1450, height: 1450, subdivisions: 140 }, scene);
 ocean.material = materials.water;
 ocean.parent = world;
 const foam = createFoamPatches(scene, materials, world);
@@ -1230,7 +1261,7 @@ function createWorldLandmasses(landmasses, scene, materials, parent) {
     const position = new Vector3(land.x, 0, land.z);
 
     if (land.kind === "coastline") {
-      createCoastline(land.name, position, land.rx, land.rz, scene, materials, parent);
+      createCoastline(land, position, scene, materials, parent);
     } else {
       createIsland(land.name, position, land.radius, land.heightScale, scene, materials, parent);
     }
@@ -1238,20 +1269,21 @@ function createWorldLandmasses(landmasses, scene, materials, parent) {
 }
 
 function getLandZone(land) {
-  return { x: land.x, z: land.z, rx: land.rx, rz: land.rz, name: land.name };
+  return {
+    x: land.x,
+    z: land.z,
+    rx: land.rx,
+    rz: land.rz,
+    name: land.name,
+    kind: land.kind,
+    fjords: land.fjords ?? []
+  };
 }
 
-function createCoastline(name, position, rx, rz, scene, materials, parent) {
-  const shallow = MeshBuilder.CreateCylinder(`${name}_shallows`, {
-    diameter: 2,
-    height: 0.08,
-    tessellation: 72
-  }, scene);
-  shallow.parent = parent;
-  shallow.position = new Vector3(position.x, 0.08, position.z);
-  shallow.scaling.x = rx * 1.18;
-  shallow.scaling.z = rz * 1.18;
-  shallow.material = materials.shallow;
+function createCoastline(land, position, scene, materials, parent) {
+  const { name, rx, rz } = land;
+  const heightScale = land.heightScale ?? 1;
+  const peakBoost = land.peakBoost ?? 0;
 
   const beach = MeshBuilder.CreateCylinder(`${name}_beach`, {
     diameter: 2,
@@ -1290,11 +1322,13 @@ function createCoastline(name, position, rx, rz, scene, materials, parent) {
     const ridgeB = Math.sin(localX * -0.028 + localZ * 0.082 + 2.4) * 0.5 + 0.5;
     const roughness = terrainNoise(localX, localZ);
     const cliffLift = smoothstep(0.68, 0.9, distance) * smoothstep(1.04, 0.86, distance) * 5.5;
-    const mountainLift = Math.pow(inland, 0.65) * (9 + ridgeA * 10 + ridgeB * 5);
+    const mountainLift = Math.pow(inland, 0.65) * (9 + ridgeA * 10 + ridgeB * 5) * heightScale;
+    const peakLift = peakBoost * Math.pow(clamp(1 - Math.sqrt((nx * 1.35) ** 2 + (nz * 1.15) ** 2), 0, 1), 2.4);
+    const fjord = getFjordCarve(localX, localZ, rx, rz, land.fjords ?? []);
 
-    positions[i + 1] = distance > 0.98
+    positions[i + 1] = distance > 0.98 || fjord > 0.55
       ? -14
-      : 0.48 + coast * (cliffLift + mountainLift + roughness * 3.2);
+      : 0.48 + coast * (cliffLift + mountainLift + peakLift + roughness * 3.2) * (1 - fjord * 0.35);
   }
 
   VertexData.ComputeNormals(positions, indices, normals);
@@ -1307,30 +1341,7 @@ function createIsland(name, position, radius, heightScale, scene, materials, par
   islandRoot.position = position;
   islandRoot.parent = parent;
 
-  const shallow = MeshBuilder.CreateCylinder(`${name}_shallows`, {
-    diameter: radius * 2,
-    height: 0.08,
-    tessellation: 28
-  }, scene);
-  shallow.parent = islandRoot;
-  shallow.position.y = 0.07;
-  shallow.scaling.x = 1.28;
-  shallow.scaling.z = 0.88;
-  shallow.rotation.y = radius * 0.07;
-  shallow.material = materials.shallow;
-
-  const cliffBase = MeshBuilder.CreateCylinder(`${name}_cliff_base`, {
-    diameter: radius * 1.24,
-    height: radius * 0.16,
-    tessellation: 9
-  }, scene);
-  cliffBase.parent = islandRoot;
-  cliffBase.position.y = radius * 0.08;
-  cliffBase.scaling.x = 0.98;
-  cliffBase.scaling.z = 0.62;
-  cliffBase.rotation.y = radius * 0.13;
-  cliffBase.material = materials.rock;
-  cliffBase.receiveShadows = true;
+  createRockFoamRing(`${name}_foam`, radius, scene, materials, islandRoot);
 
   const stackCount = Math.max(3, Math.min(4, Math.round(radius / 7)));
   for (let i = 0; i < stackCount; i += 1) {
@@ -1360,6 +1371,45 @@ function createIsland(name, position, radius, heightScale, scene, materials, par
   return islandRoot;
 }
 
+function createRockFoamRing(name, radius, scene, materials, parent) {
+  const ringCount = 8;
+
+  for (let i = 0; i < ringCount; i += 1) {
+    const angle = (i / ringCount) * Math.PI * 2 + radius * 0.09;
+    const foam = MeshBuilder.CreateBox(`${name}_${i}`, {
+      width: radius * (0.24 + (i % 3) * 0.035),
+      height: 0.012,
+      depth: radius * 0.035
+    }, scene);
+    foam.parent = parent;
+    foam.position.x = Math.cos(angle) * radius * (0.34 + (i % 2) * 0.05);
+    foam.position.y = 0.035;
+    foam.position.z = Math.sin(angle) * radius * (0.24 + (i % 2) * 0.04);
+    foam.rotation.y = -angle + Math.PI / 2;
+    foam.material = materials.foam;
+  }
+}
+
+function getFjordCarve(localX, localZ, rx, rz, fjords) {
+  let carve = 0;
+
+  fjords.forEach((fjord) => {
+    const dirX = Math.sin(fjord.angle);
+    const dirZ = Math.cos(fjord.angle);
+    const along = (localX * dirX) / rx + (localZ * dirZ) / rz;
+    const across = Math.abs((localX * dirZ) / rx - (localZ * dirX) / rz);
+    const reach = fjord.reach ?? 0.78;
+    const width = fjord.width ?? 0.14;
+    const mouthToCenter = smoothstep(1.03, 0.12, along);
+    const fromCoast = smoothstep(-1.02, -0.1, along);
+    const channel = 1 - smoothstep(width * 0.45, width, across);
+
+    carve = Math.max(carve, channel * mouthToCenter * fromCoast * smoothstep(reach, 0.08, Math.abs(along)));
+  });
+
+  return carve;
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -1385,12 +1435,13 @@ function getWaterSafety(position, zones) {
     const nx = (position.x - zone.x) / zone.rx;
     const nz = (position.z - zone.z) / zone.rz;
     const distance = Math.sqrt(nx * nx + nz * nz);
+    const fjordWater = isInFjordWater(position, zone);
 
-    if (distance < 1) {
+    if (distance < 1 && !fjordWater) {
       return { isBlocked: true, isShallow: true };
     }
 
-    if (distance < 1.18) {
+    if (distance < 1.18 || fjordWater) {
       shallowAmount = Math.max(shallowAmount, 1 - (distance - 1) / 0.18);
     }
   }
@@ -1406,7 +1457,10 @@ function getWaterDepth(position, zones) {
     const nx = (position.x - zone.x) / zone.rx;
     const nz = (position.z - zone.z) / zone.rz;
     const distance = Math.sqrt(nx * nx + nz * nz);
-    nearestCoastDistance = Math.min(nearestCoastDistance, distance - 1);
+    const coastDistance = isInFjordWater(position, zone)
+      ? Math.max(0.08, Math.abs(distance - 0.72))
+      : distance - 1;
+    nearestCoastDistance = Math.min(nearestCoastDistance, coastDistance);
   }
 
   if (nearestCoastDistance <= 0) {
@@ -1428,7 +1482,7 @@ function getWaterEscapeVector(position, zones) {
     const nz = (position.z - zone.z) / zone.rz;
     const distance = Math.sqrt(nx * nx + nz * nz);
 
-    if (distance < 1) {
+    if (distance < 1 && !isInFjordWater(position, zone)) {
       if (distance < 0.001) {
         escape.x += 1;
       } else {
@@ -1443,4 +1497,12 @@ function getWaterEscapeVector(position, zones) {
   }
 
   return escape.normalize();
+}
+
+function isInFjordWater(position, zone) {
+  if (!zone.fjords?.length) return false;
+
+  const localX = position.x - zone.x;
+  const localZ = position.z - zone.z;
+  return getFjordCarve(localX, localZ, zone.rx, zone.rz, zone.fjords) > 0.58;
 }
