@@ -564,23 +564,21 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat") {
   window.position.z = 1.13;
   window.material = materials.glass;
 
-  const funnelBase = MeshBuilder.CreateBox(`${name}_funnel_base`, { width: 0.82, height: 0.22, depth: 1.25 }, scene);
+  const funnelBase = MeshBuilder.CreateBox(`${name}_funnel_base`, { width: 0.72, height: 0.22, depth: 0.58 }, scene);
   funnelBase.parent = root;
   funnelBase.position.y = 0.76;
-  funnelBase.position.z = -0.8;
+  funnelBase.position.z = 0.0;
   funnelBase.material = materials.cabin;
 
-  for (let i = 0; i < 2; i += 1) {
-    const funnel = MeshBuilder.CreateCylinder(`${name}_funnel_${i}`, {
-      diameter: i === 0 ? 0.32 : 0.29,
-      height: i === 0 ? 0.94 : 0.86,
-      tessellation: 10
-    }, scene);
-    funnel.parent = root;
-    funnel.position.y = i === 0 ? 1.32 : 1.28;
-    funnel.position.z = -0.42 - i * 0.55;
-    funnel.material = materials.funnel;
-  }
+  const funnel = MeshBuilder.CreateCylinder(`${name}_funnel`, {
+    diameter: 0.36,
+    height: 0.98,
+    tessellation: 10
+  }, scene);
+  funnel.parent = root;
+  funnel.position.y = 1.33;
+  funnel.position.z = 0.0;
+  funnel.material = materials.funnel;
 
   for (let i = 0; i < 2; i += 1) {
     const tube = MeshBuilder.CreateCylinder(`${name}_tube_${i}`, {
