@@ -153,6 +153,7 @@ const worldLandmasses = [
 ];
 const radarOcclusionScale = 0.72;
 const mapTileSize = 1200;
+const worldMetersPerUnit = 20;
 
 const materials = createMaterials(scene);
 const world = new TransformNode("world", scene);
@@ -470,11 +471,11 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, enemyPositio
   if (enemyDistance <= radarRange && !enemyBlocked) {
     const enemyPoint = worldToRadarPoint(enemyPosition, playerPosition, centerX, centerY, scale, heading);
     drawInstrumentMarker(ctx, enemyPoint.x, enemyPoint.y, "#d84a3a", 4);
-    if (statusElement) statusElement.textContent = `Contact ${enemyDistance.toFixed(0)} m`;
+    if (statusElement) statusElement.textContent = `Contact ${formatWorldDistance(enemyDistance)}`;
   } else if (enemyDistance <= radarRange) {
-    if (statusElement) statusElement.textContent = "Shadow";
+    if (statusElement) statusElement.textContent = `Shadow ${formatWorldDistance(enemyDistance)}`;
   } else {
-    if (statusElement) statusElement.textContent = "Clear";
+    if (statusElement) statusElement.textContent = `Clear ${formatWorldDistance(radarRange)}`;
   }
 
   drawInstrumentMarker(ctx, centerX, centerY, "#9be5df", 3);
@@ -630,6 +631,16 @@ function distance2D(a, b) {
   const dx = a.x - b.x;
   const dz = a.z - b.z;
   return Math.sqrt(dx * dx + dz * dz);
+}
+
+function formatWorldDistance(worldUnits) {
+  const meters = worldUnits * worldMetersPerUnit;
+
+  if (meters >= 1000) {
+    return `${(meters / 1000).toFixed(1)} km`;
+  }
+
+  return `${Math.round(meters)} m`;
 }
 
 function getMapTile(position) {
