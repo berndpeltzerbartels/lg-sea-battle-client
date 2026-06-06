@@ -894,6 +894,7 @@ function createTorpedoSystem(scene, materials, parent) {
     active: [],
     puffs: [],
     muzzleEffects: [],
+    hitEffects: [],
     nextTube: 0,
     nextFireTime: 0,
     nextId: 1,
@@ -1188,6 +1189,25 @@ function createMuzzleEffect(system, position, heading, tubeSide) {
 }
 
 function updateTorpedoSystem(system, dt, time, enemyPosition) {
+  system.hitEffects = system.hitEffects.filter((effect) => {
+    effect.age += dt;
+    const t = effect.age / effect.lifetime;
+    if (t >= 1) {
+      effect.mesh.dispose();
+      return false;
+    }
+
+    const eased = easeOutCubic(t);
+    effect.mesh.position.x = effect.origin.x + effect.velocity.x * t;
+    effect.mesh.position.z = effect.origin.z + effect.velocity.z * t;
+    effect.mesh.position.y = effect.origin.y + effect.velocity.y * t - effect.gravity * t * t + Math.sin(time * 9 + effect.seed) * 0.01;
+    effect.mesh.scaling.x = effect.baseScale.x * (1 + eased * effect.grow.x);
+    effect.mesh.scaling.y = effect.baseScale.y * (1 + eased * effect.grow.y);
+    effect.mesh.scaling.z = effect.baseScale.z * (1 + eased * effect.grow.z);
+    effect.mesh.setEnabled(t < 0.96);
+    return true;
+  });
+
   system.muzzleEffects = system.muzzleEffects.filter((effect) => {
     effect.age += dt;
     const t = effect.age / effect.lifetime;
@@ -1276,18 +1296,77 @@ function updateTorpedoWake(torpedo, visible, time) {
 
 function createHitChurn(system, position, heading) {
   const forward = getForwardVector(heading);
+  const right = getRightVector(heading);
 
-  for (let i = 0; i < 10; i += 1) {
-    const patch = MeshBuilder.CreateBox(`torpedo_hit_${system.hits}_${i}`, {
-      width: 0.24 + i * 0.05,
-      height: 0.016,
-      depth: 0.28 + i * 0.04
+  for (let i = 0; i < 4; i += 1) {
+    const column = MeshBuilder.CreateCylinder(`torpedo_hit_column_${system.hits}_${i}`, {
+      diameter: 0.38 + i * 0.1,
+      height: 0.9 + i * 0.42,
+      tessellation: 8
+    }, system.scene);
+    column.parent = system.root;
+    column.material = system.materials.foam;
+    column.position.copyFrom(position.add(forward.scale(i * 0.08)).add(new Vector3(0, 0.28 + i * 0.15, 0)));
+    system.hitEffects.push({
+      mesh: column,
+      age: 0,
+      lifetime: 0.8 + i * 0.08,
+      origin: column.position.clone(),
+      velocity: new Vector3(0, 0.6 + i * 0.14, 0),
+      gravity: 0.48 + i * 0.08,
+      baseScale: column.scaling.clone(),
+      grow: new Vector3(0.7 + i * 0.14, 0.3, 0.7 + i * 0.14),
+      seed: i
+    });
+  }
+
+  for (let i = 0; i < 14; i += 1) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const row = Math.floor(i / 2);
+    const patch = MeshBuilder.CreateBox(`torpedo_hit_spray_${system.hits}_${i}`, {
+      width: 0.22 + row * 0.04,
+      height: 0.018,
+      depth: 0.5 + row * 0.08
     }, system.scene);
     patch.parent = system.root;
     patch.material = system.materials.foam;
-    patch.position.copyFrom(position.subtract(forward.scale(i * 0.08)).add(new Vector3(0, -0.03, 0)));
-    patch.rotation.y = heading + (i - 5) * 0.12;
-    system.puffs.push({ mesh: patch, age: 0, lifetime: 1.1, seed: i });
+    patch.position.copyFrom(position.add(right.scale(side * (0.18 + row * 0.12))).subtract(forward.scale(row * 0.08)).add(new Vector3(0, 0.06, 0)));
+    patch.rotation.y = heading + side * (0.55 + row * 0.05);
+    system.hitEffects.push({
+      mesh: patch,
+      age: 0,
+      lifetime: 1.05 + row * 0.05,
+      origin: patch.position.clone(),
+      velocity: right.scale(side * (0.55 + row * 0.15)).add(forward.scale(-0.1 - row * 0.03)).add(new Vector3(0, 0.32 + row * 0.05, 0)),
+      gravity: 0.42,
+      baseScale: patch.scaling.clone(),
+      grow: new Vector3(1.3 + row * 0.12, 0.2, 0.8 + row * 0.08),
+      seed: i + 10
+    });
+  }
+
+  for (let i = 0; i < 5; i += 1) {
+    const ring = MeshBuilder.CreateTorus(`torpedo_hit_ring_${system.hits}_${i}`, {
+      diameter: 0.52 + i * 0.24,
+      thickness: 0.035,
+      tessellation: 20
+    }, system.scene);
+    ring.parent = system.root;
+    ring.material = system.materials.foam;
+    ring.position.copyFrom(position.add(new Vector3(0, 0.045 + i * 0.004, 0)));
+    ring.rotation.x = Math.PI / 2;
+    ring.rotation.y = heading + i * 0.08;
+    system.hitEffects.push({
+      mesh: ring,
+      age: 0,
+      lifetime: 1.2 + i * 0.08,
+      origin: ring.position.clone(),
+      velocity: new Vector3(0, 0.02, 0),
+      gravity: 0.04,
+      baseScale: ring.scaling.clone(),
+      grow: new Vector3(3.6 + i * 0.45, 3.6 + i * 0.45, 3.6 + i * 0.45),
+      seed: i + 30
+    });
   }
 }
 
