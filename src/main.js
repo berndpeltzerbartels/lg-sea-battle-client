@@ -2222,6 +2222,7 @@ function createCoastline(land, position, scene, materials, parent) {
   const positions = terrain.getVerticesData("position");
   const indices = terrain.getIndices();
   const normals = [];
+  const landMask = [];
 
   for (let i = 0; i < positions.length; i += 3) {
     const localX = positions[i];
@@ -2239,13 +2240,17 @@ function createCoastline(land, position, scene, materials, parent) {
     const mountainLift = Math.pow(inland, 0.65) * (9 + ridgeA * 10 + ridgeB * 5) * heightScale;
     const peakLift = peakBoost * Math.pow(clamp(1 - Math.sqrt((nx * 1.35) ** 2 + (nz * 1.15) ** 2), 0, 1), 2.4);
     const fjord = getFjordCarve(localX, localZ, rx, rz, land.fjords ?? []);
+    const isLand = distance <= 0.98 && fjord <= 0.55;
+    landMask[i / 3] = isLand;
 
-    positions[i + 1] = distance > 0.98 || fjord > 0.55
-      ? -14
-      : 0.48 + coast * (cliffLift + mountainLift + peakLift + roughness * 3.2) * (1 - fjord * 0.35);
+    positions[i + 1] = isLand
+      ? 0.48 + coast * (cliffLift + mountainLift + peakLift + roughness * 3.2) * (1 - fjord * 0.35)
+      : 0.12;
   }
 
-  VertexData.ComputeNormals(positions, indices, normals);
+  const terrainIndices = getMaskedTriangleIndices(indices, landMask);
+  terrain.setIndices(terrainIndices);
+  VertexData.ComputeNormals(positions, terrainIndices, normals);
   terrain.updateVerticesData("position", positions);
   terrain.updateVerticesData("normal", normals);
 }
@@ -2254,6 +2259,7 @@ function shapeCoastlineBeach(beach, land, rx, rz) {
   const positions = beach.getVerticesData("position");
   const indices = beach.getIndices();
   const normals = [];
+  const sandMask = [];
 
   for (let i = 0; i < positions.length; i += 3) {
     const localX = positions[i];
@@ -2261,15 +2267,33 @@ function shapeCoastlineBeach(beach, land, rx, rz) {
     const distance = getCoastShape(localX, localZ, rx, rz, land).distance;
     const fjord = getFjordCarve(localX, localZ, rx, rz, land.fjords ?? []);
     const sandBand = 1 - smoothstep(0.78, 1.08, distance);
+    const isSand = distance <= 1.08 && fjord <= 0.55;
+    sandMask[i / 3] = isSand;
 
-    positions[i + 1] = distance > 1.08 || fjord > 0.55
-      ? -14
-      : 0.24 + sandBand * 0.08;
+    positions[i + 1] = isSand ? 0.24 + sandBand * 0.08 : 0.12;
   }
 
-  VertexData.ComputeNormals(positions, indices, normals);
+  const sandIndices = getMaskedTriangleIndices(indices, sandMask);
+  beach.setIndices(sandIndices);
+  VertexData.ComputeNormals(positions, sandIndices, normals);
   beach.updateVerticesData("position", positions);
   beach.updateVerticesData("normal", normals);
+}
+
+function getMaskedTriangleIndices(indices, mask) {
+  const filtered = [];
+
+  for (let i = 0; i < indices.length; i += 3) {
+    const a = indices[i];
+    const b = indices[i + 1];
+    const c = indices[i + 2];
+
+    if (mask[a] && mask[b] && mask[c]) {
+      filtered.push(a, b, c);
+    }
+  }
+
+  return filtered;
 }
 
 function createIsland(name, position, radius, heightScale, scene, materials, parent) {
