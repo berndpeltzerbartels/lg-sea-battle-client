@@ -42,6 +42,7 @@ const engineValue = document.getElementById("engineValue");
 const telegraphScale = document.getElementById("telegraphScale");
 const compassPointer = document.getElementById("compassPointer");
 const mapCanvas = document.getElementById("mapCanvas");
+const mapZoom = document.getElementById("mapZoom");
 const radarCanvas = document.getElementById("radarCanvas");
 const radarStatus = document.getElementById("radarStatus");
 const rudderIndicator = document.getElementById("rudderIndicator");
@@ -153,6 +154,7 @@ const worldLandmasses = [
 ];
 const radarOcclusionScale = 0.72;
 const mapTileSize = 1200;
+const mapZoomScales = [0.5, 1, 2, 4];
 const worldMetersPerUnit = 20;
 
 const materials = createMaterials(scene);
@@ -391,18 +393,20 @@ function updateRudderGauge(indicator, valueElement, degrees) {
 }
 
 function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, enemyPosition, landZones, heading) {
-  drawMapInstrument(mapCanvas, playerPosition, landZones);
+  drawMapInstrument(mapCanvas, playerPosition, landZones, mapZoom);
   drawRadarInstrument(radarCanvas, radarStatus, playerPosition, enemyPosition, landZones, heading);
 }
 
-function drawMapInstrument(canvas, playerPosition, landZones) {
+function drawMapInstrument(canvas, playerPosition, landZones, zoomControl) {
   if (!canvas) return;
 
   const ctx = prepareInstrumentCanvas(canvas);
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
-  const tile = getMapTile(playerPosition);
-  const bounds = getMapTileBounds(tile);
+  const zoomIndex = clamp(Number(zoomControl?.value ?? 1), 0, mapZoomScales.length - 1);
+  const zoomScale = mapZoomScales[zoomIndex];
+  const tile = getMapTile(playerPosition, zoomScale);
+  const bounds = getMapTileBounds(tile, zoomScale);
   const scale = Math.min(width / (bounds.maxX - bounds.minX), height / (bounds.maxZ - bounds.minZ));
 
   ctx.clearRect(0, 0, width, height);
@@ -434,7 +438,7 @@ function drawMapInstrument(canvas, playerPosition, landZones) {
 
   ctx.fillStyle = "rgba(247, 251, 255, 0.78)";
   ctx.font = "700 10px Inter, sans-serif";
-  ctx.fillText(`Tile ${tile.x},${tile.z}`, 9, height - 22);
+  ctx.fillText(`Tile ${tile.x},${tile.z} x${zoomScale}`, 9, height - 22);
   ctx.fillText(formatWorldCoordinate(playerPosition), 9, height - 9);
 }
 
@@ -643,22 +647,25 @@ function formatWorldDistance(worldUnits) {
   return `${Math.round(meters)} m`;
 }
 
-function getMapTile(position) {
+function getMapTile(position, zoomScale = 1) {
+  const size = mapTileSize * zoomScale;
+
   return {
-    x: Math.floor((position.x + mapTileSize * 0.5) / mapTileSize),
-    z: Math.floor((position.z + mapTileSize * 0.5) / mapTileSize)
+    x: Math.floor((position.x + size * 0.5) / size),
+    z: Math.floor((position.z + size * 0.5) / size)
   };
 }
 
-function getMapTileBounds(tile) {
-  const centerX = tile.x * mapTileSize;
-  const centerZ = tile.z * mapTileSize;
+function getMapTileBounds(tile, zoomScale = 1) {
+  const size = mapTileSize * zoomScale;
+  const centerX = tile.x * size;
+  const centerZ = tile.z * size;
 
   return {
-    minX: centerX - mapTileSize * 0.5,
-    maxX: centerX + mapTileSize * 0.5,
-    minZ: centerZ - mapTileSize * 0.5,
-    maxZ: centerZ + mapTileSize * 0.5
+    minX: centerX - size * 0.5,
+    maxX: centerX + size * 0.5,
+    minZ: centerZ - size * 0.5,
+    maxZ: centerZ + size * 0.5
   };
 }
 

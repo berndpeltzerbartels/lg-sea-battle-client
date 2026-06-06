@@ -20,7 +20,10 @@
       <div class="nav-panel" aria-hidden="true">
         <div class="nav-instrument">
           <div class="nav-title">Map</div>
-          <canvas id="mapCanvas" width="180" height="136"></canvas>
+          <div class="map-control">
+            <canvas id="mapCanvas" width="180" height="136"></canvas>
+            <input id="mapZoom" type="range" min="0" max="3" step="1" value="1" aria-label="Map zoom" />
+          </div>
         </div>
         <div class="nav-instrument">
           <div class="nav-title">Radar</div>
