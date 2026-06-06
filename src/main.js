@@ -233,6 +233,10 @@ window.addEventListener("keydown", (event) => {
     }
     event.preventDefault();
   }
+  if ((event.code === "Space" || event.code === "KeyF") && !event.repeat) {
+    firePlayerTorpedo(torpedoSystem, boat.root, heading, speed, time);
+    event.preventDefault();
+  }
 });
 
 window.addEventListener("keyup", (event) => {
@@ -269,17 +273,21 @@ let heldRudderDirection = 0;
 let cameraPosition = camera.position.clone();
 let cameraTarget = boat.root.position.clone();
 let time = 0;
+let localDebugFireRequest = document.body.dataset.debugFireTorpedoRequest ?? "";
 const maxRudderDegrees = 35;
 const rudderStepDegrees = 5;
 const rudderHoldDegreesPerSecond = 18;
+const torpedoSystem = createTorpedoSystem(scene, materials, world);
 
 const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
 const enemyMotion = createEnemyMotion(enemyBoat.root, enemyBoat.bowWake, -0.55, 3);
 startLocalEnemyEventSource(enemyMotion);
+createLocalDebugControls();
 
 scene.onBeforeRenderObservable.add(() => {
   const dt = Math.min(engine.getDeltaTime() / 1000, 0.05);
   time += dt;
+  consumeLocalDebugFireRequest();
 
   if (heldRudderDirection !== 0) {
     rudderDegrees = clamp(
@@ -339,6 +347,7 @@ scene.onBeforeRenderObservable.add(() => {
   materials.water.diffuseTexture.vOffset += dt * 0.018;
   updateFoamPatches(foam, boat.root.position, time);
   updateEnemyMotion(enemyMotion, dt, time);
+  updateTorpedoSystem(torpedoSystem, dt, time, enemyMotion.root.position);
 
   // Fixed bridge camera: it follows the ship immediately so acceleration never reveals the rear model.
   const cameraDistance = 0.65;
@@ -359,6 +368,8 @@ scene.onBeforeRenderObservable.add(() => {
   document.body.dataset.boat = `${boat.root.position.x.toFixed(1)},${boat.root.position.y.toFixed(1)},${boat.root.position.z.toFixed(1)}`;
   document.body.dataset.engineOrder = engineOrders[engineOrder].label;
   document.body.dataset.rudderDegrees = String(Math.round(rudderDegrees));
+  document.body.dataset.torpedoes = String(torpedoSystem.active.length);
+  document.body.dataset.torpedoHits = String(torpedoSystem.hits);
 
   const displayedSpeed = Math.abs(speed) < 0.08 ? 0 : Math.abs(speed);
   const waterDepth = getWaterDepth(boat.root.position, blockedWaters);
@@ -819,6 +830,257 @@ function getVisibleWakeRows(strength) {
   if (strength >= 0.24) return 3;
   if (strength >= 0.12) return 2;
   return 1;
+}
+
+function createTorpedoSystem(scene, materials, parent) {
+  const root = new TransformNode("torpedoes", scene);
+  root.parent = parent;
+
+  return {
+    root,
+    scene,
+    materials,
+    active: [],
+    puffs: [],
+    nextTube: 0,
+    nextFireTime: 0,
+    nextId: 1,
+    hits: 0
+  };
+}
+
+function createLocalDebugControls() {
+  if (!["localhost", "127.0.0.1"].includes(window.location.hostname)) return;
+
+  document.body.dataset.debugFireReady = "true";
+  if (new URLSearchParams(window.location.search).has("debugFireTorpedo")) {
+    window.setTimeout(() => {
+      firePlayerTorpedo(torpedoSystem, boat.root, heading, speed, time);
+    }, 350);
+  }
+}
+
+function consumeLocalDebugFireRequest() {
+  if (!["localhost", "127.0.0.1"].includes(window.location.hostname)) return;
+
+  const request = document.body.dataset.debugFireTorpedoRequest ?? "";
+  if (!request || request === localDebugFireRequest) return;
+
+  localDebugFireRequest = request;
+  firePlayerTorpedo(torpedoSystem, boat.root, heading, speed, time);
+}
+
+// A fired torpedo starts as a visible tube ejection, then becomes a simple straight-running weapon.
+function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
+  if (now < system.nextFireTime) return false;
+
+  const tubeSide = system.nextTube === 0 ? -1 : 1;
+  system.nextTube = 1 - system.nextTube;
+  system.nextFireTime = now + 1.15;
+
+  const forward = getForwardVector(heading);
+  const right = getRightVector(heading);
+  const tubeX = tubeSide * 0.32;
+  const tubeStartZ = 2.62;
+  const muzzleZ = 3.05;
+  const launchStart = shipRoot.position
+    .add(right.scale(tubeX))
+    .add(forward.scale(tubeStartZ))
+    .add(new Vector3(0, 0.58, 0));
+  const launchEnd = shipRoot.position
+    .add(right.scale(tubeX))
+    .add(forward.scale(muzzleZ + 0.8))
+    .add(new Vector3(0, -0.04, 0));
+  const runStart = shipRoot.position
+    .add(right.scale(tubeX))
+    .add(forward.scale(muzzleZ + 1.2))
+    .add(new Vector3(0, 0.06, 0));
+
+  const root = new TransformNode(`torpedo_${system.nextId}`, system.scene);
+  root.parent = system.root;
+  root.position.copyFrom(launchStart);
+  root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
+
+  const body = MeshBuilder.CreateCylinder(`${root.name}_body`, {
+    diameter: 0.12,
+    height: 1.05,
+    tessellation: 10
+  }, system.scene);
+  body.parent = root;
+  body.rotation.x = Math.PI / 2;
+  body.material = system.materials.funnel;
+
+  const wake = createTorpedoWake(system.scene, system.materials, root.name);
+  const torpedo = {
+    id: system.nextId,
+    root,
+    body,
+    wake,
+    heading,
+    forward,
+    launchStart,
+    launchEnd,
+    runStart,
+    age: 0,
+    runDistance: 0,
+    speed: 24 + Math.max(0, shipSpeed) * 0.35,
+    launchDuration: 0.48,
+    maxRange: 620,
+    hit: false
+  };
+  system.nextId += 1;
+  system.active.push(torpedo);
+  createLaunchPuff(system, launchEnd, heading, tubeSide);
+  return true;
+}
+
+function createTorpedoWake(scene, materials, name) {
+  const wake = [];
+
+  for (let i = 0; i < 9; i += 1) {
+    const segment = MeshBuilder.CreateBox(`${name}_wake_${i}`, {
+      width: 0.08 + i * 0.018,
+      height: 0.012,
+      depth: 0.58 + i * 0.08
+    }, scene);
+    segment.material = materials.foam;
+    segment.setEnabled(false);
+    wake.push(segment);
+  }
+
+  return wake;
+}
+
+function createLaunchPuff(system, position, heading, tubeSide) {
+  const forward = getForwardVector(heading);
+  const right = getRightVector(heading);
+
+  for (let i = 0; i < 7; i += 1) {
+    const patch = MeshBuilder.CreateBox(`torpedo_puff_${system.nextId}_${i}`, {
+      width: 0.16 + i * 0.025,
+      height: 0.018,
+      depth: 0.22 + i * 0.035
+    }, system.scene);
+    patch.parent = system.root;
+    patch.material = system.materials.foam;
+    patch.position.copyFrom(
+      position
+        .add(forward.scale(i * 0.08))
+        .add(right.scale(tubeSide * (0.02 + i * 0.025)))
+        .add(new Vector3(0, -0.02, 0))
+    );
+    patch.rotation.y = heading + tubeSide * (0.15 + i * 0.05);
+    system.puffs.push({ mesh: patch, age: 0, lifetime: 0.42 + i * 0.035, seed: i });
+  }
+}
+
+function updateTorpedoSystem(system, dt, time, enemyPosition) {
+  system.puffs = system.puffs.filter((puff) => {
+    puff.age += dt;
+    const t = puff.age / puff.lifetime;
+    if (t >= 1) {
+      puff.mesh.dispose();
+      return false;
+    }
+    const pulse = 1 + t * 2.6;
+    puff.mesh.scaling.x = pulse;
+    puff.mesh.scaling.z = pulse * (1.1 + puff.seed * 0.04);
+    puff.mesh.position.y = 0.06 + Math.sin(time * 10 + puff.seed) * 0.006;
+    puff.mesh.setEnabled(t < 0.94);
+    return true;
+  });
+
+  system.active = system.active.filter((torpedo) => {
+    torpedo.age += dt;
+
+    // Keep the first frames close to the launcher so the shot reads as coming out of the tube.
+    if (torpedo.age < torpedo.launchDuration) {
+      const t = easeOutCubic(torpedo.age / torpedo.launchDuration);
+      torpedo.root.position.copyFrom(Vector3.Lerp(torpedo.launchStart, torpedo.launchEnd, t));
+      torpedo.body.scaling.z = 1 - t * 0.12;
+      updateTorpedoWake(torpedo, false, time);
+      return true;
+    }
+
+    if (torpedo.runDistance === 0) {
+      torpedo.root.position.copyFrom(torpedo.runStart);
+      torpedo.body.scaling.z = 1;
+    }
+
+    const step = torpedo.speed * dt;
+    torpedo.root.position.addInPlace(torpedo.forward.scale(step));
+    torpedo.root.position.y = 0.05 + Math.sin(time * 7.5 + torpedo.id) * 0.012;
+    torpedo.runDistance += step;
+    updateTorpedoWake(torpedo, true, time);
+
+    if (!torpedo.hit && distance2D(torpedo.root.position, enemyPosition) < 2.25) {
+      torpedo.hit = true;
+      system.hits += 1;
+      createHitChurn(system, torpedo.root.position, torpedo.heading);
+      disposeTorpedo(torpedo);
+      return false;
+    }
+
+    if (torpedo.runDistance > torpedo.maxRange) {
+      disposeTorpedo(torpedo);
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function updateTorpedoWake(torpedo, visible, time) {
+  torpedo.wake.forEach((segment, index) => {
+    segment.setEnabled(visible && index * 0.8 < torpedo.runDistance);
+    if (!visible) return;
+
+    const distanceBehind = 0.72 + index * 0.58;
+    segment.position.copyFrom(
+      torpedo.root.position
+        .subtract(torpedo.forward.scale(distanceBehind))
+        .add(new Vector3(0, -0.035, 0))
+    );
+    segment.rotation.y = torpedo.heading + Math.sin(time * 3.2 + index) * 0.035;
+    segment.scaling.x = 1 + index * 0.16;
+    segment.scaling.z = 1 + Math.sin(time * 4.5 + index) * 0.08;
+  });
+}
+
+function createHitChurn(system, position, heading) {
+  const forward = getForwardVector(heading);
+
+  for (let i = 0; i < 10; i += 1) {
+    const patch = MeshBuilder.CreateBox(`torpedo_hit_${system.hits}_${i}`, {
+      width: 0.24 + i * 0.05,
+      height: 0.016,
+      depth: 0.28 + i * 0.04
+    }, system.scene);
+    patch.parent = system.root;
+    patch.material = system.materials.foam;
+    patch.position.copyFrom(position.subtract(forward.scale(i * 0.08)).add(new Vector3(0, -0.03, 0)));
+    patch.rotation.y = heading + (i - 5) * 0.12;
+    system.puffs.push({ mesh: patch, age: 0, lifetime: 1.1, seed: i });
+  }
+}
+
+function disposeTorpedo(torpedo) {
+  torpedo.wake.forEach((segment) => segment.dispose());
+  torpedo.body.dispose();
+  torpedo.root.dispose();
+}
+
+function getForwardVector(heading) {
+  return new Vector3(Math.sin(heading), 0, Math.cos(heading));
+}
+
+function getRightVector(heading) {
+  return new Vector3(Math.cos(heading), 0, -Math.sin(heading));
+}
+
+function easeOutCubic(value) {
+  const t = clamp(value, 0, 1);
+  return 1 - Math.pow(1 - t, 3);
 }
 
 function createMaterials(scene) {
