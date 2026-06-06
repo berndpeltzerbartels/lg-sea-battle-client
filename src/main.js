@@ -2235,11 +2235,15 @@ function createCoastlineTerrainMesh(name, land, rx, rz, heightScale, peakBoost, 
       const cliffLift = smoothstep(0.68, 0.9, ring) * smoothstep(1.04, 0.86, ring) * 5.5;
       const mountainLift = Math.pow(inland, 0.65) * (9 + ridgeA * 10 + ridgeB * 5) * heightScale;
       const peakLift = peakBoost * Math.pow(clamp(1 - Math.sqrt((nx * 1.35) ** 2 + (nz * 1.15) ** 2), 0, 1), 2.4);
-      const isLand = ring < 0.98 && fjord <= 0.58;
+      const isLand = ring <= 0.98 && fjord <= 0.58;
+      const shoreBlend = 1 - smoothstep(0.9, 0.98, ring);
+      const terrainHeight = 0.28 + shoreBlend * (
+        0.2 + coast * (cliffLift + mountainLift + peakLift + roughness * 3.2) * (1 - fjord * 0.35)
+      );
 
       positions.push(
         localX,
-        isLand ? 0.48 + coast * (cliffLift + mountainLift + peakLift + roughness * 3.2) * (1 - fjord * 0.35) : 0.18,
+        isLand ? terrainHeight : 0.18,
         localZ
       );
       mask.push(isLand);
