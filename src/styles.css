@@ -489,74 +489,6 @@ body {
   text-transform: uppercase;
 }
 
-.torpedo-debug {
-  position: fixed;
-  left: 50%;
-  bottom: 24px;
-  z-index: 4;
-  width: min(410px, calc(100vw - 48px));
-  padding: 12px;
-  border: 1px solid rgb(255 255 255 / 32%);
-  border-radius: 8px;
-  background: rgb(5 27 40 / 62%);
-  box-shadow: 0 12px 38px rgb(1 15 24 / 28%);
-  color: #f7fbff;
-  font-size: 11px;
-  font-weight: 800;
-  pointer-events: auto;
-  transform: translateX(-50%);
-  backdrop-filter: blur(7px);
-}
-
-.torpedo-debug strong {
-  display: block;
-  margin-bottom: 9px;
-  color: #9be5df;
-  font-size: 10px;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.torpedo-debug label {
-  display: grid;
-  grid-template-columns: 82px 1fr 42px;
-  gap: 8px;
-  align-items: center;
-  margin-top: 7px;
-}
-
-.torpedo-debug input {
-  width: 100%;
-  accent-color: #9be5df;
-}
-
-.torpedo-debug code {
-  color: #ffffff;
-  font-family: inherit;
-  text-align: right;
-}
-
-.torpedo-debug-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.torpedo-debug button {
-  min-height: 28px;
-  padding: 0 12px;
-  border: 1px solid rgb(255 255 255 / 28%);
-  border-radius: 6px;
-  background: rgb(155 229 223 / 18%);
-  color: #f7fbff;
-  font: inherit;
-  cursor: pointer;
-}
-
-.torpedo-debug button:hover {
-  background: rgb(155 229 223 / 28%);
-}
-
 @media (max-width: 700px) {
   .nav-panel {
     top: 14px;
@@ -608,12 +540,4 @@ body {
     height: 26px;
   }
 
-  .torpedo-debug {
-    bottom: 118px;
-    width: calc(100vw - 28px);
-  }
-
-  .torpedo-debug label {
-    grid-template-columns: 72px 1fr 38px;
-  }
 }

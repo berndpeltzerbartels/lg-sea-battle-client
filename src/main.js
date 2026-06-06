@@ -276,12 +276,11 @@ let heldRudderDirection = 0;
 let cameraPosition = camera.position.clone();
 let cameraTarget = boat.root.position.clone();
 let time = 0;
-let localDebugFireRequest = document.body.dataset.debugFireTorpedoRequest ?? "";
 const maxRudderDegrees = 35;
 const rudderStepDegrees = 5;
 const rudderHoldDegreesPerSecond = 18;
 const torpedoLaunchDefaults = {
-  tubeX: 0.32,
+  tubeX: 0.6,
   startZ: 2.45,
   startY: 0.6
 };
@@ -290,12 +289,10 @@ const torpedoSystem = createTorpedoSystem(scene, materials, world);
 const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
 const enemyMotion = createEnemyMotion(enemyBoat.root, enemyBoat.bowWake, -0.55, 3);
 startLocalEnemyEventSource(enemyMotion);
-createLocalDebugControls();
 
 scene.onBeforeRenderObservable.add(() => {
   const dt = Math.min(engine.getDeltaTime() / 1000, 0.05);
   time += dt;
-  consumeLocalDebugFireRequest();
 
   if (heldRudderDirection !== 0) {
     rudderDegrees = clamp(
@@ -355,7 +352,7 @@ scene.onBeforeRenderObservable.add(() => {
   materials.water.diffuseTexture.vOffset += dt * 0.018;
   updateFoamPatches(foam, boat.root.position, time);
   updateEnemyMotion(enemyMotion, dt, time);
-  updateTorpedoSystem(torpedoSystem, dt, time, enemyMotion);
+  updateTorpedoSystem(torpedoSystem, dt, time, enemyMotion, blockedWaters);
 
   // Fixed bridge camera: it follows the ship immediately so acceleration never reveals the rear model.
   const cameraDistance = 0.65;
@@ -902,28 +899,6 @@ function createTorpedoSystem(scene, materials, parent) {
   };
 }
 
-function createLocalDebugControls() {
-  if (!["localhost", "127.0.0.1"].includes(window.location.hostname)) return;
-
-  document.body.dataset.debugFireReady = "true";
-  createTorpedoDebugPanel();
-  if (new URLSearchParams(window.location.search).has("debugFireTorpedo")) {
-    window.setTimeout(() => {
-      firePlayerTorpedo(torpedoSystem, boat.root, heading, speed, time);
-    }, 350);
-  }
-}
-
-function consumeLocalDebugFireRequest() {
-  if (!["localhost", "127.0.0.1"].includes(window.location.hostname)) return;
-
-  const request = document.body.dataset.debugFireTorpedoRequest ?? "";
-  if (!request || request === localDebugFireRequest) return;
-
-  localDebugFireRequest = request;
-  firePlayerTorpedo(torpedoSystem, boat.root, heading, speed, time);
-}
-
 // A fired torpedo starts as a visible tube ejection, then becomes a simple straight-running weapon.
 function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
   if (now < system.nextFireTime) return false;
@@ -934,9 +909,9 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
 
   const forward = getForwardVector(heading);
   const right = getRightVector(heading);
-  const tuning = getTorpedoLaunchTuning();
+  const tuning = torpedoLaunchDefaults;
   const tubeX = tubeSide * tuning.tubeX;
-  const muzzleEffectX = tubeSide * torpedoLaunchDefaults.tubeX;
+  const muzzleEffectX = tubeSide * 0.32;
   const tubeStartZ = tuning.startZ;
   const muzzleZ = 3.05;
   const launchStart = shipRoot.position
@@ -1008,109 +983,6 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
   createLaunchPuff(system, muzzlePuffPoint, heading, tubeSide);
   createMuzzleEffect(system, muzzleEffectStart, heading, tubeSide);
   return true;
-}
-
-function createTorpedoDebugPanel() {
-  const existingPanel = document.getElementById("torpedoDebugPanel");
-  if (existingPanel) return;
-
-  const panel = document.createElement("div");
-  panel.id = "torpedoDebugPanel";
-  panel.className = "torpedo-debug";
-
-  const title = document.createElement("strong");
-  title.textContent = "Torpedo Start";
-  panel.append(title);
-
-  const fields = [
-    { key: "tubeX", label: "Seitlich", min: 0.18, max: 0.72, step: 0.01 },
-    { key: "startZ", label: "Vor/Zuruck", min: 1.7, max: 3.2, step: 0.05 },
-    { key: "startY", label: "Hohe", min: 0.32, max: 0.82, step: 0.01 }
-  ];
-  const valueNodes = {};
-
-  fields.forEach((field) => {
-    const row = document.createElement("label");
-    const name = document.createElement("span");
-    const input = document.createElement("input");
-    const value = document.createElement("code");
-
-    name.textContent = field.label;
-    input.type = "range";
-    input.min = String(field.min);
-    input.max = String(field.max);
-    input.step = String(field.step);
-    input.value = String(getTorpedoLaunchTuning()[field.key]);
-    input.dataset.key = field.key;
-    valueNodes[field.key] = value;
-
-    input.addEventListener("input", () => {
-      setTorpedoLaunchTuning(field.key, Number(input.value));
-      updateTorpedoDebugValues(valueNodes);
-    });
-
-    row.append(name, input, value);
-    panel.append(row);
-  });
-
-  const actions = document.createElement("div");
-  actions.className = "torpedo-debug-actions";
-
-  const fireButton = document.createElement("button");
-  fireButton.type = "button";
-  fireButton.textContent = "Fire";
-  fireButton.addEventListener("click", () => {
-    firePlayerTorpedo(torpedoSystem, boat.root, heading, speed, time);
-  });
-
-  const resetButton = document.createElement("button");
-  resetButton.type = "button";
-  resetButton.textContent = "Reset";
-  resetButton.addEventListener("click", () => {
-    window.localStorage.removeItem("seaBattleTorpedoLaunch");
-    fields.forEach((field) => {
-      const input = panel.querySelector(`input[data-key="${field.key}"]`);
-      if (input) input.value = String(torpedoLaunchDefaults[field.key]);
-    });
-    updateTorpedoDebugValues(valueNodes);
-  });
-
-  actions.append(fireButton, resetButton);
-  panel.append(actions);
-  document.body.append(panel);
-  updateTorpedoDebugValues(valueNodes);
-}
-
-function getTorpedoLaunchTuning() {
-  if (!["localhost", "127.0.0.1"].includes(window.location.hostname)) {
-    return torpedoLaunchDefaults;
-  }
-
-  try {
-    return {
-      ...torpedoLaunchDefaults,
-      ...JSON.parse(window.localStorage.getItem("seaBattleTorpedoLaunch") ?? "{}")
-    };
-  } catch {
-    return torpedoLaunchDefaults;
-  }
-}
-
-function setTorpedoLaunchTuning(key, value) {
-  const tuning = getTorpedoLaunchTuning();
-  const next = {
-    ...tuning,
-    [key]: value
-  };
-  window.localStorage.setItem("seaBattleTorpedoLaunch", JSON.stringify(next));
-}
-
-function updateTorpedoDebugValues(valueNodes) {
-  const tuning = getTorpedoLaunchTuning();
-  Object.entries(valueNodes).forEach(([key, node]) => {
-    node.textContent = tuning[key].toFixed(2);
-  });
-  document.body.dataset.torpedoLaunch = `x ${tuning.tubeX.toFixed(2)} z ${tuning.startZ.toFixed(2)} y ${tuning.startY.toFixed(2)}`;
 }
 
 function createTorpedoWake(scene, materials, name) {
@@ -1188,7 +1060,7 @@ function createMuzzleEffect(system, position, heading, tubeSide) {
   }
 }
 
-function updateTorpedoSystem(system, dt, time, enemyMotion) {
+function updateTorpedoSystem(system, dt, time, enemyMotion, landZones) {
   system.hitEffects = system.hitEffects.filter((effect) => {
     effect.age += dt;
     const t = effect.age / effect.lifetime;
@@ -1268,12 +1140,32 @@ function updateTorpedoSystem(system, dt, time, enemyMotion) {
       return false;
     }
 
+    if (!torpedo.hit && torpedoHitsLand(torpedo.root.position, landZones)) {
+      torpedo.hit = true;
+      system.hits += 1;
+      createHitChurn(system, torpedo.root.position, torpedo.heading);
+      disposeTorpedo(torpedo);
+      return false;
+    }
+
     if (torpedo.runDistance > torpedo.maxRange) {
       disposeTorpedo(torpedo);
       return false;
     }
 
     return true;
+  });
+}
+
+function torpedoHitsLand(torpedoPosition, landZones) {
+  return landZones.some((zone) => {
+    if (isInFjordWater(torpedoPosition, zone)) return false;
+
+    const rx = getZoneVisualRx(zone) + 0.35;
+    const rz = getZoneVisualRz(zone) + 0.35;
+    const nx = (torpedoPosition.x - zone.x) / rx;
+    const nz = (torpedoPosition.z - zone.z) / rz;
+    return nx * nx + nz * nz <= 1;
   });
 }
 
