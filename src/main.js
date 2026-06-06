@@ -120,6 +120,9 @@ const worldLandmasses = [
   { kind: "island", name: "storm_west_rocks", x: -536, z: -390, radius: 18, heightScale: 1.0, rx: 25, rz: 18 },
   { kind: "island", name: "storm_south_skerries", x: -462, z: -512, radius: 14, heightScale: 0.9, rx: 20, rz: 16 },
   { kind: "island", name: "storm_outer_needle", x: -318, z: -482, radius: 12, heightScale: 1.45, rx: 18, rz: 14 },
+  { kind: "island", name: "l_passage_west_arm", x: 486, z: -548, radius: 24, heightScale: 1.0, rx: 38, rz: 20 },
+  { kind: "island", name: "l_passage_north_arm", x: 536, z: -502, radius: 22, heightScale: 0.95, rx: 22, rz: 38 },
+  { kind: "island", name: "l_passage_outer_rock", x: 592, z: -555, radius: 15, heightScale: 1.2, rx: 20, rz: 16 },
   {
     kind: "coastline",
     name: "northern_ridge",
@@ -149,6 +152,13 @@ const worldLandmasses = [
       { angle: -1.78, width: 0.2, reach: 0.88 },
       { angle: -1.42, width: 0.15, reach: 0.72 },
       { angle: -2.05, width: 0.13, reach: 0.64 }
+    ],
+    waterways: [
+      { from: { x: 86, z: 8 }, to: { x: 22, z: 0 }, width: 18 },
+      { from: { x: 22, z: 0 }, to: { x: -52, z: -10 }, width: 24 },
+      { from: { x: -52, z: -10 }, to: { x: -142, z: -78 }, width: 17 },
+      { from: { x: -46, z: -3 }, to: { x: -154, z: 4 }, width: 22 },
+      { from: { x: -38, z: 6 }, to: { x: -128, z: 68 }, width: 16 }
     ]
   },
   { kind: "island", name: "delta_outer_bar", x: 632, z: 92, radius: 13, heightScale: 0.7, rx: 19, rz: 15 },
@@ -2167,6 +2177,7 @@ function createWorldLandmasses(landmasses, scene, materials, parent) {
 
     if (land.kind === "coastline") {
       createCoastline(land, position, scene, materials, parent);
+      createWaterways(land, position, scene, materials, parent);
     } else {
       createIsland(land.name, position, land.radius, land.heightScale, scene, materials, parent);
     }
@@ -2208,6 +2219,35 @@ function createCoastline(land, position, scene, materials, parent) {
   terrain.parent = parent;
   terrain.position = position;
   terrain.material = materials.terrain;
+}
+
+function createWaterways(land, position, scene, materials, parent) {
+  if (!land.waterways?.length) return;
+
+  land.waterways.forEach((waterway, index) => {
+    const segment = createWaterwaySegment(`${land.name}_waterway_${index}`, waterway, scene);
+    segment.parent = parent;
+    segment.position.x += position.x;
+    segment.position.z += position.z;
+    segment.material = materials.shallow;
+  });
+}
+
+function createWaterwaySegment(name, waterway, scene) {
+  const dx = waterway.to.x - waterway.from.x;
+  const dz = waterway.to.z - waterway.from.z;
+  const length = Math.sqrt(dx * dx + dz * dz);
+  const segment = MeshBuilder.CreateBox(name, {
+    width: waterway.width,
+    height: 0.018,
+    depth: length
+  }, scene);
+
+  segment.position.x = (waterway.from.x + waterway.to.x) * 0.5;
+  segment.position.y = 0.38;
+  segment.position.z = (waterway.from.z + waterway.to.z) * 0.5;
+  segment.rotation.y = Math.atan2(dx, dz);
+  return segment;
 }
 
 function createCoastlineTerrainMesh(name, land, rx, rz, heightScale, peakBoost, scene) {
