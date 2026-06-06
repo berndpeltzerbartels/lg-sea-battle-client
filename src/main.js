@@ -882,7 +882,7 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
 
   const forward = getForwardVector(heading);
   const right = getRightVector(heading);
-  const tubeX = tubeSide * 0.3;
+  const tubeX = tubeSide * 0.32;
   const tubeStartZ = 2.45;
   const muzzleZ = 3.05;
   const launchStart = shipRoot.position
@@ -905,7 +905,7 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
 
   const body = MeshBuilder.CreateCylinder(`${root.name}_body`, {
     diameter: 0.2,
-    height: 3.2,
+    height: 3.84,
     tessellation: 12
   }, system.scene);
   body.parent = root;
@@ -919,7 +919,7 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
     tessellation: 12
   }, system.scene);
   nose.parent = root;
-  nose.position.z = 1.78;
+  nose.position.z = 2.1;
   nose.rotation.x = Math.PI / 2;
   nose.material = system.materials.funnel;
 
