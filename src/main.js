@@ -317,15 +317,15 @@ function updateEnemyBowWake(wake, speed, time) {
 
   wake.segments.forEach((segment, index) => {
     const pulse = 0.88 + Math.sin(time * 3.2 + index * 0.7) * 0.08;
-    segment.scaling.x = 0.55 + strength * 1.05;
-    segment.scaling.z = (0.65 + strength * 0.75) * pulse;
+    segment.scaling.x = 0.7 + strength * 1.25;
+    segment.scaling.z = (0.55 + strength * 0.95) * pulse;
     segment.position.y = -0.15 + Math.sin(time * 2.8 + index) * 0.006;
   });
 
   wake.churn.forEach((patch, index) => {
     const pulse = 0.75 + Math.sin(time * 4.1 + index * 1.7) * 0.16;
-    patch.scaling.x = (0.45 + strength * 0.65) * pulse;
-    patch.scaling.z = 0.45 + strength * 0.8;
+    patch.scaling.x = (0.65 + strength * 1.05) * pulse;
+    patch.scaling.z = 0.55 + strength * 1.2;
     patch.position.y = -0.14 + Math.sin(time * 3.6 + index) * 0.008;
   });
 }
@@ -748,26 +748,26 @@ function createEnemyBowWake(scene, materials, parent, name) {
       }, scene);
       segment.parent = root;
       segment.material = materials.foam;
-      segment.position.x = side * (0.4 + i * 0.34);
+      segment.position.x = side * (0.68 + i * 0.38);
       segment.position.y = -0.15;
-      segment.position.z = 3.82 - i * 0.5;
-      segment.rotation.y = side * (0.78 - i * 0.08);
+      segment.position.z = 4.08 - i * 0.52;
+      segment.rotation.y = -side * (0.72 - i * 0.08);
       segments.push(segment);
     }
   }
 
-  for (let i = 0; i < 2; i += 1) {
+  for (let i = 0; i < 4; i += 1) {
     const patch = MeshBuilder.CreateBox(`${name}_bow_churn_${i}`, {
-      width: 0.42 - i * 0.1,
+      width: 0.32 + (i % 2) * 0.14,
       height: 0.014,
-      depth: 0.32 + i * 0.12
+      depth: 0.34 + i * 0.08
     }, scene);
     patch.parent = root;
     patch.material = materials.foam;
-    patch.position.x = i === 0 ? -0.12 : 0.12;
+    patch.position.x = (i - 1.5) * 0.12;
     patch.position.y = -0.14;
-    patch.position.z = 4.32 + i * 0.12;
-    patch.rotation.y = i === 0 ? -0.18 : 0.18;
+    patch.position.z = 4.54 + i * 0.05;
+    patch.rotation.y = -0.28 + i * 0.18;
     churn.push(patch);
   }
 
