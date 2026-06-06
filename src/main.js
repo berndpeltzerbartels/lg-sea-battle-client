@@ -319,7 +319,7 @@ function updateEnemyBowWake(wake, speed, time) {
 
   wake.segments.forEach((segment, index) => {
     const pulse = 0.88 + Math.sin(time * 3.2 + index * 0.7) * 0.08;
-    const visible = strength >= segment.metadata.minStrength;
+    const visible = segment.metadata.row <= getVisibleWakeRows(strength);
     segment.setEnabled(visible);
     segment.scaling.x = 0.95 + strength * 1.25;
     segment.scaling.z = (0.82 + strength * 0.62) * pulse;
@@ -332,6 +332,14 @@ function updateEnemyBowWake(wake, speed, time) {
     patch.scaling.z = 0.55 + strength * 1.2;
     patch.position.y = -0.045 + Math.sin(time * 3.6 + index) * 0.006;
   });
+}
+
+function getVisibleWakeRows(strength) {
+  if (strength >= 0.62) return 5;
+  if (strength >= 0.48) return 4;
+  if (strength >= 0.32) return 3;
+  if (strength >= 0.18) return 2;
+  return 1;
 }
 
 function createMaterials(scene) {
@@ -750,7 +758,7 @@ function createEnemyBowWake(scene, materials, parent, name) {
       const endX = side * (1.1 + i * 0.5);
       const endZ = 3.76 - i * 0.38;
       const segment = createWakeRibbon(`${name}_bow_wake_${side}_${i}`, scene, materials.foam, root, startX, startZ, endX, endZ);
-      segment.metadata = { minStrength: Math.max(0.08, i * 0.09) };
+      segment.metadata = { row: i + 1 };
       segments.push(segment);
     }
   }
