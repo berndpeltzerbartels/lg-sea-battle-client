@@ -51,7 +51,19 @@ const rudderValue = document.getElementById("rudderValue");
 
 // One source for visible land, collision, depth, map, and radar occlusion.
 const worldLandmasses = [
-  { kind: "coastline", name: "western_coast", x: -126, z: 58, rx: 72, rz: 66, heightScale: 1 },
+  {
+    kind: "coastline",
+    name: "western_coast",
+    x: -126,
+    z: 58,
+    rx: 72,
+    rz: 66,
+    heightScale: 1,
+    coastRoughness: 0.22,
+    fjords: [
+      { angle: 1.95, width: 0.2, reach: 0.9 }
+    ]
+  },
   { kind: "island", name: "north_island", x: -32, z: 54, radius: 21, heightScale: 1.1, rx: 28, rz: 22 },
   { kind: "island", name: "east_island", x: 58, z: 10, radius: 28, heightScale: 0.9, rx: 36, rz: 27 },
   { kind: "island", name: "south_island", x: 18, z: -76, radius: 24, heightScale: 1.25, rx: 32, rz: 25 },
@@ -65,6 +77,7 @@ const worldLandmasses = [
     rz: 74,
     heightScale: 1.55,
     peakBoost: 34,
+    coastRoughness: 0.22,
     fjords: [
       { angle: 2.72, width: 0.17, reach: 0.88 },
       { angle: -1.18, width: 0.14, reach: 0.76 }
@@ -79,6 +92,7 @@ const worldLandmasses = [
     rz: 54,
     heightScale: 1.05,
     peakBoost: 10,
+    coastRoughness: 0.24,
     fjords: [
       { angle: 0.42, width: 0.18, reach: 0.82 },
       { angle: -2.38, width: 0.13, reach: 0.7 }
@@ -96,6 +110,7 @@ const worldLandmasses = [
     rz: 62,
     heightScale: 2.05,
     peakBoost: 82,
+    coastRoughness: 0.2,
     fjords: [
       { angle: 0.9, width: 0.13, reach: 0.72 }
     ]
@@ -113,7 +128,7 @@ const worldLandmasses = [
     rz: 96,
     heightScale: 1.28,
     peakBoost: 38,
-    coastRoughness: 0.13,
+    coastRoughness: 0.24,
     fjords: [
       { angle: 3.02, width: 0.12, reach: 0.8 },
       { angle: -2.52, width: 0.16, reach: 0.68 }
@@ -128,7 +143,7 @@ const worldLandmasses = [
     rz: 128,
     heightScale: 0.72,
     peakBoost: 4,
-    coastRoughness: 0.15,
+    coastRoughness: 0.28,
     fjords: [
       { angle: -1.78, width: 0.2, reach: 0.88 },
       { angle: -1.42, width: 0.15, reach: 0.72 },
@@ -147,7 +162,7 @@ const worldLandmasses = [
     rz: 118,
     heightScale: 1.38,
     peakBoost: 24,
-    coastRoughness: 0.13,
+    coastRoughness: 0.24,
     fjords: [
       { angle: 0.12, width: 0.14, reach: 0.78 },
       { angle: -0.48, width: 0.11, reach: 0.66 }
@@ -164,7 +179,7 @@ const worldLandmasses = [
     rz: 1750,
     heightScale: 1.18,
     peakBoost: 46,
-    coastRoughness: 0.16,
+    coastRoughness: 0.26,
     fjords: [
       { angle: 1.46, width: 0.1, reach: 0.78 },
       { angle: 1.18, width: 0.16, reach: 0.62 },
@@ -525,8 +540,7 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl) {
   }
 
   landZones.filter((zone) => zoneIntersectsBounds(zone, bounds)).forEach((zone) => {
-    const point = worldToMapPoint(zone, bounds, width, height, scale);
-    drawInstrumentEllipse(ctx, point.x, point.y, getZoneVisualRx(zone) * scale, getZoneVisualRz(zone) * scale, "rgba(98, 129, 89, 0.95)", "rgba(238, 218, 164, 0.74)");
+    drawMapLandZone(ctx, zone, bounds, width, height, scale);
   });
 
   const playerPoint = clampInstrumentPoint(worldToMapPoint(playerPosition, bounds, width, height, scale), width, height, 6);
@@ -562,8 +576,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, enemyPositio
   landZones.forEach((zone) => drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, radius, radarRange));
 
   landZones.forEach((zone) => {
-    const point = worldToRadarPoint(zone, playerPosition, centerX, centerY, scale, heading);
-    drawInstrumentEllipse(ctx, point.x, point.y, getZoneVisualRx(zone) * scale, getZoneVisualRz(zone) * scale, "rgba(96, 124, 83, 0.92)", "rgba(232, 217, 159, 0.4)", -heading);
+    drawRadarLandZone(ctx, zone, playerPosition, centerX, centerY, scale, heading);
   });
 
   const enemyDistance = enemyPosition ? distance2D(playerPosition, enemyPosition) : Infinity;
@@ -644,6 +657,59 @@ function drawInstrumentEllipse(ctx, x, y, rx, rz, fill, stroke, rotation = 0) {
   ctx.ellipse(x, y, Math.max(1, rx), Math.max(1, rz), rotation, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
+}
+
+function drawMapLandZone(ctx, zone, bounds, width, height, scale) {
+  if (zone.kind !== "coastline") {
+    const point = worldToMapPoint(zone, bounds, width, height, scale);
+    drawInstrumentEllipse(ctx, point.x, point.y, getZoneVisualRx(zone) * scale, getZoneVisualRz(zone) * scale, "rgba(98, 129, 89, 0.95)", "rgba(238, 218, 164, 0.74)");
+    return;
+  }
+
+  const points = getCoastContourPoints(zone, 96).map((point) => worldToMapPoint(point, bounds, width, height, scale));
+  drawInstrumentPolygon(ctx, points, "rgba(98, 129, 89, 0.95)", "rgba(238, 218, 164, 0.78)");
+}
+
+function drawRadarLandZone(ctx, zone, playerPosition, centerX, centerY, scale, heading) {
+  if (zone.kind !== "coastline") {
+    const point = worldToRadarPoint(zone, playerPosition, centerX, centerY, scale, heading);
+    drawInstrumentEllipse(ctx, point.x, point.y, getZoneVisualRx(zone) * scale, getZoneVisualRz(zone) * scale, "rgba(96, 124, 83, 0.92)", "rgba(232, 217, 159, 0.4)", -heading);
+    return;
+  }
+
+  const points = getCoastContourPoints(zone, 80).map((point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading));
+  drawInstrumentPolygon(ctx, points, "rgba(96, 124, 83, 0.92)", "rgba(232, 217, 159, 0.46)");
+}
+
+function drawInstrumentPolygon(ctx, points, fill, stroke) {
+  if (points.length < 3) return;
+
+  ctx.fillStyle = fill;
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i += 1) {
+    ctx.lineTo(points[i].x, points[i].y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
+function getCoastContourPoints(zone, samples) {
+  const points = [];
+
+  for (let i = 0; i < samples; i += 1) {
+    const angle = (i / samples) * Math.PI * 2;
+    const factor = getCoastRadiusFactor(angle, zone);
+    points.push({
+      x: zone.x + Math.cos(angle) * getZoneVisualRx(zone) * factor,
+      z: zone.z + Math.sin(angle) * getZoneVisualRz(zone) * factor
+    });
+  }
+
+  return points;
 }
 
 function drawInstrumentMarker(ctx, x, y, color, radius) {
@@ -2122,6 +2188,7 @@ function getLandZone(land) {
     shallowRz: land.rz * shallowScale * coastPadding,
     name: land.name,
     kind: land.kind,
+    coastRoughness: land.coastRoughness ?? 0.09,
     fjords: land.fjords ?? []
   };
 }
@@ -2294,13 +2361,25 @@ function getCoastShape(localX, localZ, rx, rz, land) {
 }
 
 function getCoastRadiusFactor(angle, land) {
-  const roughness = land.coastRoughness ?? 0.09;
+  const roughness = land.coastRoughness ?? 0.16;
   const seed = getNameSeed(land.name) * 0.013;
-  const broad = Math.sin(angle * 3 + seed) * 0.52;
-  const bays = Math.sin(angle * 5 - seed * 0.7) * 0.32;
-  const small = Math.sin(angle * 9 + seed * 1.4) * 0.16;
+  const broad = Math.sin(angle * 2 + seed) * 0.62;
+  const bays = Math.sin(angle * 4 - seed * 0.7) * 0.42;
+  const small = Math.sin(angle * 7 + seed * 1.4) * 0.2;
+  let fjordBite = 0;
 
-  return clamp(1 + (broad + bays + small) * roughness, 0.8, 1.24);
+  (land.fjords ?? []).forEach((fjord) => {
+    const width = Math.max(0.08, fjord.width ?? 0.14);
+    const angleDistance = getAngularDistance(angle, fjord.angle);
+    const mouth = 1 - smoothstep(width * 0.45, width * 1.9, angleDistance);
+    fjordBite = Math.max(fjordBite, mouth * (0.18 + width * 0.9));
+  });
+
+  return clamp(1 + (broad + bays + small) * roughness - fjordBite, 0.56, 1.42);
+}
+
+function getAngularDistance(a, b) {
+  return Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 }
 
 function getNameSeed(name) {
