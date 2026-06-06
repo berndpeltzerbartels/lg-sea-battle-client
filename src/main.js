@@ -37,6 +37,7 @@ scene.fogDensity = 0.007;
 
 const speedValue = document.getElementById("speedValue");
 const depthValue = document.getElementById("depthValue");
+const engineValue = document.getElementById("engineValue");
 
 const materials = createMaterials(scene);
 const world = new TransformNode("world", scene);
@@ -79,28 +80,40 @@ camera.fov = 0.78;
 scene.activeCamera = camera;
 
 const keys = {
-  forward: false,
-  backward: false,
   left: false,
   right: false
 };
 
 window.addEventListener("keydown", (event) => {
-  if (event.code === "ArrowUp") keys.forward = true;
-  if (event.code === "ArrowDown") keys.backward = true;
+  if (event.code === "ArrowUp" && !event.repeat) {
+    engineOrder = clamp(engineOrder + 1, 0, engineOrders.length - 1);
+    event.preventDefault();
+  }
+  if (event.code === "ArrowDown" && !event.repeat) {
+    engineOrder = clamp(engineOrder - 1, 0, engineOrders.length - 1);
+    event.preventDefault();
+  }
   if (event.code === "ArrowLeft") keys.left = true;
   if (event.code === "ArrowRight") keys.right = true;
 });
 
 window.addEventListener("keyup", (event) => {
-  if (event.code === "ArrowUp") keys.forward = false;
-  if (event.code === "ArrowDown") keys.backward = false;
   if (event.code === "ArrowLeft") keys.left = false;
   if (event.code === "ArrowRight") keys.right = false;
 });
 
+const engineOrders = [
+  { label: "Astern", speed: -3.2 },
+  { label: "Stop", speed: 0 },
+  { label: "Slow", speed: 2.4 },
+  { label: "Half", speed: 5.4 },
+  { label: "Full", speed: 9.2 },
+  { label: "Flank", speed: 12.4 }
+];
+
 let heading = 0;
 let speed = 0;
+let engineOrder = 1;
 let turnVelocity = 0;
 let cameraPosition = camera.position.clone();
 let cameraTarget = boat.root.position.clone();
@@ -110,16 +123,14 @@ scene.onBeforeRenderObservable.add(() => {
   const dt = Math.min(engine.getDeltaTime() / 1000, 0.05);
   time += dt;
 
-  const throttle = Number(keys.forward) - Number(keys.backward);
   const steer = Number(keys.right) - Number(keys.left);
 
   const waterSafety = getWaterSafety(boat.root.position, blockedWaters);
   const maxForwardSpeed = waterSafety.isShallow ? 4.4 : 14.4;
-  const maxReverseSpeed = -4.8;
-  const acceleration = throttle >= 0 ? 7.2 : 4.2;
-  const drag = throttle === 0 ? 2.4 : 1.0;
-  const targetSpeed = throttle > 0 ? maxForwardSpeed : throttle < 0 ? maxReverseSpeed : 0;
-  speed += (targetSpeed - speed) * Math.min(1, dt * (throttle === 0 ? drag : acceleration));
+  const engineTargetSpeed = engineOrders[engineOrder].speed;
+  const targetSpeed = engineTargetSpeed > 0 ? Math.min(engineTargetSpeed, maxForwardSpeed) : engineTargetSpeed;
+  const response = Math.abs(targetSpeed) > Math.abs(speed) ? 0.42 : 0.72;
+  speed += (targetSpeed - speed) * Math.min(1, dt * response);
 
   const turnStrength = speed >= 0 ? 0.36 : -0.24;
   const rudderGrip = clamp(0.18 + Math.abs(speed) / 3.4, 0.18, 1);
@@ -169,8 +180,10 @@ scene.onBeforeRenderObservable.add(() => {
   document.body.dataset.cameraRotation = `${camera.rotation.x.toFixed(2)},${camera.rotation.y.toFixed(2)},${camera.rotation.z.toFixed(2)}`;
   document.body.dataset.activeCamera = scene.activeCamera?.name ?? "none";
   document.body.dataset.boat = `${boat.root.position.x.toFixed(1)},${boat.root.position.y.toFixed(1)},${boat.root.position.z.toFixed(1)}`;
+  document.body.dataset.engineOrder = engineOrders[engineOrder].label;
 
   speedValue.textContent = Math.abs(speed).toFixed(1);
+  engineValue.textContent = engineOrders[engineOrder].label;
   depthValue.textContent = nextWaterSafety.isBlocked
     ? "Ground"
     : nextWaterSafety.isShallow
