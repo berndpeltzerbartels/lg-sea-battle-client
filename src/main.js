@@ -890,15 +890,24 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
   const right = getRightVector(heading);
   const tuning = getTorpedoLaunchTuning();
   const tubeX = tubeSide * tuning.tubeX;
+  const muzzleEffectX = tubeSide * torpedoLaunchDefaults.tubeX;
   const tubeStartZ = tuning.startZ;
   const muzzleZ = 3.05;
   const launchStart = shipRoot.position
     .add(right.scale(tubeX))
     .add(forward.scale(tubeStartZ))
     .add(new Vector3(0, tuning.startY, 0));
+  const muzzleEffectStart = shipRoot.position
+    .add(right.scale(muzzleEffectX))
+    .add(forward.scale(tubeStartZ))
+    .add(new Vector3(0, tuning.startY, 0));
   const launchEnd = shipRoot.position
     .add(right.scale(tubeX))
     .add(forward.scale(muzzleZ + 1.15))
+    .add(new Vector3(0, -0.04, 0));
+  const muzzlePuffPoint = shipRoot.position
+    .add(right.scale(muzzleEffectX))
+    .add(forward.scale(muzzleZ + 0.4))
     .add(new Vector3(0, -0.04, 0));
   const runStart = shipRoot.position
     .add(right.scale(tubeX))
@@ -950,8 +959,8 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
   };
   system.nextId += 1;
   system.active.push(torpedo);
-  createLaunchPuff(system, launchEnd, heading, tubeSide);
-  createMuzzleEffect(system, launchStart, heading, tubeSide);
+  createLaunchPuff(system, muzzlePuffPoint, heading, tubeSide);
+  createMuzzleEffect(system, muzzleEffectStart, heading, tubeSide);
   return true;
 }
 
