@@ -1279,18 +1279,17 @@ function updateTorpedoSystem(system, dt, time, enemyMotion) {
 
 function torpedoHitsEnemy(torpedoPosition, enemyMotion) {
   const hit = getEnemyHitLocalPoint(torpedoPosition, enemyMotion.root.position, enemyMotion.heading);
-  const halfLength = 4.65;
-  const halfWidth = 0.92;
-  const torpedoRadius = 0.24;
-  const lengthPadding = 0.35;
+  const stern = -4.05;
+  const bow = 4.45;
+  const torpedoRadius = 0.22;
+  const lengthPadding = 0.18;
 
-  if (Math.abs(hit.forward) <= halfLength + lengthPadding && Math.abs(hit.right) <= halfWidth + torpedoRadius) {
-    return true;
+  if (hit.forward < stern - lengthPadding || hit.forward > bow + lengthPadding) {
+    return false;
   }
 
-  const bowDistance = distanceToPoint2D(hit.right, hit.forward, 0, halfLength);
-  const sternDistance = distanceToPoint2D(hit.right, hit.forward, 0, -halfLength);
-  return Math.min(bowDistance, sternDistance) <= halfWidth + torpedoRadius;
+  const halfWidth = getEnemyHullHalfWidthAt(hit.forward) + torpedoRadius;
+  return Math.abs(hit.right) <= halfWidth;
 }
 
 function getEnemyHitLocalPoint(point, enemyPosition, enemyHeading) {
@@ -1303,10 +1302,27 @@ function getEnemyHitLocalPoint(point, enemyPosition, enemyHeading) {
   };
 }
 
-function distanceToPoint2D(x1, y1, x2, y2) {
-  const dx = x1 - x2;
-  const dy = y1 - y2;
-  return Math.sqrt(dx * dx + dy * dy);
+function getEnemyHullHalfWidthAt(forward) {
+  const sections = [
+    { z: -4.05, halfWidth: 0.39 },
+    { z: -2.3, halfWidth: 0.61 },
+    { z: 1.55, halfWidth: 0.66 },
+    { z: 3.25, halfWidth: 0.31 },
+    { z: 4.45, halfWidth: 0.04 }
+  ];
+
+  if (forward <= sections[0].z) return sections[0].halfWidth;
+
+  for (let i = 0; i < sections.length - 1; i += 1) {
+    const current = sections[i];
+    const next = sections[i + 1];
+    if (forward <= next.z) {
+      const t = (forward - current.z) / (next.z - current.z);
+      return current.halfWidth + (next.halfWidth - current.halfWidth) * t;
+    }
+  }
+
+  return sections[sections.length - 1].halfWidth;
 }
 
 function updateTorpedoWake(torpedo, visible, time) {
