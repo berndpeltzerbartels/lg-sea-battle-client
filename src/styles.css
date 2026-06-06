@@ -368,9 +368,9 @@ body {
 
 .rudder {
   position: absolute;
-  right: 180px;
+  right: 202px;
   bottom: 24px;
-  width: 72px;
+  width: 142px;
   padding: 12px 10px 11px;
   border: 1px solid rgb(255 255 255 / 32%);
   border-radius: 8px;
@@ -391,32 +391,31 @@ body {
 
 .rudder-gauge {
   position: relative;
-  height: 112px;
+  height: 28px;
   margin: 0 auto;
-  border-left: 1px solid rgb(247 251 255 / 26%);
+  border-bottom: 1px solid rgb(247 251 255 / 26%);
 }
 
 .rudder-gauge::before,
 .rudder-gauge::after {
   position: absolute;
-  left: -5px;
-  width: 10px;
-  height: 1px;
+  bottom: -5px;
+  width: 1px;
+  height: 10px;
   background: rgb(247 251 255 / 44%);
   content: "";
 }
 
 .rudder-gauge::before {
-  top: 0;
+  left: 0;
 }
 
 .rudder-gauge::after {
-  bottom: 0;
+  right: 0;
 }
 
 .rudder-mark {
   position: absolute;
-  left: 10px;
   color: rgb(247 251 255 / 62%);
   font-size: 9px;
   font-weight: 800;
@@ -424,38 +423,42 @@ body {
 }
 
 .rudder-mark-port {
-  top: -3px;
+  left: 0;
+  bottom: 8px;
 }
 
 .rudder-mark-center {
-  top: 50%;
-  transform: translateY(-50%);
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
 }
 
 .rudder-mark-center::before {
   position: absolute;
-  left: -15px;
-  top: 50%;
-  width: 12px;
-  height: 1px;
+  left: 50%;
+  bottom: -14px;
+  width: 1px;
+  height: 12px;
   background: rgb(247 251 255 / 62%);
   content: "";
+  transform: translateX(-50%);
 }
 
 .rudder-mark-starboard {
-  bottom: -3px;
+  right: 0;
+  bottom: 8px;
 }
 
 .rudder-indicator {
   position: absolute;
-  left: -7px;
-  top: calc(var(--rudder-ratio, 0.5) * 100%);
-  width: 14px;
-  height: 6px;
+  left: calc(var(--rudder-ratio, 0.5) * 100%);
+  bottom: -7px;
+  width: 6px;
+  height: 14px;
   border-radius: 999px;
   background: #9be5df;
   box-shadow: 0 0 12px rgb(155 229 223 / 66%);
-  transform: translateY(-50%);
+  transform: translateX(-50%);
 }
 
 .rudder strong {
@@ -509,13 +512,13 @@ body {
   }
 
   .rudder {
-    right: 146px;
+    right: 156px;
     bottom: 14px;
-    width: 58px;
+    width: 96px;
     padding: 10px 8px;
   }
 
   .rudder-gauge {
-    height: 92px;
+    height: 26px;
   }
 }

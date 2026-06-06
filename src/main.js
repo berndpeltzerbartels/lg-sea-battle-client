@@ -317,7 +317,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, enemyPositio
   const centerX = width * 0.5;
   const centerY = height * 0.5;
   const radius = Math.min(width, height) * 0.5 - 7;
-  const radarRange = 170;
+  const radarRange = 360;
   const scale = radius / radarRange;
 
   ctx.clearRect(0, 0, width, height);
