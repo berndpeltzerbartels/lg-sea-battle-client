@@ -123,6 +123,71 @@ body {
   color: #9be5df;
 }
 
+.telegraph {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  width: 132px;
+  padding: 12px 12px 11px;
+  border: 1px solid rgb(255 255 255 / 32%);
+  border-radius: 8px;
+  background: rgb(5 27 40 / 42%);
+  box-shadow: 0 12px 38px rgb(1 15 24 / 22%);
+  backdrop-filter: blur(7px);
+}
+
+.telegraph-title {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+  color: #9be5df;
+}
+
+.telegraph-scale {
+  display: grid;
+  gap: 4px;
+}
+
+.telegraph-step {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-items: center;
+  min-height: 15px;
+  color: rgb(247 251 255 / 62%);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.telegraph-step::before {
+  width: 14px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(247 251 255 / 35%);
+  content: "";
+}
+
+.telegraph-step.is-active {
+  color: #ffffff;
+}
+
+.telegraph-step.is-active::before {
+  height: 8px;
+  background: #9be5df;
+  box-shadow: 0 0 14px rgb(155 229 223 / 62%);
+}
+
+.telegraph-step.is-stop::before {
+  background: rgb(255 255 255 / 56%);
+}
+
+.telegraph-step.is-active.is-stop::before {
+  background: #ffffff;
+}
+
 @media (max-width: 700px) {
   .compass {
     top: 14px;
@@ -135,5 +200,12 @@ body {
   .speed {
     left: 14px;
     bottom: 14px;
+  }
+
+  .telegraph {
+    right: 14px;
+    bottom: 14px;
+    width: 116px;
+    padding: 10px;
   }
 }

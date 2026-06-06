@@ -38,6 +38,7 @@ scene.fogDensity = 0.007;
 const speedValue = document.getElementById("speedValue");
 const depthValue = document.getElementById("depthValue");
 const engineValue = document.getElementById("engineValue");
+const telegraphScale = document.getElementById("telegraphScale");
 
 const materials = createMaterials(scene);
 const world = new TransformNode("world", scene);
@@ -108,11 +109,14 @@ window.addEventListener("keyup", (event) => {
 });
 
 const engineOrders = [
-  { label: "Astern", speed: -3.2 },
+  { label: "Astern Full", shortLabel: "Full Ast", speed: -4.2 },
+  { label: "Astern Half", shortLabel: "Half Ast", speed: -2.2 },
   { label: "Stop", speed: 0 },
-  { label: "Slow", speed: 2.4 },
-  { label: "Half", speed: 5.4 },
-  { label: "Full", speed: 9.2 },
+  { label: "Ahead Slow", shortLabel: "Slow", speed: 1.6 },
+  { label: "Ahead 1/3", shortLabel: "1/3", speed: 3.2 },
+  { label: "Ahead Half", shortLabel: "Half", speed: 5.2 },
+  { label: "Ahead 2/3", shortLabel: "2/3", speed: 7.2 },
+  { label: "Ahead Full", shortLabel: "Full", speed: 9.6 },
   { label: "Flank", speed: 12.4 }
 ];
 
@@ -120,11 +124,13 @@ const engineOrders = [
 // Later multiplayer can send this order index plus heading/speed instead of raw input.
 let heading = 0;
 let speed = 0;
-let engineOrder = 1;
+let engineOrder = 2;
 let turnVelocity = 0;
 let cameraPosition = camera.position.clone();
 let cameraTarget = boat.root.position.clone();
 let time = 0;
+
+const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
 
 scene.onBeforeRenderObservable.add(() => {
   const dt = Math.min(engine.getDeltaTime() / 1000, 0.05);
@@ -201,6 +207,7 @@ scene.onBeforeRenderObservable.add(() => {
   const displayedSpeed = Math.abs(speed) < 0.08 ? 0 : Math.abs(speed);
   speedValue.textContent = displayedSpeed.toFixed(1);
   engineValue.textContent = engineOrders[engineOrder].label;
+  updateTelegraphSteps(telegraphSteps, engineOrder);
   depthValue.textContent = nextWaterSafety.isBlocked
     ? "Ground"
     : nextWaterSafety.isShallow
@@ -215,6 +222,25 @@ engine.runRenderLoop(() => {
 window.addEventListener("resize", () => {
   engine.resize();
 });
+
+function createTelegraphSteps(orders, parent) {
+  if (!parent) return [];
+
+  return orders.map((order, index) => {
+    const step = document.createElement("div");
+    step.className = `telegraph-step${order.speed === 0 ? " is-stop" : ""}`;
+    step.textContent = order.shortLabel ?? order.label;
+    step.dataset.order = String(index);
+    parent.prepend(step);
+    return step;
+  });
+}
+
+function updateTelegraphSteps(steps, activeOrder) {
+  steps.forEach((step, index) => {
+    step.classList.toggle("is-active", index === activeOrder);
+  });
+}
 
 function createMaterials(scene) {
   const water = new StandardMaterial("water_material", scene);
