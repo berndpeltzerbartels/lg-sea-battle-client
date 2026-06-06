@@ -301,10 +301,17 @@ function createPlayerBow(scene, materials, name = "player_bow") {
     }, scene);
     tube.parent = root;
     tube.position.x = i === 0 ? -0.32 : 0.32;
-    tube.position.y = 0.84;
+    tube.position.y = 0.82;
     tube.position.z = 1.55;
     tube.rotation.x = Math.PI / 2;
     tube.material = materials.funnel;
+
+    const tubeBase = MeshBuilder.CreateBox(`${name}_torpedo_base_${i}`, { width: 0.25, height: 0.04, depth: 2.2 }, scene);
+    tubeBase.parent = root;
+    tubeBase.position.x = tube.position.x;
+    tubeBase.position.y = 0.765;
+    tubeBase.position.z = 1.42;
+    tubeBase.material = materials.hull;
 
     const cap = MeshBuilder.CreateCylinder(`${name}_tube_cap_${i}`, {
       diameter: 0.17,
@@ -323,16 +330,16 @@ function createPlayerBow(scene, materials, name = "player_bow") {
     const rail = MeshBuilder.CreateBox(`${name}_deck_edge_${i}`, { width: 0.07, height: 0.13, depth: 3.42 }, scene);
     rail.parent = root;
     rail.position.x = i === 0 ? -0.58 : 0.58;
-    rail.position.y = 0.77;
+    rail.position.y = 0.76;
     rail.position.z = 0.62;
     rail.material = materials.hull;
   }
 
-  createRailSegment(`${name}_bow_rail_left_a`, scene, materials.hull, root, -0.58, 2.15, -0.42, 2.82, 0.74);
-  createRailSegment(`${name}_bow_rail_left_b`, scene, materials.hull, root, -0.28, 3.42, -0.07, 4.56, 0.69);
-  createRailSegment(`${name}_bow_rail_right_a`, scene, materials.hull, root, 0.58, 2.15, 0.42, 2.82, 0.74);
-  createRailSegment(`${name}_bow_rail_right_b`, scene, materials.hull, root, 0.28, 3.42, 0.07, 4.56, 0.69);
-  createRailSegment(`${name}_bow_tip_rail`, scene, materials.hull, root, -0.07, 4.56, 0.07, 4.56, 0.69);
+  createRailSegment(`${name}_bow_rail_left_a`, scene, materials.hull, root, -0.58, 2.15, -0.42, 2.82, 0.76);
+  createRailSegment(`${name}_bow_rail_left_b`, scene, materials.hull, root, -0.28, 3.42, -0.07, 4.56, 0.76);
+  createRailSegment(`${name}_bow_rail_right_a`, scene, materials.hull, root, 0.58, 2.15, 0.42, 2.82, 0.76);
+  createRailSegment(`${name}_bow_rail_right_b`, scene, materials.hull, root, 0.28, 3.42, 0.07, 4.56, 0.76);
+  createRailSegment(`${name}_bow_tip_rail`, scene, materials.hull, root, -0.09, 4.56, 0.09, 4.56, 0.8, 0.16);
 
   const hatch = MeshBuilder.CreateBox(`${name}_deck_hatch`, { width: 0.46, height: 0.11, depth: 0.52 }, scene);
   hatch.parent = root;
@@ -343,11 +350,11 @@ function createPlayerBow(scene, materials, name = "player_bow") {
   return { root };
 }
 
-function createRailSegment(name, scene, material, parent, x1, z1, x2, z2, y) {
+function createRailSegment(name, scene, material, parent, x1, z1, x2, z2, y, height = 0.12) {
   const dx = x2 - x1;
   const dz = z2 - z1;
   const length = Math.sqrt(dx * dx + dz * dz);
-  const rail = MeshBuilder.CreateBox(name, { width: 0.07, height: 0.12, depth: length }, scene);
+  const rail = MeshBuilder.CreateBox(name, { width: 0.07, height, depth: length }, scene);
   rail.parent = parent;
   rail.position.x = (x1 + x2) / 2;
   rail.position.y = y;
