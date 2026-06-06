@@ -132,6 +132,8 @@ let cameraTarget = boat.root.position.clone();
 let time = 0;
 
 const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
+const enemyMotion = createEnemyMotion(enemyBoat.root, -0.55, 3);
+startLocalEnemyEventSource(enemyMotion);
 
 scene.onBeforeRenderObservable.add(() => {
   const dt = Math.min(engine.getDeltaTime() / 1000, 0.05);
@@ -185,6 +187,7 @@ scene.onBeforeRenderObservable.add(() => {
   materials.water.diffuseTexture.uOffset += dt * 0.01;
   materials.water.diffuseTexture.vOffset += dt * 0.018;
   updateFoamPatches(foam, boat.root.position, time);
+  updateEnemyMotion(enemyMotion, dt, time);
 
   // Fixed bridge camera: it follows the ship immediately so acceleration never reveals the rear model.
   const cameraDistance = 0.65;
@@ -239,6 +242,69 @@ function updateTelegraphSteps(steps, activeOrder) {
   steps.forEach((step, index) => {
     step.classList.toggle("is-active", index === activeOrder);
   });
+}
+
+function createEnemyMotion(root, heading, engineOrder) {
+  return {
+    root,
+    heading,
+    speed: 0,
+    turnVelocity: 0,
+    engineOrder,
+    rudder: 0,
+    timers: []
+  };
+}
+
+function startLocalEnemyEventSource(motion) {
+  const events = [
+    { delay: 1800, engineOrder: 4, rudder: 0.2 },
+    { delay: 5200, rudder: -0.7 },
+    { delay: 9400, engineOrder: 5, rudder: 0.45 },
+    { delay: 13800, rudder: 0 },
+    { delay: 17800, engineOrder: 3, rudder: -0.35 },
+    { delay: 22800, engineOrder: 6, rudder: 0.25 }
+  ];
+
+  events.forEach((event) => {
+    const timer = window.setTimeout(() => {
+      applyEnemyMotionEvent(motion, event);
+    }, event.delay);
+    motion.timers.push(timer);
+  });
+}
+
+function applyEnemyMotionEvent(motion, event) {
+  if (Number.isInteger(event.engineOrder)) {
+    motion.engineOrder = clamp(event.engineOrder, 0, engineOrders.length - 1);
+  }
+
+  if (Number.isFinite(event.rudder)) {
+    motion.rudder = clamp(event.rudder, -1, 1);
+  }
+}
+
+function updateEnemyMotion(motion, dt, time) {
+  const targetSpeed = engineOrders[motion.engineOrder].speed;
+  const speedResponse = Math.abs(targetSpeed) > Math.abs(motion.speed) ? 0.32 : 0.62;
+  motion.speed += (targetSpeed - motion.speed) * Math.min(1, dt * speedResponse);
+
+  const turnStrength = motion.speed >= 0 ? 0.22 : -0.16;
+  const targetTurnVelocity = motion.rudder * turnStrength * clamp(Math.abs(motion.speed) / 5.2, 0.12, 1);
+  motion.turnVelocity += (targetTurnVelocity - motion.turnVelocity) * Math.min(1, dt * 1.5);
+  motion.heading += motion.turnVelocity * dt;
+
+  const forward = new Vector3(Math.sin(motion.heading), 0, Math.cos(motion.heading));
+  motion.root.position.addInPlace(forward.scale(motion.speed * dt));
+  motion.root.position.y = 0.28 + Math.sin(time * 1.6 + 1.9) * 0.04;
+  motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
+    Math.sin(time * 1.9 + 0.8) * 0.015,
+    motion.heading,
+    -motion.turnVelocity * 0.42 + Math.sin(time * 1.4) * 0.01
+  );
+
+  document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
+  document.body.dataset.enemyEngineOrder = engineOrders[motion.engineOrder].label;
 }
 
 function createMaterials(scene) {
