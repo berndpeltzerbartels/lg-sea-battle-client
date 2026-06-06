@@ -433,7 +433,8 @@ function drawMapInstrument(canvas, playerPosition, landZones) {
 
   ctx.fillStyle = "rgba(247, 251, 255, 0.78)";
   ctx.font = "700 10px Inter, sans-serif";
-  ctx.fillText(`Tile ${tile.x},${tile.z}`, 9, height - 10);
+  ctx.fillText(`Tile ${tile.x},${tile.z}`, 9, height - 22);
+  ctx.fillText(formatWorldCoordinate(playerPosition), 9, height - 9);
 }
 
 function drawRadarInstrument(canvas, statusElement, playerPosition, enemyPosition, landZones, heading) {
@@ -657,6 +658,15 @@ function zoneIntersectsBounds(zone, bounds) {
     zone.z + getZoneVisualRz(zone) >= bounds.minZ &&
     zone.z - getZoneVisualRz(zone) <= bounds.maxZ
   );
+}
+
+function formatWorldCoordinate(position) {
+  const north = Math.round(position.z);
+  const east = Math.round(position.x);
+  const northLabel = north >= 0 ? `N ${String(north).padStart(4, "0")}` : `S ${String(Math.abs(north)).padStart(4, "0")}`;
+  const eastLabel = east >= 0 ? `E ${String(east).padStart(4, "0")}` : `W ${String(Math.abs(east)).padStart(4, "0")}`;
+
+  return `${northLabel} / ${eastLabel}`;
 }
 
 function getZoneVisualRx(zone) {
