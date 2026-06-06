@@ -361,10 +361,9 @@ scene.onBeforeRenderObservable.add(() => {
     nextRamHitTime = time + 2.2;
     torpedoSystem.hits += 1;
     ramShake = 1;
-    enemyMotion.rollImpulse += ramHit.side * 0.42;
+    beginEnemySinking(enemyMotion, ramHit.side, time);
     speed *= -0.18;
     turnVelocity *= 0.25;
-    enemyMotion.speed *= 0.35;
   }
 
   // Fixed bridge camera: it follows the ship immediately so acceleration never reveals the rear model.
@@ -401,7 +400,7 @@ scene.onBeforeRenderObservable.add(() => {
   depthGauge?.style.setProperty("--depth-ratio", String(waterDepth.ratio));
   compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
   updateRudderGauge(rudderIndicator, rudderValue, rudderDegrees);
-  updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, enemyMotion.root.position, blockedWaters, heading);
+  updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, getRadarEnemyPosition(enemyMotion), blockedWaters, heading);
 });
 
 engine.runRenderLoop(() => {
@@ -563,13 +562,13 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, enemyPositio
     drawInstrumentEllipse(ctx, point.x, point.y, getZoneVisualRx(zone) * scale, getZoneVisualRz(zone) * scale, "rgba(96, 124, 83, 0.92)", "rgba(232, 217, 159, 0.4)", -heading);
   });
 
-  const enemyDistance = distance2D(playerPosition, enemyPosition);
-  const enemyBlocked = isLineBlockedByLand(playerPosition, enemyPosition, landZones);
-  if (enemyDistance <= radarRange && !enemyBlocked) {
+  const enemyDistance = enemyPosition ? distance2D(playerPosition, enemyPosition) : Infinity;
+  const enemyBlocked = enemyPosition ? isLineBlockedByLand(playerPosition, enemyPosition, landZones) : false;
+  if (enemyPosition && enemyDistance <= radarRange && !enemyBlocked) {
     const enemyPoint = worldToRadarPoint(enemyPosition, playerPosition, centerX, centerY, scale, heading);
     drawInstrumentMarker(ctx, enemyPoint.x, enemyPoint.y, "#d84a3a", 4);
     if (statusElement) statusElement.textContent = `Contact ${formatWorldDistance(enemyDistance)}`;
-  } else if (enemyDistance <= radarRange) {
+  } else if (enemyPosition && enemyDistance <= radarRange) {
     if (statusElement) statusElement.textContent = `Shadow ${formatWorldDistance(enemyDistance)}`;
   } else {
     if (statusElement) statusElement.textContent = `Clear ${formatWorldDistance(radarRange)}`;
@@ -806,6 +805,10 @@ function createEnemyMotion(root, bowWake, heading, engineOrder) {
     rollImpulse: 0,
     engineOrder,
     rudder: 0,
+    state: "active",
+    sinkAge: 0,
+    sinkSide: -1,
+    sinkStartY: root.position.y,
     timers: []
   };
 }
@@ -832,6 +835,8 @@ function startLocalEnemyEventSource(motion) {
 }
 
 function applyEnemyMotionEvent(motion, event) {
+  if (motion.state !== "active") return;
+
   if (Number.isInteger(event.engineOrder)) {
     motion.engineOrder = clamp(event.engineOrder, 0, engineOrders.length - 1);
   }
@@ -842,6 +847,13 @@ function applyEnemyMotionEvent(motion, event) {
 }
 
 function updateEnemyMotion(motion, dt, time) {
+  if (motion.state === "sunk") return;
+
+  if (motion.state === "sinking") {
+    updateEnemySinking(motion, dt, time);
+    return;
+  }
+
   const targetSpeed = engineOrders[motion.engineOrder].speed;
   const speedResponse = Math.abs(targetSpeed) > Math.abs(motion.speed) ? 0.58 : 0.78;
   motion.speed += (targetSpeed - motion.speed) * Math.min(1, dt * speedResponse);
@@ -865,6 +877,51 @@ function updateEnemyMotion(motion, dt, time) {
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
   document.body.dataset.enemyEngineOrder = engineOrders[motion.engineOrder].label;
   document.body.dataset.enemySpeed = motion.speed.toFixed(1);
+}
+
+function beginEnemySinking(motion, side, time) {
+  if (motion.state !== "active") return;
+
+  motion.state = "sinking";
+  motion.sinkAge = 0;
+  motion.sinkSide = side || -1;
+  motion.sinkStartY = motion.root.position.y;
+  motion.engineOrder = 0;
+  motion.rudder = 0;
+  motion.rollImpulse = motion.sinkSide * 0.5;
+  motion.timers.forEach((timer) => window.clearTimeout(timer));
+  motion.timers = [];
+  updateEnemyBowWake(motion.bowWake, 0, time);
+}
+
+function updateEnemySinking(motion, dt, time) {
+  motion.sinkAge += dt;
+  motion.speed *= Math.max(0, 1 - dt * 1.55);
+  motion.rollImpulse += (0 - motion.rollImpulse) * Math.min(1, dt * 1.2);
+
+  const forward = new Vector3(Math.sin(motion.heading), 0, Math.cos(motion.heading));
+  motion.root.position.addInPlace(forward.scale(motion.speed * dt));
+
+  const t = clamp(motion.sinkAge / 5.2, 0, 1);
+  const ease = easeInOutCubic(t);
+  const roll = motion.sinkSide * (0.12 + ease * 1.45) + motion.rollImpulse;
+  const pitch = -ease * 0.28 + Math.sin(time * 1.7) * (1 - t) * 0.025;
+  motion.root.position.y = motion.sinkStartY - ease * 2.35 + Math.sin(time * 3.1) * (1 - t) * 0.035;
+  motion.root.rotationQuaternion = Quaternion.FromEulerAngles(pitch, motion.heading, roll);
+  updateEnemyBowWake(motion.bowWake, 0, time);
+
+  if (t >= 1) {
+    motion.state = "sunk";
+    motion.root.setEnabled(false);
+  }
+
+  document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
+  document.body.dataset.enemyEngineOrder = "SUNK";
+  document.body.dataset.enemySpeed = "0.0";
+}
+
+function getRadarEnemyPosition(enemyMotion) {
+  return enemyMotion.state === "active" ? enemyMotion.root.position : null;
 }
 
 function updateEnemyBowWake(wake, speed, time) {
@@ -1154,6 +1211,7 @@ function updateTorpedoSystem(system, dt, time, enemyMotion, landZones) {
     if (!torpedo.hit && torpedoHitsEnemy(torpedo.root.position, enemyMotion)) {
       torpedo.hit = true;
       system.hits += 1;
+      beginEnemySinking(enemyMotion, getEnemySinkSide(torpedo.root.position, enemyMotion), time);
       createHitChurn(system, torpedo.root.position, torpedo.heading);
       disposeTorpedo(torpedo);
       return false;
@@ -1223,6 +1281,8 @@ function torpedoHitsEnemy(torpedoPosition, enemyMotion) {
 }
 
 function pointHitsEnemyHull(point, enemyMotion, radius) {
+  if (enemyMotion.state !== "active") return false;
+
   const hit = getEnemyHitLocalPoint(point, enemyMotion.root.position, enemyMotion.heading);
   const stern = -4.05;
   const bow = 4.45;
@@ -1234,6 +1294,11 @@ function pointHitsEnemyHull(point, enemyMotion, radius) {
 
   const halfWidth = getEnemyHullHalfWidthAt(hit.forward) + radius;
   return Math.abs(hit.right) <= halfWidth;
+}
+
+function getEnemySinkSide(point, enemyMotion) {
+  const hit = getEnemyHitLocalPoint(point, enemyMotion.root.position, enemyMotion.heading);
+  return hit.right >= 0 ? -1 : 1;
 }
 
 function getEnemyHitLocalPoint(point, enemyPosition, enemyHeading) {
@@ -1407,6 +1472,11 @@ function getRightVector(heading) {
 function easeOutCubic(value) {
   const t = clamp(value, 0, 1);
   return 1 - Math.pow(1 - t, 3);
+}
+
+function easeInOutCubic(value) {
+  const t = clamp(value, 0, 1);
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
 function createMaterials(scene) {
