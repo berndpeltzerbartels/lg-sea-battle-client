@@ -205,14 +205,11 @@ scene.onBeforeRenderObservable.add(() => {
   document.body.dataset.engineOrder = engineOrders[engineOrder].label;
 
   const displayedSpeed = Math.abs(speed) < 0.08 ? 0 : Math.abs(speed);
+  const waterDepth = getWaterDepth(boat.root.position, blockedWaters);
   speedValue.textContent = displayedSpeed.toFixed(1);
   engineValue.textContent = engineOrders[engineOrder].label;
   updateTelegraphSteps(telegraphSteps, engineOrder);
-  depthValue.textContent = nextWaterSafety.isBlocked
-    ? "Ground"
-    : nextWaterSafety.isShallow
-      ? "Shallow"
-      : "Deep";
+  depthValue.textContent = nextWaterSafety.isBlocked ? "Ground" : `${waterDepth.toFixed(0)} m`;
 });
 
 engine.runRenderLoop(() => {
@@ -964,6 +961,24 @@ function getWaterSafety(position, zones) {
   }
 
   return { isBlocked: false, isShallow: shallowAmount > 0 };
+}
+
+function getWaterDepth(position, zones) {
+  let nearestCoastDistance = Number.POSITIVE_INFINITY;
+
+  for (const zone of zones) {
+    const nx = (position.x - zone.x) / zone.rx;
+    const nz = (position.z - zone.z) / zone.rz;
+    const distance = Math.sqrt(nx * nx + nz * nz);
+    nearestCoastDistance = Math.min(nearestCoastDistance, distance - 1);
+  }
+
+  if (nearestCoastDistance <= 0) {
+    return 0;
+  }
+
+  const openWater = smoothstep(0, 1.6, nearestCoastDistance);
+  return 2 + openWater * 98;
 }
 
 function getWaterEscapeVector(position, zones) {
