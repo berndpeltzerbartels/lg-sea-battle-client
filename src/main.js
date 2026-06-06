@@ -78,6 +78,7 @@ const worldLandmasses = [
     heightScale: 1.55,
     peakBoost: 34,
     coastRoughness: 0.22,
+    caldera: { radius: 0.38, rim: 0.18, depth: 18 },
     fjords: [
       { angle: 2.72, width: 0.17, reach: 0.88 },
       { angle: -1.18, width: 0.14, reach: 0.76 }
@@ -2225,6 +2226,7 @@ function createCoastlineTerrainMesh(name, land, rx, rz, heightScale, peakBoost, 
       const localX = Math.cos(angle) * rx * ring * radiusFactor;
       const localZ = Math.sin(angle) * rz * ring * radiusFactor;
       const fjord = getFjordCarve(localX, localZ, rx, rz, land.fjords ?? []);
+      const terrainFjord = fjord * smoothstep(0.62, 0.95, ring);
       const coast = 1 - smoothstep(0.58, 0.96, ring);
       const inland = clamp(1 - ring, 0, 1);
       const nx = localX / rx;
@@ -2234,11 +2236,11 @@ function createCoastlineTerrainMesh(name, land, rx, rz, heightScale, peakBoost, 
       const roughness = terrainNoise(localX, localZ);
       const cliffLift = smoothstep(0.68, 0.9, ring) * smoothstep(1.04, 0.86, ring) * 5.5;
       const mountainLift = Math.pow(inland, 0.65) * (9 + ridgeA * 10 + ridgeB * 5) * heightScale;
-      const peakLift = peakBoost * Math.pow(clamp(1 - Math.sqrt((nx * 1.35) ** 2 + (nz * 1.15) ** 2), 0, 1), 2.4);
-      const isLand = ring <= 0.98 && fjord <= 0.58;
+      const peakLift = getPeakLift(nx, nz, ring, peakBoost, land);
+      const isLand = ring <= 0.98 && terrainFjord <= 0.58;
       const shoreBlend = 1 - smoothstep(0.9, 0.98, ring);
       const terrainHeight = 0.28 + shoreBlend * (
-        0.2 + coast * (cliffLift + mountainLift + peakLift + roughness * 3.2) * (1 - fjord * 0.35)
+        0.2 + coast * (cliffLift + mountainLift + peakLift + roughness * 3.2) * (1 - terrainFjord * 0.25)
       );
 
       positions.push(
@@ -2404,6 +2406,22 @@ function getCoastShape(localX, localZ, rx, rz, land) {
     nz,
     distance: baseDistance / radiusFactor
   };
+}
+
+function getPeakLift(nx, nz, ring, peakBoost, land) {
+  if (!land.caldera) {
+    return peakBoost * Math.pow(clamp(1 - Math.sqrt((nx * 1.35) ** 2 + (nz * 1.15) ** 2), 0, 1), 2.4);
+  }
+
+  const radius = land.caldera.radius ?? 0.38;
+  const rim = land.caldera.rim ?? 0.16;
+  const depth = land.caldera.depth ?? peakBoost * 0.45;
+  const craterDistance = Math.sqrt((nx * 1.18) ** 2 + (nz * 1.05) ** 2);
+  const outerCone = peakBoost * Math.pow(clamp(1 - ring * 0.72, 0, 1), 2.1);
+  const rimLift = peakBoost * 0.48 * Math.exp(-((craterDistance - radius) ** 2) / (rim * rim));
+  const bowlDrop = depth * (1 - smoothstep(radius * 0.45, radius, craterDistance));
+
+  return Math.max(0, outerCone + rimLift - bowlDrop);
 }
 
 function getCoastRadiusFactor(angle, land) {
