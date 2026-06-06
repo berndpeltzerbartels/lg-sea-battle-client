@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LG Sea Battle WebGPU Test</title>
+  </head>
+  <body>
+    <canvas id="renderCanvas"></canvas>
+    <div id="engineStatus" class="engine-status">WebGPU test</div>
+    <div class="hud">
+      <div class="compass" aria-hidden="true">
+        <span>N</span>
+        <span>E</span>
+        <span>S</span>
+        <span>W</span>
+      </div>
+      <div class="speed">
+        <span id="speedValue">0.0</span>
+        <small>kn</small>
+        <strong id="depthValue">Deep</strong>
+      </div>
+    </div>
+    <script type="module" src="/src/webgpu-main.js"></script>
+  </body>
+</html>
