@@ -462,7 +462,7 @@ function drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, r
   const start = centerAngle - halfAngle;
   const end = centerAngle + halfAngle;
 
-  ctx.fillStyle = "rgba(0, 0, 0, 0.34)";
+  ctx.fillStyle = "rgba(0, 0, 0, 0.52)";
   ctx.beginPath();
   ctx.moveTo(centerX + Math.sin(start) * near, centerY - Math.cos(start) * near);
   ctx.lineTo(centerX + Math.sin(start) * radius, centerY - Math.cos(start) * radius);
