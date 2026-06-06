@@ -149,12 +149,29 @@ window.addEventListener("keydown", (event) => {
     engineOrder = clamp(engineOrder - 1, 0, engineOrders.length - 1);
     event.preventDefault();
   }
-  if (event.code === "ArrowLeft" && !event.repeat) {
-    rudderDegrees = clamp(rudderDegrees - rudderStepDegrees, -maxRudderDegrees, maxRudderDegrees);
+  if (event.code === "ArrowLeft") {
+    heldRudderDirection = -1;
+    if (!event.repeat) {
+      rudderDegrees = clamp(rudderDegrees - rudderStepDegrees, -maxRudderDegrees, maxRudderDegrees);
+    }
     event.preventDefault();
   }
-  if (event.code === "ArrowRight" && !event.repeat) {
-    rudderDegrees = clamp(rudderDegrees + rudderStepDegrees, -maxRudderDegrees, maxRudderDegrees);
+  if (event.code === "ArrowRight") {
+    heldRudderDirection = 1;
+    if (!event.repeat) {
+      rudderDegrees = clamp(rudderDegrees + rudderStepDegrees, -maxRudderDegrees, maxRudderDegrees);
+    }
+    event.preventDefault();
+  }
+});
+
+window.addEventListener("keyup", (event) => {
+  if (event.code === "ArrowLeft" && heldRudderDirection < 0) {
+    heldRudderDirection = 0;
+    event.preventDefault();
+  }
+  if (event.code === "ArrowRight" && heldRudderDirection > 0) {
+    heldRudderDirection = 0;
     event.preventDefault();
   }
 });
@@ -178,11 +195,13 @@ let speed = 0;
 let engineOrder = 2;
 let turnVelocity = 0;
 let rudderDegrees = 0;
+let heldRudderDirection = 0;
 let cameraPosition = camera.position.clone();
 let cameraTarget = boat.root.position.clone();
 let time = 0;
 const maxRudderDegrees = 35;
 const rudderStepDegrees = 5;
+const rudderHoldDegreesPerSecond = 18;
 
 const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
 const enemyMotion = createEnemyMotion(enemyBoat.root, enemyBoat.bowWake, -0.55, 3);
@@ -191,6 +210,14 @@ startLocalEnemyEventSource(enemyMotion);
 scene.onBeforeRenderObservable.add(() => {
   const dt = Math.min(engine.getDeltaTime() / 1000, 0.05);
   time += dt;
+
+  if (heldRudderDirection !== 0) {
+    rudderDegrees = clamp(
+      rudderDegrees + heldRudderDirection * rudderHoldDegreesPerSecond * dt,
+      -maxRudderDegrees,
+      maxRudderDegrees
+    );
+  }
 
   // Heavy ship feel: the selected telegraph order is a target, and speed eases toward it.
   const waterSafety = getWaterSafety(boat.root.position, blockedWaters);
