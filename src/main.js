@@ -155,7 +155,14 @@ scene.onBeforeRenderObservable.add(() => {
   const nextWaterSafety = getWaterSafety(boat.root.position, blockedWaters);
   if (nextWaterSafety.isBlocked) {
     boat.root.position.copyFrom(previousPosition);
-    speed = Math.min(speed, 0) - 0.15;
+
+    // Grounding stops the ship, but a tiny escape nudge prevents numeric edge-locking.
+    if (getWaterSafety(boat.root.position, blockedWaters).isBlocked) {
+      boat.root.position.addInPlace(getWaterEscapeVector(boat.root.position, blockedWaters).scale(0.18));
+    }
+
+    speed = 0;
+    turnVelocity *= 0.4;
   } else if (nextWaterSafety.isShallow) {
     speed *= 0.985;
   }
@@ -191,7 +198,8 @@ scene.onBeforeRenderObservable.add(() => {
   document.body.dataset.boat = `${boat.root.position.x.toFixed(1)},${boat.root.position.y.toFixed(1)},${boat.root.position.z.toFixed(1)}`;
   document.body.dataset.engineOrder = engineOrders[engineOrder].label;
 
-  speedValue.textContent = Math.abs(speed).toFixed(1);
+  const displayedSpeed = Math.abs(speed) < 0.08 ? 0 : Math.abs(speed);
+  speedValue.textContent = displayedSpeed.toFixed(1);
   engineValue.textContent = engineOrders[engineOrder].label;
   depthValue.textContent = nextWaterSafety.isBlocked
     ? "Ground"
@@ -930,4 +938,29 @@ function getWaterSafety(position, zones) {
   }
 
   return { isBlocked: false, isShallow: shallowAmount > 0 };
+}
+
+function getWaterEscapeVector(position, zones) {
+  let escape = new Vector3(0, 0, 0);
+
+  for (const zone of zones) {
+    const nx = (position.x - zone.x) / zone.rx;
+    const nz = (position.z - zone.z) / zone.rz;
+    const distance = Math.sqrt(nx * nx + nz * nz);
+
+    if (distance < 1) {
+      if (distance < 0.001) {
+        escape.x += 1;
+      } else {
+        escape.x += nx / distance;
+        escape.z += nz / distance;
+      }
+    }
+  }
+
+  if (escape.lengthSquared() === 0) {
+    return Vector3.Zero();
+  }
+
+  return escape.normalize();
 }
