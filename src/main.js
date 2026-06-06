@@ -286,7 +286,7 @@ scene.onBeforeRenderObservable.add(() => {
   document.body.dataset.activeCamera = scene.activeCamera?.name ?? "none";
   document.body.dataset.boat = `${boat.root.position.x.toFixed(1)},${boat.root.position.y.toFixed(1)},${boat.root.position.z.toFixed(1)}`;
   document.body.dataset.engineOrder = engineOrders[engineOrder].label;
-  document.body.dataset.rudderDegrees = String(rudderDegrees);
+  document.body.dataset.rudderDegrees = String(Math.round(rudderDegrees));
 
   const displayedSpeed = Math.abs(speed) < 0.08 ? 0 : Math.abs(speed);
   const waterDepth = getWaterDepth(boat.root.position, blockedWaters);
@@ -332,8 +332,9 @@ function updateRudderGauge(indicator, valueElement, degrees) {
   indicator?.style.setProperty("--rudder-ratio", String(ratio));
 
   if (valueElement) {
-    const side = degrees < 0 ? "P" : degrees > 0 ? "S" : "";
-    valueElement.textContent = side ? `${Math.abs(degrees)}° ${side}` : "0°";
+    const roundedDegrees = Math.round(degrees);
+    const side = roundedDegrees < 0 ? "P" : roundedDegrees > 0 ? "S" : "";
+    valueElement.textContent = side ? `${Math.abs(roundedDegrees)}° ${side}` : "0°";
   }
 }
 
