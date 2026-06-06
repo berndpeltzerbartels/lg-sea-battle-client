@@ -942,7 +942,7 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
     .add(new Vector3(0, tuning.startY, 0));
   const launchEnd = shipRoot.position
     .add(right.scale(tubeX))
-    .add(forward.scale(muzzleZ + 1.15))
+    .add(forward.scale(muzzleZ + 0.62))
     .add(new Vector3(0, -0.04, 0));
   const muzzlePuffPoint = shipRoot.position
     .add(right.scale(muzzleEffectX))
@@ -950,7 +950,7 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
     .add(new Vector3(0, -0.04, 0));
   const runStart = shipRoot.position
     .add(right.scale(tubeX))
-    .add(forward.scale(muzzleZ + 1.65))
+    .add(forward.scale(muzzleZ + 0.92))
     .add(new Vector3(0, 0.06, 0));
 
   const root = new TransformNode(`torpedo_${system.nextId}`, system.scene);
@@ -992,7 +992,8 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
     age: 0,
     runDistance: 0,
     speed: 24 + Math.max(0, shipSpeed) * 0.35,
-    launchDuration: 0.62,
+    // A short ejection avoids an exaggerated sideways gap when the player fires while turning.
+    launchDuration: 0.34,
     maxRange: 620,
     hit: false
   };
