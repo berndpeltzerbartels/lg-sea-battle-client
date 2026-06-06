@@ -542,43 +542,43 @@ function createMeshFromData(name, scene, positions, indices) {
 function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat") {
   const root = new TransformNode(name, scene);
 
-  const hull = createTaperedHull(`${name}_hull`, scene, [
-    { z: -3.55, width: 1.22, top: 0.52, bottom: 0.06 },
-    { z: 1.9, width: 1.36, top: 0.58, bottom: 0.02 },
-    { z: 4.35, width: 0.12, top: 0.42, bottom: 0.0 }
-  ]);
-  hull.parent = root;
-  hull.material = materials.hull;
+  const body = createEnemyBoatBody(`${name}_body`, scene);
+  body.parent = root;
+  body.material = materials.hull;
 
-  const deck = createTaperedDeck(`${name}_deck`, scene, [
-    { z: -3.15, width: 0.98, y: 0.66 },
-    { z: 1.85, width: 1.08, y: 0.68 },
-    { z: 4.0, width: 0.16, y: 0.52 }
-  ]);
-  deck.parent = root;
-  deck.material = materials.deck;
+  const bridgeBase = MeshBuilder.CreateBox(`${name}_bridge_base`, { width: 0.96, height: 0.28, depth: 1.05 }, scene);
+  bridgeBase.parent = root;
+  bridgeBase.position.y = 0.75;
+  bridgeBase.position.z = 0.55;
+  bridgeBase.material = materials.cabin;
 
-  const bridge = MeshBuilder.CreateBox(`${name}_bridge`, { width: 0.82, height: 0.52, depth: 0.82 }, scene);
+  const bridge = MeshBuilder.CreateBox(`${name}_bridge`, { width: 0.74, height: 0.48, depth: 0.72 }, scene);
   bridge.parent = root;
-  bridge.position.y = 1.0;
-  bridge.position.z = 0.75;
+  bridge.position.y = 1.06;
+  bridge.position.z = 0.76;
   bridge.material = materials.cabin;
 
-  const window = MeshBuilder.CreateBox(`${name}_window`, { width: 0.68, height: 0.13, depth: 0.035 }, scene);
+  const window = MeshBuilder.CreateBox(`${name}_window`, { width: 0.58, height: 0.11, depth: 0.035 }, scene);
   window.parent = root;
-  window.position.y = 1.08;
-  window.position.z = 1.18;
+  window.position.y = 1.17;
+  window.position.z = 1.13;
   window.material = materials.glass;
+
+  const funnelBase = MeshBuilder.CreateBox(`${name}_funnel_base`, { width: 0.82, height: 0.22, depth: 1.25 }, scene);
+  funnelBase.parent = root;
+  funnelBase.position.y = 0.76;
+  funnelBase.position.z = -0.8;
+  funnelBase.material = materials.cabin;
 
   for (let i = 0; i < 2; i += 1) {
     const funnel = MeshBuilder.CreateCylinder(`${name}_funnel_${i}`, {
       diameter: i === 0 ? 0.32 : 0.29,
-      height: i === 0 ? 1.05 : 0.94,
+      height: i === 0 ? 0.94 : 0.86,
       tessellation: 10
     }, scene);
     funnel.parent = root;
-    funnel.position.y = i === 0 ? 1.24 : 1.18;
-    funnel.position.z = -0.34 - i * 0.82;
+    funnel.position.y = i === 0 ? 1.32 : 1.28;
+    funnel.position.z = -0.42 - i * 0.55;
     funnel.material = materials.funnel;
   }
 
@@ -590,39 +590,11 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat") {
     }, scene);
     tube.parent = root;
     tube.position.x = i === 0 ? -0.31 : 0.31;
-    tube.position.y = 0.84;
-    tube.position.z = 1.72;
+    tube.position.y = 0.76;
+    tube.position.z = 1.65;
     tube.rotation.x = Math.PI / 2;
     tube.material = materials.funnel;
   }
-
-  const foreGun = MeshBuilder.CreateCylinder(`${name}_fore_gun`, {
-    diameter: 0.11,
-    height: 0.72,
-    tessellation: 8
-  }, scene);
-  foreGun.parent = root;
-  foreGun.position.y = 0.78;
-  foreGun.position.z = 3.05;
-  foreGun.rotation.x = Math.PI / 2;
-  foreGun.material = materials.funnel;
-
-  const sternDeck = MeshBuilder.CreateBox(`${name}_stern_deck`, { width: 0.92, height: 0.1, depth: 0.95 }, scene);
-  sternDeck.parent = root;
-  sternDeck.position.y = 0.72;
-  sternDeck.position.z = -2.7;
-  sternDeck.material = materials.deck;
-
-  const aftGun = MeshBuilder.CreateCylinder(`${name}_aft_gun`, {
-    diameter: 0.1,
-    height: 0.62,
-    tessellation: 8
-  }, scene);
-  aftGun.parent = root;
-  aftGun.position.y = 0.86;
-  aftGun.position.z = -3.2;
-  aftGun.rotation.x = Math.PI / 2;
-  aftGun.material = materials.funnel;
 
   const mast = MeshBuilder.CreateCylinder(`${name}_mast`, {
     diameter: 0.045,
@@ -636,6 +608,46 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat") {
   mast.material = materials.funnel;
 
   return { root };
+}
+
+function createEnemyBoatBody(name, scene) {
+  const sections = [
+    { z: -4.05, topWidth: 0.78, chineWidth: 0.62, top: 0.52, chine: 0.24, keel: 0.02 },
+    { z: -2.3, topWidth: 1.22, chineWidth: 1.02, top: 0.66, chine: 0.2, keel: -0.03 },
+    { z: 1.55, topWidth: 1.32, chineWidth: 1.05, top: 0.68, chine: 0.18, keel: -0.04 },
+    { z: 3.25, topWidth: 0.62, chineWidth: 0.42, top: 0.56, chine: 0.14, keel: -0.02 },
+    { z: 4.45, topWidth: 0.08, chineWidth: 0.04, top: 0.43, chine: 0.11, keel: 0.02 }
+  ];
+  const positions = [];
+  const indices = [];
+
+  sections.forEach((section) => {
+    const top = section.topWidth / 2;
+    const chine = section.chineWidth / 2;
+    positions.push(
+      -top, section.top, section.z,
+      top, section.top, section.z,
+      -chine, section.chine, section.z,
+      chine, section.chine, section.z,
+      0, section.keel, section.z
+    );
+  });
+
+  for (let i = 0; i < sections.length - 1; i += 1) {
+    const a = i * 5;
+    const b = (i + 1) * 5;
+    pushQuad(indices, a, b, b + 1, a + 1); // deck
+    pushQuad(indices, a, a + 2, b + 2, b); // port side
+    pushQuad(indices, a + 1, b + 1, b + 3, a + 3); // starboard side
+    pushQuad(indices, a + 2, a + 4, b + 4, b + 2); // port bottom
+    pushQuad(indices, a + 3, b + 3, b + 4, a + 4); // starboard bottom
+  }
+
+  indices.push(0, 2, 4, 0, 4, 3, 0, 3, 1);
+  const last = (sections.length - 1) * 5;
+  indices.push(last, last + 4, last + 2, last, last + 3, last + 4, last, last + 1, last + 3);
+
+  return createMeshFromData(name, scene, positions, indices);
 }
 
 // Legacy full-ship prototype kept only for comparison while the enemy model evolves.
