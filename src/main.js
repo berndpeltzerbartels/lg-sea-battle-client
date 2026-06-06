@@ -44,6 +44,8 @@ const compassPointer = document.getElementById("compassPointer");
 const mapCanvas = document.getElementById("mapCanvas");
 const radarCanvas = document.getElementById("radarCanvas");
 const radarStatus = document.getElementById("radarStatus");
+const rudderIndicator = document.getElementById("rudderIndicator");
+const rudderValue = document.getElementById("rudderValue");
 
 // One source for visible land, collision, depth, map, and radar occlusion.
 const worldLandmasses = [
@@ -90,11 +92,6 @@ camera.maxZ = 800;
 camera.fov = 0.78;
 scene.activeCamera = camera;
 
-const keys = {
-  left: false,
-  right: false
-};
-
 window.addEventListener("keydown", (event) => {
   if (event.code === "ArrowUp" && !event.repeat) {
     engineOrder = clamp(engineOrder + 1, 0, engineOrders.length - 1);
@@ -104,13 +101,14 @@ window.addEventListener("keydown", (event) => {
     engineOrder = clamp(engineOrder - 1, 0, engineOrders.length - 1);
     event.preventDefault();
   }
-  if (event.code === "ArrowLeft") keys.left = true;
-  if (event.code === "ArrowRight") keys.right = true;
-});
-
-window.addEventListener("keyup", (event) => {
-  if (event.code === "ArrowLeft") keys.left = false;
-  if (event.code === "ArrowRight") keys.right = false;
+  if (event.code === "ArrowLeft" && !event.repeat) {
+    rudderDegrees = clamp(rudderDegrees - rudderStepDegrees, -maxRudderDegrees, maxRudderDegrees);
+    event.preventDefault();
+  }
+  if (event.code === "ArrowRight" && !event.repeat) {
+    rudderDegrees = clamp(rudderDegrees + rudderStepDegrees, -maxRudderDegrees, maxRudderDegrees);
+    event.preventDefault();
+  }
 });
 
 const engineOrders = [
@@ -131,9 +129,12 @@ let heading = -2.12;
 let speed = 0;
 let engineOrder = 2;
 let turnVelocity = 0;
+let rudderDegrees = 0;
 let cameraPosition = camera.position.clone();
 let cameraTarget = boat.root.position.clone();
 let time = 0;
+const maxRudderDegrees = 35;
+const rudderStepDegrees = 5;
 
 const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
 const enemyMotion = createEnemyMotion(enemyBoat.root, enemyBoat.bowWake, -0.55, 3);
@@ -142,8 +143,6 @@ startLocalEnemyEventSource(enemyMotion);
 scene.onBeforeRenderObservable.add(() => {
   const dt = Math.min(engine.getDeltaTime() / 1000, 0.05);
   time += dt;
-
-  const steer = Number(keys.right) - Number(keys.left);
 
   // Heavy ship feel: the selected telegraph order is a target, and speed eases toward it.
   const waterSafety = getWaterSafety(boat.root.position, blockedWaters);
@@ -155,6 +154,7 @@ scene.onBeforeRenderObservable.add(() => {
 
   const turnStrength = speed >= 0 ? 0.36 : -0.24;
   const rudderGrip = clamp(0.18 + Math.abs(speed) / 3.4, 0.18, 1);
+  const steer = rudderDegrees / maxRudderDegrees;
   const targetTurnVelocity = steer * turnStrength * rudderGrip;
   turnVelocity += (targetTurnVelocity - turnVelocity) * Math.min(1, dt * 2.4);
   heading += turnVelocity * dt;
@@ -211,6 +211,7 @@ scene.onBeforeRenderObservable.add(() => {
   document.body.dataset.activeCamera = scene.activeCamera?.name ?? "none";
   document.body.dataset.boat = `${boat.root.position.x.toFixed(1)},${boat.root.position.y.toFixed(1)},${boat.root.position.z.toFixed(1)}`;
   document.body.dataset.engineOrder = engineOrders[engineOrder].label;
+  document.body.dataset.rudderDegrees = String(rudderDegrees);
 
   const displayedSpeed = Math.abs(speed) < 0.08 ? 0 : Math.abs(speed);
   const waterDepth = getWaterDepth(boat.root.position, blockedWaters);
@@ -220,6 +221,7 @@ scene.onBeforeRenderObservable.add(() => {
   depthValue.textContent = nextWaterSafety.isBlocked ? "Ground" : `${waterDepth.meters.toFixed(0)} m`;
   depthGauge?.style.setProperty("--depth-ratio", String(waterDepth.ratio));
   compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
+  updateRudderGauge(rudderIndicator, rudderValue, rudderDegrees);
   updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, enemyMotion.root.position, blockedWaters, heading);
 });
 
@@ -248,6 +250,16 @@ function updateTelegraphSteps(steps, activeOrder) {
   steps.forEach((step, index) => {
     step.classList.toggle("is-active", index === activeOrder);
   });
+}
+
+function updateRudderGauge(indicator, valueElement, degrees) {
+  const ratio = (degrees + maxRudderDegrees) / (maxRudderDegrees * 2);
+  indicator?.style.setProperty("--rudder-ratio", String(ratio));
+
+  if (valueElement) {
+    const side = degrees < 0 ? "P" : degrees > 0 ? "S" : "";
+    valueElement.textContent = side ? `${Math.abs(degrees)}° ${side}` : "0°";
+  }
 }
 
 function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, enemyPosition, landZones, heading) {

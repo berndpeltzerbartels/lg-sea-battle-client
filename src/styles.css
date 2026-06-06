@@ -366,6 +366,108 @@ body {
   background: #ffffff;
 }
 
+.rudder {
+  position: absolute;
+  right: 180px;
+  bottom: 24px;
+  width: 72px;
+  padding: 12px 10px 11px;
+  border: 1px solid rgb(255 255 255 / 32%);
+  border-radius: 8px;
+  background: rgb(5 27 40 / 42%);
+  box-shadow: 0 12px 38px rgb(1 15 24 / 22%);
+  text-align: center;
+  backdrop-filter: blur(7px);
+}
+
+.rudder-title {
+  margin-bottom: 8px;
+  color: #9be5df;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.rudder-gauge {
+  position: relative;
+  height: 112px;
+  margin: 0 auto;
+  border-left: 1px solid rgb(247 251 255 / 26%);
+}
+
+.rudder-gauge::before,
+.rudder-gauge::after {
+  position: absolute;
+  left: -5px;
+  width: 10px;
+  height: 1px;
+  background: rgb(247 251 255 / 44%);
+  content: "";
+}
+
+.rudder-gauge::before {
+  top: 0;
+}
+
+.rudder-gauge::after {
+  bottom: 0;
+}
+
+.rudder-mark {
+  position: absolute;
+  left: 10px;
+  color: rgb(247 251 255 / 62%);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.rudder-mark-port {
+  top: -3px;
+}
+
+.rudder-mark-center {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.rudder-mark-center::before {
+  position: absolute;
+  left: -15px;
+  top: 50%;
+  width: 12px;
+  height: 1px;
+  background: rgb(247 251 255 / 62%);
+  content: "";
+}
+
+.rudder-mark-starboard {
+  bottom: -3px;
+}
+
+.rudder-indicator {
+  position: absolute;
+  left: -7px;
+  top: calc(var(--rudder-ratio, 0.5) * 100%);
+  width: 14px;
+  height: 6px;
+  border-radius: 999px;
+  background: #9be5df;
+  box-shadow: 0 0 12px rgb(155 229 223 / 66%);
+  transform: translateY(-50%);
+}
+
+.rudder strong {
+  display: block;
+  margin-top: 8px;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 @media (max-width: 700px) {
   .nav-panel {
     top: 14px;
@@ -404,5 +506,16 @@ body {
     bottom: 14px;
     width: 116px;
     padding: 10px;
+  }
+
+  .rudder {
+    right: 146px;
+    bottom: 14px;
+    width: 58px;
+    padding: 10px 8px;
+  }
+
+  .rudder-gauge {
+    height: 92px;
   }
 }
