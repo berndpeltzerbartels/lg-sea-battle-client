@@ -310,6 +310,8 @@ scene.onBeforeRenderObservable.add(() => {
     heading,
     -turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018
   );
+  ocean.position.x = boat.root.position.x;
+  ocean.position.z = boat.root.position.z;
 
   materials.water.diffuseTexture.uOffset += dt * 0.01;
   materials.water.diffuseTexture.vOffset += dt * 0.018;
