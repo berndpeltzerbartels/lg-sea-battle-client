@@ -156,6 +156,58 @@ body {
   transform: translateY(-50%);
 }
 
+.nav-panel {
+  position: absolute;
+  top: 22px;
+  left: 24px;
+  display: grid;
+  grid-template-columns: 180px 136px;
+  gap: 10px;
+  align-items: start;
+}
+
+.nav-instrument {
+  padding: 9px;
+  border: 1px solid rgb(255 255 255 / 30%);
+  border-radius: 8px;
+  background: rgb(5 27 40 / 42%);
+  box-shadow: 0 12px 38px rgb(1 15 24 / 22%);
+  backdrop-filter: blur(7px);
+}
+
+.nav-title {
+  margin-bottom: 7px;
+  color: #9be5df;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.nav-instrument canvas {
+  display: block;
+  width: 100%;
+  height: 136px;
+}
+
+#mapCanvas {
+  border-radius: 5px;
+}
+
+#radarCanvas {
+  border-radius: 50%;
+}
+
+.nav-instrument small {
+  display: block;
+  margin-top: 6px;
+  color: rgb(247 251 255 / 78%);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 .speed {
   position: absolute;
   left: 24px;
@@ -315,6 +367,21 @@ body {
 }
 
 @media (max-width: 700px) {
+  .nav-panel {
+    top: 14px;
+    left: 14px;
+    grid-template-columns: 132px 86px;
+    gap: 7px;
+  }
+
+  .nav-instrument {
+    padding: 7px;
+  }
+
+  .nav-instrument canvas {
+    height: 86px;
+  }
+
   .compass {
     top: 14px;
     right: 14px;

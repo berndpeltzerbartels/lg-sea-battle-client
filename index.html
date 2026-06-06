@@ -17,6 +17,17 @@
         </div>
         <div id="compassPointer" class="compass-pointer"></div>
       </div>
+      <div class="nav-panel" aria-hidden="true">
+        <div class="nav-instrument">
+          <div class="nav-title">Map</div>
+          <canvas id="mapCanvas" width="180" height="136"></canvas>
+        </div>
+        <div class="nav-instrument">
+          <div class="nav-title">Radar</div>
+          <canvas id="radarCanvas" width="136" height="136"></canvas>
+          <small id="radarStatus">Clear</small>
+        </div>
+      </div>
       <div class="speed">
         <span id="speedValue">0.0</span>
         <small>kn</small>

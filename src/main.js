@@ -41,6 +41,18 @@ const depthGauge = document.querySelector(".depth-gauge");
 const engineValue = document.getElementById("engineValue");
 const telegraphScale = document.getElementById("telegraphScale");
 const compassPointer = document.getElementById("compassPointer");
+const mapCanvas = document.getElementById("mapCanvas");
+const radarCanvas = document.getElementById("radarCanvas");
+const radarStatus = document.getElementById("radarStatus");
+
+// One source for visible land, collision, depth, map, and radar occlusion.
+const worldLandmasses = [
+  { kind: "coastline", name: "western_coast", x: -126, z: 58, rx: 72, rz: 66 },
+  { kind: "island", name: "north_island", x: -32, z: 54, radius: 21, heightScale: 1.1, rx: 28, rz: 22 },
+  { kind: "island", name: "east_island", x: 58, z: 10, radius: 28, heightScale: 0.9, rx: 36, rz: 27 },
+  { kind: "island", name: "south_island", x: 18, z: -76, radius: 24, heightScale: 1.25, rx: 32, rz: 25 },
+  { kind: "island", name: "far_island", x: -92, z: -26, radius: 16, heightScale: 0.75, rx: 22, rz: 17 }
+];
 
 const materials = createMaterials(scene);
 const world = new TransformNode("world", scene);
@@ -59,18 +71,8 @@ ocean.material = materials.water;
 ocean.parent = world;
 const foam = createFoamPatches(scene, materials, world);
 
-const blockedWaters = [];
-createCoastline("western_coast", new Vector3(-126, 0, 58), 72, 66, scene, materials, world, blockedWaters);
-createIsland("north_island", new Vector3(-32, 0, 54), 21, 1.1, scene, materials, world);
-createIsland("east_island", new Vector3(58, 0, 10), 28, 0.9, scene, materials, world);
-createIsland("south_island", new Vector3(18, 0, -76), 24, 1.25, scene, materials, world);
-createIsland("far_island", new Vector3(-92, 0, -26), 16, 0.75, scene, materials, world);
-blockedWaters.push(
-  { x: -32, z: 54, rx: 28, rz: 22 },
-  { x: 58, z: 10, rx: 36, rz: 27 },
-  { x: 18, z: -76, rx: 32, rz: 25 },
-  { x: -92, z: -26, rx: 22, rz: 17 }
-);
+const blockedWaters = worldLandmasses.map(getLandZone);
+createWorldLandmasses(worldLandmasses, scene, materials, world);
 
 const boat = createPlayerBow(scene, materials);
 boat.root.position = new Vector3(46, 0.28, 52);
@@ -217,6 +219,7 @@ scene.onBeforeRenderObservable.add(() => {
   depthValue.textContent = nextWaterSafety.isBlocked ? "Ground" : `${waterDepth.meters.toFixed(0)} m`;
   depthGauge?.style.setProperty("--depth-ratio", String(waterDepth.ratio));
   compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
+  updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, enemyMotion.root.position, blockedWaters, heading);
 });
 
 engine.runRenderLoop(() => {
@@ -244,6 +247,231 @@ function updateTelegraphSteps(steps, activeOrder) {
   steps.forEach((step, index) => {
     step.classList.toggle("is-active", index === activeOrder);
   });
+}
+
+function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, enemyPosition, landZones, heading) {
+  drawMapInstrument(mapCanvas, playerPosition, enemyPosition, landZones);
+  drawRadarInstrument(radarCanvas, radarStatus, playerPosition, enemyPosition, landZones, heading);
+}
+
+function drawMapInstrument(canvas, playerPosition, enemyPosition, landZones) {
+  if (!canvas) return;
+
+  const ctx = prepareInstrumentCanvas(canvas);
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  const viewRange = 360;
+  const scale = Math.min(width, height) / viewRange;
+  const centerX = width * 0.5;
+  const centerY = height * 0.5;
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "rgba(7, 31, 43, 0.78)";
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.strokeStyle = "rgba(247, 251, 255, 0.14)";
+  ctx.lineWidth = 1;
+  for (let x = centerX % 36; x < width; x += 36) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+    ctx.stroke();
+  }
+  for (let y = centerY % 36; y < height; y += 36) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
+  }
+
+  landZones.forEach((zone) => {
+    const point = worldToInstrumentPoint(zone, playerPosition, centerX, centerY, scale);
+    drawInstrumentEllipse(ctx, point.x, point.y, zone.rx * scale, zone.rz * scale, "rgba(98, 129, 89, 0.95)", "rgba(238, 218, 164, 0.74)");
+  });
+
+  drawInstrumentMarker(ctx, centerX, centerY, "#f7fbff", 4);
+
+  const enemyPoint = worldToInstrumentPoint(enemyPosition, playerPosition, centerX, centerY, scale);
+  drawInstrumentMarker(ctx, enemyPoint.x, enemyPoint.y, "rgba(216, 74, 58, 0.72)", 3);
+
+  ctx.fillStyle = "rgba(247, 251, 255, 0.78)";
+  ctx.font = "700 10px Inter, sans-serif";
+  ctx.fillText("200 m", 9, height - 10);
+  ctx.fillRect(9, height - 7, 55, 2);
+}
+
+function drawRadarInstrument(canvas, statusElement, playerPosition, enemyPosition, landZones, heading) {
+  if (!canvas) return;
+
+  const ctx = prepareInstrumentCanvas(canvas);
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  const centerX = width * 0.5;
+  const centerY = height * 0.5;
+  const radius = Math.min(width, height) * 0.5 - 7;
+  const radarRange = 170;
+  const scale = radius / radarRange;
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.fillStyle = "rgba(2, 22, 28, 0.86)";
+  ctx.fillRect(0, 0, width, height);
+
+  drawRadarRangeRings(ctx, centerX, centerY, radius);
+  landZones.forEach((zone) => drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, radius, radarRange));
+
+  landZones.forEach((zone) => {
+    const point = worldToRadarPoint(zone, playerPosition, centerX, centerY, scale, heading);
+    drawInstrumentEllipse(ctx, point.x, point.y, zone.rx * scale, zone.rz * scale, "rgba(96, 124, 83, 0.92)", "rgba(232, 217, 159, 0.4)", -heading);
+  });
+
+  const enemyDistance = distance2D(playerPosition, enemyPosition);
+  const enemyBlocked = isLineBlockedByLand(playerPosition, enemyPosition, landZones);
+  if (enemyDistance <= radarRange && !enemyBlocked) {
+    const enemyPoint = worldToRadarPoint(enemyPosition, playerPosition, centerX, centerY, scale, heading);
+    drawInstrumentMarker(ctx, enemyPoint.x, enemyPoint.y, "#d84a3a", 4);
+    if (statusElement) statusElement.textContent = `Contact ${enemyDistance.toFixed(0)} m`;
+  } else if (enemyDistance <= radarRange) {
+    if (statusElement) statusElement.textContent = "Shadow";
+  } else {
+    if (statusElement) statusElement.textContent = "Clear";
+  }
+
+  drawInstrumentMarker(ctx, centerX, centerY, "#9be5df", 3);
+  ctx.restore();
+
+  ctx.strokeStyle = "rgba(155, 229, 223, 0.62)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function prepareInstrumentCanvas(canvas) {
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  const targetWidth = Math.round(width * ratio);
+  const targetHeight = Math.round(height * ratio);
+
+  if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+  }
+
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  return ctx;
+}
+
+function worldToInstrumentPoint(position, origin, centerX, centerY, scale) {
+  return {
+    x: centerX + (position.x - origin.x) * scale,
+    y: centerY - (position.z - origin.z) * scale
+  };
+}
+
+function worldToRadarPoint(position, origin, centerX, centerY, scale, heading) {
+  const dx = position.x - origin.x;
+  const dz = position.z - origin.z;
+  const right = dx * Math.cos(heading) - dz * Math.sin(heading);
+  const forward = dx * Math.sin(heading) + dz * Math.cos(heading);
+
+  return {
+    x: centerX + right * scale,
+    y: centerY - forward * scale
+  };
+}
+
+function drawInstrumentEllipse(ctx, x, y, rx, rz, fill, stroke, rotation = 0) {
+  ctx.fillStyle = fill;
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(x, y, Math.max(1, rx), Math.max(1, rz), rotation, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+}
+
+function drawInstrumentMarker(ctx, x, y, color, radius) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawRadarRangeRings(ctx, centerX, centerY, radius) {
+  ctx.strokeStyle = "rgba(155, 229, 223, 0.22)";
+  ctx.lineWidth = 1;
+
+  [0.33, 0.66, 1].forEach((ring) => {
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius * ring, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+
+  ctx.beginPath();
+  ctx.moveTo(centerX, centerY - radius);
+  ctx.lineTo(centerX, centerY + radius);
+  ctx.moveTo(centerX - radius, centerY);
+  ctx.lineTo(centerX + radius, centerY);
+  ctx.stroke();
+}
+
+function drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, radius, radarRange) {
+  const dx = zone.x - playerPosition.x;
+  const dz = zone.z - playerPosition.z;
+  const distance = Math.sqrt(dx * dx + dz * dz);
+  const landRadius = Math.max(zone.rx, zone.rz);
+
+  if (distance < 1 || distance - landRadius > radarRange) return;
+
+  const centerAngle = Math.atan2(dx, dz) - heading;
+  const halfAngle = Math.asin(clamp(landRadius / Math.max(distance, landRadius), 0, 0.95));
+  const near = clamp((distance - landRadius) / radarRange, 0, 1) * radius;
+  const start = centerAngle - halfAngle;
+  const end = centerAngle + halfAngle;
+
+  ctx.fillStyle = "rgba(0, 0, 0, 0.34)";
+  ctx.beginPath();
+  ctx.moveTo(centerX + Math.sin(start) * near, centerY - Math.cos(start) * near);
+  ctx.lineTo(centerX + Math.sin(start) * radius, centerY - Math.cos(start) * radius);
+  ctx.arc(centerX, centerY, radius, start - Math.PI / 2, end - Math.PI / 2);
+  ctx.lineTo(centerX + Math.sin(end) * near, centerY - Math.cos(end) * near);
+  ctx.arc(centerX, centerY, near, end - Math.PI / 2, start - Math.PI / 2, true);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function isLineBlockedByLand(from, to, landZones) {
+  return landZones.some((zone) => lineIntersectsEllipse(from, to, zone));
+}
+
+function lineIntersectsEllipse(from, to, zone) {
+  const dx = to.x - from.x;
+  const dz = to.z - from.z;
+  const ox = from.x - zone.x;
+  const oz = from.z - zone.z;
+  const a = (dx * dx) / (zone.rx * zone.rx) + (dz * dz) / (zone.rz * zone.rz);
+  const b = 2 * ((ox * dx) / (zone.rx * zone.rx) + (oz * dz) / (zone.rz * zone.rz));
+  const c = (ox * ox) / (zone.rx * zone.rx) + (oz * oz) / (zone.rz * zone.rz) - 1;
+  const discriminant = b * b - 4 * a * c;
+
+  if (discriminant <= 0) return false;
+
+  const root = Math.sqrt(discriminant);
+  const t1 = (-b - root) / (2 * a);
+  const t2 = (-b + root) / (2 * a);
+  return (t1 > 0.02 && t1 < 0.98) || (t2 > 0.02 && t2 < 0.98);
+}
+
+function distance2D(a, b) {
+  const dx = a.x - b.x;
+  const dz = a.z - b.z;
+  return Math.sqrt(dx * dx + dz * dz);
 }
 
 function createEnemyMotion(root, bowWake, heading, engineOrder) {
@@ -954,9 +1182,23 @@ function createBoat(scene, materials, name = "boat") {
   return { root };
 }
 
-function createCoastline(name, position, rx, rz, scene, materials, parent, blockedWaters) {
-  blockedWaters.push({ x: position.x, z: position.z, rx, rz });
+function createWorldLandmasses(landmasses, scene, materials, parent) {
+  landmasses.forEach((land) => {
+    const position = new Vector3(land.x, 0, land.z);
 
+    if (land.kind === "coastline") {
+      createCoastline(land.name, position, land.rx, land.rz, scene, materials, parent);
+    } else {
+      createIsland(land.name, position, land.radius, land.heightScale, scene, materials, parent);
+    }
+  });
+}
+
+function getLandZone(land) {
+  return { x: land.x, z: land.z, rx: land.rx, rz: land.rz, name: land.name };
+}
+
+function createCoastline(name, position, rx, rz, scene, materials, parent) {
   const shallow = MeshBuilder.CreateCylinder(`${name}_shallows`, {
     diameter: 2,
     height: 0.08,
