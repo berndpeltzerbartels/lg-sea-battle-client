@@ -278,6 +278,11 @@ let localDebugFireRequest = document.body.dataset.debugFireTorpedoRequest ?? "";
 const maxRudderDegrees = 35;
 const rudderStepDegrees = 5;
 const rudderHoldDegreesPerSecond = 18;
+const torpedoLaunchDefaults = {
+  tubeX: 0.32,
+  startZ: 2.45,
+  startY: 0.6
+};
 const torpedoSystem = createTorpedoSystem(scene, materials, world);
 
 const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
@@ -855,6 +860,7 @@ function createLocalDebugControls() {
   if (!["localhost", "127.0.0.1"].includes(window.location.hostname)) return;
 
   document.body.dataset.debugFireReady = "true";
+  createTorpedoDebugPanel();
   if (new URLSearchParams(window.location.search).has("debugFireTorpedo")) {
     window.setTimeout(() => {
       firePlayerTorpedo(torpedoSystem, boat.root, heading, speed, time);
@@ -882,13 +888,14 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
 
   const forward = getForwardVector(heading);
   const right = getRightVector(heading);
-  const tubeX = tubeSide * 0.32;
-  const tubeStartZ = 2.45;
+  const tuning = getTorpedoLaunchTuning();
+  const tubeX = tubeSide * tuning.tubeX;
+  const tubeStartZ = tuning.startZ;
   const muzzleZ = 3.05;
   const launchStart = shipRoot.position
     .add(right.scale(tubeX))
     .add(forward.scale(tubeStartZ))
-    .add(new Vector3(0, 0.6, 0));
+    .add(new Vector3(0, tuning.startY, 0));
   const launchEnd = shipRoot.position
     .add(right.scale(tubeX))
     .add(forward.scale(muzzleZ + 1.15))
@@ -946,6 +953,109 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
   createLaunchPuff(system, launchEnd, heading, tubeSide);
   createMuzzleEffect(system, launchStart, heading, tubeSide);
   return true;
+}
+
+function createTorpedoDebugPanel() {
+  const existingPanel = document.getElementById("torpedoDebugPanel");
+  if (existingPanel) return;
+
+  const panel = document.createElement("div");
+  panel.id = "torpedoDebugPanel";
+  panel.className = "torpedo-debug";
+
+  const title = document.createElement("strong");
+  title.textContent = "Torpedo Start";
+  panel.append(title);
+
+  const fields = [
+    { key: "tubeX", label: "Seitlich", min: 0.18, max: 0.42, step: 0.01 },
+    { key: "startZ", label: "Vor/Zuruck", min: 1.7, max: 3.2, step: 0.05 },
+    { key: "startY", label: "Hohe", min: 0.32, max: 0.82, step: 0.01 }
+  ];
+  const valueNodes = {};
+
+  fields.forEach((field) => {
+    const row = document.createElement("label");
+    const name = document.createElement("span");
+    const input = document.createElement("input");
+    const value = document.createElement("code");
+
+    name.textContent = field.label;
+    input.type = "range";
+    input.min = String(field.min);
+    input.max = String(field.max);
+    input.step = String(field.step);
+    input.value = String(getTorpedoLaunchTuning()[field.key]);
+    input.dataset.key = field.key;
+    valueNodes[field.key] = value;
+
+    input.addEventListener("input", () => {
+      setTorpedoLaunchTuning(field.key, Number(input.value));
+      updateTorpedoDebugValues(valueNodes);
+    });
+
+    row.append(name, input, value);
+    panel.append(row);
+  });
+
+  const actions = document.createElement("div");
+  actions.className = "torpedo-debug-actions";
+
+  const fireButton = document.createElement("button");
+  fireButton.type = "button";
+  fireButton.textContent = "Fire";
+  fireButton.addEventListener("click", () => {
+    firePlayerTorpedo(torpedoSystem, boat.root, heading, speed, time);
+  });
+
+  const resetButton = document.createElement("button");
+  resetButton.type = "button";
+  resetButton.textContent = "Reset";
+  resetButton.addEventListener("click", () => {
+    window.localStorage.removeItem("seaBattleTorpedoLaunch");
+    fields.forEach((field) => {
+      const input = panel.querySelector(`input[data-key="${field.key}"]`);
+      if (input) input.value = String(torpedoLaunchDefaults[field.key]);
+    });
+    updateTorpedoDebugValues(valueNodes);
+  });
+
+  actions.append(fireButton, resetButton);
+  panel.append(actions);
+  document.body.append(panel);
+  updateTorpedoDebugValues(valueNodes);
+}
+
+function getTorpedoLaunchTuning() {
+  if (!["localhost", "127.0.0.1"].includes(window.location.hostname)) {
+    return torpedoLaunchDefaults;
+  }
+
+  try {
+    return {
+      ...torpedoLaunchDefaults,
+      ...JSON.parse(window.localStorage.getItem("seaBattleTorpedoLaunch") ?? "{}")
+    };
+  } catch {
+    return torpedoLaunchDefaults;
+  }
+}
+
+function setTorpedoLaunchTuning(key, value) {
+  const tuning = getTorpedoLaunchTuning();
+  const next = {
+    ...tuning,
+    [key]: value
+  };
+  window.localStorage.setItem("seaBattleTorpedoLaunch", JSON.stringify(next));
+}
+
+function updateTorpedoDebugValues(valueNodes) {
+  const tuning = getTorpedoLaunchTuning();
+  Object.entries(valueNodes).forEach(([key, node]) => {
+    node.textContent = tuning[key].toFixed(2);
+  });
+  document.body.dataset.torpedoLaunch = `x ${tuning.tubeX.toFixed(2)} z ${tuning.startZ.toFixed(2)} y ${tuning.startY.toFixed(2)}`;
 }
 
 function createTorpedoWake(scene, materials, name) {
