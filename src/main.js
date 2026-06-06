@@ -113,6 +113,7 @@ const worldLandmasses = [
     rz: 96,
     heightScale: 1.28,
     peakBoost: 38,
+    coastRoughness: 0.13,
     fjords: [
       { angle: 3.02, width: 0.12, reach: 0.8 },
       { angle: -2.52, width: 0.16, reach: 0.68 }
@@ -127,6 +128,7 @@ const worldLandmasses = [
     rz: 128,
     heightScale: 0.72,
     peakBoost: 4,
+    coastRoughness: 0.15,
     fjords: [
       { angle: -1.78, width: 0.2, reach: 0.88 },
       { angle: -1.42, width: 0.15, reach: 0.72 },
@@ -145,6 +147,7 @@ const worldLandmasses = [
     rz: 118,
     heightScale: 1.38,
     peakBoost: 24,
+    coastRoughness: 0.13,
     fjords: [
       { angle: 0.12, width: 0.14, reach: 0.78 },
       { angle: -0.48, width: 0.11, reach: 0.66 }
@@ -161,6 +164,7 @@ const worldLandmasses = [
     rz: 1750,
     heightScale: 1.18,
     peakBoost: 46,
+    coastRoughness: 0.16,
     fjords: [
       { angle: 1.46, width: 0.1, reach: 0.78 },
       { angle: 1.18, width: 0.16, reach: 0.62 },
@@ -2105,16 +2109,17 @@ function createWorldLandmasses(landmasses, scene, materials, parent) {
 function getLandZone(land) {
   const navigationScale = land.kind === "island" ? 0.58 : 1;
   const shallowScale = land.kind === "island" ? 0.9 : 1.12;
+  const coastPadding = land.kind === "coastline" ? 1 + (land.coastRoughness ?? 0.09) * 1.05 : 1;
 
   return {
     x: land.x,
     z: land.z,
-    rx: land.rx * navigationScale,
-    rz: land.rz * navigationScale,
-    visualRx: land.rx,
-    visualRz: land.rz,
-    shallowRx: land.rx * shallowScale,
-    shallowRz: land.rz * shallowScale,
+    rx: land.rx * navigationScale * coastPadding,
+    rz: land.rz * navigationScale * coastPadding,
+    visualRx: land.rx * coastPadding,
+    visualRz: land.rz * coastPadding,
+    shallowRx: land.rx * shallowScale * coastPadding,
+    shallowRz: land.rz * shallowScale * coastPadding,
     name: land.name,
     kind: land.kind,
     fjords: land.fjords ?? []
@@ -2126,16 +2131,16 @@ function createCoastline(land, position, scene, materials, parent) {
   const heightScale = land.heightScale ?? 1;
   const peakBoost = land.peakBoost ?? 0;
 
-  const beach = MeshBuilder.CreateCylinder(`${name}_beach`, {
-    diameter: 2,
-    height: 0.18,
-    tessellation: 72
+  const beach = MeshBuilder.CreateGround(`${name}_beach`, {
+    width: rx * 2.1,
+    height: rz * 2.1,
+    subdivisions: 42,
+    updatable: true
   }, scene);
   beach.parent = parent;
-  beach.position = new Vector3(position.x, 0.28, position.z);
-  beach.scaling.x = rx * 1.04;
-  beach.scaling.z = rz * 1.04;
+  beach.position = position;
   beach.material = materials.sand;
+  shapeCoastlineBeach(beach, land, rx, rz);
 
   const terrain = MeshBuilder.CreateGround(`${name}_terrain`, {
     width: rx * 2.05,
@@ -2154,9 +2159,10 @@ function createCoastline(land, position, scene, materials, parent) {
   for (let i = 0; i < positions.length; i += 3) {
     const localX = positions[i];
     const localZ = positions[i + 2];
-    const nx = localX / rx;
-    const nz = localZ / rz;
-    const distance = Math.sqrt(nx * nx + nz * nz);
+    const shape = getCoastShape(localX, localZ, rx, rz, land);
+    const distance = shape.distance;
+    const nx = shape.nx;
+    const nz = shape.nz;
     const coast = 1 - smoothstep(0.58, 0.96, distance);
     const inland = clamp(1 - distance, 0, 1);
     const ridgeA = Math.sin(localX * 0.065 + localZ * 0.035) * 0.5 + 0.5;
@@ -2175,6 +2181,28 @@ function createCoastline(land, position, scene, materials, parent) {
   VertexData.ComputeNormals(positions, indices, normals);
   terrain.updateVerticesData("position", positions);
   terrain.updateVerticesData("normal", normals);
+}
+
+function shapeCoastlineBeach(beach, land, rx, rz) {
+  const positions = beach.getVerticesData("position");
+  const indices = beach.getIndices();
+  const normals = [];
+
+  for (let i = 0; i < positions.length; i += 3) {
+    const localX = positions[i];
+    const localZ = positions[i + 2];
+    const distance = getCoastShape(localX, localZ, rx, rz, land).distance;
+    const fjord = getFjordCarve(localX, localZ, rx, rz, land.fjords ?? []);
+    const sandBand = 1 - smoothstep(0.78, 1.08, distance);
+
+    positions[i + 1] = distance > 1.08 || fjord > 0.55
+      ? -14
+      : 0.24 + sandBand * 0.08;
+  }
+
+  VertexData.ComputeNormals(positions, indices, normals);
+  beach.updateVerticesData("position", positions);
+  beach.updateVerticesData("normal", normals);
 }
 
 function createIsland(name, position, radius, heightScale, scene, materials, parent) {
@@ -2249,6 +2277,40 @@ function getFjordCarve(localX, localZ, rx, rz, fjords) {
   });
 
   return carve;
+}
+
+function getCoastShape(localX, localZ, rx, rz, land) {
+  const nx = localX / rx;
+  const nz = localZ / rz;
+  const baseDistance = Math.sqrt(nx * nx + nz * nz);
+  const angle = Math.atan2(nz, nx);
+  const radiusFactor = getCoastRadiusFactor(angle, land);
+
+  return {
+    nx,
+    nz,
+    distance: baseDistance / radiusFactor
+  };
+}
+
+function getCoastRadiusFactor(angle, land) {
+  const roughness = land.coastRoughness ?? 0.09;
+  const seed = getNameSeed(land.name) * 0.013;
+  const broad = Math.sin(angle * 3 + seed) * 0.52;
+  const bays = Math.sin(angle * 5 - seed * 0.7) * 0.32;
+  const small = Math.sin(angle * 9 + seed * 1.4) * 0.16;
+
+  return clamp(1 + (broad + bays + small) * roughness, 0.8, 1.24);
+}
+
+function getNameSeed(name) {
+  let seed = 0;
+
+  for (let i = 0; i < name.length; i += 1) {
+    seed = (seed * 31 + name.charCodeAt(i)) % 9973;
+  }
+
+  return seed;
 }
 
 function clamp(value, min, max) {
