@@ -237,7 +237,7 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
   }
   if (isTorpedoFireKey(event) && !event.repeat) {
-    firePlayerTorpedo(torpedoSystem, boat.root, heading, speed, time);
+    firePlayerTorpedo(torpedoSystem, boat.root, heading, turnVelocity, speed, time);
     event.preventDefault();
   }
 });
@@ -975,15 +975,18 @@ function createTorpedoSystem(scene, materials, parent) {
 }
 
 // A fired torpedo starts as a visible tube ejection, then becomes a simple straight-running weapon.
-function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
+function firePlayerTorpedo(system, shipRoot, heading, turnVelocity, shipSpeed, now) {
   if (now < system.nextFireTime) return false;
 
   const tubeSide = system.nextTube === 0 ? -1 : 1;
   system.nextTube = 1 - system.nextTube;
   system.nextFireTime = now + 1.15;
 
-  const forward = getForwardVector(heading);
-  const right = getRightVector(heading);
+  // Firing while turning is the normal attack maneuver. Aim very slightly into the current turn
+  // so the shot feels tied to the tube direction, without making torpedoes steer after launch.
+  const launchHeading = heading + clamp(turnVelocity, -0.42, 0.42) * 0.2;
+  const forward = getForwardVector(launchHeading);
+  const right = getRightVector(launchHeading);
   const tuning = torpedoLaunchDefaults;
   const tubeX = tubeSide * tuning.tubeX;
   const muzzleEffectX = tubeSide * 0.32;
@@ -999,7 +1002,7 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
     .add(new Vector3(0, tuning.startY, 0));
   const launchEnd = shipRoot.position
     .add(right.scale(tubeX))
-    .add(forward.scale(muzzleZ + 0.62))
+    .add(forward.scale(muzzleZ + 0.32))
     .add(new Vector3(0, -0.04, 0));
   const muzzlePuffPoint = shipRoot.position
     .add(right.scale(muzzleEffectX))
@@ -1007,13 +1010,13 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
     .add(new Vector3(0, -0.04, 0));
   const runStart = shipRoot.position
     .add(right.scale(tubeX))
-    .add(forward.scale(muzzleZ + 0.92))
+    .add(forward.scale(muzzleZ + 0.52))
     .add(new Vector3(0, 0.06, 0));
 
   const root = new TransformNode(`torpedo_${system.nextId}`, system.scene);
   root.parent = system.root;
   root.position.copyFrom(launchStart);
-  root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
+  root.rotationQuaternion = Quaternion.FromEulerAngles(0, launchHeading, 0);
 
   const body = MeshBuilder.CreateCylinder(`${root.name}_body`, {
     diameter: 0.2,
@@ -1041,7 +1044,7 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
     root,
     body,
     wake,
-    heading,
+    heading: launchHeading,
     forward,
     launchStart,
     launchEnd,
@@ -1049,15 +1052,15 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
     age: 0,
     runDistance: 0,
     speed: 24 + Math.max(0, shipSpeed) * 0.35,
-    // A short ejection avoids an exaggerated sideways gap when the player fires while turning.
-    launchDuration: 0.34,
+    // Keep launch nearly immediate so turning fire does not drag behind the player's aim.
+    launchDuration: 0.2,
     maxRange: 620,
     hit: false
   };
   system.nextId += 1;
   system.active.push(torpedo);
-  createLaunchPuff(system, muzzlePuffPoint, heading, tubeSide);
-  createMuzzleEffect(system, muzzleEffectStart, heading, tubeSide);
+  createLaunchPuff(system, muzzlePuffPoint, launchHeading, tubeSide);
+  createMuzzleEffect(system, muzzleEffectStart, launchHeading, tubeSide);
   return true;
 }
 
