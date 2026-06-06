@@ -150,7 +150,25 @@ const worldLandmasses = [
     ]
   },
   { kind: "island", name: "southern_gate_rocks", x: -96, z: -706, radius: 18, heightScale: 1.15, rx: 25, rz: 18 },
-  { kind: "island", name: "southern_outer_stack", x: 332, z: -698, radius: 20, heightScale: 1.05, rx: 28, rz: 21 }
+  { kind: "island", name: "southern_outer_stack", x: 332, z: -698, radius: 20, heightScale: 1.05, rx: 28, rz: 21 },
+  {
+    kind: "coastline",
+    name: "western_continent",
+    x: -2350,
+    z: 120,
+    rx: 820,
+    rz: 1750,
+    heightScale: 1.18,
+    peakBoost: 46,
+    fjords: [
+      { angle: 1.46, width: 0.1, reach: 0.78 },
+      { angle: 1.18, width: 0.16, reach: 0.62 },
+      { angle: 1.82, width: 0.13, reach: 0.68 },
+      { angle: 2.22, width: 0.1, reach: 0.55 }
+    ]
+  },
+  { kind: "island", name: "western_sound_stack", x: -1310, z: 520, radius: 28, heightScale: 1.2, rx: 38, rz: 28 },
+  { kind: "island", name: "western_south_rocks", x: -1460, z: -630, radius: 22, heightScale: 1.05, rx: 30, rz: 24 }
 ];
 const radarOcclusionScale = 0.72;
 const mapTileSize = 1200;
