@@ -101,7 +101,55 @@ const worldLandmasses = [
   { kind: "island", name: "storm_north_stack", x: -372, z: -312, radius: 16, heightScale: 1.15, rx: 22, rz: 17 },
   { kind: "island", name: "storm_west_rocks", x: -536, z: -390, radius: 18, heightScale: 1.0, rx: 25, rz: 18 },
   { kind: "island", name: "storm_south_skerries", x: -462, z: -512, radius: 14, heightScale: 0.9, rx: 20, rz: 16 },
-  { kind: "island", name: "storm_outer_needle", x: -318, z: -482, radius: 12, heightScale: 1.45, rx: 18, rz: 14 }
+  { kind: "island", name: "storm_outer_needle", x: -318, z: -482, radius: 12, heightScale: 1.45, rx: 18, rz: 14 },
+  {
+    kind: "coastline",
+    name: "northern_ridge",
+    x: 24,
+    z: 760,
+    rx: 220,
+    rz: 96,
+    heightScale: 1.28,
+    peakBoost: 38,
+    fjords: [
+      { angle: 3.02, width: 0.12, reach: 0.8 },
+      { angle: -2.52, width: 0.16, reach: 0.68 }
+    ]
+  },
+  {
+    kind: "coastline",
+    name: "eastern_delta_coast",
+    x: 835,
+    z: 118,
+    rx: 168,
+    rz: 128,
+    heightScale: 0.72,
+    peakBoost: 4,
+    fjords: [
+      { angle: -1.78, width: 0.2, reach: 0.88 },
+      { angle: -1.42, width: 0.15, reach: 0.72 },
+      { angle: -2.05, width: 0.13, reach: 0.64 }
+    ]
+  },
+  { kind: "island", name: "delta_outer_bar", x: 632, z: 92, radius: 13, heightScale: 0.7, rx: 19, rz: 15 },
+  { kind: "island", name: "delta_split_rocks", x: 672, z: 164, radius: 11, heightScale: 0.8, rx: 16, rz: 13 },
+  { kind: "island", name: "delta_south_bar", x: 604, z: 18, radius: 12, heightScale: 0.65, rx: 17, rz: 14 },
+  {
+    kind: "coastline",
+    name: "southern_cliffs",
+    x: 148,
+    z: -855,
+    rx: 232,
+    rz: 118,
+    heightScale: 1.38,
+    peakBoost: 24,
+    fjords: [
+      { angle: 0.12, width: 0.14, reach: 0.78 },
+      { angle: -0.48, width: 0.11, reach: 0.66 }
+    ]
+  },
+  { kind: "island", name: "southern_gate_rocks", x: -96, z: -706, radius: 18, heightScale: 1.15, rx: 25, rz: 18 },
+  { kind: "island", name: "southern_outer_stack", x: 332, z: -698, radius: 20, heightScale: 1.05, rx: 28, rz: 21 }
 ];
 const radarOcclusionScale = 0.72;
 
@@ -117,7 +165,7 @@ ambient.intensity = 0.58;
 ambient.groundColor = new Color3(0.1, 0.18, 0.19);
 
 const worldLimit = 5000;
-const ocean = MeshBuilder.CreateGround("ocean", { width: 1450, height: 1450, subdivisions: 140 }, scene);
+const ocean = MeshBuilder.CreateGround("ocean", { width: 2300, height: 2300, subdivisions: 160 }, scene);
 ocean.material = materials.water;
 ocean.parent = world;
 const foam = createFoamPatches(scene, materials, world);
