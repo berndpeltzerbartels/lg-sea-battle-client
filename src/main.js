@@ -361,7 +361,7 @@ scene.onBeforeRenderObservable.add(() => {
     nextRamHitTime = time + 2.2;
     torpedoSystem.hits += 1;
     ramShake = 1;
-    beginEnemySinking(enemyMotion, ramHit.side, time);
+    beginEnemySinking(enemyMotion, -ramHit.side, time);
     speed *= -0.18;
     turnVelocity *= 0.25;
   }
