@@ -212,40 +212,42 @@ camera.fov = 0.78;
 scene.activeCamera = camera;
 
 window.addEventListener("keydown", (event) => {
-  if (event.code === "ArrowUp" && !event.repeat) {
+  document.body.dataset.lastKey = formatInputEvent(event);
+
+  if (isInputKey(event, "up") && !event.repeat) {
     engineOrder = clamp(engineOrder + 1, 0, engineOrders.length - 1);
     event.preventDefault();
   }
-  if (event.code === "ArrowDown" && !event.repeat) {
+  if (isInputKey(event, "down") && !event.repeat) {
     engineOrder = clamp(engineOrder - 1, 0, engineOrders.length - 1);
     event.preventDefault();
   }
-  if (event.code === "ArrowLeft") {
+  if (isInputKey(event, "left")) {
     heldRudderDirection = -1;
     if (!event.repeat) {
       rudderDegrees = clamp(rudderDegrees - rudderStepDegrees, -maxRudderDegrees, maxRudderDegrees);
     }
     event.preventDefault();
   }
-  if (event.code === "ArrowRight") {
+  if (isInputKey(event, "right")) {
     heldRudderDirection = 1;
     if (!event.repeat) {
       rudderDegrees = clamp(rudderDegrees + rudderStepDegrees, -maxRudderDegrees, maxRudderDegrees);
     }
     event.preventDefault();
   }
-  if ((event.code === "Space" || event.code === "KeyF") && !event.repeat) {
+  if (isTorpedoFireKey(event) && !event.repeat) {
     firePlayerTorpedo(torpedoSystem, boat.root, heading, speed, time);
     event.preventDefault();
   }
 });
 
 window.addEventListener("keyup", (event) => {
-  if (event.code === "ArrowLeft" && heldRudderDirection < 0) {
+  if (isInputKey(event, "left") && heldRudderDirection < 0) {
     heldRudderDirection = 0;
     event.preventDefault();
   }
-  if (event.code === "ArrowRight" && heldRudderDirection > 0) {
+  if (isInputKey(event, "right") && heldRudderDirection > 0) {
     heldRudderDirection = 0;
     event.preventDefault();
   }
@@ -396,6 +398,49 @@ engine.runRenderLoop(() => {
 window.addEventListener("resize", () => {
   engine.resize();
 });
+
+function isInputKey(event, name) {
+  const keyCode = event.keyCode ?? event.which;
+  const code = event.code;
+
+  return {
+    up: code === "ArrowUp" || keyCode === 38,
+    down: code === "ArrowDown" || keyCode === 40,
+    left: code === "ArrowLeft" || keyCode === 37,
+    right: code === "ArrowRight" || keyCode === 39
+  }[name];
+}
+
+function isTorpedoFireKey(event) {
+  const keyCode = event.keyCode ?? event.which;
+  const code = event.code;
+  const key = event.key;
+
+  return (
+    code === "Space" ||
+    code === "KeyF" ||
+    code === "Enter" ||
+    code === "NumpadEnter" ||
+    key === "Enter" ||
+    keyCode === 13 ||
+    keyCode === 398 ||
+    keyCode === 399 ||
+    keyCode === 400 ||
+    keyCode === 401 ||
+    keyCode === 403 ||
+    keyCode === 404 ||
+    keyCode === 405 ||
+    keyCode === 406 ||
+    keyCode === 415
+  );
+}
+
+function formatInputEvent(event) {
+  const keyCode = event.keyCode ?? event.which ?? "";
+  const code = event.code ?? "";
+  const key = event.key ?? "";
+  return `${code || "-"} / ${key || "-"} / ${keyCode || "-"}`;
+}
 
 function createTelegraphSteps(orders, parent) {
   if (!parent) return [];
