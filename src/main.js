@@ -295,19 +295,19 @@ function createPlayerBow(scene, materials, name = "player_bow") {
 
   for (let i = 0; i < 2; i += 1) {
     const tube = MeshBuilder.CreateCylinder(`${name}_torpedo_tube_${i}`, {
-      diameter: 0.18,
+      diameter: 0.14,
       height: 2.65,
       tessellation: 12
     }, scene);
     tube.parent = root;
     tube.position.x = i === 0 ? -0.32 : 0.32;
-    tube.position.y = 0.98;
+    tube.position.y = 0.84;
     tube.position.z = 1.55;
     tube.rotation.x = Math.PI / 2;
     tube.material = materials.funnel;
 
     const cap = MeshBuilder.CreateCylinder(`${name}_tube_cap_${i}`, {
-      diameter: 0.21,
+      diameter: 0.17,
       height: 0.08,
       tessellation: 12
     }, scene);
@@ -320,13 +320,18 @@ function createPlayerBow(scene, materials, name = "player_bow") {
   }
 
   for (let i = 0; i < 2; i += 1) {
-    const rail = MeshBuilder.CreateBox(`${name}_deck_edge_${i}`, { width: 0.08, height: 0.16, depth: 3.55 }, scene);
+    const rail = MeshBuilder.CreateBox(`${name}_deck_edge_${i}`, { width: 0.07, height: 0.13, depth: 3.42 }, scene);
     rail.parent = root;
-    rail.position.x = i === 0 ? -0.68 : 0.68;
-    rail.position.y = 0.86;
-    rail.position.z = 0.75;
+    rail.position.x = i === 0 ? -0.66 : 0.66;
+    rail.position.y = 0.84;
+    rail.position.z = 0.62;
     rail.material = materials.hull;
   }
+
+  createRailSegment(`${name}_bow_rail_left`, scene, materials.hull, root, -0.62, 2.25, -0.17, 4.28, 0.78);
+  createRailSegment(`${name}_bow_rail_right`, scene, materials.hull, root, 0.62, 2.25, 0.17, 4.28, 0.78);
+  createRailSegment(`${name}_bow_rail_port_opening`, scene, materials.hull, root, -0.5, 3.12, -0.43, 3.68, 0.77);
+  createRailSegment(`${name}_bow_rail_starboard_opening`, scene, materials.hull, root, 0.5, 3.12, 0.43, 3.68, 0.77);
 
   const hatch = MeshBuilder.CreateBox(`${name}_deck_hatch`, { width: 0.46, height: 0.11, depth: 0.52 }, scene);
   hatch.parent = root;
@@ -335,6 +340,20 @@ function createPlayerBow(scene, materials, name = "player_bow") {
   hatch.material = materials.cabin;
 
   return { root };
+}
+
+function createRailSegment(name, scene, material, parent, x1, z1, x2, z2, y) {
+  const dx = x2 - x1;
+  const dz = z2 - z1;
+  const length = Math.sqrt(dx * dx + dz * dz);
+  const rail = MeshBuilder.CreateBox(name, { width: 0.07, height: 0.12, depth: length }, scene);
+  rail.parent = parent;
+  rail.position.x = (x1 + x2) / 2;
+  rail.position.y = y;
+  rail.position.z = (z1 + z2) / 2;
+  rail.rotation.y = Math.atan2(dx, dz);
+  rail.material = material;
+  return rail;
 }
 
 function createTaperedHull(name, scene, sections) {
