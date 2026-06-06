@@ -276,6 +276,7 @@ let heldRudderDirection = 0;
 let cameraPosition = camera.position.clone();
 let cameraTarget = boat.root.position.clone();
 let time = 0;
+let nextRamHitTime = 0;
 const maxRudderDegrees = 35;
 const rudderStepDegrees = 5;
 const rudderHoldDegreesPerSecond = 18;
@@ -354,6 +355,16 @@ scene.onBeforeRenderObservable.add(() => {
   updateEnemyMotion(enemyMotion, dt, time);
   updateTorpedoSystem(torpedoSystem, dt, time, enemyMotion, blockedWaters);
 
+  const ramHit = getPlayerRamHit(boat.root.position, heading, speed, enemyMotion, time);
+  if (ramHit) {
+    nextRamHitTime = time + 2.2;
+    torpedoSystem.hits += 1;
+    createHitChurn(torpedoSystem, ramHit.position, heading);
+    speed *= -0.18;
+    turnVelocity *= 0.25;
+    enemyMotion.speed *= 0.35;
+  }
+
   // Fixed bridge camera: it follows the ship immediately so acceleration never reveals the rear model.
   const cameraDistance = 0.65;
   const cameraHeight = 1.48;
@@ -375,6 +386,7 @@ scene.onBeforeRenderObservable.add(() => {
   document.body.dataset.rudderDegrees = String(Math.round(rudderDegrees));
   document.body.dataset.torpedoes = String(torpedoSystem.active.length);
   document.body.dataset.torpedoHits = String(torpedoSystem.hits);
+  document.body.dataset.ramReady = time >= nextRamHitTime ? "true" : "false";
 
   const displayedSpeed = Math.abs(speed) < 0.08 ? 0 : Math.abs(speed);
   const waterDepth = getWaterDepth(boat.root.position, blockedWaters);
@@ -1169,18 +1181,37 @@ function torpedoHitsLand(torpedoPosition, landZones) {
   });
 }
 
+function getPlayerRamHit(playerPosition, playerHeading, playerSpeed, enemyMotion, time) {
+  if (time < nextRamHitTime || playerSpeed < 2.2) return null;
+
+  const forward = getForwardVector(playerHeading);
+  const right = getRightVector(playerHeading);
+  const bowCenter = playerPosition.add(forward.scale(4.45));
+  const bowProbePoints = [
+    bowCenter,
+    bowCenter.add(right.scale(0.34)),
+    bowCenter.add(right.scale(-0.34))
+  ];
+
+  const hitPoint = bowProbePoints.find((point) => pointHitsEnemyHull(point, enemyMotion, 0.16));
+  return hitPoint ? { position: hitPoint } : null;
+}
+
 function torpedoHitsEnemy(torpedoPosition, enemyMotion) {
-  const hit = getEnemyHitLocalPoint(torpedoPosition, enemyMotion.root.position, enemyMotion.heading);
+  return pointHitsEnemyHull(torpedoPosition, enemyMotion, 0.22);
+}
+
+function pointHitsEnemyHull(point, enemyMotion, radius) {
+  const hit = getEnemyHitLocalPoint(point, enemyMotion.root.position, enemyMotion.heading);
   const stern = -4.05;
   const bow = 4.45;
-  const torpedoRadius = 0.22;
   const lengthPadding = 0.18;
 
   if (hit.forward < stern - lengthPadding || hit.forward > bow + lengthPadding) {
     return false;
   }
 
-  const halfWidth = getEnemyHullHalfWidthAt(hit.forward) + torpedoRadius;
+  const halfWidth = getEnemyHullHalfWidthAt(hit.forward) + radius;
   return Math.abs(hit.right) <= halfWidth;
 }
 
