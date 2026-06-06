@@ -154,7 +154,7 @@ const worldLandmasses = [
 ];
 const radarOcclusionScale = 0.72;
 const mapTileSize = 1200;
-const mapZoomScales = [0.5, 1, 2, 4];
+const mapZoomScales = [0.5, 1, 2, 4, 8, 16];
 const worldMetersPerUnit = 20;
 
 const materials = createMaterials(scene);
