@@ -58,46 +58,44 @@ body {
   backdrop-filter: blur(7px);
 }
 
-.compass span {
+.compass-rose {
   position: absolute;
-}
-
-.compass-needle {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 6px;
-  height: 76px;
-  transform: translate(-50%, -50%) rotate(0rad);
+  inset: 0;
+  border-radius: 50%;
+  transform: rotate(0rad);
   transform-origin: 50% 50%;
 }
 
-.compass-needle::before,
-.compass-needle::after {
+.compass-rose::before,
+.compass-rose::after {
+  position: absolute;
+  inset: 17px;
+  border-top: 1px solid rgb(255 255 255 / 24%);
+  border-bottom: 1px solid rgb(255 255 255 / 24%);
+  content: "";
+}
+
+.compass-rose::after {
+  transform: rotate(90deg);
+}
+
+.compass-rose span {
+  position: absolute;
+}
+
+.compass-pointer {
   position: absolute;
   left: 50%;
-  display: block;
-  width: 4px;
-  border-radius: 999px;
+  top: 6px;
+  width: 0;
+  height: 0;
+  border-right: 6px solid transparent;
+  border-bottom: 17px solid #d84a3a;
+  border-left: 6px solid transparent;
   content: "";
   transform: translateX(-50%);
-}
-
-.compass-needle::before {
-  top: 3px;
-  height: 38px;
-  background: #d84a3a;
-  box-shadow: 0 0 10px rgb(216 74 58 / 55%);
-}
-
-.compass-needle::after {
-  bottom: 7px;
-  height: 28px;
-  background: rgb(232 241 244 / 78%);
-}
-
-.compass-needle {
-  filter: drop-shadow(0 3px 7px rgb(1 15 24 / 42%));
+  filter: drop-shadow(0 0 7px rgb(216 74 58 / 65%));
+  z-index: 2;
 }
 
 .compass::after {
@@ -113,25 +111,25 @@ body {
   transform: translate(-50%, -50%);
 }
 
-.compass span:nth-child(1) {
+.compass-rose span:nth-child(1) {
   top: 9px;
   left: 0;
   right: 0;
 }
 
-.compass span:nth-child(2) {
+.compass-rose span:nth-child(2) {
   top: 50%;
   right: 12px;
   transform: translateY(-50%);
 }
 
-.compass span:nth-child(3) {
+.compass-rose span:nth-child(3) {
   bottom: 9px;
   left: 0;
   right: 0;
 }
 
-.compass span:nth-child(4) {
+.compass-rose span:nth-child(4) {
   top: 50%;
   left: 12px;
   transform: translateY(-50%);
@@ -304,8 +302,11 @@ body {
     font-size: 11px;
   }
 
-  .compass-needle {
-    height: 56px;
+  .compass-pointer {
+    top: 4px;
+    border-right-width: 5px;
+    border-bottom-width: 13px;
+    border-left-width: 5px;
   }
 
   .speed {
