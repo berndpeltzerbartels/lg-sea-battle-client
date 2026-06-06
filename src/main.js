@@ -132,7 +132,7 @@ let cameraTarget = boat.root.position.clone();
 let time = 0;
 
 const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
-const enemyMotion = createEnemyMotion(enemyBoat.root, -0.55, 3);
+const enemyMotion = createEnemyMotion(enemyBoat.root, enemyBoat.bowWake, -0.55, 3);
 startLocalEnemyEventSource(enemyMotion);
 
 scene.onBeforeRenderObservable.add(() => {
@@ -244,9 +244,10 @@ function updateTelegraphSteps(steps, activeOrder) {
   });
 }
 
-function createEnemyMotion(root, heading, engineOrder) {
+function createEnemyMotion(root, bowWake, heading, engineOrder) {
   return {
     root,
+    bowWake,
     heading,
     speed: 0,
     turnVelocity: 0,
@@ -302,9 +303,31 @@ function updateEnemyMotion(motion, dt, time) {
     motion.heading,
     -motion.turnVelocity * 0.42 + Math.sin(time * 1.4) * 0.01
   );
+  updateEnemyBowWake(motion.bowWake, motion.speed, time);
 
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
   document.body.dataset.enemyEngineOrder = engineOrders[motion.engineOrder].label;
+}
+
+function updateEnemyBowWake(wake, speed, time) {
+  if (!wake) return;
+
+  const strength = clamp(Math.abs(speed) / 8, 0, 1);
+  wake.root.setEnabled(strength > 0.08);
+
+  wake.segments.forEach((segment, index) => {
+    const pulse = 0.88 + Math.sin(time * 3.2 + index * 0.7) * 0.08;
+    segment.scaling.x = 0.55 + strength * 1.05;
+    segment.scaling.z = (0.65 + strength * 0.75) * pulse;
+    segment.position.y = -0.15 + Math.sin(time * 2.8 + index) * 0.006;
+  });
+
+  wake.churn.forEach((patch, index) => {
+    const pulse = 0.75 + Math.sin(time * 4.1 + index * 1.7) * 0.16;
+    patch.scaling.x = (0.45 + strength * 0.65) * pulse;
+    patch.scaling.z = 0.45 + strength * 0.8;
+    patch.position.y = -0.14 + Math.sin(time * 3.6 + index) * 0.008;
+  });
 }
 
 function createMaterials(scene) {
@@ -704,7 +727,52 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat") {
   mast.rotation.x = -0.16;
   mast.material = materials.funnel;
 
-  return { root };
+  const bowWake = createEnemyBowWake(scene, materials, root, name);
+
+  return { root, bowWake };
+}
+
+function createEnemyBowWake(scene, materials, parent, name) {
+  const root = new TransformNode(`${name}_bow_wake`, scene);
+  root.parent = parent;
+
+  const segments = [];
+  const churn = [];
+
+  for (let side = -1; side <= 1; side += 2) {
+    for (let i = 0; i < 3; i += 1) {
+      const segment = MeshBuilder.CreateBox(`${name}_bow_wake_${side}_${i}`, {
+        width: 0.035,
+        height: 0.012,
+        depth: 1.35 - i * 0.16
+      }, scene);
+      segment.parent = root;
+      segment.material = materials.foam;
+      segment.position.x = side * (0.4 + i * 0.34);
+      segment.position.y = -0.15;
+      segment.position.z = 3.82 - i * 0.5;
+      segment.rotation.y = side * (0.78 - i * 0.08);
+      segments.push(segment);
+    }
+  }
+
+  for (let i = 0; i < 2; i += 1) {
+    const patch = MeshBuilder.CreateBox(`${name}_bow_churn_${i}`, {
+      width: 0.42 - i * 0.1,
+      height: 0.014,
+      depth: 0.32 + i * 0.12
+    }, scene);
+    patch.parent = root;
+    patch.material = materials.foam;
+    patch.position.x = i === 0 ? -0.12 : 0.12;
+    patch.position.y = -0.14;
+    patch.position.z = 4.32 + i * 0.12;
+    patch.rotation.y = i === 0 ? -0.18 : 0.18;
+    churn.push(patch);
+  }
+
+  root.setEnabled(false);
+  return { root, segments, churn };
 }
 
 function createEnemyBoatBody(name, scene) {
