@@ -86,16 +86,37 @@ body {
 .compass-pointer {
   position: absolute;
   left: 50%;
-  top: 6px;
-  width: 0;
-  height: 0;
-  border-right: 6px solid transparent;
-  border-bottom: 17px solid #d84a3a;
-  border-left: 6px solid transparent;
-  content: "";
-  transform: translateX(-50%);
+  top: 50%;
+  width: 6px;
+  height: 76px;
+  transform: translate(-50%, -50%) rotate(0rad);
+  transform-origin: 50% 50%;
   filter: drop-shadow(0 0 7px rgb(216 74 58 / 65%));
   z-index: 2;
+}
+
+.compass-pointer::before,
+.compass-pointer::after {
+  position: absolute;
+  left: 50%;
+  display: block;
+  width: 4px;
+  border-radius: 999px;
+  content: "";
+  transform: translateX(-50%);
+}
+
+.compass-pointer::before {
+  top: 3px;
+  height: 38px;
+  background: #d84a3a;
+  box-shadow: 0 0 10px rgb(216 74 58 / 55%);
+}
+
+.compass-pointer::after {
+  bottom: 7px;
+  height: 28px;
+  background: rgb(232 241 244 / 78%);
 }
 
 .compass::after {
@@ -303,10 +324,7 @@ body {
   }
 
   .compass-pointer {
-    top: 4px;
-    border-right-width: 5px;
-    border-bottom-width: 13px;
-    border-left-width: 5px;
+    height: 56px;
   }
 
   .speed {

@@ -40,7 +40,7 @@ const depthValue = document.getElementById("depthValue");
 const depthGauge = document.querySelector(".depth-gauge");
 const engineValue = document.getElementById("engineValue");
 const telegraphScale = document.getElementById("telegraphScale");
-const compassRose = document.getElementById("compassRose");
+const compassPointer = document.getElementById("compassPointer");
 
 const materials = createMaterials(scene);
 const world = new TransformNode("world", scene);
@@ -216,7 +216,7 @@ scene.onBeforeRenderObservable.add(() => {
   updateTelegraphSteps(telegraphSteps, engineOrder);
   depthValue.textContent = nextWaterSafety.isBlocked ? "Ground" : `${waterDepth.meters.toFixed(0)} m`;
   depthGauge?.style.setProperty("--depth-ratio", String(waterDepth.ratio));
-  compassRose?.style.setProperty("transform", `rotate(${-heading}rad)`);
+  compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
 });
 
 engine.runRenderLoop(() => {
