@@ -84,7 +84,24 @@ const worldLandmasses = [
   },
   { kind: "island", name: "outer_stack", x: 410, z: -315, radius: 22, heightScale: 1.0, rx: 30, rz: 23 },
   { kind: "island", name: "needle_rocks", x: 240, z: -112, radius: 17, heightScale: 1.35, rx: 24, rz: 18 },
-  { kind: "island", name: "low_skerries", x: 118, z: -238, radius: 14, heightScale: 0.82, rx: 20, rz: 16 }
+  { kind: "island", name: "low_skerries", x: 118, z: -238, radius: 14, heightScale: 0.82, rx: 20, rz: 16 },
+  {
+    kind: "coastline",
+    name: "storm_peak",
+    x: -430,
+    z: -405,
+    rx: 78,
+    rz: 62,
+    heightScale: 2.05,
+    peakBoost: 82,
+    fjords: [
+      { angle: 0.9, width: 0.13, reach: 0.72 }
+    ]
+  },
+  { kind: "island", name: "storm_north_stack", x: -372, z: -312, radius: 16, heightScale: 1.15, rx: 22, rz: 17 },
+  { kind: "island", name: "storm_west_rocks", x: -536, z: -390, radius: 18, heightScale: 1.0, rx: 25, rz: 18 },
+  { kind: "island", name: "storm_south_skerries", x: -462, z: -512, radius: 14, heightScale: 0.9, rx: 20, rz: 16 },
+  { kind: "island", name: "storm_outer_needle", x: -318, z: -482, radius: 12, heightScale: 1.45, rx: 18, rz: 14 }
 ];
 const radarOcclusionScale = 0.72;
 
