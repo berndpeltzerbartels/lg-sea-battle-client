@@ -355,7 +355,7 @@ scene.onBeforeRenderObservable.add(() => {
   materials.water.diffuseTexture.vOffset += dt * 0.018;
   updateFoamPatches(foam, boat.root.position, time);
   updateEnemyMotion(enemyMotion, dt, time);
-  updateTorpedoSystem(torpedoSystem, dt, time, enemyMotion.root.position);
+  updateTorpedoSystem(torpedoSystem, dt, time, enemyMotion);
 
   // Fixed bridge camera: it follows the ship immediately so acceleration never reveals the rear model.
   const cameraDistance = 0.65;
@@ -1188,7 +1188,7 @@ function createMuzzleEffect(system, position, heading, tubeSide) {
   }
 }
 
-function updateTorpedoSystem(system, dt, time, enemyPosition) {
+function updateTorpedoSystem(system, dt, time, enemyMotion) {
   system.hitEffects = system.hitEffects.filter((effect) => {
     effect.age += dt;
     const t = effect.age / effect.lifetime;
@@ -1260,7 +1260,7 @@ function updateTorpedoSystem(system, dt, time, enemyPosition) {
     torpedo.runDistance += step;
     updateTorpedoWake(torpedo, true, time);
 
-    if (!torpedo.hit && distance2D(torpedo.root.position, enemyPosition) < 2.25) {
+    if (!torpedo.hit && torpedoHitsEnemy(torpedo.root.position, enemyMotion)) {
       torpedo.hit = true;
       system.hits += 1;
       createHitChurn(system, torpedo.root.position, torpedo.heading);
@@ -1275,6 +1275,38 @@ function updateTorpedoSystem(system, dt, time, enemyPosition) {
 
     return true;
   });
+}
+
+function torpedoHitsEnemy(torpedoPosition, enemyMotion) {
+  const hit = getEnemyHitLocalPoint(torpedoPosition, enemyMotion.root.position, enemyMotion.heading);
+  const halfLength = 4.65;
+  const halfWidth = 0.92;
+  const torpedoRadius = 0.24;
+  const lengthPadding = 0.35;
+
+  if (Math.abs(hit.forward) <= halfLength + lengthPadding && Math.abs(hit.right) <= halfWidth + torpedoRadius) {
+    return true;
+  }
+
+  const bowDistance = distanceToPoint2D(hit.right, hit.forward, 0, halfLength);
+  const sternDistance = distanceToPoint2D(hit.right, hit.forward, 0, -halfLength);
+  return Math.min(bowDistance, sternDistance) <= halfWidth + torpedoRadius;
+}
+
+function getEnemyHitLocalPoint(point, enemyPosition, enemyHeading) {
+  const dx = point.x - enemyPosition.x;
+  const dz = point.z - enemyPosition.z;
+
+  return {
+    right: dx * Math.cos(enemyHeading) - dz * Math.sin(enemyHeading),
+    forward: dx * Math.sin(enemyHeading) + dz * Math.cos(enemyHeading)
+  };
+}
+
+function distanceToPoint2D(x1, y1, x2, y2) {
+  const dx = x1 - x2;
+  const dy = y1 - y2;
+  return Math.sqrt(dx * dx + dy * dy);
 }
 
 function updateTorpedoWake(torpedo, visible, time) {
