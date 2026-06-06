@@ -53,6 +53,7 @@ const worldLandmasses = [
   { kind: "island", name: "south_island", x: 18, z: -76, radius: 24, heightScale: 1.25, rx: 32, rz: 25 },
   { kind: "island", name: "far_island", x: -92, z: -26, radius: 16, heightScale: 0.75, rx: 22, rz: 17 }
 ];
+const radarOcclusionScale = 0.72;
 
 const materials = createMaterials(scene);
 const world = new TransformNode("world", scene);
@@ -250,20 +251,18 @@ function updateTelegraphSteps(steps, activeOrder) {
 }
 
 function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, enemyPosition, landZones, heading) {
-  drawMapInstrument(mapCanvas, playerPosition, enemyPosition, landZones);
+  drawMapInstrument(mapCanvas, playerPosition, landZones);
   drawRadarInstrument(radarCanvas, radarStatus, playerPosition, enemyPosition, landZones, heading);
 }
 
-function drawMapInstrument(canvas, playerPosition, enemyPosition, landZones) {
+function drawMapInstrument(canvas, playerPosition, landZones) {
   if (!canvas) return;
 
   const ctx = prepareInstrumentCanvas(canvas);
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
-  const viewRange = 360;
-  const scale = Math.min(width, height) / viewRange;
-  const centerX = width * 0.5;
-  const centerY = height * 0.5;
+  const bounds = getMapBounds(landZones, 70);
+  const scale = Math.min(width / (bounds.maxX - bounds.minX), height / (bounds.maxZ - bounds.minZ));
 
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "rgba(7, 31, 43, 0.78)";
@@ -271,13 +270,13 @@ function drawMapInstrument(canvas, playerPosition, enemyPosition, landZones) {
 
   ctx.strokeStyle = "rgba(247, 251, 255, 0.14)";
   ctx.lineWidth = 1;
-  for (let x = centerX % 36; x < width; x += 36) {
+  for (let x = 0; x < width; x += 30) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, height);
     ctx.stroke();
   }
-  for (let y = centerY % 36; y < height; y += 36) {
+  for (let y = 0; y < height; y += 30) {
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(width, y);
@@ -285,19 +284,16 @@ function drawMapInstrument(canvas, playerPosition, enemyPosition, landZones) {
   }
 
   landZones.forEach((zone) => {
-    const point = worldToInstrumentPoint(zone, playerPosition, centerX, centerY, scale);
+    const point = worldToMapPoint(zone, bounds, width, height, scale);
     drawInstrumentEllipse(ctx, point.x, point.y, zone.rx * scale, zone.rz * scale, "rgba(98, 129, 89, 0.95)", "rgba(238, 218, 164, 0.74)");
   });
 
-  drawInstrumentMarker(ctx, centerX, centerY, "#f7fbff", 4);
-
-  const enemyPoint = worldToInstrumentPoint(enemyPosition, playerPosition, centerX, centerY, scale);
-  drawInstrumentMarker(ctx, enemyPoint.x, enemyPoint.y, "rgba(216, 74, 58, 0.72)", 3);
+  const playerPoint = clampInstrumentPoint(worldToMapPoint(playerPosition, bounds, width, height, scale), width, height, 6);
+  drawInstrumentMarker(ctx, playerPoint.x, playerPoint.y, "#f7fbff", 4);
 
   ctx.fillStyle = "rgba(247, 251, 255, 0.78)";
   ctx.font = "700 10px Inter, sans-serif";
-  ctx.fillText("200 m", 9, height - 10);
-  ctx.fillRect(9, height - 7, 55, 2);
+  ctx.fillText("World", 9, height - 10);
 }
 
 function drawRadarInstrument(canvas, statusElement, playerPosition, enemyPosition, landZones, heading) {
@@ -374,6 +370,18 @@ function worldToInstrumentPoint(position, origin, centerX, centerY, scale) {
   };
 }
 
+function worldToMapPoint(position, bounds, width, height, scale) {
+  const mapWidth = (bounds.maxX - bounds.minX) * scale;
+  const mapHeight = (bounds.maxZ - bounds.minZ) * scale;
+  const insetX = (width - mapWidth) * 0.5;
+  const insetY = (height - mapHeight) * 0.5;
+
+  return {
+    x: insetX + (position.x - bounds.minX) * scale,
+    y: insetY + (bounds.maxZ - position.z) * scale
+  };
+}
+
 function worldToRadarPoint(position, origin, centerX, centerY, scale, heading) {
   const dx = position.x - origin.x;
   const dz = position.z - origin.z;
@@ -403,6 +411,13 @@ function drawInstrumentMarker(ctx, x, y, color, radius) {
   ctx.fill();
 }
 
+function clampInstrumentPoint(point, width, height, padding) {
+  return {
+    x: clamp(point.x, padding, width - padding),
+    y: clamp(point.y, padding, height - padding)
+  };
+}
+
 function drawRadarRangeRings(ctx, centerX, centerY, radius) {
   ctx.strokeStyle = "rgba(155, 229, 223, 0.22)";
   ctx.lineWidth = 1;
@@ -425,7 +440,7 @@ function drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, r
   const dx = zone.x - playerPosition.x;
   const dz = zone.z - playerPosition.z;
   const distance = Math.sqrt(dx * dx + dz * dz);
-  const landRadius = Math.max(zone.rx, zone.rz);
+  const landRadius = Math.max(zone.rx, zone.rz) * radarOcclusionScale;
 
   if (distance < 1 || distance - landRadius > radarRange) return;
 
@@ -455,9 +470,11 @@ function lineIntersectsEllipse(from, to, zone) {
   const dz = to.z - from.z;
   const ox = from.x - zone.x;
   const oz = from.z - zone.z;
-  const a = (dx * dx) / (zone.rx * zone.rx) + (dz * dz) / (zone.rz * zone.rz);
-  const b = 2 * ((ox * dx) / (zone.rx * zone.rx) + (oz * dz) / (zone.rz * zone.rz));
-  const c = (ox * ox) / (zone.rx * zone.rx) + (oz * oz) / (zone.rz * zone.rz) - 1;
+  const rx = zone.rx * radarOcclusionScale;
+  const rz = zone.rz * radarOcclusionScale;
+  const a = (dx * dx) / (rx * rx) + (dz * dz) / (rz * rz);
+  const b = 2 * ((ox * dx) / (rx * rx) + (oz * dz) / (rz * rz));
+  const c = (ox * ox) / (rx * rx) + (oz * oz) / (rz * rz) - 1;
   const discriminant = b * b - 4 * a * c;
 
   if (discriminant <= 0) return false;
@@ -472,6 +489,20 @@ function distance2D(a, b) {
   const dx = a.x - b.x;
   const dz = a.z - b.z;
   return Math.sqrt(dx * dx + dz * dz);
+}
+
+function getMapBounds(landZones, padding) {
+  return landZones.reduce((bounds, zone) => ({
+    minX: Math.min(bounds.minX, zone.x - zone.rx - padding),
+    maxX: Math.max(bounds.maxX, zone.x + zone.rx + padding),
+    minZ: Math.min(bounds.minZ, zone.z - zone.rz - padding),
+    maxZ: Math.max(bounds.maxZ, zone.z + zone.rz + padding)
+  }), {
+    minX: Number.POSITIVE_INFINITY,
+    maxX: Number.NEGATIVE_INFINITY,
+    minZ: Number.POSITIVE_INFINITY,
+    maxZ: Number.NEGATIVE_INFINITY
+  });
 }
 
 function createEnemyMotion(root, bowWake, heading, engineOrder) {
