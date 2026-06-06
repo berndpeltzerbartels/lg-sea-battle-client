@@ -14,6 +14,7 @@ import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import "@babylonjs/core/Meshes/Builders/boxBuilder";
 import "@babylonjs/core/Meshes/Builders/cylinderBuilder";
 import "@babylonjs/core/Meshes/Builders/groundBuilder";
+import "@babylonjs/core/Meshes/Builders/torusBuilder";
 import "@babylonjs/core/Shaders/default.fragment";
 import "@babylonjs/core/Shaders/default.vertex";
 import "@babylonjs/core/Shaders/depthBoxBlur.fragment";
@@ -842,6 +843,7 @@ function createTorpedoSystem(scene, materials, parent) {
     materials,
     active: [],
     puffs: [],
+    muzzleEffects: [],
     nextTube: 0,
     nextFireTime: 0,
     nextId: 1,
@@ -881,19 +883,19 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
   const forward = getForwardVector(heading);
   const right = getRightVector(heading);
   const tubeX = tubeSide * 0.32;
-  const tubeStartZ = 2.62;
+  const tubeStartZ = 2.45;
   const muzzleZ = 3.05;
   const launchStart = shipRoot.position
     .add(right.scale(tubeX))
     .add(forward.scale(tubeStartZ))
-    .add(new Vector3(0, 0.58, 0));
+    .add(new Vector3(0, 0.6, 0));
   const launchEnd = shipRoot.position
     .add(right.scale(tubeX))
-    .add(forward.scale(muzzleZ + 0.8))
+    .add(forward.scale(muzzleZ + 1.15))
     .add(new Vector3(0, -0.04, 0));
   const runStart = shipRoot.position
     .add(right.scale(tubeX))
-    .add(forward.scale(muzzleZ + 1.2))
+    .add(forward.scale(muzzleZ + 1.65))
     .add(new Vector3(0, 0.06, 0));
 
   const root = new TransformNode(`torpedo_${system.nextId}`, system.scene);
@@ -902,13 +904,24 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
   root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
 
   const body = MeshBuilder.CreateCylinder(`${root.name}_body`, {
-    diameter: 0.12,
-    height: 1.05,
-    tessellation: 10
+    diameter: 0.2,
+    height: 2.18,
+    tessellation: 12
   }, system.scene);
   body.parent = root;
   body.rotation.x = Math.PI / 2;
   body.material = system.materials.funnel;
+
+  const nose = MeshBuilder.CreateCylinder(`${root.name}_nose`, {
+    diameterTop: 0.035,
+    diameterBottom: 0.2,
+    height: 0.36,
+    tessellation: 12
+  }, system.scene);
+  nose.parent = root;
+  nose.position.z = 1.27;
+  nose.rotation.x = Math.PI / 2;
+  nose.material = system.materials.funnel;
 
   const wake = createTorpedoWake(system.scene, system.materials, root.name);
   const torpedo = {
@@ -924,13 +937,14 @@ function firePlayerTorpedo(system, shipRoot, heading, shipSpeed, now) {
     age: 0,
     runDistance: 0,
     speed: 24 + Math.max(0, shipSpeed) * 0.35,
-    launchDuration: 0.48,
+    launchDuration: 0.62,
     maxRange: 620,
     hit: false
   };
   system.nextId += 1;
   system.active.push(torpedo);
   createLaunchPuff(system, launchEnd, heading, tubeSide);
+  createMuzzleEffect(system, launchStart, heading, tubeSide);
   return true;
 }
 
@@ -955,11 +969,11 @@ function createLaunchPuff(system, position, heading, tubeSide) {
   const forward = getForwardVector(heading);
   const right = getRightVector(heading);
 
-  for (let i = 0; i < 7; i += 1) {
+  for (let i = 0; i < 9; i += 1) {
     const patch = MeshBuilder.CreateBox(`torpedo_puff_${system.nextId}_${i}`, {
-      width: 0.16 + i * 0.025,
+      width: 0.2 + i * 0.034,
       height: 0.018,
-      depth: 0.22 + i * 0.035
+      depth: 0.28 + i * 0.05
     }, system.scene);
     patch.parent = system.root;
     patch.material = system.materials.foam;
@@ -970,11 +984,62 @@ function createLaunchPuff(system, position, heading, tubeSide) {
         .add(new Vector3(0, -0.02, 0))
     );
     patch.rotation.y = heading + tubeSide * (0.15 + i * 0.05);
-    system.puffs.push({ mesh: patch, age: 0, lifetime: 0.42 + i * 0.035, seed: i });
+    system.puffs.push({ mesh: patch, age: 0, lifetime: 0.52 + i * 0.035, seed: i });
+  }
+}
+
+function createMuzzleEffect(system, position, heading, tubeSide) {
+  const forward = getForwardVector(heading);
+  const right = getRightVector(heading);
+
+  const ring = MeshBuilder.CreateTorus(`torpedo_muzzle_ring_${system.nextId}`, {
+    diameter: 0.42,
+    thickness: 0.045,
+    tessellation: 16
+  }, system.scene);
+  ring.parent = system.root;
+  ring.material = system.materials.foam;
+  ring.position.copyFrom(position.add(forward.scale(0.28)).add(new Vector3(0, 0.02, 0)));
+  ring.rotation.x = Math.PI / 2;
+  ring.rotation.y = heading;
+  system.muzzleEffects.push({ mesh: ring, age: 0, lifetime: 0.32, seed: 0, kind: "ring" });
+
+  for (let i = 0; i < 4; i += 1) {
+    const jet = MeshBuilder.CreateBox(`torpedo_muzzle_jet_${system.nextId}_${i}`, {
+      width: 0.09 + i * 0.02,
+      height: 0.018,
+      depth: 0.34 + i * 0.08
+    }, system.scene);
+    jet.parent = system.root;
+    jet.material = system.materials.foam;
+    jet.position.copyFrom(
+      position
+        .add(forward.scale(0.18 + i * 0.16))
+        .add(right.scale(tubeSide * (0.02 + i * 0.018)))
+        .add(new Vector3(0, 0.0, 0))
+    );
+    jet.rotation.y = heading + tubeSide * (0.05 + i * 0.025);
+    system.muzzleEffects.push({ mesh: jet, age: 0, lifetime: 0.22 + i * 0.05, seed: i + 1, kind: "jet" });
   }
 }
 
 function updateTorpedoSystem(system, dt, time, enemyPosition) {
+  system.muzzleEffects = system.muzzleEffects.filter((effect) => {
+    effect.age += dt;
+    const t = effect.age / effect.lifetime;
+    if (t >= 1) {
+      effect.mesh.dispose();
+      return false;
+    }
+    const scale = effect.kind === "ring" ? 1 + t * 1.7 : 1 + t * 0.8;
+    effect.mesh.scaling.x = scale;
+    effect.mesh.scaling.y = scale;
+    effect.mesh.scaling.z = scale;
+    effect.mesh.position.y += dt * (effect.kind === "ring" ? 0.04 : -0.02);
+    effect.mesh.setEnabled(t < 0.92);
+    return true;
+  });
+
   system.puffs = system.puffs.filter((puff) => {
     puff.age += dt;
     const t = puff.age / puff.lifetime;
@@ -997,14 +1062,12 @@ function updateTorpedoSystem(system, dt, time, enemyPosition) {
     if (torpedo.age < torpedo.launchDuration) {
       const t = easeOutCubic(torpedo.age / torpedo.launchDuration);
       torpedo.root.position.copyFrom(Vector3.Lerp(torpedo.launchStart, torpedo.launchEnd, t));
-      torpedo.body.scaling.z = 1 - t * 0.12;
       updateTorpedoWake(torpedo, false, time);
       return true;
     }
 
     if (torpedo.runDistance === 0) {
       torpedo.root.position.copyFrom(torpedo.runStart);
-      torpedo.body.scaling.z = 1;
     }
 
     const step = torpedo.speed * dt;
@@ -1066,7 +1129,7 @@ function createHitChurn(system, position, heading) {
 
 function disposeTorpedo(torpedo) {
   torpedo.wake.forEach((segment) => segment.dispose());
-  torpedo.body.dispose();
+  torpedo.root.getChildMeshes().forEach((mesh) => mesh.dispose());
   torpedo.root.dispose();
 }
 
