@@ -71,6 +71,11 @@ blockedWaters.push(
 
 const boat = createPlayerBow(scene, materials);
 boat.root.position = new Vector3(0, 0.28, 0);
+
+// Static inspection target until networked opponents supply position and heading.
+const enemyBoat = createEnemyTorpedoBoat(scene, materials, "enemy_boat");
+enemyBoat.root.position = new Vector3(8, 0.26, 36);
+enemyBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, -0.55, 0);
 document.body.dataset.meshCount = String(scene.meshes.length);
 
 const camera = new FreeCamera("follow_camera", new Vector3(0, 7, -13), scene);
@@ -533,7 +538,107 @@ function createMeshFromData(name, scene, positions, indices) {
   return mesh;
 }
 
-// Full-ship prototype kept for future enemy silhouettes; the player camera does not use it.
+// Low-poly external ship model for opponents. Keep it cheap: enemies may appear in groups later.
+function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat") {
+  const root = new TransformNode(name, scene);
+
+  const hull = createTaperedHull(`${name}_hull`, scene, [
+    { z: -3.55, width: 1.22, top: 0.52, bottom: 0.06 },
+    { z: 1.9, width: 1.36, top: 0.58, bottom: 0.02 },
+    { z: 4.35, width: 0.12, top: 0.42, bottom: 0.0 }
+  ]);
+  hull.parent = root;
+  hull.material = materials.hull;
+
+  const deck = createTaperedDeck(`${name}_deck`, scene, [
+    { z: -3.15, width: 0.98, y: 0.66 },
+    { z: 1.85, width: 1.08, y: 0.68 },
+    { z: 4.0, width: 0.16, y: 0.52 }
+  ]);
+  deck.parent = root;
+  deck.material = materials.deck;
+
+  const bridge = MeshBuilder.CreateBox(`${name}_bridge`, { width: 0.82, height: 0.52, depth: 0.82 }, scene);
+  bridge.parent = root;
+  bridge.position.y = 1.0;
+  bridge.position.z = 0.75;
+  bridge.material = materials.cabin;
+
+  const window = MeshBuilder.CreateBox(`${name}_window`, { width: 0.68, height: 0.13, depth: 0.035 }, scene);
+  window.parent = root;
+  window.position.y = 1.08;
+  window.position.z = 1.18;
+  window.material = materials.glass;
+
+  for (let i = 0; i < 2; i += 1) {
+    const funnel = MeshBuilder.CreateCylinder(`${name}_funnel_${i}`, {
+      diameter: i === 0 ? 0.32 : 0.29,
+      height: i === 0 ? 1.05 : 0.94,
+      tessellation: 10
+    }, scene);
+    funnel.parent = root;
+    funnel.position.y = i === 0 ? 1.24 : 1.18;
+    funnel.position.z = -0.34 - i * 0.82;
+    funnel.material = materials.funnel;
+  }
+
+  for (let i = 0; i < 2; i += 1) {
+    const tube = MeshBuilder.CreateCylinder(`${name}_tube_${i}`, {
+      diameter: 0.15,
+      height: 1.75,
+      tessellation: 10
+    }, scene);
+    tube.parent = root;
+    tube.position.x = i === 0 ? -0.31 : 0.31;
+    tube.position.y = 0.84;
+    tube.position.z = 1.72;
+    tube.rotation.x = Math.PI / 2;
+    tube.material = materials.funnel;
+  }
+
+  const foreGun = MeshBuilder.CreateCylinder(`${name}_fore_gun`, {
+    diameter: 0.11,
+    height: 0.72,
+    tessellation: 8
+  }, scene);
+  foreGun.parent = root;
+  foreGun.position.y = 0.78;
+  foreGun.position.z = 3.05;
+  foreGun.rotation.x = Math.PI / 2;
+  foreGun.material = materials.funnel;
+
+  const sternDeck = MeshBuilder.CreateBox(`${name}_stern_deck`, { width: 0.92, height: 0.1, depth: 0.95 }, scene);
+  sternDeck.parent = root;
+  sternDeck.position.y = 0.72;
+  sternDeck.position.z = -2.7;
+  sternDeck.material = materials.deck;
+
+  const aftGun = MeshBuilder.CreateCylinder(`${name}_aft_gun`, {
+    diameter: 0.1,
+    height: 0.62,
+    tessellation: 8
+  }, scene);
+  aftGun.parent = root;
+  aftGun.position.y = 0.86;
+  aftGun.position.z = -3.2;
+  aftGun.rotation.x = Math.PI / 2;
+  aftGun.material = materials.funnel;
+
+  const mast = MeshBuilder.CreateCylinder(`${name}_mast`, {
+    diameter: 0.045,
+    height: 1.35,
+    tessellation: 6
+  }, scene);
+  mast.parent = root;
+  mast.position.y = 1.66;
+  mast.position.z = 0.32;
+  mast.rotation.x = -0.16;
+  mast.material = materials.funnel;
+
+  return { root };
+}
+
+// Legacy full-ship prototype kept only for comparison while the enemy model evolves.
 function createBoat(scene, materials, name = "boat") {
   const root = new TransformNode(name, scene);
 
