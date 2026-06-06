@@ -40,6 +40,7 @@ const depthValue = document.getElementById("depthValue");
 const depthGauge = document.querySelector(".depth-gauge");
 const engineValue = document.getElementById("engineValue");
 const telegraphScale = document.getElementById("telegraphScale");
+const compassNeedle = document.getElementById("compassNeedle");
 
 const materials = createMaterials(scene);
 const world = new TransformNode("world", scene);
@@ -72,7 +73,7 @@ blockedWaters.push(
 );
 
 const boat = createPlayerBow(scene, materials);
-boat.root.position = new Vector3(-12, 0.28, -36);
+boat.root.position = new Vector3(46, 0.28, 52);
 
 // Static inspection target until networked opponents supply position and heading.
 const enemyBoat = createEnemyTorpedoBoat(scene, materials, "enemy_boat");
@@ -123,7 +124,7 @@ const engineOrders = [
 
 // Keep propulsion as discrete ship orders, not held-key throttle.
 // Later multiplayer can send this order index plus heading/speed instead of raw input.
-let heading = 0;
+let heading = -2.12;
 let speed = 0;
 let engineOrder = 2;
 let turnVelocity = 0;
@@ -215,6 +216,7 @@ scene.onBeforeRenderObservable.add(() => {
   updateTelegraphSteps(telegraphSteps, engineOrder);
   depthValue.textContent = nextWaterSafety.isBlocked ? "Ground" : `${waterDepth.meters.toFixed(0)} m`;
   depthGauge?.style.setProperty("--depth-ratio", String(waterDepth.ratio));
+  compassNeedle?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
 });
 
 engine.runRenderLoop(() => {
@@ -323,7 +325,7 @@ function updateEnemyBowWake(wake, speed, time) {
     const pulse = 0.88 + Math.sin(time * 3.2 + index * 0.7) * 0.08;
     const visible = segment.metadata.row <= getVisibleWakeRows(strength);
     segment.setEnabled(visible);
-    segment.scaling.x = 0.95 + strength * 1.25;
+    segment.scaling.x = 1.35 + strength * 1.85 + segment.metadata.row * 0.12;
     segment.scaling.z = (0.82 + strength * 0.62) * pulse;
     segment.position.y = -0.05 + Math.sin(time * 2.8 + index) * 0.005;
   });
@@ -789,7 +791,7 @@ function createWakeRibbon(name, scene, material, parent, startX, startZ, endX, e
   const dz = endZ - startZ;
   const length = Math.sqrt(dx * dx + dz * dz);
   const ribbon = MeshBuilder.CreateBox(name, {
-    width: 0.038,
+    width: 0.07,
     height: 0.012,
     depth: length
   }, scene);

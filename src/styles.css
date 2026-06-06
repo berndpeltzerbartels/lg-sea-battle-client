@@ -62,6 +62,57 @@ body {
   position: absolute;
 }
 
+.compass-needle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 76px;
+  transform: translate(-50%, -50%) rotate(0rad);
+  transform-origin: 50% 50%;
+}
+
+.compass-needle::before,
+.compass-needle::after {
+  position: absolute;
+  left: 50%;
+  display: block;
+  width: 4px;
+  border-radius: 999px;
+  content: "";
+  transform: translateX(-50%);
+}
+
+.compass-needle::before {
+  top: 3px;
+  height: 38px;
+  background: #d84a3a;
+  box-shadow: 0 0 10px rgb(216 74 58 / 55%);
+}
+
+.compass-needle::after {
+  bottom: 7px;
+  height: 28px;
+  background: rgb(232 241 244 / 78%);
+}
+
+.compass-needle {
+  filter: drop-shadow(0 3px 7px rgb(1 15 24 / 42%));
+}
+
+.compass::after {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #f7fbff;
+  box-shadow: 0 0 0 2px rgb(5 27 40 / 52%);
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
 .compass span:nth-child(1) {
   top: 9px;
   left: 0;
@@ -251,6 +302,10 @@ body {
     width: 86px;
     height: 86px;
     font-size: 11px;
+  }
+
+  .compass-needle {
+    height: 56px;
   }
 
   .speed {
