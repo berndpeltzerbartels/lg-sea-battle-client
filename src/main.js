@@ -72,11 +72,11 @@ blockedWaters.push(
 );
 
 const boat = createPlayerBow(scene, materials);
-boat.root.position = new Vector3(0, 0.28, 0);
+boat.root.position = new Vector3(-12, 0.28, -36);
 
 // Static inspection target until networked opponents supply position and heading.
 const enemyBoat = createEnemyTorpedoBoat(scene, materials, "enemy_boat");
-enemyBoat.root.position = new Vector3(8, 0.26, 36);
+enemyBoat.root.position = new Vector3(16, 0.26, 34);
 enemyBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, -0.55, 0);
 document.body.dataset.meshCount = String(scene.meshes.length);
 
@@ -259,12 +259,14 @@ function createEnemyMotion(root, bowWake, heading, engineOrder) {
 
 function startLocalEnemyEventSource(motion) {
   const events = [
-    { delay: 1800, engineOrder: 4, rudder: 0.2 },
-    { delay: 5200, rudder: -0.7 },
-    { delay: 9400, engineOrder: 5, rudder: 0.45 },
-    { delay: 13800, rudder: 0 },
-    { delay: 17800, engineOrder: 3, rudder: -0.35 },
-    { delay: 22800, engineOrder: 6, rudder: 0.25 }
+    { delay: 1400, engineOrder: 3, rudder: 0.12 },
+    { delay: 4800, engineOrder: 4, rudder: -0.35 },
+    { delay: 8600, engineOrder: 5, rudder: 0.28 },
+    { delay: 12600, engineOrder: 3, rudder: 0.08 },
+    { delay: 16800, engineOrder: 2, rudder: -0.18 },
+    { delay: 20500, engineOrder: 3, rudder: -0.26 },
+    { delay: 25500, engineOrder: 4, rudder: 0.18 },
+    { delay: 31800, engineOrder: 3, rudder: 0 }
   ];
 
   events.forEach((event) => {
@@ -319,8 +321,8 @@ function updateEnemyBowWake(wake, speed, time) {
     const pulse = 0.88 + Math.sin(time * 3.2 + index * 0.7) * 0.08;
     const visible = strength >= segment.metadata.minStrength;
     segment.setEnabled(visible);
-    segment.scaling.x = 0.8 + strength * 1.1;
-    segment.scaling.z = (0.72 + strength * 0.55) * pulse;
+    segment.scaling.x = 0.95 + strength * 1.25;
+    segment.scaling.z = (0.82 + strength * 0.62) * pulse;
     segment.position.y = -0.05 + Math.sin(time * 2.8 + index) * 0.005;
   });
 
@@ -743,12 +745,12 @@ function createEnemyBowWake(scene, materials, parent, name) {
 
   for (let side = -1; side <= 1; side += 2) {
     for (let i = 0; i < 5; i += 1) {
-      const startX = side * (0.2 + i * 0.08);
-      const startZ = 4.48 - i * 0.1;
-      const endX = side * (1.05 + i * 0.42);
-      const endZ = 3.75 - i * 0.34;
+      const startX = side * (0.22 + i * 0.1);
+      const startZ = 4.48 - i * 0.12;
+      const endX = side * (1.1 + i * 0.5);
+      const endZ = 3.76 - i * 0.38;
       const segment = createWakeRibbon(`${name}_bow_wake_${side}_${i}`, scene, materials.foam, root, startX, startZ, endX, endZ);
-      segment.metadata = { minStrength: 0.08 + i * 0.16 };
+      segment.metadata = { minStrength: Math.max(0.08, i * 0.09) };
       segments.push(segment);
     }
   }
