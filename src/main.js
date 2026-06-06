@@ -111,6 +111,8 @@ const engineOrders = [
   { label: "Flank", speed: 12.4 }
 ];
 
+// Keep propulsion as discrete ship orders, not held-key throttle.
+// Later multiplayer can send this order index plus heading/speed instead of raw input.
 let heading = 0;
 let speed = 0;
 let engineOrder = 1;
@@ -125,6 +127,7 @@ scene.onBeforeRenderObservable.add(() => {
 
   const steer = Number(keys.right) - Number(keys.left);
 
+  // Heavy ship feel: the selected telegraph order is a target, and speed eases toward it.
   const waterSafety = getWaterSafety(boat.root.position, blockedWaters);
   const maxForwardSpeed = waterSafety.isShallow ? 4.4 : 14.4;
   const engineTargetSpeed = engineOrders[engineOrder].speed;
@@ -164,6 +167,7 @@ scene.onBeforeRenderObservable.add(() => {
   materials.water.diffuseTexture.vOffset += dt * 0.018;
   updateFoamPatches(foam, boat.root.position, time);
 
+  // Fixed bridge camera: it follows the ship immediately so acceleration never reveals the rear model.
   const cameraDistance = 0.65;
   const cameraHeight = 1.48;
   const desiredCameraPosition = boat.root.position
@@ -288,6 +292,8 @@ function createWaterTexture(scene) {
   return texture;
 }
 
+// Cheap open-sea orientation markers: opaque low-poly streaks recycled around the player.
+// Avoid transparency and particles here because both can be fragile on TV WebGL implementations.
 function createFoamPatches(scene, materials, parent) {
   const root = new TransformNode("foam_patches", scene);
   root.parent = parent;
@@ -365,6 +371,8 @@ function wrapCentered(value, size) {
   return ((((value + size / 2) % size) + size) % size) - size / 2;
 }
 
+// Player ship is only the visible foredeck. Enemy ships should get their own full model later.
+// A shared Ship base class would be premature until network interpolation and combat state exist.
 function createPlayerBow(scene, materials, name = "player_bow") {
   const root = new TransformNode(name, scene);
 
@@ -525,6 +533,7 @@ function createMeshFromData(name, scene, positions, indices) {
   return mesh;
 }
 
+// Full-ship prototype kept for future enemy silhouettes; the player camera does not use it.
 function createBoat(scene, materials, name = "boat") {
   const root = new TransformNode(name, scene);
 
@@ -787,6 +796,7 @@ function terrainNoise(x, z) {
   );
 }
 
+// Elliptical land/shallow zones are intentionally simple: one check feeds collision and slowdown.
 function getWaterSafety(position, zones) {
   let shallowAmount = 0;
 
