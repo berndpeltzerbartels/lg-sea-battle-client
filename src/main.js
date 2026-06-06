@@ -968,7 +968,7 @@ function createTorpedoDebugPanel() {
   panel.append(title);
 
   const fields = [
-    { key: "tubeX", label: "Seitlich", min: 0.18, max: 0.42, step: 0.01 },
+    { key: "tubeX", label: "Seitlich", min: 0.18, max: 0.72, step: 0.01 },
     { key: "startZ", label: "Vor/Zuruck", min: 1.7, max: 3.2, step: 0.05 },
     { key: "startY", label: "Hohe", min: 0.32, max: 0.82, step: 0.01 }
   ];
