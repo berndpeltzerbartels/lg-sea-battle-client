@@ -1300,26 +1300,6 @@ function createCoastline(name, position, rx, rz, scene, materials, parent) {
   VertexData.ComputeNormals(positions, indices, normals);
   terrain.updateVerticesData("position", positions);
   terrain.updateVerticesData("normal", normals);
-
-  const ridgeCount = 9;
-  for (let i = 0; i < ridgeCount; i += 1) {
-    const angle = -0.8 + i * 0.26;
-    const distance = 0.2 + (i % 4) * 0.12;
-    const rock = MeshBuilder.CreateCylinder(`${name}_rock_${i}`, {
-      diameterTop: 0,
-      diameterBottom: 11 + i * 1.4,
-      height: 16 + (i % 3) * 7,
-      tessellation: 7
-    }, scene);
-    rock.parent = parent;
-    rock.position.x = position.x + Math.cos(angle) * rx * distance;
-    rock.position.z = position.z + Math.sin(angle) * rz * distance;
-    rock.position.y = 8 + (i % 3) * 2.2;
-    rock.rotation.y = angle * 1.7;
-    rock.scaling.x = 0.55 + (i % 2) * 0.25;
-    rock.scaling.z = 1.1;
-    rock.material = materials.rock;
-  }
 }
 
 function createIsland(name, position, radius, heightScale, scene, materials, parent) {
@@ -1327,49 +1307,54 @@ function createIsland(name, position, radius, heightScale, scene, materials, par
   islandRoot.position = position;
   islandRoot.parent = parent;
 
-  const sand = MeshBuilder.CreateCylinder(`${name}_sand`, {
+  const shallow = MeshBuilder.CreateCylinder(`${name}_shallows`, {
     diameter: radius * 2,
-    height: 0.55,
+    height: 0.08,
     tessellation: 28
   }, scene);
-  sand.parent = islandRoot;
-  sand.position.y = 0.02;
-  sand.scaling.x = 1.15;
-  sand.scaling.z = 0.78;
-  sand.rotation.y = radius * 0.07;
-  sand.material = materials.sand;
-  sand.receiveShadows = true;
+  shallow.parent = islandRoot;
+  shallow.position.y = 0.07;
+  shallow.scaling.x = 1.28;
+  shallow.scaling.z = 0.88;
+  shallow.rotation.y = radius * 0.07;
+  shallow.material = materials.shallow;
 
-  const grass = MeshBuilder.CreateCylinder(`${name}_grass`, {
-    diameter: radius * 1.5,
-    height: 0.7,
-    tessellation: 24
+  const cliffBase = MeshBuilder.CreateCylinder(`${name}_cliff_base`, {
+    diameter: radius * 1.24,
+    height: radius * 0.16,
+    tessellation: 9
   }, scene);
-  grass.parent = islandRoot;
-  grass.position.y = 0.5;
-  grass.scaling.x = 1.08;
-  grass.scaling.z = 0.67;
-  grass.rotation.y = radius * 0.13;
-  grass.material = materials.grass;
-  grass.receiveShadows = true;
+  cliffBase.parent = islandRoot;
+  cliffBase.position.y = radius * 0.08;
+  cliffBase.scaling.x = 0.98;
+  cliffBase.scaling.z = 0.62;
+  cliffBase.rotation.y = radius * 0.13;
+  cliffBase.material = materials.rock;
+  cliffBase.receiveShadows = true;
 
-  const peaks = Math.max(2, Math.round(radius / 8));
-  for (let i = 0; i < peaks; i += 1) {
-    const angle = (i / peaks) * Math.PI * 2 + radius * 0.11;
-    const distance = radius * (0.11 + i * 0.04);
-    const mountain = MeshBuilder.CreateCylinder(`${name}_mountain_${i}`, {
-      diameterTop: 0.35,
-      diameterBottom: radius * (0.58 - i * 0.08),
-      height: radius * (0.52 + i * 0.18) * heightScale,
-      tessellation: 6
+  const stackCount = Math.max(3, Math.min(4, Math.round(radius / 7)));
+  for (let i = 0; i < stackCount; i += 1) {
+    const angle = radius * 0.18 + i * 1.85;
+    const distance = i === 0 ? 0 : radius * (0.12 + i * 0.045);
+    const height = radius * (0.62 + i * 0.11) * heightScale;
+    const baseDiameter = radius * (0.44 - i * 0.045);
+    const stack = MeshBuilder.CreateCylinder(`${name}_rock_stack_${i}`, {
+      diameterTop: baseDiameter * 0.18,
+      diameterBottom: baseDiameter,
+      height,
+      tessellation: 7
     }, scene);
-    mountain.parent = islandRoot;
-    mountain.position.x = Math.cos(angle) * distance;
-    mountain.position.z = Math.sin(angle) * distance * 0.68;
-    mountain.position.y = radius * (0.26 + i * 0.09) * heightScale;
-    mountain.rotation.y = angle * 0.5;
-    mountain.material = materials.rock;
-    mountain.receiveShadows = true;
+    stack.parent = islandRoot;
+    stack.position.x = Math.cos(angle) * distance;
+    stack.position.z = Math.sin(angle) * distance * 0.68;
+    stack.position.y = height * 0.5 + radius * 0.1;
+    stack.rotation.x = Math.sin(angle) * 0.09;
+    stack.rotation.z = Math.cos(angle) * 0.08;
+    stack.rotation.y = angle * 0.65;
+    stack.scaling.x = 0.78 + (i % 2) * 0.16;
+    stack.scaling.z = 1.05 - (i % 2) * 0.18;
+    stack.material = materials.rock;
+    stack.receiveShadows = true;
   }
 
   return islandRoot;
