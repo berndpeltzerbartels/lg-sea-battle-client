@@ -317,16 +317,18 @@ function updateEnemyBowWake(wake, speed, time) {
 
   wake.segments.forEach((segment, index) => {
     const pulse = 0.88 + Math.sin(time * 3.2 + index * 0.7) * 0.08;
-    segment.scaling.x = 0.7 + strength * 1.25;
-    segment.scaling.z = (0.55 + strength * 0.95) * pulse;
-    segment.position.y = -0.15 + Math.sin(time * 2.8 + index) * 0.006;
+    const visible = strength >= segment.metadata.minStrength;
+    segment.setEnabled(visible);
+    segment.scaling.x = 0.8 + strength * 1.1;
+    segment.scaling.z = (0.72 + strength * 0.55) * pulse;
+    segment.position.y = -0.05 + Math.sin(time * 2.8 + index) * 0.005;
   });
 
   wake.churn.forEach((patch, index) => {
     const pulse = 0.75 + Math.sin(time * 4.1 + index * 1.7) * 0.16;
     patch.scaling.x = (0.65 + strength * 1.05) * pulse;
     patch.scaling.z = 0.55 + strength * 1.2;
-    patch.position.y = -0.14 + Math.sin(time * 3.6 + index) * 0.008;
+    patch.position.y = -0.045 + Math.sin(time * 3.6 + index) * 0.006;
   });
 }
 
@@ -740,18 +742,13 @@ function createEnemyBowWake(scene, materials, parent, name) {
   const churn = [];
 
   for (let side = -1; side <= 1; side += 2) {
-    for (let i = 0; i < 3; i += 1) {
-      const segment = MeshBuilder.CreateBox(`${name}_bow_wake_${side}_${i}`, {
-        width: 0.035,
-        height: 0.012,
-        depth: 1.35 - i * 0.16
-      }, scene);
-      segment.parent = root;
-      segment.material = materials.foam;
-      segment.position.x = side * (0.68 + i * 0.38);
-      segment.position.y = -0.15;
-      segment.position.z = 4.08 - i * 0.52;
-      segment.rotation.y = -side * (0.72 - i * 0.08);
+    for (let i = 0; i < 5; i += 1) {
+      const startX = side * (0.2 + i * 0.08);
+      const startZ = 4.48 - i * 0.1;
+      const endX = side * (1.05 + i * 0.42);
+      const endZ = 3.75 - i * 0.34;
+      const segment = createWakeRibbon(`${name}_bow_wake_${side}_${i}`, scene, materials.foam, root, startX, startZ, endX, endZ);
+      segment.metadata = { minStrength: 0.08 + i * 0.16 };
       segments.push(segment);
     }
   }
@@ -765,7 +762,7 @@ function createEnemyBowWake(scene, materials, parent, name) {
     patch.parent = root;
     patch.material = materials.foam;
     patch.position.x = (i - 1.5) * 0.12;
-    patch.position.y = -0.14;
+    patch.position.y = -0.045;
     patch.position.z = 4.54 + i * 0.05;
     patch.rotation.y = -0.28 + i * 0.18;
     churn.push(patch);
@@ -773,6 +770,24 @@ function createEnemyBowWake(scene, materials, parent, name) {
 
   root.setEnabled(false);
   return { root, segments, churn };
+}
+
+function createWakeRibbon(name, scene, material, parent, startX, startZ, endX, endZ) {
+  const dx = endX - startX;
+  const dz = endZ - startZ;
+  const length = Math.sqrt(dx * dx + dz * dz);
+  const ribbon = MeshBuilder.CreateBox(name, {
+    width: 0.038,
+    height: 0.012,
+    depth: length
+  }, scene);
+  ribbon.parent = parent;
+  ribbon.material = material;
+  ribbon.position.x = (startX + endX) / 2;
+  ribbon.position.y = -0.05;
+  ribbon.position.z = (startZ + endZ) / 2;
+  ribbon.rotation.y = Math.atan2(dx, dz);
+  return ribbon;
 }
 
 function createEnemyBoatBody(name, scene) {
