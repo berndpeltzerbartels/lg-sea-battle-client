@@ -53,6 +53,7 @@ const worldLimit = 5000;
 const ocean = MeshBuilder.CreateGround("ocean", { width: 1050, height: 1050, subdivisions: 120 }, scene);
 ocean.material = materials.water;
 ocean.parent = world;
+const foam = createFoamPatches(scene, materials, world);
 
 const blockedWaters = [];
 createCoastline("western_coast", new Vector3(-126, 0, 58), 72, 66, scene, materials, world, blockedWaters);
@@ -150,6 +151,7 @@ scene.onBeforeRenderObservable.add(() => {
 
   materials.water.diffuseTexture.uOffset += dt * 0.01;
   materials.water.diffuseTexture.vOffset += dt * 0.018;
+  updateFoamPatches(foam, boat.root.position, time);
 
   const cameraDistance = 0.65;
   const cameraHeight = 1.48;
@@ -237,7 +239,12 @@ function createMaterials(scene) {
   glass.emissiveColor = new Color3(0.02, 0.08, 0.1);
   glass.specularColor = new Color3(0.7, 0.9, 1);
 
-  return { water, sand, grass, terrain, shallow, rock, hull, deck, cabin, funnel, glass };
+  const foam = new StandardMaterial("foam_material", scene);
+  foam.diffuseColor = new Color3(0.9, 0.97, 0.96);
+  foam.emissiveColor = new Color3(0.18, 0.22, 0.22);
+  foam.specularColor = new Color3(0.05, 0.06, 0.06);
+
+  return { water, sand, grass, terrain, shallow, rock, hull, deck, cabin, funnel, glass, foam };
 }
 
 function createWaterTexture(scene) {
@@ -266,6 +273,83 @@ function createWaterTexture(scene) {
 
   texture.update(false);
   return texture;
+}
+
+function createFoamPatches(scene, materials, parent) {
+  const root = new TransformNode("foam_patches", scene);
+  root.parent = parent;
+
+  const patches = [];
+  const area = 180;
+  const count = 128;
+
+  for (let i = 0; i < count; i += 1) {
+    const seed = seededFoam(i);
+    const patch = MeshBuilder.CreateBox(`foam_patch_${i}`, {
+      width: 0.06 + seed.width * 0.05,
+      height: 0.012,
+      depth: 0.55 + seed.length * 1.25
+    }, scene);
+    patch.parent = root;
+    patch.material = materials.foam;
+    patch.position.y = 0.13 + seed.lift * 0.025;
+    patch.rotation.y = seed.angle;
+    patch.scaling.x = 1 + seed.width * 1.2;
+    patches.push({
+      mesh: patch,
+      x: (seed.x - 0.5) * area,
+      z: (seed.z - 0.5) * area,
+      driftX: -0.06 + seed.driftX * 0.12,
+      driftZ: 0.12 + seed.driftZ * 0.18,
+      spin: -0.025 + seed.spin * 0.05,
+      baseAngle: seed.angle
+    });
+  }
+
+  return { area, patches };
+}
+
+function updateFoamPatches(foam, center, time) {
+  const halfArea = foam.area / 2;
+
+  foam.patches.forEach((patch) => {
+    patch.mesh.position.x = center.x + wrapCentered(patch.x + time * patch.driftX - center.x, foam.area);
+    patch.mesh.position.z = center.z + wrapCentered(patch.z + time * patch.driftZ - center.z, foam.area);
+    patch.mesh.position.y = 0.13 + Math.sin(time * 0.9 + patch.x * 0.07 + patch.z * 0.03) * 0.012;
+    patch.mesh.rotation.y = patch.baseAngle + Math.sin(time * patch.spin) * 0.18;
+
+    const distanceFromCenter = Math.max(
+      Math.abs(patch.mesh.position.x - center.x),
+      Math.abs(patch.mesh.position.z - center.z)
+    );
+    patch.mesh.setEnabled(distanceFromCenter < halfArea - 8);
+  });
+}
+
+function seededFoam(index) {
+  return {
+    x: pseudoRandom(index, 11),
+    z: pseudoRandom(index, 23),
+    width: pseudoRandom(index, 37),
+    length: pseudoRandom(index, 41),
+    lift: pseudoRandom(index, 53),
+    angle: pseudoRandom(index, 61) * Math.PI,
+    driftX: pseudoRandom(index, 71),
+    driftZ: pseudoRandom(index, 83),
+    spin: pseudoRandom(index, 97)
+  };
+}
+
+function pseudoRandom(index, salt) {
+  return fract(Math.sin(index * 91.17 + salt * 13.91) * 43758.5453);
+}
+
+function fract(value) {
+  return value - Math.floor(value);
+}
+
+function wrapCentered(value, size) {
+  return ((((value + size / 2) % size) + size) % size) - size / 2;
 }
 
 function createPlayerBow(scene, materials, name = "player_bow") {
