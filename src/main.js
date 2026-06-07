@@ -155,10 +155,13 @@ const worldLandmasses = [
     ],
     waterways: [
       { from: { x: 86, z: 8 }, to: { x: 22, z: 0 }, width: 18 },
-      { from: { x: 22, z: 0 }, to: { x: -52, z: -10 }, width: 24 },
-      { from: { x: -52, z: -10 }, to: { x: -142, z: -78 }, width: 17 },
-      { from: { x: -46, z: -3 }, to: { x: -154, z: 4 }, width: 22 },
-      { from: { x: -38, z: 6 }, to: { x: -128, z: 68 }, width: 16 }
+      { from: { x: 22, z: 0 }, to: { x: -52, z: -10 }, width: 30 },
+      { from: { x: -52, z: -10 }, to: { x: -142, z: -78 }, width: 22 },
+      { from: { x: -46, z: -3 }, to: { x: -154, z: 4 }, width: 28 },
+      { from: { x: -38, z: 6 }, to: { x: -128, z: 68 }, width: 21 }
+    ],
+    lakes: [
+      { x: -58, z: -5, rx: 42, rz: 28 }
     ]
   },
   { kind: "island", name: "delta_outer_bar", x: 632, z: 92, radius: 13, heightScale: 0.7, rx: 19, rz: 15 },
@@ -1320,7 +1323,7 @@ function updateTorpedoSystem(system, dt, time, enemyMotion, landZones) {
 
 function torpedoHitsLand(torpedoPosition, landZones) {
   return landZones.some((zone) => {
-    if (isInFjordWater(torpedoPosition, zone)) return false;
+    if (isInLandWater(torpedoPosition, zone)) return false;
 
     const rx = getZoneVisualRx(zone) + 0.35;
     const rz = getZoneVisualRz(zone) + 0.35;
@@ -2201,7 +2204,9 @@ function getLandZone(land) {
     name: land.name,
     kind: land.kind,
     coastRoughness: land.coastRoughness ?? 0.09,
-    fjords: land.fjords ?? []
+    fjords: land.fjords ?? [],
+    waterways: land.waterways ?? [],
+    lakes: land.lakes ?? []
   };
 }
 
@@ -2222,14 +2227,25 @@ function createCoastline(land, position, scene, materials, parent) {
 }
 
 function createWaterways(land, position, scene, materials, parent) {
-  if (!land.waterways?.length) return;
-
-  land.waterways.forEach((waterway, index) => {
+  (land.waterways ?? []).forEach((waterway, index) => {
     const segment = createWaterwaySegment(`${land.name}_waterway_${index}`, waterway, scene);
     segment.parent = parent;
     segment.position.x += position.x;
     segment.position.z += position.z;
     segment.material = materials.shallow;
+  });
+
+  (land.lakes ?? []).forEach((lake, index) => {
+    const mesh = MeshBuilder.CreateCylinder(`${land.name}_lake_${index}`, {
+      diameter: 2,
+      height: 0.018,
+      tessellation: 36
+    }, scene);
+    mesh.parent = parent;
+    mesh.position = new Vector3(position.x + lake.x, 0.382, position.z + lake.z);
+    mesh.scaling.x = lake.rx;
+    mesh.scaling.z = lake.rz;
+    mesh.material = materials.shallow;
   });
 }
 
@@ -2521,17 +2537,17 @@ function getWaterSafety(position, zones) {
     const nx = (position.x - zone.x) / zone.rx;
     const nz = (position.z - zone.z) / zone.rz;
     const distance = Math.sqrt(nx * nx + nz * nz);
-    const fjordWater = isInFjordWater(position, zone);
+    const landWater = isInLandWater(position, zone);
     const shallowNx = (position.x - zone.x) / getZoneShallowRx(zone);
     const shallowNz = (position.z - zone.z) / getZoneShallowRz(zone);
     const shallowDistance = Math.sqrt(shallowNx * shallowNx + shallowNz * shallowNz);
 
-    if (distance < 1 && !fjordWater) {
+    if (distance < 1 && !landWater) {
       return { isBlocked: true, isShallow: true };
     }
 
-    if (shallowDistance < 1 || fjordWater) {
-      shallowAmount = Math.max(shallowAmount, fjordWater ? 0.45 : 1 - shallowDistance);
+    if (shallowDistance < 1 || landWater) {
+      shallowAmount = Math.max(shallowAmount, landWater ? 0.48 : 1 - shallowDistance);
     }
   }
 
@@ -2546,7 +2562,7 @@ function getWaterDepth(position, zones) {
     const nx = (position.x - zone.x) / zone.rx;
     const nz = (position.z - zone.z) / zone.rz;
     const distance = Math.sqrt(nx * nx + nz * nz);
-    const coastDistance = isInFjordWater(position, zone)
+    const coastDistance = isInLandWater(position, zone)
       ? Math.max(0.08, Math.abs(distance - 0.72))
       : distance - 1;
     nearestCoastDistance = Math.min(nearestCoastDistance, coastDistance);
@@ -2571,7 +2587,7 @@ function getWaterEscapeVector(position, zones) {
     const nz = (position.z - zone.z) / zone.rz;
     const distance = Math.sqrt(nx * nx + nz * nz);
 
-    if (distance < 1 && !isInFjordWater(position, zone)) {
+    if (distance < 1 && !isInLandWater(position, zone)) {
       if (distance < 0.001) {
         escape.x += 1;
       } else {
@@ -2594,4 +2610,41 @@ function isInFjordWater(position, zone) {
   const localX = position.x - zone.x;
   const localZ = position.z - zone.z;
   return getFjordCarve(localX, localZ, zone.rx, zone.rz, zone.fjords) > 0.58;
+}
+
+function isInLandWater(position, zone) {
+  if (isInFjordWater(position, zone)) return true;
+
+  const localX = position.x - zone.x;
+  const localZ = position.z - zone.z;
+  return isInWaterway(localX, localZ, zone.waterways ?? []) || isInLake(localX, localZ, zone.lakes ?? []);
+}
+
+function isInWaterway(localX, localZ, waterways) {
+  return waterways.some((waterway) => {
+    const distance = distanceToSegment2D(localX, localZ, waterway.from.x, waterway.from.z, waterway.to.x, waterway.to.z);
+    return distance <= waterway.width * 0.58;
+  });
+}
+
+function isInLake(localX, localZ, lakes) {
+  return lakes.some((lake) => {
+    const nx = (localX - lake.x) / lake.rx;
+    const nz = (localZ - lake.z) / lake.rz;
+    return nx * nx + nz * nz <= 1;
+  });
+}
+
+function distanceToSegment2D(px, pz, ax, az, bx, bz) {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const lengthSquared = dx * dx + dz * dz;
+  const t = lengthSquared === 0
+    ? 0
+    : clamp(((px - ax) * dx + (pz - az) * dz) / lengthSquared, 0, 1);
+  const nearestX = ax + dx * t;
+  const nearestZ = az + dz * t;
+  const ox = px - nearestX;
+  const oz = pz - nearestZ;
+  return Math.sqrt(ox * ox + oz * oz);
 }
