@@ -59,6 +59,11 @@ const torpedoMinimumWaterDepthMeters = 1;
 const worldLandmasses = await loadWorldLandmasses();
 document.body.dataset.worldSource = "server";
 document.body.dataset.worldLandmasses = String(worldLandmasses.length);
+const gameState = await loadGameState();
+document.body.dataset.gameStateSource = "server";
+document.body.dataset.serverGameState = gameState.state;
+document.body.dataset.serverShips = String(gameState.ships.length);
+document.body.dataset.serverTorpedoes = String(gameState.torpedoes.length);
 
 const materials = createMaterials(scene);
 const world = new TransformNode("world", scene);
@@ -83,8 +88,8 @@ createWorldLandmasses(worldLandmasses, scene, materials, world);
 const boat = createPlayerBow(scene, materials);
 boat.root.position = new Vector3(46, 0.28, 52);
 
-// Static inspection targets until networked opponents supply position and heading.
-const enemyMotions = createEnemyFleet(scene, materials);
+// Until SSE arrives, backend ships seed the visual fleet and local motion keeps them inspectable.
+const enemyMotions = createEnemyFleet(scene, materials, gameState.ships);
 document.body.dataset.meshCount = String(scene.meshes.length);
 
 const camera = new FreeCamera("follow_camera", new Vector3(0, 7, -13), scene);
@@ -406,6 +411,46 @@ function getWorldMapEndpoint() {
   }
 
   return "/game/world";
+}
+
+async function loadGameState() {
+  const endpoint = getGameStateEndpoint();
+  const response = await fetch(endpoint, { cache: "no-store" });
+  if (!response.ok) {
+    failGameStateLoad(endpoint, `Game state request failed with ${response.status}`);
+  }
+
+  const payload = await response.json();
+  if (!Array.isArray(payload.ships)) {
+    failGameStateLoad(endpoint, "Game state response has no ships array");
+  }
+  if (!Array.isArray(payload.torpedoes)) {
+    failGameStateLoad(endpoint, "Game state response has no torpedoes array");
+  }
+
+  console.info("[sea-battle] loaded game state from server", {
+    endpoint,
+    sessionId: payload.sessionId,
+    state: payload.state,
+    ships: payload.ships.length,
+    torpedoes: payload.torpedoes.length
+  });
+  return payload;
+}
+
+function failGameStateLoad(endpoint, message) {
+  document.body.dataset.gameStateSource = "error";
+  document.body.dataset.gameStateError = message;
+  document.body.innerHTML = `<main class="startup-error"><h1>Game state unavailable</h1><p>${escapeHtml(message)}</p><small>${escapeHtml(endpoint)}</small></main>`;
+  throw new Error(`${message}: ${endpoint}`);
+}
+
+function getGameStateEndpoint() {
+  if (location.port === "5173" || location.port === "4173") {
+    return `${location.protocol}//${location.hostname}/game/state`;
+  }
+
+  return "/game/state";
 }
 
 function escapeHtml(value) {
@@ -851,30 +896,33 @@ function getZoneShallowRz(zone) {
   return zone.shallowRz ?? zone.rz * 1.08;
 }
 
-function createEnemyFleet(scene, materials) {
-  const configs = [
-    { x: 16, z: 34, heading: -0.55, engineOrder: 3 },
-    { x: -96, z: 118, heading: 1.25, engineOrder: 4 },
-    { x: 142, z: -86, heading: -1.9, engineOrder: 5 },
-    { x: -172, z: -142, heading: 0.72, engineOrder: 3 },
-    { x: 248, z: 156, heading: -2.55, engineOrder: 4 }
-  ];
-
-  return configs.map((config, index) => {
-    const enemyBoat = createEnemyTorpedoBoat(scene, materials, `enemy_boat_${index + 1}`);
-    enemyBoat.root.position = new Vector3(config.x, 0.26, config.z);
-    enemyBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, config.heading, 0);
-    return createEnemyMotion(enemyBoat.root, enemyBoat.bowWake, config.heading, config.engineOrder, index);
+function createEnemyFleet(scene, materials, serverShips) {
+  return serverShips.map((ship, index) => {
+    const enemyBoat = createEnemyTorpedoBoat(scene, materials, `server_ship_${ship.id}`);
+    const heading = Number.isFinite(ship.heading) ? ship.heading : 0;
+    const engineOrder = Number.isInteger(ship.engineOrder) ? ship.engineOrder : 2;
+    enemyBoat.root.position = new Vector3(ship.x, 0.26, ship.z);
+    enemyBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
+    enemyBoat.root.metadata = {
+      serverShipId: ship.id,
+      teamId: ship.teamId,
+      controlledBy: ship.controlledBy
+    };
+    return createEnemyMotion(enemyBoat.root, enemyBoat.bowWake, heading, engineOrder, index, ship);
   });
 }
 
-function createEnemyMotion(root, bowWake, heading, engineOrder, index = 0) {
+function createEnemyMotion(root, bowWake, heading, engineOrder, index = 0, serverShip = null) {
   return {
-    id: index + 1,
+    id: serverShip?.id ?? `local-${index + 1}`,
+    numericIndex: index + 1,
+    teamId: serverShip?.teamId ?? "unknown",
+    controlledBy: serverShip?.controlledBy ?? "local",
+    serverState: serverShip?.state ?? "active",
     root,
     bowWake,
     heading,
-    speed: 0,
+    speed: serverShip?.speed ?? 0,
     turnVelocity: 0,
     rollImpulse: 0,
     engineOrder,
@@ -1223,7 +1271,7 @@ function fireEnemyTorpedo(system, motion, targetPosition, now) {
   const right = getRightVector(launchHeading);
   const tubeSide = motion.nextTube === 0 ? -1 : 1;
   motion.nextTube = 1 - motion.nextTube;
-  motion.nextFireTime = now + 34 + motion.id * 4.5;
+  motion.nextFireTime = now + 34 + motion.numericIndex * 4.5;
   system.nextEnemyFireTime = now + 18;
 
   const launchStart = motion.root.position
