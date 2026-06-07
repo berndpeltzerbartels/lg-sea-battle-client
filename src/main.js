@@ -125,36 +125,6 @@ const worldLandmasses = [
   { kind: "island", name: "l_passage_outer_rock", x: 592, z: -555, radius: 15, heightScale: 1.2, rx: 20, rz: 16 },
   {
     kind: "coastline",
-    name: "inland_sea_north_shore",
-    x: -860,
-    z: 1600,
-    rx: 600,
-    rz: 150,
-    heightScale: 1.1,
-    peakBoost: 18,
-    coastRoughness: 0.2,
-    radarOcclusion: false,
-    fjords: [
-      { angle: -2.72, width: 0.13, reach: 0.68 }
-    ]
-  },
-  {
-    kind: "coastline",
-    name: "inland_sea_south_shore",
-    x: -900,
-    z: 520,
-    rx: 650,
-    rz: 160,
-    heightScale: 0.92,
-    peakBoost: 8,
-    coastRoughness: 0.22,
-    radarOcclusion: false,
-    fjords: [
-      { angle: 0.38, width: 0.16, reach: 0.72 }
-    ]
-  },
-  {
-    kind: "coastline",
     name: "northern_ridge",
     x: 24,
     z: 760,
@@ -260,7 +230,7 @@ const blockedWaters = worldLandmasses.map(getLandZone);
 createWorldLandmasses(worldLandmasses, scene, materials, world);
 
 const boat = createPlayerBow(scene, materials);
-boat.root.position = new Vector3(-820, 0.28, 1040);
+boat.root.position = new Vector3(46, 0.28, 52);
 
 // Static inspection target until networked opponents supply position and heading.
 const enemyBoat = createEnemyTorpedoBoat(scene, materials, "enemy_boat");
@@ -797,12 +767,15 @@ function drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, r
   const dz = zone.z - playerPosition.z;
   const distance = Math.sqrt(dx * dx + dz * dz);
   const landRadius = Math.max(getZoneVisualRx(zone), getZoneVisualRz(zone)) * radarOcclusionScale;
+  const shadowStartDistance = distance - landRadius;
 
-  if (distance < 1 || distance - landRadius > radarRange) return;
+  // If the coarse occlusion shape reaches the player, drawing a shadow from
+  // the center is more misleading than helpful. Shadows start behind land.
+  if (distance < 1 || shadowStartDistance <= 0 || shadowStartDistance > radarRange) return;
 
   const centerAngle = Math.atan2(dx, dz) - heading;
   const halfAngle = Math.asin(clamp(landRadius / Math.max(distance, landRadius), 0, 0.95));
-  const near = clamp((distance - landRadius) / radarRange, 0, 1) * radius;
+  const near = clamp(shadowStartDistance / radarRange, 0.04, 1) * radius;
   const start = centerAngle - halfAngle;
   const end = centerAngle + halfAngle;
 
@@ -828,6 +801,10 @@ function lineIntersectsEllipse(from, to, zone) {
   const oz = from.z - zone.z;
   const rx = getZoneVisualRx(zone) * radarOcclusionScale;
   const rz = getZoneVisualRz(zone) * radarOcclusionScale;
+  const startInsideOccluder = (ox * ox) / (rx * rx) + (oz * oz) / (rz * rz) <= 1;
+
+  if (startInsideOccluder) return false;
+
   const a = (dx * dx) / (rx * rx) + (dz * dz) / (rz * rz);
   const b = 2 * ((ox * dx) / (rx * rx) + (oz * dz) / (rz * rz));
   const c = (ox * ox) / (rx * rx) + (oz * oz) / (rz * rz) - 1;
