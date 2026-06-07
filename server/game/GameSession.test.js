@@ -44,6 +44,20 @@ test("ship can fire a server-owned torpedo", () => {
   assert.equal(ship.torpedoesRemaining, 5);
 });
 
+test("torpedo starts at the firing ship bow and runs forward", () => {
+  const session = new GameSession();
+  const ship = session.assignPlayer("player-1", "red");
+  ship.position = new Vector2(10, 20);
+  ship.heading = Math.PI / 2;
+
+  session.applyPlayerCommand("player-1", { type: "fire" });
+  const torpedo = session.snapshot().torpedoes[0];
+
+  assert.equal(torpedo.x, 15);
+  assert.equal(torpedo.z, 20);
+  assert.equal(torpedo.heading, Math.round((Math.PI / 2) * 1000) / 1000);
+});
+
 test("torpedo hit sinks enemy ship and emits hit event", () => {
   const session = new GameSession();
   const redShip = session.assignPlayer("player-1", "red");
@@ -58,6 +72,7 @@ test("torpedo hit sinks enemy ship and emits hit event", () => {
   const events = session.pullEvents();
 
   assert.equal(blueShip.state, "sunk");
+  assert.equal(session.snapshot().ships.some((ship) => ship.id === blueShip.id), false);
   assert.equal(events.some((event) => event.type === "torpedoHitShip"), true);
 });
 
@@ -70,6 +85,7 @@ test("bot fires when an enemy ship crosses its firing line", () => {
   redShip.position = new Vector2(0, 0);
   redShip.heading = 0;
   redShip.engineOrder = 2;
+  redShip.nextFireTime = 0;
   blueShip.position = new Vector2(0, 180);
 
   session.update(0.05);
@@ -85,6 +101,7 @@ test("bot targets enemy bot ships too", () => {
   const blueBot = session.allShips().find((ship) => ship.teamId === "blue" && ship.controlledBy === "bot");
   redBot.position = new Vector2(0, 0);
   redBot.heading = 0;
+  redBot.nextFireTime = 0;
   blueBot.position = new Vector2(0, 180);
 
   session.update(0.05);
@@ -102,6 +119,7 @@ test("bot does not fire at ships outside radar visibility", () => {
   redShip.position = new Vector2(0, 0);
   redShip.heading = 0;
   redShip.engineOrder = 2;
+  redShip.nextFireTime = 0;
   blueShip.position = new Vector2(0, 180);
 
   session.update(0.05);

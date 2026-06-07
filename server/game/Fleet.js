@@ -18,6 +18,7 @@ export class Fleet {
     if (!availableShip) return null;
 
     availableShip.controlledBy = "player";
+    availableShip.nextFireTime = 0;
     this.activeShipIdByPlayerId.set(playerId, availableShip.id);
     return availableShip;
   }

@@ -65,7 +65,9 @@ export class GameSession {
       sessionId: this.id,
       state: this.state,
       t: round(this.nowSeconds),
-      ships: this.allShips().map((ship) => ship.snapshot()),
+      ships: this.allShips()
+        .filter((ship) => ship.state === "active")
+        .map((ship) => ship.snapshot()),
       torpedoes: this.torpedoes
         .filter((torpedo) => torpedo.state === "running")
         .map((torpedo) => torpedo.snapshot())
@@ -82,7 +84,7 @@ export class GameSession {
 
       ship.applyCommand(command);
       if (command.shouldFire) {
-        this.fireTorpedo(ship, this.nowSeconds);
+        this.fireTorpedo(ship, this.nowSeconds, command.fireHeadingOffsetRadians ?? 0);
       }
     }
   }
@@ -115,18 +117,19 @@ export class GameSession {
     this.torpedoes = this.torpedoes.filter((torpedo) => torpedo.state === "running");
   }
 
-  fireTorpedo(ship, nowSeconds) {
+  fireTorpedo(ship, nowSeconds, headingOffsetRadians = 0) {
     if (!ship.canFire(nowSeconds)) return false;
 
     const cooldownSeconds = ship.controlledBy === "bot" ? 8.0 : 2.4;
     ship.markFired(nowSeconds, cooldownSeconds);
     const muzzlePosition = ship.position.add(Vector2.fromHeading(ship.heading).scale(5.0));
+    const torpedoHeading = ship.heading + headingOffsetRadians;
     const torpedo = new Torpedo({
       id: `torpedo-${this.nextTorpedoId++}`,
       teamId: ship.teamId,
       shipId: ship.id,
       position: muzzlePosition,
-      heading: ship.heading,
+      heading: torpedoHeading,
       firedAtSeconds: nowSeconds
     });
     this.torpedoes.push(torpedo);
@@ -165,19 +168,23 @@ export class GameSession {
 
 function createStartingFleets() {
   return new Map([
-    ["red", new Fleet({ teamId: "red", ships: createShips("red", -140, -80, 0.85) })],
-    ["blue", new Fleet({ teamId: "blue", ships: createShips("blue", 140, 80, -2.3) })]
+    ["red", new Fleet({ teamId: "red", ships: createShips("red", -420, -220, 0.85) })],
+    ["blue", new Fleet({ teamId: "blue", ships: createShips("blue", 420, 220, -2.3) })]
   ]);
 }
 
 function createShips(teamId, baseX, baseZ, heading) {
-  return Array.from({ length: 5 }, (_, index) => new Ship({
-    id: `${teamId}-${index + 1}`,
-    teamId,
-    position: new Vector2(baseX + index * 18, baseZ + (index % 2) * 26),
-    heading,
-    controlledBy: "bot"
-  }));
+  return Array.from({ length: 5 }, (_, index) => {
+    const ship = new Ship({
+      id: `${teamId}-${index + 1}`,
+      teamId,
+      position: new Vector2(baseX + index * 18, baseZ + (index % 2) * 26),
+      heading,
+      controlledBy: "bot"
+    });
+    ship.nextFireTime = 5 + index * 2.5;
+    return ship;
+  });
 }
 
 function round(value) {

@@ -16,7 +16,8 @@ export class BotCaptain {
 
     const desiredHeading = Math.atan2(target.position.x - ship.position.x, target.position.z - ship.position.z);
     const headingError = normalizeAngle(desiredHeading - ship.heading);
-    const perceivedHeadingError = normalizeAngle(headingError + randomBetween(-this.aimingErrorRadians, this.aimingErrorRadians));
+    const fireHeadingOffsetRadians = randomBetween(-this.aimingErrorRadians, this.aimingErrorRadians);
+    const perceivedHeadingError = normalizeAngle(headingError + fireHeadingOffsetRadians);
     const rudderDegrees = clamp(headingError * 55, -35, 35);
     const distance = ship.position.distanceTo(target.position);
     const engineOrder = distance > 150 ? 6 : 4;
@@ -24,7 +25,8 @@ export class BotCaptain {
     return {
       engineOrder,
       rudderDegrees,
-      shouldFire: Math.abs(perceivedHeadingError) < this.fireArcRadians && distance > 65 && distance < 360
+      shouldFire: Math.abs(perceivedHeadingError) < this.fireArcRadians && distance > 65 && distance < 360,
+      fireHeadingOffsetRadians
     };
   }
 
