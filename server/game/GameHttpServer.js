@@ -3,6 +3,7 @@ import { URL } from "node:url";
 import { GameLoop } from "./GameLoop.js";
 import { GameSession } from "./GameSession.js";
 import { SseClientRegistry } from "./SseClientRegistry.js";
+import { worldMapSnapshot } from "./WorldMap.js";
 
 export class GameHttpServer {
   constructor({ port = 8787, session = new GameSession() } = {}) {
@@ -33,9 +34,19 @@ export class GameHttpServer {
 
   async handleRequest(request, response) {
     const url = new URL(request.url, `http://${request.headers.host ?? "localhost"}`);
+    this.applyCorsHeaders(response);
+
+    if (request.method === "OPTIONS") {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
 
     if (request.method === "GET" && url.pathname === "/game/state") {
       return this.sendJson(response, this.session.snapshot());
+    }
+    if (request.method === "GET" && url.pathname === "/game/world") {
+      return this.sendJson(response, worldMapSnapshot());
     }
     if (request.method === "GET" && url.pathname === "/game/events") {
       return this.openEventStream(url, response);
@@ -89,6 +100,12 @@ export class GameHttpServer {
   sendJson(response, payload) {
     response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
     response.end(JSON.stringify(payload));
+  }
+
+  applyCorsHeaders(response) {
+    response.setHeader("Access-Control-Allow-Origin", "*");
+    response.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    response.setHeader("Access-Control-Allow-Headers", "Content-Type");
   }
 }
 

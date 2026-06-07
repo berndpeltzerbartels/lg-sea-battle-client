@@ -48,166 +48,17 @@ const radarCanvas = document.getElementById("radarCanvas");
 const radarStatus = document.getElementById("radarStatus");
 const rudderIndicator = document.getElementById("rudderIndicator");
 const rudderValue = document.getElementById("rudderValue");
+const sinkingWaterOverlay = document.getElementById("sinkingWaterOverlay");
 
-// One source for visible land, collision, depth, map, and radar occlusion.
-const worldLandmasses = [
-  {
-    kind: "coastline",
-    name: "western_coast",
-    x: -126,
-    z: 58,
-    rx: 72,
-    rz: 66,
-    heightScale: 1,
-    coastRoughness: 0.22,
-    fjords: [
-      { angle: 1.95, width: 0.2, reach: 0.9 }
-    ]
-  },
-  { kind: "island", name: "north_island", x: -32, z: 54, radius: 21, heightScale: 1.1, rx: 28, rz: 22 },
-  { kind: "island", name: "east_island", x: 58, z: 10, radius: 28, heightScale: 0.9, rx: 36, rz: 27 },
-  { kind: "island", name: "south_island", x: 18, z: -76, radius: 24, heightScale: 1.25, rx: 32, rz: 25 },
-  { kind: "island", name: "far_island", x: -92, z: -26, radius: 16, heightScale: 0.75, rx: 22, rz: 17 },
-  {
-    kind: "coastline",
-    name: "volcanic_highland",
-    x: 312,
-    z: -214,
-    rx: 86,
-    rz: 74,
-    heightScale: 1.55,
-    peakBoost: 34,
-    coastRoughness: 0.22,
-    caldera: { radius: 0.38, rim: 0.18, depth: 18 },
-    fjords: [
-      { angle: 2.72, width: 0.17, reach: 0.88 },
-      { angle: -1.18, width: 0.14, reach: 0.76 }
-    ]
-  },
-  {
-    kind: "coastline",
-    name: "fjord_coast",
-    x: 194,
-    z: -344,
-    rx: 64,
-    rz: 54,
-    heightScale: 1.05,
-    peakBoost: 10,
-    coastRoughness: 0.24,
-    fjords: [
-      { angle: 0.42, width: 0.18, reach: 0.82 },
-      { angle: -2.38, width: 0.13, reach: 0.7 }
-    ]
-  },
-  { kind: "island", name: "outer_stack", x: 410, z: -315, radius: 22, heightScale: 1.0, rx: 30, rz: 23 },
-  { kind: "island", name: "needle_rocks", x: 240, z: -112, radius: 17, heightScale: 1.35, rx: 24, rz: 18 },
-  { kind: "island", name: "low_skerries", x: 118, z: -238, radius: 14, heightScale: 0.82, rx: 20, rz: 16 },
-  {
-    kind: "coastline",
-    name: "storm_peak",
-    x: -430,
-    z: -405,
-    rx: 78,
-    rz: 62,
-    heightScale: 2.05,
-    peakBoost: 82,
-    coastRoughness: 0.2,
-    fjords: [
-      { angle: 0.9, width: 0.13, reach: 0.72 }
-    ]
-  },
-  { kind: "island", name: "storm_north_stack", x: -372, z: -312, radius: 16, heightScale: 1.15, rx: 22, rz: 17 },
-  { kind: "island", name: "storm_west_rocks", x: -536, z: -390, radius: 18, heightScale: 1.0, rx: 25, rz: 18 },
-  { kind: "island", name: "storm_south_skerries", x: -462, z: -512, radius: 14, heightScale: 0.9, rx: 20, rz: 16 },
-  { kind: "island", name: "storm_outer_needle", x: -318, z: -482, radius: 12, heightScale: 1.45, rx: 18, rz: 14 },
-  { kind: "island", name: "l_passage_west_arm", x: 486, z: -548, radius: 24, heightScale: 1.0, rx: 38, rz: 20 },
-  { kind: "island", name: "l_passage_north_arm", x: 536, z: -502, radius: 22, heightScale: 0.95, rx: 22, rz: 38 },
-  { kind: "island", name: "l_passage_outer_rock", x: 592, z: -555, radius: 15, heightScale: 1.2, rx: 20, rz: 16 },
-  {
-    kind: "coastline",
-    name: "northern_ridge",
-    x: 24,
-    z: 760,
-    rx: 220,
-    rz: 96,
-    heightScale: 1.28,
-    peakBoost: 38,
-    coastRoughness: 0.24,
-    fjords: [
-      { angle: 3.02, width: 0.12, reach: 0.8 },
-      { angle: -2.52, width: 0.16, reach: 0.68 }
-    ]
-  },
-  {
-    kind: "coastline",
-    name: "eastern_delta_coast",
-    x: 835,
-    z: 118,
-    rx: 168,
-    rz: 128,
-    heightScale: 0.72,
-    peakBoost: 4,
-    coastRoughness: 0.28,
-    fjords: [
-      { angle: -1.78, width: 0.2, reach: 0.88 },
-      { angle: -1.42, width: 0.15, reach: 0.72 },
-      { angle: -2.05, width: 0.13, reach: 0.64 }
-    ],
-    waterways: [
-      { from: { x: 86, z: 8 }, to: { x: 22, z: 0 }, width: 18 },
-      { from: { x: 22, z: 0 }, to: { x: -52, z: -10 }, width: 30 },
-      { from: { x: -52, z: -10 }, to: { x: -154, z: -80 }, width: 18 },
-      { from: { x: -46, z: -3 }, to: { x: -164, z: 0 }, width: 20 },
-      { from: { x: -38, z: 6 }, to: { x: -138, z: 72 }, width: 17 }
-    ],
-    lakes: [
-      { x: -48, z: -5, rx: 32, rz: 21 }
-    ]
-  },
-  { kind: "island", name: "delta_outer_bar", x: 632, z: 92, radius: 13, heightScale: 0.7, rx: 19, rz: 15 },
-  { kind: "island", name: "delta_split_rocks", x: 672, z: 164, radius: 11, heightScale: 0.8, rx: 16, rz: 13 },
-  { kind: "island", name: "delta_south_bar", x: 604, z: 18, radius: 12, heightScale: 0.65, rx: 17, rz: 14 },
-  {
-    kind: "coastline",
-    name: "southern_cliffs",
-    x: 148,
-    z: -855,
-    rx: 232,
-    rz: 118,
-    heightScale: 1.38,
-    peakBoost: 24,
-    coastRoughness: 0.24,
-    fjords: [
-      { angle: 0.12, width: 0.14, reach: 0.78 },
-      { angle: -0.48, width: 0.11, reach: 0.66 }
-    ]
-  },
-  { kind: "island", name: "southern_gate_rocks", x: -96, z: -706, radius: 18, heightScale: 1.15, rx: 25, rz: 18 },
-  { kind: "island", name: "southern_outer_stack", x: 332, z: -698, radius: 20, heightScale: 1.05, rx: 28, rz: 21 },
-  {
-    kind: "coastline",
-    name: "western_continent",
-    x: -2350,
-    z: 120,
-    rx: 820,
-    rz: 1750,
-    heightScale: 1.18,
-    peakBoost: 46,
-    coastRoughness: 0.26,
-    fjords: [
-      { angle: 1.46, width: 0.1, reach: 0.78 },
-      { angle: 1.18, width: 0.16, reach: 0.62 },
-      { angle: 1.82, width: 0.13, reach: 0.68 },
-      { angle: 2.22, width: 0.1, reach: 0.55 }
-    ]
-  },
-  { kind: "island", name: "western_sound_stack", x: -1310, z: 520, radius: 28, heightScale: 1.2, rx: 38, rz: 28 },
-  { kind: "island", name: "western_south_rocks", x: -1460, z: -630, radius: 22, heightScale: 1.05, rx: 30, rz: 24 }
-];
 const radarOcclusionScale = 0.72;
 const mapTileSize = 1200;
 const mapZoomScales = [0.5, 1, 2, 4, 8, 16];
 const worldMetersPerUnit = 20;
+const torpedoLogLimit = 40;
+const torpedoMinimumWaterDepthMeters = 1;
+const worldLandmasses = await loadWorldLandmasses();
+document.body.dataset.worldSource = "server";
+document.body.dataset.worldLandmasses = String(worldLandmasses.length);
 
 const materials = createMaterials(scene);
 const world = new TransformNode("world", scene);
@@ -244,30 +95,31 @@ scene.activeCamera = camera;
 
 window.addEventListener("keydown", (event) => {
   document.body.dataset.lastKey = formatInputEvent(event);
+  const playerActive = playerDamageState === "active";
 
-  if (isInputKey(event, "up") && !event.repeat) {
+  if (playerActive && isInputKey(event, "up") && !event.repeat) {
     engineOrder = clamp(engineOrder + 1, 0, engineOrders.length - 1);
     event.preventDefault();
   }
-  if (isInputKey(event, "down") && !event.repeat) {
+  if (playerActive && isInputKey(event, "down") && !event.repeat) {
     engineOrder = clamp(engineOrder - 1, 0, engineOrders.length - 1);
     event.preventDefault();
   }
-  if (isInputKey(event, "left")) {
+  if (playerActive && isInputKey(event, "left")) {
     heldRudderDirection = -1;
     if (!event.repeat) {
       rudderDegrees = clamp(rudderDegrees - rudderStepDegrees, -maxRudderDegrees, maxRudderDegrees);
     }
     event.preventDefault();
   }
-  if (isInputKey(event, "right")) {
+  if (playerActive && isInputKey(event, "right")) {
     heldRudderDirection = 1;
     if (!event.repeat) {
       rudderDegrees = clamp(rudderDegrees + rudderStepDegrees, -maxRudderDegrees, maxRudderDegrees);
     }
     event.preventDefault();
   }
-  if (isTorpedoFireKey(event) && !event.repeat) {
+  if (playerActive && isTorpedoFireKey(event) && !event.repeat) {
     firePlayerTorpedo(torpedoSystem, boat.root, heading, turnVelocity, speed, time);
     event.preventDefault();
   }
@@ -310,9 +162,20 @@ let time = 0;
 let nextRamHitTime = 0;
 let ramShake = 0;
 let playerHits = 0;
+let playerDamageState = "active";
+let playerSinkStartTime = 0;
+let playerSinkStartY = 0;
+let playerSinkSide = -1;
+let playerRespawnIndex = 0;
 const maxRudderDegrees = 35;
 const rudderStepDegrees = 5;
 const rudderHoldDegreesPerSecond = 18;
+const playerRespawnPoints = [
+  { position: new Vector3(46, 0.28, 52), heading: -2.12 },
+  { position: new Vector3(84, 0.28, -16), heading: -1.62 },
+  { position: new Vector3(-34, 0.28, 96), heading: 2.35 },
+  { position: new Vector3(172, 0.28, 62), heading: -2.72 }
+];
 const torpedoLaunchDefaults = {
   tubeX: 0.6,
   startZ: 2.45,
@@ -326,8 +189,9 @@ enemyMotions.forEach((enemyMotion, index) => startLocalEnemyEventSource(enemyMot
 scene.onBeforeRenderObservable.add(() => {
   const dt = Math.min(engine.getDeltaTime() / 1000, 0.05);
   time += dt;
+  const playerActive = playerDamageState === "active";
 
-  if (heldRudderDirection !== 0) {
+  if (playerActive && heldRudderDirection !== 0) {
     rudderDegrees = clamp(
       rudderDegrees + heldRudderDirection * rudderHoldDegreesPerSecond * dt,
       -maxRudderDegrees,
@@ -337,47 +201,62 @@ scene.onBeforeRenderObservable.add(() => {
 
   // Heavy ship feel: the selected telegraph order is a target, and speed eases toward it.
   const waterSafety = getWaterSafety(boat.root.position, blockedWaters);
-  const maxForwardSpeed = 14.4 - waterSafety.shallowAmount * 9.2;
-  const engineTargetSpeed = engineOrders[engineOrder].speed;
-  const targetSpeed = engineTargetSpeed > 0 ? Math.min(engineTargetSpeed, maxForwardSpeed) : engineTargetSpeed;
-  const response = Math.abs(targetSpeed) > Math.abs(speed) ? 0.42 : 0.72;
-  speed += (targetSpeed - speed) * Math.min(1, dt * response);
+  let forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
+  let nextWaterSafety = waterSafety;
 
-  const turnStrength = speed >= 0 ? 0.36 : -0.24;
-  const rudderGrip = clamp(0.18 + Math.abs(speed) / 3.4, 0.18, 1);
-  const steer = rudderDegrees / maxRudderDegrees;
-  const targetTurnVelocity = steer * turnStrength * rudderGrip;
-  turnVelocity += (targetTurnVelocity - turnVelocity) * Math.min(1, dt * 2.4);
-  heading += turnVelocity * dt;
+  if (playerActive) {
+    const maxForwardSpeed = 14.4 - waterSafety.shallowAmount * 9.2;
+    const engineTargetSpeed = engineOrders[engineOrder].speed;
+    const targetSpeed = engineTargetSpeed > 0 ? Math.min(engineTargetSpeed, maxForwardSpeed) : engineTargetSpeed;
+    const response = Math.abs(targetSpeed) > Math.abs(speed) ? 0.42 : 0.72;
+    speed += (targetSpeed - speed) * Math.min(1, dt * response);
 
-  const forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
-  const previousPosition = boat.root.position.clone();
-  boat.root.position.addInPlace(forward.scale(speed * dt));
-  boat.root.position.x = clamp(boat.root.position.x, -worldLimit, worldLimit);
-  boat.root.position.z = clamp(boat.root.position.z, -worldLimit, worldLimit);
+    const turnStrength = speed >= 0 ? 0.36 : -0.24;
+    const rudderGrip = clamp(0.18 + Math.abs(speed) / 3.4, 0.18, 1);
+    const steer = rudderDegrees / maxRudderDegrees;
+    const targetTurnVelocity = steer * turnStrength * rudderGrip;
+    turnVelocity += (targetTurnVelocity - turnVelocity) * Math.min(1, dt * 2.4);
+    heading += turnVelocity * dt;
+    forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
 
-  const nextWaterSafety = getWaterSafety(boat.root.position, blockedWaters);
-  if (nextWaterSafety.isBlocked) {
-    boat.root.position.copyFrom(previousPosition);
+    const previousPosition = boat.root.position.clone();
+    boat.root.position.addInPlace(forward.scale(speed * dt));
+    boat.root.position.x = clamp(boat.root.position.x, -worldLimit, worldLimit);
+    boat.root.position.z = clamp(boat.root.position.z, -worldLimit, worldLimit);
 
-    // Grounding stops the ship, but a tiny escape nudge prevents numeric edge-locking.
-    if (getWaterSafety(boat.root.position, blockedWaters).isBlocked) {
-      boat.root.position.addInPlace(getWaterEscapeVector(boat.root.position, blockedWaters).scale(0.18));
+    nextWaterSafety = getWaterSafety(boat.root.position, blockedWaters);
+    if (nextWaterSafety.isBlocked) {
+      boat.root.position.copyFrom(previousPosition);
+
+      // Grounding stops the ship, but a tiny escape nudge prevents numeric edge-locking.
+      if (getWaterSafety(boat.root.position, blockedWaters).isBlocked) {
+        boat.root.position.addInPlace(getWaterEscapeVector(boat.root.position, blockedWaters).scale(0.18));
+      }
+
+      speed = 0;
+      turnVelocity *= 0.4;
+    } else if (nextWaterSafety.isShallow) {
+      speed *= 1 - nextWaterSafety.shallowAmount * 0.004;
     }
-
-    speed = 0;
-    turnVelocity *= 0.4;
-  } else if (nextWaterSafety.isShallow) {
-    speed *= 1 - nextWaterSafety.shallowAmount * 0.004;
+  } else {
+    engineOrder = 2;
+    heldRudderDirection = 0;
+    speed *= Math.max(0, 1 - dt * 1.7);
+    turnVelocity *= Math.max(0, 1 - dt * 2.0);
+    rudderDegrees += (0 - rudderDegrees) * Math.min(1, dt * 1.8);
   }
 
   const bob = Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035;
-  boat.root.position.y = 0.32 + bob;
-  boat.root.rotationQuaternion = Quaternion.FromEulerAngles(
-    Math.sin(time * 2.6) * 0.025,
-    heading,
-    -turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018
-  );
+  if (playerActive) {
+    boat.root.position.y = 0.32 + bob;
+    boat.root.rotationQuaternion = Quaternion.FromEulerAngles(
+      Math.sin(time * 2.6) * 0.025,
+      heading,
+      -turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018
+    );
+  } else {
+    updatePlayerSinking(boat, time);
+  }
   ocean.position.x = boat.root.position.x;
   ocean.position.z = boat.root.position.z;
 
@@ -387,13 +266,14 @@ scene.onBeforeRenderObservable.add(() => {
   enemyMotions.forEach((enemyMotion) => updateEnemyMotion(enemyMotion, dt, time));
   updateEnemyFireControl(torpedoSystem, enemyMotions, boat.root.position, blockedWaters, time);
   const torpedoResult = updateTorpedoSystem(torpedoSystem, dt, time, enemyMotions, blockedWaters, boat.root.position);
-  if (torpedoResult.playerHit) {
+  if (torpedoResult.playerHit && playerDamageState === "active") {
     playerHits += torpedoResult.playerHit;
     ramShake = 1;
     speed *= 0.55;
+    beginPlayerSinking(torpedoResult.playerHitPosition, time);
   }
 
-  const ramHit = getPlayerRamHit(boat.root.position, heading, speed, enemyMotions, time);
+  const ramHit = playerActive ? getPlayerRamHit(boat.root.position, heading, speed, enemyMotions, time) : null;
   if (ramHit) {
     nextRamHitTime = time + 2.2;
     torpedoSystem.hits += 1;
@@ -427,6 +307,7 @@ scene.onBeforeRenderObservable.add(() => {
   document.body.dataset.torpedoes = String(torpedoSystem.active.length);
   document.body.dataset.torpedoHits = String(torpedoSystem.hits);
   document.body.dataset.playerHits = String(playerHits);
+  document.body.dataset.playerDamageState = playerDamageState;
   document.body.dataset.ramReady = time >= nextRamHitTime ? "true" : "false";
 
   const displayedSpeed = Math.abs(speed) < 0.08 ? 0 : Math.abs(speed);
@@ -438,7 +319,7 @@ scene.onBeforeRenderObservable.add(() => {
   depthGauge?.style.setProperty("--depth-ratio", String(waterDepth.ratio));
   compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
   updateRudderGauge(rudderIndicator, rudderValue, rudderDegrees);
-  updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, getRadarEnemyPositions(enemyMotions), blockedWaters, heading);
+  updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, getRadarContacts(enemyMotions), blockedWaters, heading);
 });
 
 engine.runRenderLoop(() => {
@@ -492,6 +373,50 @@ function formatInputEvent(event) {
   return `${code || "-"} / ${key || "-"} / ${keyCode || "-"}`;
 }
 
+async function loadWorldLandmasses() {
+  const endpoint = getWorldMapEndpoint();
+  const response = await fetch(endpoint, { cache: "no-store" });
+  if (!response.ok) {
+    failWorldMapLoad(endpoint, `World map request failed with ${response.status}`);
+  }
+
+  const payload = await response.json();
+  if (!Array.isArray(payload.landmasses)) {
+    failWorldMapLoad(endpoint, "World map response has no landmasses array");
+  }
+
+  console.info("[sea-battle] loaded world map from server", {
+    endpoint,
+    version: payload.version,
+    landmasses: payload.landmasses.length
+  });
+  return payload.landmasses;
+}
+
+function failWorldMapLoad(endpoint, message) {
+  document.body.dataset.worldSource = "error";
+  document.body.dataset.worldError = message;
+  document.body.innerHTML = `<main class="startup-error"><h1>World map unavailable</h1><p>${escapeHtml(message)}</p><small>${escapeHtml(endpoint)}</small></main>`;
+  throw new Error(`${message}: ${endpoint}`);
+}
+
+function getWorldMapEndpoint() {
+  if (location.port === "5173" || location.port === "4173") {
+    return `${location.protocol}//${location.hostname}/game/world`;
+  }
+
+  return "/game/world";
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function createTelegraphSteps(orders, parent) {
   if (!parent) return [];
 
@@ -522,9 +447,9 @@ function updateRudderGauge(indicator, valueElement, degrees) {
   }
 }
 
-function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, enemyPositions, landZones, heading) {
+function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading) {
   drawMapInstrument(mapCanvas, playerPosition, landZones, mapZoom);
-  drawRadarInstrument(radarCanvas, radarStatus, playerPosition, enemyPositions, landZones, heading);
+  drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading);
 }
 
 function drawMapInstrument(canvas, playerPosition, landZones, zoomControl) {
@@ -571,7 +496,7 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl) {
   ctx.fillText(formatWorldCoordinate(playerPosition), 9, height - 9);
 }
 
-function drawRadarInstrument(canvas, statusElement, playerPosition, enemyPositions, landZones, heading) {
+function drawRadarInstrument(canvas, statusElement, playerPosition, radarContacts, landZones, heading) {
   if (!canvas) return;
 
   const ctx = prepareInstrumentCanvas(canvas);
@@ -598,17 +523,17 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, enemyPositio
     drawRadarLandZone(ctx, zone, playerPosition, centerX, centerY, scale, heading);
   });
 
-  const contacts = enemyPositions
-    .map((enemyPosition) => ({
-      position: enemyPosition,
-      distance: distance2D(playerPosition, enemyPosition),
-      blocked: isLineBlockedByLand(playerPosition, enemyPosition, landZones)
+  const contacts = radarContacts
+    .map((contact) => ({
+      ...contact,
+      distance: distance2D(playerPosition, contact.position),
+      blocked: isLineBlockedByLand(playerPosition, contact.position, landZones)
     }))
     .filter((contact) => contact.distance <= radarRange);
   const visibleContacts = contacts.filter((contact) => !contact.blocked);
   visibleContacts.forEach((contact) => {
-    const enemyPoint = worldToRadarPoint(contact.position, playerPosition, centerX, centerY, scale, heading);
-    drawInstrumentMarker(ctx, enemyPoint.x, enemyPoint.y, "#d84a3a", 4);
+    const contactPoint = worldToRadarPoint(contact.position, playerPosition, centerX, centerY, scale, heading);
+    drawRadarContactMarker(ctx, contactPoint.x, contactPoint.y, contact.team);
   });
 
   const nearestVisible = visibleContacts.reduce((nearest, contact) => (
@@ -620,14 +545,15 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, enemyPositio
 
   if (nearestVisible) {
     const suffix = visibleContacts.length > 1 ? ` x${visibleContacts.length}` : "";
-    if (statusElement) statusElement.textContent = `Contact ${formatWorldDistance(nearestVisible.distance)}${suffix}`;
+    const label = nearestVisible.team === "light" ? "Own" : "Enemy";
+    if (statusElement) statusElement.textContent = `${label} ${formatWorldDistance(nearestVisible.distance)}${suffix}`;
   } else if (nearestShadow) {
     if (statusElement) statusElement.textContent = `Shadow ${formatWorldDistance(nearestShadow.distance)}`;
   } else {
     if (statusElement) statusElement.textContent = `Clear ${formatWorldDistance(radarRange)}`;
   }
 
-  drawInstrumentMarker(ctx, centerX, centerY, "#9be5df", 3);
+  drawRadarContactMarker(ctx, centerX, centerY, "light", true);
   ctx.restore();
 
   ctx.strokeStyle = "rgba(155, 229, 223, 0.62)";
@@ -755,6 +681,19 @@ function drawInstrumentMarker(ctx, x, y, color, radius) {
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, Math.PI * 2);
   ctx.fill();
+}
+
+function drawRadarContactMarker(ctx, x, y, team, isPlayer = false) {
+  const color = team === "light" ? "#7fd7ff" : "#ff6b4a";
+  const ring = team === "light" ? "rgba(127, 215, 255, 0.42)" : "rgba(255, 107, 74, 0.48)";
+  const radius = isPlayer ? 4.2 : 4;
+
+  drawInstrumentMarker(ctx, x, y, color, radius);
+  ctx.strokeStyle = ring;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(x, y, radius + 3.2, 0, Math.PI * 2);
+  ctx.stroke();
 }
 
 function clampInstrumentPoint(point, width, height, padding) {
@@ -1057,10 +996,81 @@ function updateEnemySinking(motion, dt, time) {
   document.body.dataset.enemySpeed = "0.0";
 }
 
-function getRadarEnemyPositions(enemyMotions) {
+function getRadarContacts(enemyMotions) {
   return enemyMotions
     .filter((enemyMotion) => enemyMotion.state === "active")
-    .map((enemyMotion) => enemyMotion.root.position);
+    .map((enemyMotion) => ({
+      id: `enemy-${enemyMotion.id}`,
+      team: "dark",
+      position: enemyMotion.root.position
+    }));
+}
+
+function beginPlayerSinking(hitPosition, now) {
+  if (playerDamageState !== "active") return;
+
+  playerDamageState = "sinking";
+  playerSinkStartTime = now;
+  playerSinkStartY = boat.root.position.y;
+  playerSinkSide = getPlayerSinkSide(hitPosition, boat.root.position, heading);
+  engineOrder = 2;
+  heldRudderDirection = 0;
+  rudderDegrees = 0;
+  turnVelocity *= 0.25;
+  speed *= 0.18;
+  updateSinkingWaterOverlay(0);
+}
+
+function updatePlayerSinking(playerBoat, now) {
+  const age = now - playerSinkStartTime;
+  const t = clamp(age / 4.6, 0, 1);
+  const ease = easeInOutCubic(t);
+  const bob = Math.sin(now * 3.4) * (1 - t) * 0.05;
+
+  playerBoat.root.position.y = playerSinkStartY - ease * 2.25 + bob;
+  playerBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(
+    -ease * 0.32 + Math.sin(now * 1.8) * (1 - t) * 0.025,
+    heading,
+    playerSinkSide * (0.16 + ease * 1.18)
+  );
+  updateSinkingWaterOverlay(smoothstep(0.08, 0.92, t) * 0.96);
+
+  if (t >= 1) {
+    respawnPlayerBoat(playerBoat);
+  }
+}
+
+function respawnPlayerBoat(playerBoat) {
+  playerRespawnIndex = (playerRespawnIndex + 1) % playerRespawnPoints.length;
+  const spawn = playerRespawnPoints[playerRespawnIndex];
+
+  playerBoat.root.position.copyFrom(spawn.position);
+  heading = spawn.heading;
+  speed = 0;
+  turnVelocity = 0;
+  rudderDegrees = 0;
+  engineOrder = 2;
+  ramShake = 0.72;
+  playerDamageState = "active";
+  playerBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
+  updateSinkingWaterOverlay(0);
+}
+
+function updateSinkingWaterOverlay(level) {
+  if (!sinkingWaterOverlay) return;
+
+  const visibleLevel = clamp(level, 0, 1);
+  sinkingWaterOverlay.style.setProperty("--sink-water-level", visibleLevel.toFixed(3));
+  sinkingWaterOverlay.style.setProperty("--sink-water-opacity", visibleLevel > 0.015 ? "1" : "0");
+}
+
+function getPlayerSinkSide(hitPosition, playerPosition, playerHeading) {
+  if (!hitPosition) return -1;
+
+  const dx = hitPosition.x - playerPosition.x;
+  const dz = hitPosition.z - playerPosition.z;
+  const right = dx * Math.cos(playerHeading) - dz * Math.sin(playerHeading);
+  return right >= 0 ? -1 : 1;
 }
 
 function updateEnemyBowWake(wake, speed, time) {
@@ -1367,6 +1377,7 @@ function createMuzzleEffect(system, position, heading, tubeSide) {
 
 function updateTorpedoSystem(system, dt, time, enemyMotions, landZones, playerPosition) {
   let playerHit = 0;
+  let playerHitPosition = null;
 
   system.hitEffects = system.hitEffects.filter((effect) => {
     effect.age += dt;
@@ -1444,6 +1455,10 @@ function updateTorpedoSystem(system, dt, time, enemyMotions, landZones, playerPo
       torpedo.hit = true;
       system.hits += 1;
       beginEnemySinking(hitEnemy, getEnemySinkSide(torpedo.root.position, hitEnemy), time);
+      recordTorpedoEvent(system, torpedo, "enemy-hit", time, {
+        enemyId: hitEnemy.id,
+        enemyPosition: summarizeVector(hitEnemy.root.position)
+      }, landZones);
       createHitChurn(system, torpedo.root.position, torpedo.heading);
       disposeTorpedo(torpedo);
       return false;
@@ -1452,20 +1467,27 @@ function updateTorpedoSystem(system, dt, time, enemyMotions, landZones, playerPo
     if (!torpedo.hit && torpedo.owner === "enemy" && torpedoHitsPlayer(torpedo.root.position, playerPosition)) {
       torpedo.hit = true;
       playerHit += 1;
+      playerHitPosition = torpedo.root.position.clone();
+      recordTorpedoEvent(system, torpedo, "player-hit", time, {
+        playerPosition: summarizeVector(playerPosition)
+      }, landZones);
       createHitChurn(system, torpedo.root.position, torpedo.heading);
       disposeTorpedo(torpedo);
       return false;
     }
 
-    if (!torpedo.hit && torpedoHitsLand(torpedo.root.position, landZones)) {
+    const landHit = getTorpedoLandHit(torpedo.root.position, landZones);
+    if (!torpedo.hit && landHit) {
       torpedo.hit = true;
       system.hits += 1;
+      recordTorpedoEvent(system, torpedo, "land-hit", time, { landHit }, landZones);
       createHitChurn(system, torpedo.root.position, torpedo.heading);
       disposeTorpedo(torpedo);
       return false;
     }
 
     if (torpedo.runDistance > torpedo.maxRange) {
+      recordTorpedoEvent(system, torpedo, "range-expired", time, {}, landZones);
       disposeTorpedo(torpedo);
       return false;
     }
@@ -1473,19 +1495,133 @@ function updateTorpedoSystem(system, dt, time, enemyMotions, landZones, playerPo
     return true;
   });
 
-  return { playerHit };
+  return { playerHit, playerHitPosition };
 }
 
 function torpedoHitsLand(torpedoPosition, landZones) {
-  return landZones.some((zone) => {
-    if (isInLandWater(torpedoPosition, zone)) return false;
+  return Boolean(getTorpedoLandHit(torpedoPosition, landZones));
+}
+
+function getTorpedoLandHit(torpedoPosition, landZones) {
+  const waterDepth = getWaterDepth(torpedoPosition, landZones);
+  if (waterDepth.meters > torpedoMinimumWaterDepthMeters) return null;
+
+  for (const zone of landZones) {
+    if (isInLandWater(torpedoPosition, zone)) return null;
 
     const rx = getZoneVisualRx(zone) + 0.35;
     const rz = getZoneVisualRz(zone) + 0.35;
     const nx = (torpedoPosition.x - zone.x) / rx;
     const nz = (torpedoPosition.z - zone.z) / rz;
-    return nx * nx + nz * nz <= 1;
-  });
+    const normalizedDistance = Math.sqrt(nx * nx + nz * nz);
+
+    if (normalizedDistance <= 1) {
+      return {
+        zone: zone.name,
+        kind: zone.kind,
+        depthMeters: Number(waterDepth.meters.toFixed(1)),
+        minimumDepthMeters: torpedoMinimumWaterDepthMeters,
+        normalizedDistance: Number(normalizedDistance.toFixed(3)),
+        visualRx: Number(getZoneVisualRx(zone).toFixed(2)),
+        visualRz: Number(getZoneVisualRz(zone).toFixed(2)),
+        localX: Number((torpedoPosition.x - zone.x).toFixed(2)),
+        localZ: Number((torpedoPosition.z - zone.z).toFixed(2))
+      };
+    }
+  }
+
+  return null;
+}
+
+function recordTorpedoEvent(system, torpedo, reason, time, details = {}, landZones = []) {
+  const depth = getWaterDepth(torpedo.root.position, landZones);
+  const snapshot = createTorpedoExplosionSnapshot(system, torpedo, reason, time, details, landZones, depth);
+  const log = window.__seaBattleTorpedoLog ?? [];
+  log.push(snapshot);
+  window.__seaBattleTorpedoLog = log.slice(-torpedoLogLimit);
+  window.__seaBattleLastTorpedoSnapshot = snapshot;
+  document.body.dataset.lastTorpedoEvent = JSON.stringify(snapshot);
+
+  try {
+    localStorage.setItem("seaBattle.lastTorpedoSnapshot", JSON.stringify(snapshot));
+  } catch {
+    // The in-memory log is enough if the browser disallows storage.
+  }
+
+  console.info("[sea-battle] torpedo snapshot", snapshot);
+}
+
+function createTorpedoExplosionSnapshot(system, torpedo, reason, time, details, landZones, depth) {
+  const entry = {
+    reason,
+    id: torpedo.id,
+    owner: torpedo.owner,
+    time: Number(time.toFixed(2)),
+    age: Number(torpedo.age.toFixed(2)),
+    runDistance: Number(torpedo.runDistance.toFixed(2)),
+    speed: Number(torpedo.speed.toFixed(2)),
+    heading: Number(torpedo.heading.toFixed(3)),
+    position: summarizeVector(torpedo.root.position),
+    depthMeters: Number(depth.meters.toFixed(1)),
+    player: {
+      position: summarizeVector(boat.root.position),
+      heading: Number(heading.toFixed(3)),
+      speed: Number(speed.toFixed(2)),
+      engineOrder: engineOrders[engineOrder]?.label ?? String(engineOrder),
+      rudderDegrees: Number(rudderDegrees.toFixed(1)),
+      damageState: playerDamageState
+    },
+    nearbyLand: getNearbyLandSnapshot(torpedo.root.position, landZones),
+    activeTorpedoes: system.active.map((activeTorpedo) => ({
+      id: activeTorpedo.id,
+      owner: activeTorpedo.owner,
+      age: Number(activeTorpedo.age.toFixed(2)),
+      runDistance: Number(activeTorpedo.runDistance.toFixed(2)),
+      position: summarizeVector(activeTorpedo.root.position)
+    })),
+    enemies: enemyMotions.map((motion) => ({
+      id: motion.id,
+      state: motion.state,
+      position: summarizeVector(motion.root.position),
+      heading: Number(motion.heading.toFixed(3)),
+      speed: Number(motion.speed.toFixed(2)),
+      engineOrder: engineOrders[motion.engineOrder]?.label ?? String(motion.engineOrder)
+    })),
+    details
+  };
+
+  return entry;
+}
+
+function getNearbyLandSnapshot(position, landZones) {
+  return landZones
+    .map((zone) => {
+      const visualRx = getZoneVisualRx(zone);
+      const visualRz = getZoneVisualRz(zone);
+      const nx = (position.x - zone.x) / visualRx;
+      const nz = (position.z - zone.z) / visualRz;
+      const normalizedDistance = Math.sqrt(nx * nx + nz * nz);
+
+      return {
+        name: zone.name,
+        kind: zone.kind,
+        normalizedDistance: Number(normalizedDistance.toFixed(3)),
+        centerDistance: Number(distance2D(position, zone).toFixed(2)),
+        localX: Number((position.x - zone.x).toFixed(2)),
+        localZ: Number((position.z - zone.z).toFixed(2)),
+        inLandWater: isInLandWater(position, zone)
+      };
+    })
+    .sort((a, b) => a.normalizedDistance - b.normalizedDistance)
+    .slice(0, 5);
+}
+
+function summarizeVector(vector) {
+  return {
+    x: Number(vector.x.toFixed(2)),
+    y: Number(vector.y.toFixed(2)),
+    z: Number(vector.z.toFixed(2))
+  };
 }
 
 function getPlayerRamHit(playerPosition, playerHeading, playerSpeed, enemyMotions, time) {
@@ -1785,12 +1921,50 @@ function createMaterials(scene) {
   glass.emissiveColor = new Color3(0.02, 0.08, 0.1);
   glass.specularColor = new Color3(0.7, 0.9, 1);
 
+  const lightHull = new StandardMaterial("light_party_hull_material", scene);
+  lightHull.diffuseColor = new Color3(0.28, 0.34, 0.35);
+  lightHull.specularColor = new Color3(0.09, 0.11, 0.11);
+
+  const lightDeck = new StandardMaterial("light_party_deck_material", scene);
+  lightDeck.diffuseColor = new Color3(0.23, 0.28, 0.28);
+  lightDeck.specularColor = new Color3(0.07, 0.08, 0.08);
+
+  const darkHull = new StandardMaterial("dark_party_hull_material", scene);
+  darkHull.diffuseColor = new Color3(0.12, 0.14, 0.14);
+  darkHull.specularColor = new Color3(0.05, 0.06, 0.06);
+
+  const darkCabin = new StandardMaterial("dark_party_cabin_material", scene);
+  darkCabin.diffuseColor = new Color3(0.17, 0.18, 0.18);
+  darkCabin.specularColor = new Color3(0.08, 0.09, 0.09);
+
+  const darkFunnel = new StandardMaterial("dark_party_funnel_material", scene);
+  darkFunnel.diffuseColor = new Color3(0.1, 0.11, 0.11);
+  darkFunnel.specularColor = new Color3(0.04, 0.04, 0.04);
+
   const foam = new StandardMaterial("foam_material", scene);
   foam.diffuseColor = new Color3(0.9, 0.97, 0.96);
   foam.emissiveColor = new Color3(0.18, 0.22, 0.22);
   foam.specularColor = new Color3(0.05, 0.06, 0.06);
 
-  return { water, sand, grass, terrain, shallow, rock, hull, deck, cabin, funnel, glass, foam };
+  return {
+    water,
+    sand,
+    grass,
+    terrain,
+    shallow,
+    rock,
+    hull,
+    deck,
+    cabin,
+    funnel,
+    glass,
+    lightHull,
+    lightDeck,
+    darkHull,
+    darkCabin,
+    darkFunnel,
+    foam
+  };
 }
 
 function createWaterTexture(scene) {
@@ -1904,6 +2078,9 @@ function wrapCentered(value, size) {
 // A shared Ship base class would be premature until network interpolation and combat state exist.
 function createPlayerBow(scene, materials, name = "player_bow") {
   const root = new TransformNode(name, scene);
+  const hullMaterial = materials.lightHull ?? materials.hull;
+  const deckMaterial = materials.lightDeck ?? materials.deck;
+  const tubeMaterial = materials.lightHull ?? materials.funnel;
 
   const hull = createTaperedHull(`${name}_hull`, scene, [
     { z: -1.35, width: 1.7, top: 0.72, bottom: 0.12 },
@@ -1911,7 +2088,7 @@ function createPlayerBow(scene, materials, name = "player_bow") {
     { z: 5.15, width: 0.16, top: 0.64, bottom: 0.0 }
   ]);
   hull.parent = root;
-  hull.material = materials.hull;
+  hull.material = hullMaterial;
 
   const deck = createTaperedDeck(`${name}_foredeck`, scene, [
     { z: -1.08, width: 1.35, y: 0.78 },
@@ -1919,13 +2096,13 @@ function createPlayerBow(scene, materials, name = "player_bow") {
     { z: 4.75, width: 0.24, y: 0.72 }
   ]);
   deck.parent = root;
-  deck.material = materials.deck;
+  deck.material = deckMaterial;
 
   const rearDeck = MeshBuilder.CreateBox(`${name}_rear_deck`, { width: 1.42, height: 0.12, depth: 0.72 }, scene);
   rearDeck.parent = root;
   rearDeck.position.y = 0.82;
   rearDeck.position.z = -1.02;
-  rearDeck.material = materials.deck;
+  rearDeck.material = deckMaterial;
 
   for (let i = 0; i < 2; i += 1) {
     const tube = MeshBuilder.CreateCylinder(`${name}_torpedo_tube_${i}`, {
@@ -1938,7 +2115,7 @@ function createPlayerBow(scene, materials, name = "player_bow") {
     tube.position.y = 0.795;
     tube.position.z = 1.55;
     tube.rotation.x = Math.PI / 2;
-    tube.material = materials.funnel;
+    tube.material = tubeMaterial;
 
     for (let j = 0; j < 3; j += 1) {
       const saddle = MeshBuilder.CreateBox(`${name}_torpedo_saddle_${i}_${j}`, { width: 0.2, height: 0.08, depth: 0.12 }, scene);
@@ -1946,7 +2123,7 @@ function createPlayerBow(scene, materials, name = "player_bow") {
       saddle.position.x = tube.position.x;
       saddle.position.y = 0.755;
       saddle.position.z = 0.52 + j * 0.86;
-      saddle.material = materials.hull;
+      saddle.material = hullMaterial;
     }
 
     const cap = MeshBuilder.CreateCylinder(`${name}_tube_cap_${i}`, {
@@ -1959,16 +2136,16 @@ function createPlayerBow(scene, materials, name = "player_bow") {
     cap.position.y = tube.position.y;
     cap.position.z = 2.9;
     cap.rotation.x = Math.PI / 2;
-    cap.material = materials.funnel;
+    cap.material = tubeMaterial;
   }
 
-  createRailSegment(`${name}_deck_edge_left`, scene, materials.hull, root, -0.58, -1.09, -0.58, 2.15, 0.76);
-  createRailSegment(`${name}_deck_edge_right`, scene, materials.hull, root, 0.58, -1.09, 0.58, 2.15, 0.76);
+  createRailSegment(`${name}_deck_edge_left`, scene, hullMaterial, root, -0.58, -1.09, -0.58, 2.15, 0.76);
+  createRailSegment(`${name}_deck_edge_right`, scene, hullMaterial, root, 0.58, -1.09, 0.58, 2.15, 0.76);
 
-  createRailSegment(`${name}_bow_rail_left_a`, scene, materials.hull, root, -0.58, 2.15, -0.46, 3.02, 0.76);
-  createRailSegment(`${name}_bow_rail_left_b`, scene, materials.hull, root, -0.2, 3.9, 0, 4.58, 0.76);
-  createRailSegment(`${name}_bow_rail_right_a`, scene, materials.hull, root, 0.58, 2.15, 0.46, 3.02, 0.76);
-  createRailSegment(`${name}_bow_rail_right_b`, scene, materials.hull, root, 0.2, 3.9, 0, 4.58, 0.76);
+  createRailSegment(`${name}_bow_rail_left_a`, scene, hullMaterial, root, -0.58, 2.15, -0.46, 3.02, 0.76);
+  createRailSegment(`${name}_bow_rail_left_b`, scene, hullMaterial, root, -0.2, 3.9, 0, 4.58, 0.76);
+  createRailSegment(`${name}_bow_rail_right_a`, scene, hullMaterial, root, 0.58, 2.15, 0.46, 3.02, 0.76);
+  createRailSegment(`${name}_bow_rail_right_b`, scene, hullMaterial, root, 0.2, 3.9, 0, 4.58, 0.76);
 
   const hatch = MeshBuilder.CreateBox(`${name}_deck_hatch`, { width: 0.46, height: 0.11, depth: 0.52 }, scene);
   hatch.parent = root;
@@ -2065,22 +2242,25 @@ function createMeshFromData(name, scene, positions, indices) {
 // Low-poly external ship model for opponents. Keep it cheap: enemies may appear in groups later.
 function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat") {
   const root = new TransformNode(name, scene);
+  const hullMaterial = materials.darkHull ?? materials.hull;
+  const cabinMaterial = materials.darkCabin ?? materials.cabin;
+  const funnelMaterial = materials.darkFunnel ?? materials.funnel;
 
   const body = createEnemyBoatBody(`${name}_body`, scene);
   body.parent = root;
-  body.material = materials.hull;
+  body.material = hullMaterial;
 
   const bridgeBase = MeshBuilder.CreateBox(`${name}_bridge_base`, { width: 0.96, height: 0.28, depth: 1.05 }, scene);
   bridgeBase.parent = root;
   bridgeBase.position.y = 0.75;
   bridgeBase.position.z = 0.55;
-  bridgeBase.material = materials.cabin;
+  bridgeBase.material = cabinMaterial;
 
   const bridge = MeshBuilder.CreateBox(`${name}_bridge`, { width: 0.74, height: 0.48, depth: 0.72 }, scene);
   bridge.parent = root;
   bridge.position.y = 1.06;
   bridge.position.z = 0.76;
-  bridge.material = materials.cabin;
+  bridge.material = cabinMaterial;
 
   const window = MeshBuilder.CreateBox(`${name}_window`, { width: 0.58, height: 0.11, depth: 0.035 }, scene);
   window.parent = root;
@@ -2092,7 +2272,7 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat") {
   funnelBase.parent = root;
   funnelBase.position.y = 0.76;
   funnelBase.position.z = 0.0;
-  funnelBase.material = materials.cabin;
+  funnelBase.material = cabinMaterial;
 
   const funnel = MeshBuilder.CreateCylinder(`${name}_funnel`, {
     diameter: 0.36,
@@ -2102,7 +2282,7 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat") {
   funnel.parent = root;
   funnel.position.y = 1.33;
   funnel.position.z = 0.0;
-  funnel.material = materials.funnel;
+  funnel.material = funnelMaterial;
 
   for (let i = 0; i < 2; i += 1) {
     const tube = MeshBuilder.CreateCylinder(`${name}_tube_${i}`, {
@@ -2115,7 +2295,7 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat") {
     tube.position.y = 0.76;
     tube.position.z = 1.65;
     tube.rotation.x = Math.PI / 2;
-    tube.material = materials.funnel;
+    tube.material = funnelMaterial;
   }
 
   const mast = MeshBuilder.CreateCylinder(`${name}_mast`, {
@@ -2127,7 +2307,7 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat") {
   mast.position.y = 1.66;
   mast.position.z = 0.32;
   mast.rotation.x = -0.16;
-  mast.material = materials.funnel;
+  mast.material = funnelMaterial;
 
   const bowWake = createEnemyBowWake(scene, materials, root, name);
 

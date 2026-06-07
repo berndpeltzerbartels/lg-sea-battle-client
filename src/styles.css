@@ -11,6 +11,31 @@ body {
     sans-serif;
 }
 
+.startup-error {
+  display: grid;
+  min-height: 100%;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px;
+  box-sizing: border-box;
+  text-align: center;
+  background: #071b2a;
+}
+
+.startup-error h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.startup-error p,
+.startup-error small {
+  margin: 0;
+  max-width: 620px;
+  color: #c8d7df;
+}
+
 #renderCanvas {
   width: 100%;
   height: 100%;
@@ -19,9 +44,26 @@ body {
   touch-action: none;
 }
 
+.sinking-water-overlay {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  height: calc(var(--sink-water-level, 0) * 100%);
+  border-top: 2px solid rgb(152 217 230 / 54%);
+  background:
+    linear-gradient(180deg, rgb(18 86 121 / 92%), rgb(3 43 70 / 98%) 38%, rgb(1 22 39 / 100%));
+  box-shadow: inset 0 24px 34px rgb(176 237 245 / 16%);
+  opacity: var(--sink-water-opacity, 0);
+  pointer-events: none;
+  transition: height 80ms linear, opacity 120ms ease;
+}
+
 .hud {
   position: fixed;
   inset: 0;
+  z-index: 3;
   pointer-events: none;
 }
 
