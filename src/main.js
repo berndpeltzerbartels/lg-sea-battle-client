@@ -133,6 +133,7 @@ const worldLandmasses = [
     heightScale: 1.1,
     peakBoost: 18,
     coastRoughness: 0.2,
+    radarOcclusion: false,
     fjords: [
       { angle: -2.72, width: 0.13, reach: 0.68 }
     ]
@@ -147,36 +148,9 @@ const worldLandmasses = [
     heightScale: 0.92,
     peakBoost: 8,
     coastRoughness: 0.22,
+    radarOcclusion: false,
     fjords: [
       { angle: 0.38, width: 0.16, reach: 0.72 }
-    ]
-  },
-  {
-    kind: "coastline",
-    name: "inland_sea_west_headland",
-    x: -1640,
-    z: 1070,
-    rx: 180,
-    rz: 360,
-    heightScale: 1.22,
-    peakBoost: 22,
-    coastRoughness: 0.18,
-    fjords: [
-      { angle: 1.2, width: 0.12, reach: 0.62 }
-    ]
-  },
-  {
-    kind: "coastline",
-    name: "inland_sea_east_gate",
-    x: -80,
-    z: 1070,
-    rx: 160,
-    rz: 320,
-    heightScale: 1.0,
-    peakBoost: 14,
-    coastRoughness: 0.2,
-    fjords: [
-      { angle: -1.95, width: 0.13, reach: 0.66 }
     ]
   },
   {
@@ -817,6 +791,8 @@ function drawRadarRangeRings(ctx, centerX, centerY, radius) {
 }
 
 function drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, radius, radarRange) {
+  if (!zone.radarOcclusion) return;
+
   const dx = zone.x - playerPosition.x;
   const dz = zone.z - playerPosition.z;
   const distance = Math.sqrt(dx * dx + dz * dz);
@@ -2262,6 +2238,7 @@ function getLandZone(land) {
     name: land.name,
     kind: land.kind,
     coastRoughness: land.coastRoughness ?? 0.09,
+    radarOcclusion: land.radarOcclusion ?? true,
     fjords: land.fjords ?? [],
     waterways: land.waterways ?? [],
     lakes: land.lakes ?? []
