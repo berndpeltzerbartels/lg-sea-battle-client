@@ -18,7 +18,7 @@ export class BotCaptain {
     const headingError = normalizeAngle(desiredHeading - ship.heading);
     const fireHeadingOffsetRadians = randomBetween(-this.aimingErrorRadians, this.aimingErrorRadians);
     const perceivedHeadingError = normalizeAngle(headingError + fireHeadingOffsetRadians);
-    const rudderDegrees = clamp(headingError * 55, -35, 35);
+    const rudderDegrees = clamp(headingError * 48 - ship.turnVelocity * 85, -35, 35);
     const distance = ship.position.distanceTo(target.position);
     const engineOrder = distance > 150 ? 6 : 4;
 
