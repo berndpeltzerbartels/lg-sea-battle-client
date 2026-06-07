@@ -241,7 +241,7 @@ const blockedWaters = worldLandmasses.map(getLandZone);
 createWorldLandmasses(worldLandmasses, scene, materials, world);
 
 const boat = createPlayerBow(scene, materials);
-boat.root.position = new Vector3(46, 0.28, 52);
+boat.root.position = new Vector3(-2446, 0.28, 92);
 
 // Static inspection target until networked opponents supply position and heading.
 const enemyBoat = createEnemyTorpedoBoat(scene, materials, "enemy_boat");
@@ -693,6 +693,7 @@ function drawMapLandZone(ctx, zone, bounds, width, height, scale) {
 
   const points = getCoastContourPoints(zone, 96).map((point) => worldToMapPoint(point, bounds, width, height, scale));
   drawInstrumentPolygon(ctx, points, "rgba(98, 129, 89, 0.95)", "rgba(238, 218, 164, 0.78)");
+  drawMapLandWater(ctx, zone, bounds, width, height, scale);
 }
 
 function drawRadarLandZone(ctx, zone, playerPosition, centerX, centerY, scale, heading) {
@@ -704,6 +705,7 @@ function drawRadarLandZone(ctx, zone, playerPosition, centerX, centerY, scale, h
 
   const points = getCoastContourPoints(zone, 80).map((point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading));
   drawInstrumentPolygon(ctx, points, "rgba(96, 124, 83, 0.92)", "rgba(232, 217, 159, 0.46)");
+  drawRadarLandWater(ctx, zone, playerPosition, centerX, centerY, scale, heading);
 }
 
 function drawInstrumentPolygon(ctx, points, fill, stroke) {
@@ -2253,7 +2255,7 @@ function createWaterways(land, position, scene, materials, parent) {
       tessellation: 36
     }, scene);
     mesh.parent = parent;
-    mesh.position = new Vector3(position.x + lake.x, 0.382, position.z + lake.z);
+    mesh.position = new Vector3(position.x + lake.x, 0.585, position.z + lake.z);
     mesh.scaling.x = lake.rx;
     mesh.scaling.z = lake.rz;
     mesh.material = materials.shallow;
@@ -2271,7 +2273,7 @@ function createWaterwaySegment(name, waterway, scene) {
   }, scene);
 
   segment.position.x = (waterway.from.x + waterway.to.x) * 0.5;
-  segment.position.y = 0.38;
+  segment.position.y = 0.58;
   segment.position.z = (waterway.from.z + waterway.to.z) * 0.5;
   segment.rotation.y = Math.atan2(dx, dz);
   return segment;
@@ -2294,6 +2296,7 @@ function createCoastlineTerrainMesh(name, land, rx, rz, heightScale, peakBoost, 
       const localZ = Math.sin(angle) * rz * ring * radiusFactor;
       const fjord = getFjordCarve(localX, localZ, rx, rz, land.fjords ?? []);
       const terrainFjord = fjord * smoothstep(0.62, 0.95, ring);
+      const inlandWater = isInLocalLandWater(localX, localZ, land);
       const coast = 1 - smoothstep(0.58, 0.96, ring);
       const inland = clamp(1 - ring, 0, 1);
       const nx = localX / rx;
@@ -2312,7 +2315,7 @@ function createCoastlineTerrainMesh(name, land, rx, rz, heightScale, peakBoost, 
 
       positions.push(
         localX,
-        isLand ? terrainHeight : 0.18,
+        isLand ? (inlandWater ? 0.24 : terrainHeight) : 0.18,
         localZ
       );
       mask.push(isLand);
@@ -2509,6 +2512,42 @@ function getCoastRadiusFactor(angle, land) {
   return clamp(1 + (broad + bays + small) * roughness - fjordBite, 0.56, 1.42);
 }
 
+function drawMapLandWater(ctx, zone, bounds, width, height, scale) {
+  drawInstrumentWaterways(ctx, zone, (point) => worldToMapPoint(point, bounds, width, height, scale), scale);
+
+  (zone.lakes ?? []).forEach((lake) => {
+    const point = worldToMapPoint({ x: zone.x + lake.x, z: zone.z + lake.z }, bounds, width, height, scale);
+    drawInstrumentEllipse(ctx, point.x, point.y, lake.rx * scale, lake.rz * scale, "rgba(54, 143, 157, 0.86)", "rgba(180, 236, 231, 0.72)");
+  });
+}
+
+function drawRadarLandWater(ctx, zone, playerPosition, centerX, centerY, scale, heading) {
+  drawInstrumentWaterways(ctx, zone, (point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading), scale);
+
+  (zone.lakes ?? []).forEach((lake) => {
+    const point = worldToRadarPoint({ x: zone.x + lake.x, z: zone.z + lake.z }, playerPosition, centerX, centerY, scale, heading);
+    drawInstrumentEllipse(ctx, point.x, point.y, lake.rx * scale, lake.rz * scale, "rgba(54, 143, 157, 0.75)", "rgba(180, 236, 231, 0.48)", -heading);
+  });
+}
+
+function drawInstrumentWaterways(ctx, zone, project, scale) {
+  ctx.strokeStyle = "rgba(84, 180, 190, 0.86)";
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  (zone.waterways ?? []).forEach((waterway) => {
+    const from = project({ x: zone.x + waterway.from.x, z: zone.z + waterway.from.z });
+    const to = project({ x: zone.x + waterway.to.x, z: zone.z + waterway.to.z });
+    ctx.lineWidth = Math.max(2, waterway.width * scale);
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+  });
+
+  ctx.lineCap = "butt";
+}
+
 function getAngularDistance(a, b) {
   return Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 }
@@ -2628,6 +2667,10 @@ function isInLandWater(position, zone) {
 
   const localX = position.x - zone.x;
   const localZ = position.z - zone.z;
+  return isInLocalLandWater(localX, localZ, zone);
+}
+
+function isInLocalLandWater(localX, localZ, zone) {
   return isInWaterway(localX, localZ, zone.waterways ?? []) || isInLake(localX, localZ, zone.lakes ?? []);
 }
 
