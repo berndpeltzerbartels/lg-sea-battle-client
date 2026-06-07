@@ -201,11 +201,15 @@ const worldLandmasses = [
       { angle: 2.22, width: 0.1, reach: 0.55 }
     ],
     waterways: [
-      { from: { x: 700, z: 520 }, to: { x: 468, z: 420 }, width: 42 },
-      { from: { x: 468, z: 420 }, to: { x: 245, z: 505 }, width: 38 },
-      { from: { x: 245, z: 505 }, to: { x: 58, z: 345 }, width: 34 },
-      { from: { x: 58, z: 345 }, to: { x: -128, z: 420 }, width: 30 },
-      { from: { x: -128, z: 420 }, to: { x: -288, z: 300 }, width: 26 }
+      { from: { x: 760, z: 620 }, to: { x: 520, z: 470 }, width: 48 },
+      { from: { x: 520, z: 470 }, to: { x: 310, z: 250 }, width: 44 },
+      { from: { x: 310, z: 250 }, to: { x: 118, z: 76 }, width: 42 },
+      { from: { x: 118, z: 76 }, to: { x: -96, z: -28 }, width: 46 },
+      { from: { x: -96, z: -28 }, to: { x: -320, z: -168 }, width: 38 },
+      { from: { x: -320, z: -168 }, to: { x: -610, z: -310 }, width: 34 }
+    ],
+    lakes: [
+      { x: -96, z: -28, rx: 120, rz: 78 }
     ]
   },
   { kind: "island", name: "western_sound_stack", x: -1310, z: 520, radius: 28, heightScale: 1.2, rx: 38, rz: 28 },
