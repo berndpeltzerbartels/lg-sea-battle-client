@@ -64,6 +64,13 @@ document.body.dataset.gameStateSource = "server";
 document.body.dataset.serverGameState = gameState.state;
 document.body.dataset.serverShips = String(gameState.ships.length);
 document.body.dataset.serverTorpedoes = String(gameState.torpedoes.length);
+const playerTeamId = getRequestedPlayerTeamId(gameState.ships);
+const playerShips = getTeamShips(gameState.ships, playerTeamId);
+const enemyShips = getEnemyShips(gameState.ships, playerTeamId);
+const initialPlayerSpawn = createPlayerSpawn(playerShips);
+document.body.dataset.playerTeam = playerTeamId;
+document.body.dataset.serverOwnShips = String(playerShips.length);
+document.body.dataset.serverEnemyShips = String(enemyShips.length);
 
 const materials = createMaterials(scene);
 const world = new TransformNode("world", scene);
@@ -86,10 +93,10 @@ const blockedWaters = worldLandmasses.map(getLandZone);
 createWorldLandmasses(worldLandmasses, scene, materials, world);
 
 const boat = createPlayerBow(scene, materials);
-boat.root.position = new Vector3(46, 0.28, 52);
+boat.root.position.copyFrom(initialPlayerSpawn.position);
 
 // Until SSE arrives, backend ships seed the visual fleet and local motion keeps them inspectable.
-const enemyMotions = createEnemyFleet(scene, materials, gameState.ships);
+const enemyMotions = createEnemyFleet(scene, materials, enemyShips);
 document.body.dataset.meshCount = String(scene.meshes.length);
 
 const camera = new FreeCamera("follow_camera", new Vector3(0, 7, -13), scene);
@@ -155,7 +162,7 @@ const engineOrders = [
 
 // Keep propulsion as discrete ship orders, not held-key throttle.
 // Later multiplayer can send this order index plus heading/speed instead of raw input.
-let heading = -2.12;
+let heading = initialPlayerSpawn.heading;
 let speed = 0;
 let engineOrder = 2;
 let turnVelocity = 0;
@@ -175,12 +182,8 @@ let playerRespawnIndex = 0;
 const maxRudderDegrees = 35;
 const rudderStepDegrees = 5;
 const rudderHoldDegreesPerSecond = 18;
-const playerRespawnPoints = [
-  { position: new Vector3(46, 0.28, 52), heading: -2.12 },
-  { position: new Vector3(84, 0.28, -16), heading: -1.62 },
-  { position: new Vector3(-34, 0.28, 96), heading: 2.35 },
-  { position: new Vector3(172, 0.28, 62), heading: -2.72 }
-];
+boat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
+const playerRespawnPoints = createPlayerRespawnPoints(playerShips, initialPlayerSpawn);
 const torpedoLaunchDefaults = {
   tubeX: 0.6,
   startZ: 2.45,
@@ -451,6 +454,54 @@ function getGameStateEndpoint() {
   }
 
   return "/game/state";
+}
+
+function getRequestedPlayerTeamId(ships) {
+  const params = new URLSearchParams(location.search);
+  const requestedTeamId = params.get("team") ?? params.get("side");
+  const teamIds = [...new Set(ships.map((ship) => ship.teamId).filter(Boolean))];
+
+  if (requestedTeamId && teamIds.includes(requestedTeamId)) {
+    return requestedTeamId;
+  }
+  if (teamIds.includes("red")) {
+    return "red";
+  }
+  return teamIds[0] ?? "red";
+}
+
+function getTeamShips(ships, teamId) {
+  return ships.filter((ship) => ship.teamId === teamId);
+}
+
+function getEnemyShips(ships, teamId) {
+  return ships.filter((ship) => ship.teamId !== teamId);
+}
+
+function createPlayerSpawn(teamShips) {
+  const ship = teamShips.find((candidate) => candidate.state === "active") ?? teamShips[0];
+  if (!ship) {
+    return {
+      position: new Vector3(46, 0.28, 52),
+      heading: -2.12
+    };
+  }
+
+  return {
+    position: new Vector3(ship.x, 0.28, ship.z),
+    heading: Number.isFinite(ship.heading) ? ship.heading : 0
+  };
+}
+
+function createPlayerRespawnPoints(teamShips, fallbackSpawn) {
+  const spawns = teamShips
+    .filter((ship) => ship.state === "active")
+    .map((ship) => ({
+      position: new Vector3(ship.x, 0.28, ship.z),
+      heading: Number.isFinite(ship.heading) ? ship.heading : fallbackSpawn.heading
+    }));
+
+  return spawns.length > 0 ? spawns : [fallbackSpawn];
 }
 
 function escapeHtml(value) {
