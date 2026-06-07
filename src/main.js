@@ -156,12 +156,12 @@ const worldLandmasses = [
     waterways: [
       { from: { x: 86, z: 8 }, to: { x: 22, z: 0 }, width: 18 },
       { from: { x: 22, z: 0 }, to: { x: -52, z: -10 }, width: 30 },
-      { from: { x: -52, z: -10 }, to: { x: -142, z: -78 }, width: 22 },
-      { from: { x: -46, z: -3 }, to: { x: -154, z: 4 }, width: 28 },
-      { from: { x: -38, z: 6 }, to: { x: -128, z: 68 }, width: 21 }
+      { from: { x: -52, z: -10 }, to: { x: -154, z: -80 }, width: 18 },
+      { from: { x: -46, z: -3 }, to: { x: -164, z: 0 }, width: 20 },
+      { from: { x: -38, z: 6 }, to: { x: -138, z: 72 }, width: 17 }
     ],
     lakes: [
-      { x: -58, z: -5, rx: 42, rz: 28 }
+      { x: -48, z: -5, rx: 32, rz: 21 }
     ]
   },
   { kind: "island", name: "delta_outer_bar", x: 632, z: 92, radius: 13, heightScale: 0.7, rx: 19, rz: 15 },
@@ -199,6 +199,13 @@ const worldLandmasses = [
       { angle: 1.18, width: 0.16, reach: 0.62 },
       { angle: 1.82, width: 0.13, reach: 0.68 },
       { angle: 2.22, width: 0.1, reach: 0.55 }
+    ],
+    waterways: [
+      { from: { x: 700, z: 520 }, to: { x: 468, z: 420 }, width: 42 },
+      { from: { x: 468, z: 420 }, to: { x: 245, z: 505 }, width: 38 },
+      { from: { x: 245, z: 505 }, to: { x: 58, z: 345 }, width: 34 },
+      { from: { x: 58, z: 345 }, to: { x: -128, z: 420 }, width: 30 },
+      { from: { x: -128, z: 420 }, to: { x: -288, z: 300 }, width: 26 }
     ]
   },
   { kind: "island", name: "western_sound_stack", x: -1310, z: 520, radius: 28, heightScale: 1.2, rx: 38, rz: 28 },
@@ -339,7 +346,7 @@ scene.onBeforeRenderObservable.add(() => {
 
   // Heavy ship feel: the selected telegraph order is a target, and speed eases toward it.
   const waterSafety = getWaterSafety(boat.root.position, blockedWaters);
-  const maxForwardSpeed = waterSafety.isShallow ? 4.4 : 14.4;
+  const maxForwardSpeed = 14.4 - waterSafety.shallowAmount * 9.2;
   const engineTargetSpeed = engineOrders[engineOrder].speed;
   const targetSpeed = engineTargetSpeed > 0 ? Math.min(engineTargetSpeed, maxForwardSpeed) : engineTargetSpeed;
   const response = Math.abs(targetSpeed) > Math.abs(speed) ? 0.42 : 0.72;
@@ -370,7 +377,7 @@ scene.onBeforeRenderObservable.add(() => {
     speed = 0;
     turnVelocity *= 0.4;
   } else if (nextWaterSafety.isShallow) {
-    speed *= 0.994;
+    speed *= 1 - nextWaterSafety.shallowAmount * 0.004;
   }
 
   const bob = Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035;
@@ -2543,7 +2550,7 @@ function getWaterSafety(position, zones) {
     const shallowDistance = Math.sqrt(shallowNx * shallowNx + shallowNz * shallowNz);
 
     if (distance < 1 && !landWater) {
-      return { isBlocked: true, isShallow: true };
+      return { isBlocked: true, isShallow: true, shallowAmount: 1 };
     }
 
     if (shallowDistance < 1 || landWater) {
@@ -2551,7 +2558,7 @@ function getWaterSafety(position, zones) {
     }
   }
 
-  return { isBlocked: false, isShallow: shallowAmount > 0 };
+  return { isBlocked: false, isShallow: shallowAmount > 0, shallowAmount };
 }
 
 function getWaterDepth(position, zones) {
