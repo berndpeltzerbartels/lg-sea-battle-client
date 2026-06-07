@@ -125,6 +125,62 @@ const worldLandmasses = [
   { kind: "island", name: "l_passage_outer_rock", x: 592, z: -555, radius: 15, heightScale: 1.2, rx: 20, rz: 16 },
   {
     kind: "coastline",
+    name: "inland_sea_north_shore",
+    x: -860,
+    z: 1510,
+    rx: 620,
+    rz: 190,
+    heightScale: 1.1,
+    peakBoost: 18,
+    coastRoughness: 0.2,
+    fjords: [
+      { angle: -2.72, width: 0.13, reach: 0.68 }
+    ]
+  },
+  {
+    kind: "coastline",
+    name: "inland_sea_south_shore",
+    x: -900,
+    z: 665,
+    rx: 660,
+    rz: 210,
+    heightScale: 0.92,
+    peakBoost: 8,
+    coastRoughness: 0.22,
+    fjords: [
+      { angle: 0.38, width: 0.16, reach: 0.72 }
+    ]
+  },
+  {
+    kind: "coastline",
+    name: "inland_sea_west_headland",
+    x: -1515,
+    z: 1070,
+    rx: 230,
+    rz: 510,
+    heightScale: 1.22,
+    peakBoost: 22,
+    coastRoughness: 0.18,
+    fjords: [
+      { angle: 1.2, width: 0.12, reach: 0.62 }
+    ]
+  },
+  {
+    kind: "coastline",
+    name: "inland_sea_east_gate",
+    x: -240,
+    z: 1180,
+    rx: 260,
+    rz: 430,
+    heightScale: 1.0,
+    peakBoost: 14,
+    coastRoughness: 0.2,
+    fjords: [
+      { angle: -1.95, width: 0.13, reach: 0.66 }
+    ]
+  },
+  {
+    kind: "coastline",
     name: "northern_ridge",
     x: 24,
     z: 760,
@@ -199,17 +255,6 @@ const worldLandmasses = [
       { angle: 1.18, width: 0.16, reach: 0.62 },
       { angle: 1.82, width: 0.13, reach: 0.68 },
       { angle: 2.22, width: 0.1, reach: 0.55 }
-    ],
-    waterways: [
-      { from: { x: 760, z: 620 }, to: { x: 520, z: 470 }, width: 48 },
-      { from: { x: 520, z: 470 }, to: { x: 310, z: 250 }, width: 44 },
-      { from: { x: 310, z: 250 }, to: { x: 118, z: 76 }, width: 42 },
-      { from: { x: 118, z: 76 }, to: { x: -96, z: -28 }, width: 46 },
-      { from: { x: -96, z: -28 }, to: { x: -320, z: -168 }, width: 38 },
-      { from: { x: -320, z: -168 }, to: { x: -610, z: -310 }, width: 34 }
-    ],
-    lakes: [
-      { x: -96, z: -28, rx: 120, rz: 78 }
     ]
   },
   { kind: "island", name: "western_sound_stack", x: -1310, z: 520, radius: 28, heightScale: 1.2, rx: 38, rz: 28 },
@@ -241,7 +286,7 @@ const blockedWaters = worldLandmasses.map(getLandZone);
 createWorldLandmasses(worldLandmasses, scene, materials, world);
 
 const boat = createPlayerBow(scene, materials);
-boat.root.position = new Vector3(-2446, 0.28, 92);
+boat.root.position = new Vector3(-820, 0.28, 1040);
 
 // Static inspection target until networked opponents supply position and heading.
 const enemyBoat = createEnemyTorpedoBoat(scene, materials, "enemy_boat");
@@ -2296,7 +2341,6 @@ function createCoastlineTerrainMesh(name, land, rx, rz, heightScale, peakBoost, 
       const localZ = Math.sin(angle) * rz * ring * radiusFactor;
       const fjord = getFjordCarve(localX, localZ, rx, rz, land.fjords ?? []);
       const terrainFjord = fjord * smoothstep(0.62, 0.95, ring);
-      const inlandWater = isInLocalLandWater(localX, localZ, land);
       const coast = 1 - smoothstep(0.58, 0.96, ring);
       const inland = clamp(1 - ring, 0, 1);
       const nx = localX / rx;
@@ -2315,7 +2359,7 @@ function createCoastlineTerrainMesh(name, land, rx, rz, heightScale, peakBoost, 
 
       positions.push(
         localX,
-        isLand ? (inlandWater ? 0.24 : terrainHeight) : 0.18,
+        isLand ? terrainHeight : 0.18,
         localZ
       );
       mask.push(isLand);
