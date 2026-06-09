@@ -924,7 +924,8 @@ function setupResetGameControl(button) {
 async function requestHostGameReset() {
   const adminKey = window.prompt("Host key");
   if (!adminKey) return;
-  const setupId = new URLSearchParams(location.search).get("setup") ?? undefined;
+  const setupId = promptGameSetupId();
+  if (setupId === null) return;
 
   try {
     const response = await fetch(getResetGameEndpoint(), {
@@ -939,6 +940,15 @@ async function requestHostGameReset() {
   } catch (error) {
     document.body.dataset.resetGameError = error.message;
   }
+}
+
+function promptGameSetupId() {
+  const currentSetup = new URLSearchParams(location.search).get("setup") ?? "default";
+  const choice = window.prompt("World: 1 = Islands, 2 = Dense land", currentSetup === "dense-land" ? "2" : "1");
+  if (choice === null) return null;
+  const normalized = choice.trim().toLowerCase();
+  if (normalized === "2" || normalized === "dense" || normalized === "dense-land") return "dense-land";
+  return undefined;
 }
 
 function getResetGameEndpoint() {
@@ -1196,7 +1206,10 @@ function applyServerGameSnapshot(snapshot) {
     }
   });
 
-  syncServerTorpedoes(Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes : []);
+  syncServerTorpedoes(
+    Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes : [],
+    Array.isArray(snapshot.torpedoImpacts) ? snapshot.torpedoImpacts : []
+  );
   document.body.dataset.remoteShips = String(snapshot.ships.length);
   document.body.dataset.serverTorpedoes = String(Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes.length : 0);
   document.body.dataset.playerStateSync = "ok";
@@ -1530,26 +1543,20 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl) {
 
   drawMapSectorGrid(ctx, bounds, width, height, scale);
 
-  landZones.filter((zone) => zoneIntersectsBounds(zone, bounds)).forEach((zone) => {
-    drawMapLandZone(ctx, zone, bounds, width, height, scale);
-  });
-  landZones.filter((zone) => zoneIntersectsBounds(zone, bounds)).forEach((zone) => {
-    drawMapLandLabel(ctx, zone, bounds, width, height, scale);
-  });
+  const visibleLandZones = landZones.filter((zone) => zoneIntersectsBounds(zone, bounds));
+  drawMapLandUnion(ctx, visibleLandZones, bounds, width, height, scale);
+  drawMapLandLabels(ctx, visibleLandZones, bounds, width, height, scale);
 
   const playerPoint = clampInstrumentPoint(worldToMapPoint(playerPosition, bounds, width, height, scale), width, height, 6);
   drawInstrumentMarker(ctx, playerPoint.x, playerPoint.y, "#f7fbff", 4);
 
   if (mapSectorValue) mapSectorValue.textContent = formatMapSector(playerPosition);
   if (mapCoordinateValue) mapCoordinateValue.textContent = `${formatWorldCoordinate(playerPosition)}\n${formatMapBounds(bounds)}\nZoom x${zoomScale}`;
-  updateMapGridEdgeLabels(bounds);
+  updateMapGridEdgeLabels(bounds, width, height, scale);
 }
 
 function drawMapSectorGrid(ctx, bounds, width, height, scale) {
-  const firstCol = Math.floor((bounds.minX + mapSectorOrigin) / mapSectorSize);
-  const lastCol = Math.floor((bounds.maxX + mapSectorOrigin) / mapSectorSize);
-  const firstRow = Math.floor((mapSectorOrigin - bounds.maxZ) / mapSectorSize);
-  const lastRow = Math.floor((mapSectorOrigin - bounds.minZ) / mapSectorSize);
+  const { firstCol, lastCol, firstRow, lastRow } = getVisibleMapSectorRange(bounds);
 
   ctx.save();
   ctx.strokeStyle = "rgba(247, 251, 255, 0.18)";
@@ -1557,7 +1564,7 @@ function drawMapSectorGrid(ctx, bounds, width, height, scale) {
 
   for (let col = firstCol; col <= lastCol + 1; col += 1) {
     const worldX = col * mapSectorSize - mapSectorOrigin;
-    const x = (worldX - bounds.minX) * scale;
+    const x = worldToMapPoint({ x: worldX, z: bounds.maxZ }, bounds, width, height, scale).x;
     if (x < -0.5 || x > width + 0.5) continue;
     ctx.beginPath();
     ctx.moveTo(Math.round(x) + 0.5, 0);
@@ -1567,7 +1574,7 @@ function drawMapSectorGrid(ctx, bounds, width, height, scale) {
 
   for (let row = firstRow; row <= lastRow + 1; row += 1) {
     const worldZ = mapSectorOrigin - row * mapSectorSize;
-    const y = (bounds.maxZ - worldZ) * scale;
+    const y = worldToMapPoint({ x: bounds.minX, z: worldZ }, bounds, width, height, scale).y;
     if (y < -0.5 || y > height + 0.5) continue;
     ctx.beginPath();
     ctx.moveTo(0, Math.round(y) + 0.5);
@@ -1601,9 +1608,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   drawRadarRangeRings(ctx, centerX, centerY, radius);
   landZones.forEach((zone) => drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, radius, radarRange));
 
-  landZones.forEach((zone) => {
-    drawRadarLandZone(ctx, zone, playerPosition, centerX, centerY, scale, heading);
-  });
+  drawRadarLandUnion(ctx, landZones, playerPosition, centerX, centerY, scale, heading, width, height);
 
   const contacts = radarContacts
     .map((contact) => ({
@@ -1722,11 +1727,89 @@ function drawMapLandZone(ctx, zone, bounds, width, height, scale) {
   drawMapLandWater(ctx, zone, bounds, width, height, scale);
 }
 
+function drawMapLandUnion(ctx, zones, bounds, width, height, scale) {
+  if (zones.length === 0) return;
+
+  const mask = document.createElement("canvas");
+  mask.width = Math.max(1, Math.ceil(width));
+  mask.height = Math.max(1, Math.ceil(height));
+  const maskCtx = mask.getContext("2d");
+  if (!maskCtx) return;
+
+  maskCtx.fillStyle = "#ffffff";
+  zones.forEach((zone) => addMapLandPath(maskCtx, zone, bounds, width, height, scale));
+
+  ctx.save();
+  ctx.drawImage(createColoredMaskCanvas(mask, "rgba(98, 129, 89, 0.95)"), 0, 0, width, height);
+  drawMaskOutline(ctx, mask, "rgba(238, 218, 164, 0.78)");
+  ctx.restore();
+
+  zones.forEach((zone) => drawMapLandWater(ctx, zone, bounds, width, height, scale));
+}
+
+function addMapLandPath(ctx, zone, bounds, width, height, scale) {
+  ctx.beginPath();
+  if (zone.kind !== "coastline") {
+    const point = worldToMapPoint(zone, bounds, width, height, scale);
+    ctx.ellipse(
+      point.x,
+      point.y,
+      Math.max(1, getZoneVisualRx(zone) * scale),
+      Math.max(1, getZoneVisualRz(zone) * scale),
+      0,
+      0,
+      Math.PI * 2
+    );
+  } else {
+    const points = getCoastContourPoints(zone, 96).map((point) => worldToMapPoint(point, bounds, width, height, scale));
+    if (points.length < 3) return;
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i += 1) {
+      ctx.lineTo(points[i].x, points[i].y);
+    }
+    ctx.closePath();
+  }
+  ctx.fill();
+}
+
+function createColoredMaskCanvas(mask, fillStyle) {
+  const colored = document.createElement("canvas");
+  colored.width = mask.width;
+  colored.height = mask.height;
+  const coloredCtx = colored.getContext("2d");
+  if (!coloredCtx) return mask;
+  coloredCtx.fillStyle = fillStyle;
+  coloredCtx.fillRect(0, 0, colored.width, colored.height);
+  coloredCtx.globalCompositeOperation = "destination-in";
+  coloredCtx.drawImage(mask, 0, 0);
+  return colored;
+}
+
+function drawMaskOutline(ctx, mask, strokeStyle) {
+  const maskCtx = mask.getContext("2d");
+  if (!maskCtx) return;
+  const { width, height } = mask;
+  const pixels = maskCtx.getImageData(0, 0, width, height).data;
+  ctx.fillStyle = strokeStyle;
+
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const alpha = pixels[(y * width + x) * 4 + 3];
+      if (alpha === 0) continue;
+      const touchesWater =
+        pixels[(y * width + x - 1) * 4 + 3] === 0 ||
+        pixels[(y * width + x + 1) * 4 + 3] === 0 ||
+        pixels[((y - 1) * width + x) * 4 + 3] === 0 ||
+        pixels[((y + 1) * width + x) * 4 + 3] === 0;
+      if (touchesWater) {
+        ctx.fillRect(x, y, 1, 1);
+      }
+    }
+  }
+}
+
 function formatMapBounds(bounds) {
-  const firstCol = Math.floor((bounds.minX + mapSectorOrigin) / mapSectorSize);
-  const lastCol = Math.floor((bounds.maxX + mapSectorOrigin) / mapSectorSize);
-  const firstRow = Math.floor((mapSectorOrigin - bounds.maxZ) / mapSectorSize);
-  const lastRow = Math.floor((mapSectorOrigin - bounds.minZ) / mapSectorSize);
+  const { firstCol, lastCol, firstRow, lastRow } = getVisibleMapSectorRange(bounds);
   const colStart = formatSectorColumn(Math.max(0, firstCol));
   const colEnd = formatSectorColumn(Math.max(0, lastCol));
   const rowStart = Math.max(1, firstRow + 1);
@@ -1734,28 +1817,44 @@ function formatMapBounds(bounds) {
   return `Cols ${colStart}-${colEnd}\nRows ${rowStart}-${rowEnd}`;
 }
 
-function updateMapGridEdgeLabels(bounds) {
+function updateMapGridEdgeLabels(bounds, width, height, scale) {
+  const { firstCol, lastCol, firstRow, lastRow } = getVisibleMapSectorRange(bounds);
+
   if (mapColumnLabels) {
-    const firstCol = Math.max(0, Math.floor((bounds.minX + mapSectorOrigin) / mapSectorSize));
-    const lastCol = Math.max(0, Math.floor((bounds.maxX + mapSectorOrigin) / mapSectorSize));
     mapColumnLabels.innerHTML = "";
-    for (let col = firstCol; col <= lastCol; col += 1) {
+    for (let col = Math.max(0, firstCol); col <= Math.max(0, lastCol); col += 1) {
+      const centerWorldX = col * mapSectorSize - mapSectorOrigin + mapSectorSize * 0.5;
+      const x = worldToMapPoint({ x: centerWorldX, z: bounds.maxZ }, bounds, width, height, scale).x;
+      if (x < 0 || x > width) continue;
       const label = document.createElement("span");
       label.textContent = formatSectorColumn(col);
+      label.style.left = `${x}px`;
       mapColumnLabels.append(label);
     }
   }
 
   if (mapRowLabels) {
-    const firstRow = Math.max(0, Math.floor((mapSectorOrigin - bounds.maxZ) / mapSectorSize));
-    const lastRow = Math.max(0, Math.floor((mapSectorOrigin - bounds.minZ) / mapSectorSize));
     mapRowLabels.innerHTML = "";
-    for (let row = firstRow; row <= lastRow; row += 1) {
+    for (let row = Math.max(0, firstRow); row <= Math.max(0, lastRow); row += 1) {
+      const centerWorldZ = mapSectorOrigin - row * mapSectorSize - mapSectorSize * 0.5;
+      const y = worldToMapPoint({ x: bounds.minX, z: centerWorldZ }, bounds, width, height, scale).y;
+      if (y < 0 || y > height) continue;
       const label = document.createElement("span");
       label.textContent = String(row + 1);
+      label.style.top = `${y}px`;
       mapRowLabels.append(label);
     }
   }
+}
+
+function getVisibleMapSectorRange(bounds) {
+  const epsilon = 0.000001;
+  return {
+    firstCol: Math.floor((bounds.minX + mapSectorOrigin) / mapSectorSize),
+    lastCol: Math.floor((bounds.maxX - epsilon + mapSectorOrigin) / mapSectorSize),
+    firstRow: Math.floor((mapSectorOrigin - bounds.maxZ + epsilon) / mapSectorSize),
+    lastRow: Math.floor((mapSectorOrigin - bounds.minZ - epsilon) / mapSectorSize)
+  };
 }
 
 function drawMapLandLabel(ctx, zone, bounds, width, height, scale) {
@@ -1766,6 +1865,45 @@ function drawMapLandLabel(ctx, zone, bounds, width, height, scale) {
 
   const label = getLandDisplayName(zone);
   const point = worldToMapPoint(zone, bounds, width, height, scale);
+  if (point.x < 18 || point.x > width - 18 || point.y < 18 || point.y > height - 40) return;
+
+  ctx.save();
+  ctx.font = "800 9px Inter, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "rgba(5, 27, 40, 0.82)";
+  ctx.fillStyle = "rgba(247, 251, 255, 0.76)";
+  ctx.strokeText(label, point.x, point.y);
+  ctx.fillText(label, point.x, point.y);
+  ctx.restore();
+}
+
+function drawMapLandLabels(ctx, zones, bounds, width, height, scale) {
+  const groups = new Map();
+
+  zones.forEach((zone) => {
+    const area = getZoneVisualRx(zone) * getZoneVisualRz(zone);
+    const screenWidth = getZoneVisualRx(zone) * scale * 2;
+    const screenHeight = getZoneVisualRz(zone) * scale * 2;
+    if (area < 3300 || screenWidth < 28 || screenHeight < 16) return;
+
+    const label = getLandDisplayName(zone);
+    const group = groups.get(label) ?? { label, x: 0, z: 0, weight: 0 };
+    group.x += zone.x * area;
+    group.z += zone.z * area;
+    group.weight += area;
+    groups.set(label, group);
+  });
+
+  groups.forEach((group) => {
+    if (group.weight <= 0) return;
+    drawMapLandLabelAt(ctx, group.label, { x: group.x / group.weight, z: group.z / group.weight }, bounds, width, height);
+  });
+}
+
+function drawMapLandLabelAt(ctx, label, position, bounds, width, height) {
+  const point = worldToMapPoint(position, bounds, width, height, Math.min(width / (bounds.maxX - bounds.minX), height / (bounds.maxZ - bounds.minZ)));
   if (point.x < 18 || point.x > width - 18 || point.y < 18 || point.y > height - 40) return;
 
   ctx.save();
@@ -1820,6 +1958,51 @@ function drawRadarLandZone(ctx, zone, playerPosition, centerX, centerY, scale, h
   const points = getCoastContourPoints(zone, 80).map((point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading));
   drawInstrumentPolygon(ctx, points, "rgba(96, 124, 83, 0.92)", "rgba(232, 217, 159, 0.46)");
   drawRadarLandWater(ctx, zone, playerPosition, centerX, centerY, scale, heading);
+}
+
+function drawRadarLandUnion(ctx, zones, playerPosition, centerX, centerY, scale, heading, width, height) {
+  if (zones.length === 0) return;
+
+  const mask = document.createElement("canvas");
+  mask.width = Math.max(1, Math.ceil(width));
+  mask.height = Math.max(1, Math.ceil(height));
+  const maskCtx = mask.getContext("2d");
+  if (!maskCtx) return;
+
+  maskCtx.fillStyle = "#ffffff";
+  zones.forEach((zone) => addRadarLandPath(maskCtx, zone, playerPosition, centerX, centerY, scale, heading));
+
+  ctx.save();
+  ctx.drawImage(createColoredMaskCanvas(mask, "rgba(96, 124, 83, 0.92)"), 0, 0, width, height);
+  drawMaskOutline(ctx, mask, "rgba(232, 217, 159, 0.46)");
+  ctx.restore();
+
+  zones.forEach((zone) => drawRadarLandWater(ctx, zone, playerPosition, centerX, centerY, scale, heading));
+}
+
+function addRadarLandPath(ctx, zone, playerPosition, centerX, centerY, scale, heading) {
+  ctx.beginPath();
+  if (zone.kind !== "coastline") {
+    const point = worldToRadarPoint(zone, playerPosition, centerX, centerY, scale, heading);
+    ctx.ellipse(
+      point.x,
+      point.y,
+      Math.max(1, getZoneRadarRx(zone) * scale),
+      Math.max(1, getZoneRadarRz(zone) * scale),
+      -heading,
+      0,
+      Math.PI * 2
+    );
+  } else {
+    const points = getCoastContourPoints(zone, 80).map((point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading));
+    if (points.length < 3) return;
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i += 1) {
+      ctx.lineTo(points[i].x, points[i].y);
+    }
+    ctx.closePath();
+  }
+  ctx.fill();
 }
 
 function drawInstrumentPolygon(ctx, points, fill, stroke) {
@@ -2087,11 +2270,11 @@ function getZoneRadarRz(zone) {
 }
 
 function getZoneShallowRx(zone) {
-  return zone.shallowRx ?? zone.rx * 1.08;
+  return zone.shallowRx ?? zone.rx;
 }
 
 function getZoneShallowRz(zone) {
-  return zone.shallowRz ?? zone.rz * 1.08;
+  return zone.shallowRz ?? zone.rz;
 }
 
 function createShipDesignation(ship) {
@@ -2470,6 +2653,7 @@ function createTorpedoSystem(scene, materials, parent) {
     muzzleEffects: [],
     hitEffects: [],
     serverVisuals: new Map(),
+    serverImpactIds: new Set(),
     nextTube: 0,
     nextFireTime: 0,
     nextEnemyFireTime: 10,
@@ -2666,7 +2850,7 @@ function isTargetInEnemyTorpedoArc(motion, targetPosition) {
   return getAngularDistance(targetHeading, motion.heading) <= enemyTorpedoFireArcRadians;
 }
 
-function syncServerTorpedoes(torpedoes) {
+function syncServerTorpedoes(torpedoes, impacts = []) {
   const activeIds = new Set();
 
   torpedoes.forEach((snapshot) => {
@@ -2675,13 +2859,39 @@ function syncServerTorpedoes(torpedoes) {
     applyServerTorpedoSnapshot(visual, snapshot);
   });
 
+  renderServerTorpedoImpacts(impacts);
+
   torpedoSystem.serverVisuals.forEach((visual, id) => {
     if (activeIds.has(id)) return;
 
-    createHitChurn(torpedoSystem, visual.root.position.clone(), visual.heading);
     disposeServerTorpedoVisual(visual);
     torpedoSystem.serverVisuals.delete(id);
   });
+}
+
+function renderServerTorpedoImpacts(impacts) {
+  impacts.forEach((impact) => {
+    const key = `${impact.id}:${impact.reason}:${impact.t}`;
+    if (torpedoSystem.serverImpactIds.has(key)) return;
+    torpedoSystem.serverImpactIds.add(key);
+
+    const position = new Vector3(
+      Number.isFinite(impact.x) ? impact.x : 0,
+      0.05,
+      Number.isFinite(impact.z) ? impact.z : 0
+    );
+    const headingValue = Number.isFinite(impact.heading) ? impact.heading : 0;
+    torpedoSystem.hits += 1;
+    if (impact.reason === "expired") {
+      createRangeSplash(torpedoSystem, position, headingValue);
+    } else {
+      createHitChurn(torpedoSystem, position, headingValue);
+    }
+  });
+
+  if (torpedoSystem.serverImpactIds.size > 120) {
+    torpedoSystem.serverImpactIds = new Set(Array.from(torpedoSystem.serverImpactIds).slice(-80));
+  }
 }
 
 function createServerTorpedoVisual(system, snapshot) {
@@ -3293,6 +3503,35 @@ function updateTorpedoWake(torpedo, visible, time) {
     segment.scaling.x = 1 + index * 0.16;
     segment.scaling.z = 1 + Math.sin(time * 4.5 + index) * 0.08;
   });
+}
+
+function createRangeSplash(system, position, heading) {
+  const forward = getForwardVector(heading);
+  const right = getRightVector(heading);
+
+  for (let i = 0; i < 5; i += 1) {
+    const patch = createJaggedSurfacePatch(`torpedo_range_splash_${system.hits}_${i}`, system.scene, 0.42 + i * 0.11, 0.28 + i * 0.06, i + 40);
+    patch.parent = system.root;
+    patch.material = system.materials.foam;
+    patch.position.copyFrom(
+      position
+        .add(forward.scale((i - 2) * 0.06))
+        .add(right.scale(((i % 3) - 1) * 0.08))
+        .add(new Vector3(0, 0.048 + i * 0.002, 0))
+    );
+    patch.rotation.y = heading + i * 0.52;
+    system.hitEffects.push({
+      mesh: patch,
+      age: 0,
+      lifetime: 0.78 + i * 0.04,
+      origin: patch.position.clone(),
+      velocity: forward.scale(-0.025 * i).add(right.scale(((i % 2) * 2 - 1) * 0.035)).add(new Vector3(0, 0.01, 0)),
+      gravity: 0.025,
+      baseScale: patch.scaling.clone(),
+      grow: new Vector3(1.1 + i * 0.12, 0.06, 0.78 + i * 0.08),
+      seed: i + 40
+    });
+  }
 }
 
 function createHitChurn(system, position, heading) {
@@ -4339,13 +4578,17 @@ function createWorldLandmasses(landmasses, scene, materials, parent) {
     if (land.kind === "coastline") {
       createCoastline(land, position, scene, materials, parent);
       createWaterways(land, position, scene, materials, parent);
-      if (land.name === "volcanic_highland") {
+      if (isVolcanicLandmass(land)) {
         volcanoPlumes.push(createVolcanoPlume(land, position, scene, materials, parent));
       }
     } else {
-      createIsland(land.name, position, land.radius, land.heightScale, scene, materials, parent);
+      createIsland(land, position, scene, materials, parent);
     }
   });
+}
+
+function isVolcanicLandmass(land) {
+  return String(land.name ?? "").includes("volcano") || String(land.name ?? "") === "volcanic_highland";
 }
 
 function createVolcanoPlume(land, position, scene, materials, parent) {
@@ -4496,7 +4739,6 @@ function createCoastlineTerrainMesh(name, land, rx, rz, heightScale, peakBoost, 
   const normals = [];
   const rings = [0, 0.22, 0.42, 0.6, 0.74, 0.86, 0.98];
   const samples = 112;
-  const mask = [];
 
   rings.forEach((ring) => {
     for (let i = 0; i < samples; i += 1) {
@@ -4505,7 +4747,6 @@ function createCoastlineTerrainMesh(name, land, rx, rz, heightScale, peakBoost, 
       const localX = Math.cos(angle) * rx * ring * radiusFactor;
       const localZ = Math.sin(angle) * rz * ring * radiusFactor;
       const fjord = getFjordCarve(localX, localZ, rx, rz, land.fjords ?? []);
-      const landWater = isInLocalLandWater(localX, localZ, land);
       const terrainFjord = fjord * smoothstep(0.62, 0.95, ring);
       const coast = 1 - smoothstep(0.58, 0.96, ring);
       const inland = clamp(1 - ring, 0, 1);
@@ -4517,7 +4758,6 @@ function createCoastlineTerrainMesh(name, land, rx, rz, heightScale, peakBoost, 
       const cliffLift = smoothstep(0.68, 0.9, ring) * smoothstep(1.04, 0.86, ring) * 5.5;
       const mountainLift = Math.pow(inland, 0.65) * (9 + ridgeA * 10 + ridgeB * 5) * heightScale;
       const peakLift = getPeakLift(nx, nz, ring, peakBoost, land);
-      const isLand = ring <= 0.98 && terrainFjord <= 0.58 && !landWater;
       const shoreBlend = 1 - smoothstep(0.9, 0.98, ring);
       const terrainHeight = 0.28 + shoreBlend * (
         0.2 + coast * (cliffLift + mountainLift + peakLift + roughness * 3.2) * (1 - terrainFjord * 0.25)
@@ -4525,10 +4765,9 @@ function createCoastlineTerrainMesh(name, land, rx, rz, heightScale, peakBoost, 
 
       positions.push(
         localX,
-        isLand ? terrainHeight : 0.18,
+        terrainHeight,
         localZ
       );
-      mask.push(isLand);
     }
   });
 
@@ -4540,8 +4779,8 @@ function createCoastlineTerrainMesh(name, land, rx, rz, heightScale, peakBoost, 
       const c = (ring + 1) * samples + i;
       const d = (ring + 1) * samples + next;
 
-      if (mask[a] && mask[c] && mask[b]) indices.push(a, c, b);
-      if (mask[b] && mask[c] && mask[d]) indices.push(b, c, d);
+      indices.push(a, c, b);
+      indices.push(b, c, d);
     }
   }
 
@@ -4601,34 +4840,45 @@ function createCoastlineBeachMesh(name, land, rx, rz, scene) {
   return mesh;
 }
 
-function createIsland(name, position, radius, heightScale, scene, materials, parent) {
+function createIsland(land, position, scene, materials, parent) {
+  const { name } = land;
+  const rx = land.rx ?? land.radius ?? 20;
+  const rz = land.rz ?? land.radius ?? 20;
+  const radius = land.radius ?? Math.min(rx, rz);
+  const heightScale = land.heightScale ?? 1;
+  const steepRock = isSteepRockLand(land);
   const islandRoot = new TransformNode(name, scene);
   islandRoot.position = position;
   islandRoot.parent = parent;
 
-  createRockFoamRing(`${name}_foam`, radius, scene, materials, islandRoot);
+  if (!steepRock) {
+    createSmallIslandSurface(land, rx, rz, heightScale, scene, materials, islandRoot);
+    return islandRoot;
+  }
 
-  const stackCount = Math.max(3, Math.min(4, Math.round(radius / 7)));
+  const stackCount = Math.max(2, Math.min(3, Math.round(radius / 9)));
   for (let i = 0; i < stackCount; i += 1) {
-    const angle = radius * 0.18 + i * 1.85;
-    const distance = i === 0 ? 0 : radius * (0.12 + i * 0.045);
-    const height = radius * (0.62 + i * 0.11) * heightScale;
-    const baseDiameter = radius * (0.44 - i * 0.045);
+    const angle = radius * 0.18 + i * 2.15;
+    const distance = i === 0 ? 0 : 0.18 + i * 0.07;
+    const rockHeightProfile = [0.34, 0.48, 0.39];
+    const capProfile = [0.72, 0.48, 0.62];
+    const height = radius * rockHeightProfile[i % rockHeightProfile.length] * heightScale;
+    const baseDiameter = radius * (0.54 - i * 0.045);
     const stack = MeshBuilder.CreateCylinder(`${name}_rock_stack_${i}`, {
-      diameterTop: baseDiameter * 0.18,
+      diameterTop: baseDiameter * capProfile[i % capProfile.length],
       diameterBottom: baseDiameter,
       height,
-      tessellation: 7
+      tessellation: 8
     }, scene);
     stack.parent = islandRoot;
-    stack.position.x = Math.cos(angle) * distance;
-    stack.position.z = Math.sin(angle) * distance * 0.68;
-    stack.position.y = height * 0.5 - radius * 0.14;
-    stack.rotation.x = Math.sin(angle) * 0.09;
-    stack.rotation.z = Math.cos(angle) * 0.08;
-    stack.rotation.y = angle * 0.65;
-    stack.scaling.x = 0.78 + (i % 2) * 0.16;
-    stack.scaling.z = 1.05 - (i % 2) * 0.18;
+    stack.position.x = Math.cos(angle) * rx * distance;
+    stack.position.z = Math.sin(angle) * rz * distance * 0.82;
+    stack.position.y = height * 0.5 - radius * 0.2;
+    stack.rotation.x = Math.sin(angle) * 0.14;
+    stack.rotation.z = Math.cos(angle) * 0.13;
+    stack.rotation.y = angle * 0.92;
+    stack.scaling.x = 0.72 + (i % 2) * 0.28;
+    stack.scaling.z = 1.18 - (i % 2) * 0.24;
     stack.material = materials.rock;
     stack.receiveShadows = true;
   }
@@ -4636,8 +4886,106 @@ function createIsland(name, position, radius, heightScale, scene, materials, par
   return islandRoot;
 }
 
-function createRockFoamRing(name, radius, scene, materials, parent) {
+function createSmallIslandSurface(land, rx, rz, heightScale, scene, materials, parent) {
+  const beach = MeshBuilder.CreateCylinder(`${land.name}_island_beach`, {
+    diameter: 2,
+    height: 0.05,
+    tessellation: 64
+  }, scene);
+  beach.parent = parent;
+  beach.position.y = 0.045;
+  beach.scaling.x = rx * 1.02;
+  beach.scaling.z = rz * 1.02;
+  beach.material = materials.sand;
+
+  const terrain = MeshBuilder.CreateCylinder(`${land.name}_island_terrain`, {
+    diameterTop: 1.55,
+    diameterBottom: 1.96,
+    height: Math.max(0.55, Math.min(2.2, Math.min(rx, rz) * 0.055 * heightScale)),
+    tessellation: 64
+  }, scene);
+  terrain.parent = parent;
+  terrain.position.y = 0.22;
+  terrain.scaling.x = rx * 0.92;
+  terrain.scaling.z = rz * 0.92;
+  terrain.material = materials.terrain;
+  terrain.receiveShadows = true;
+
+  const hill = createSmallIslandHillMesh(`${land.name}_island_hill`, land, rx, rz, heightScale, scene);
+  hill.parent = parent;
+  hill.material = materials.terrain;
+  hill.receiveShadows = true;
+}
+
+function createSmallIslandHillMesh(name, land, rx, rz, heightScale, scene) {
+  const mesh = new Mesh(name, scene);
+  const positions = [];
+  const indices = [];
+  const normals = [];
+  const samples = 18;
+  const rings = [0, 0.42, 0.76, 1.0];
+  const seed = getNameSeed(land.name);
+  const hillRx = rx * (0.72 + (seed % 5) * 0.018);
+  const hillRz = rz * (0.62 + (seed % 7) * 0.014);
+  const height = Math.max(1.1, Math.min(4.2, Math.min(rx, rz) * 0.15 * heightScale));
+  const offsetX = rx * (0.01 + ((seed % 9) - 4) * 0.006);
+  const offsetZ = rz * (-0.015 + ((seed % 11) - 5) * 0.005);
+  const peakAngle = seed * 0.017;
+  const peakX = Math.cos(peakAngle) * hillRx * 0.16;
+  const peakZ = Math.sin(peakAngle) * hillRz * 0.16;
+
+  rings.forEach((ring, ringIndex) => {
+    for (let i = 0; i < samples; i += 1) {
+      const angle = (i / samples) * Math.PI * 2;
+      const uneven = 1
+        + Math.sin(angle * 2.0 + seed * 0.021) * 0.12
+        + Math.sin(angle * 5.0 - seed * 0.009) * 0.07;
+      const localX = offsetX + peakX * (1 - ring) + Math.cos(angle) * hillRx * ring * uneven;
+      const localZ = offsetZ + peakZ * (1 - ring) + Math.sin(angle) * hillRz * ring * (1.05 - (uneven - 1) * 0.35);
+      const ridge = Math.sin(angle * 3.0 + seed * 0.013) * 0.1;
+      const crown = Math.pow(1 - ring, 0.72);
+      const shoulder = ringIndex === 1 ? 0.28 : 0;
+      const shoreDrop = smoothstep(0.72, 1.0, ring);
+      const y = 0.34 + height * (crown + shoulder + ridge * (1 - ring * 0.45)) * (1 - shoreDrop * 0.9);
+      positions.push(localX, y, localZ);
+    }
+  });
+
+  for (let ring = 0; ring < rings.length - 1; ring += 1) {
+    for (let i = 0; i < samples; i += 1) {
+      const next = (i + 1) % samples;
+      const a = ring * samples + i;
+      const b = ring * samples + next;
+      const c = (ring + 1) * samples + i;
+      const d = (ring + 1) * samples + next;
+      indices.push(a, c, b);
+      indices.push(b, c, d);
+    }
+  }
+
+  VertexData.ComputeNormals(positions, indices, normals);
+  const vertexData = new VertexData();
+  vertexData.positions = positions;
+  vertexData.indices = indices;
+  vertexData.normals = normals;
+  vertexData.applyToMesh(mesh);
+  return mesh;
+}
+
+function isSteepRockLand(land) {
+  const name = land.name ?? "";
+  return land.kind === "island"
+    && (name.includes("rock")
+      || name.includes("rocks")
+      || name.includes("stack")
+      || name.includes("needle")
+      || name.includes("skerry")
+      || name.includes("skerries"));
+}
+
+function createRockFoamRing(name, rx, rz, scene, materials, parent) {
   const ringCount = 8;
+  const radius = Math.min(rx, rz);
 
   for (let i = 0; i < ringCount; i += 1) {
     const angle = (i / ringCount) * Math.PI * 2 + radius * 0.09;
@@ -4647,9 +4995,9 @@ function createRockFoamRing(name, radius, scene, materials, parent) {
       depth: radius * 0.035
     }, scene);
     foam.parent = parent;
-    foam.position.x = Math.cos(angle) * radius * (0.34 + (i % 2) * 0.05);
+    foam.position.x = Math.cos(angle) * rx * (0.86 + (i % 2) * 0.05);
     foam.position.y = 0.035;
-    foam.position.z = Math.sin(angle) * radius * (0.24 + (i % 2) * 0.04);
+    foam.position.z = Math.sin(angle) * rz * (0.86 + (i % 2) * 0.05);
     foam.rotation.y = -angle + Math.PI / 2;
     foam.material = materials.foam;
   }
@@ -4665,11 +5013,11 @@ function getFjordCarve(localX, localZ, rx, rz, fjords) {
     const across = Math.abs((localX * dirZ) / rx - (localZ * dirX) / rz);
     const reach = fjord.reach ?? 0.78;
     const width = fjord.width ?? 0.14;
-    const mouthToCenter = smoothstep(1.03, 0.12, along);
-    const fromCoast = smoothstep(-1.02, -0.1, along);
+    const outerFade = 1 - smoothstep(1.02, 1.16, along);
+    const innerFade = smoothstep(1 - reach, 1 - reach + 0.18, along);
     const channel = 1 - smoothstep(width * 0.45, width, across);
 
-    carve = Math.max(carve, channel * mouthToCenter * fromCoast * smoothstep(reach, 0.08, Math.abs(along)));
+    carve = Math.max(carve, channel * outerFade * innerFade);
   });
 
   return carve;
@@ -4957,16 +5305,10 @@ function getWaterEscapeVector(position, zones) {
 }
 
 function isInFjordWater(position, zone) {
-  if (!zone.fjords?.length) return false;
-
-  const localX = position.x - zone.x;
-  const localZ = position.z - zone.z;
-  return getFjordCarve(localX, localZ, zone.rx, zone.rz, zone.fjords) > 0.58;
+  return false;
 }
 
 function isInLandWater(position, zone) {
-  if (isInFjordWater(position, zone)) return true;
-
   const localX = position.x - zone.x;
   const localZ = position.z - zone.z;
   return isInLocalLandWater(localX, localZ, zone);
