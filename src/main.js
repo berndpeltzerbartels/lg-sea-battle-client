@@ -3,6 +3,7 @@ import { Scene } from "@babylonjs/core/scene";
 import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
+import { PointLight } from "@babylonjs/core/Lights/pointLight";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
@@ -31,9 +32,9 @@ const engine = new Engine(canvas, true, {
 
 const scene = new Scene(engine);
 document.body.dataset.appStarted = "true";
-scene.clearColor = new Color4(0.64, 0.82, 0.95, 1);
+scene.clearColor = new Color4(0.42, 0.58, 0.72, 1);
 scene.fogMode = Scene.FOGMODE_LINEAR;
-scene.fogColor = new Color3(0.68, 0.84, 0.94);
+scene.fogColor = new Color3(0.34, 0.45, 0.54);
 scene.fogStart = 65;
 scene.fogEnd = 560;
 
@@ -43,6 +44,7 @@ const depthGauge = document.querySelector(".depth-gauge");
 const engineValue = document.getElementById("engineValue");
 const telegraphScale = document.getElementById("telegraphScale");
 const compassPointer = document.getElementById("compassPointer");
+const compassHeading = document.getElementById("compassHeading");
 const mapCanvas = document.getElementById("mapCanvas");
 const mapZoom = document.getElementById("mapZoom");
 const mapSectorValue = document.getElementById("mapSectorValue");
@@ -103,17 +105,21 @@ updateFleetStatus(gameState.ships, gameState.destroyedShipsByTeam);
 updatePlayerList(gameState.ships);
 updatePlayerTorpedoStock(playerTorpedoesRemaining);
 setupResetGameControl(resetGameButton);
+setupMapZoomControl(mapZoom);
 
 const materials = createMaterials(scene);
 const world = new TransformNode("world", scene);
 
 const sun = new DirectionalLight("sun", new Vector3(-0.45, -0.9, 0.32), scene);
 sun.position = new Vector3(35, 80, -45);
-sun.intensity = 1.45;
+sun.intensity = 0.92;
+sun.diffuse = new Color3(1.0, 0.78, 0.52);
+sun.specular = new Color3(0.58, 0.42, 0.3);
 
 const ambient = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
-ambient.intensity = 0.58;
-ambient.groundColor = new Color3(0.1, 0.18, 0.19);
+ambient.intensity = 0.44;
+ambient.diffuse = new Color3(0.62, 0.72, 0.82);
+ambient.groundColor = new Color3(0.055, 0.095, 0.11);
 
 const worldLimit = 5000;
 const ocean = MeshBuilder.CreateGround("ocean", { width: 2300, height: 2300, subdivisions: 160 }, scene);
@@ -139,6 +145,7 @@ camera.fov = 0.78;
 scene.activeCamera = camera;
 
 window.addEventListener("keydown", (event) => {
+  if (isHudControlEvent(event)) return;
   document.body.dataset.lastKey = formatInputEvent(event);
   const playerActive = playerDamageState === "active";
 
@@ -179,6 +186,7 @@ window.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("keyup", (event) => {
+  if (isHudControlEvent(event)) return;
   if (isInputKey(event, "up") && heldEngineDirection > 0) {
     heldEngineDirection = 0;
     event.preventDefault();
@@ -198,6 +206,7 @@ window.addEventListener("keyup", (event) => {
 });
 
 window.addEventListener("mousedown", (event) => {
+  if (isHudControlEvent(event)) return;
   if (fireMouseTorpedo(event.button)) {
     event.preventDefault();
     return;
@@ -209,6 +218,7 @@ window.addEventListener("mousedown", (event) => {
 });
 
 window.addEventListener("pointerdown", (event) => {
+  if (isHudControlEvent(event)) return;
   if (startMouseRudder(event.button)) {
     mouseButtonMask = event.buttons;
     event.target?.setPointerCapture?.(event.pointerId);
@@ -217,6 +227,7 @@ window.addEventListener("pointerdown", (event) => {
 });
 
 window.addEventListener("mouseup", (event) => {
+  if (isHudControlEvent(event)) return;
   if (stopMouseRudder(event.button)) {
     mouseButtonMask = event.buttons;
     event.preventDefault();
@@ -224,6 +235,7 @@ window.addEventListener("mouseup", (event) => {
 });
 
 window.addEventListener("pointerup", (event) => {
+  if (isHudControlEvent(event)) return;
   if (stopMouseRudder(event.button)) {
     mouseButtonMask = event.buttons;
     event.target?.releasePointerCapture?.(event.pointerId);
@@ -397,7 +409,10 @@ scene.onBeforeRenderObservable.add(() => {
     boat.root.position.z = clamp(boat.root.position.z, -worldLimit, worldLimit);
 
     nextWaterSafety = getShipWaterSafety(boat.root.position, heading, blockedWaters);
-    if (nextWaterSafety.isBlocked) {
+    const movementSafety = nextWaterSafety.isBlocked
+      ? getShipMovementWaterSafety(boat.root.position, heading, speed, blockedWaters)
+      : nextWaterSafety;
+    if (movementSafety.isBlocked) {
       boat.root.position.copyFrom(previousPosition);
 
       // Grounding stops the ship, but a tiny escape nudge prevents numeric edge-locking.
@@ -406,7 +421,7 @@ scene.onBeforeRenderObservable.add(() => {
         boat.root.position.addInPlace(getWaterEscapeVector(groundedSafety.blockedPoint ?? boat.root.position, blockedWaters).scale(0.18));
       }
 
-      speed = 0;
+      speed = engineOrders[engineOrder].speed < 0 ? Math.min(speed, -1.2) : 0;
       turnVelocity *= 0.4;
     }
   } else {
@@ -504,6 +519,7 @@ scene.onBeforeRenderObservable.add(() => {
   depthValue.textContent = nextWaterSafety.isBlocked ? "Ground" : `${waterDepth.meters.toFixed(0)} m`;
   depthGauge?.style.setProperty("--depth-ratio", String(waterDepth.ratio));
   compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
+  if (compassHeading) compassHeading.textContent = `HDG ${formatHeadingDegrees(heading)}`;
   updateRudderGauge(rudderIndicator, rudderValue, rudderDegrees);
   updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, getRadarContacts(enemyMotions), blockedWaters, heading);
 });
@@ -526,6 +542,49 @@ function isInputKey(event, name) {
     left: code === "ArrowLeft" || keyCode === 37,
     right: code === "ArrowRight" || keyCode === 39
   }[name];
+}
+
+function isHudControlEvent(event) {
+  return event.target?.closest?.("input, button, select, textarea");
+}
+
+function setupMapZoomControl(input) {
+  if (!input) return;
+
+  const setZoomFromPointer = (event) => {
+    const rect = input.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const ratio = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+    const min = Number(input.min ?? 0);
+    const max = Number(input.max ?? mapZoomScales.length - 1);
+    input.value = String(Math.round(min + ratio * (max - min)));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+
+  input.addEventListener("pointerdown", (event) => {
+    setZoomFromPointer(event);
+    input.setPointerCapture?.(event.pointerId);
+    event.stopPropagation();
+    event.preventDefault();
+  });
+  input.addEventListener("pointermove", (event) => {
+    if (!event.buttons) return;
+    setZoomFromPointer(event);
+    event.stopPropagation();
+    event.preventDefault();
+  });
+  input.addEventListener("keydown", (event) => {
+    const delta = event.code === "ArrowRight" || event.code === "ArrowUp"
+      ? 1
+      : event.code === "ArrowLeft" || event.code === "ArrowDown"
+        ? -1
+        : 0;
+    if (!delta) return;
+    input.value = String(clamp(Number(input.value) + delta, Number(input.min ?? 0), Number(input.max ?? mapZoomScales.length - 1)));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    event.stopPropagation();
+    event.preventDefault();
+  });
 }
 
 function isTorpedoFireKey(event) {
@@ -784,12 +843,13 @@ function setupResetGameControl(button) {
 async function requestHostGameReset() {
   const adminKey = window.prompt("Host key");
   if (!adminKey) return;
+  const setupId = new URLSearchParams(location.search).get("setup") ?? undefined;
 
   try {
     const response = await fetch(getResetGameEndpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ adminKey })
+      body: JSON.stringify({ adminKey, setupId })
     });
     if (!response.ok) {
       throw new Error(`Reset failed with ${response.status}`);
@@ -1401,7 +1461,6 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl) {
   landZones.filter((zone) => zoneIntersectsBounds(zone, bounds)).forEach((zone) => {
     drawMapLandZone(ctx, zone, bounds, width, height, scale);
   });
-  drawMapSectorLabels(ctx, bounds, width, height, scale);
   landZones.filter((zone) => zoneIntersectsBounds(zone, bounds)).forEach((zone) => {
     drawMapLandLabel(ctx, zone, bounds, width, height, scale);
   });
@@ -1410,7 +1469,7 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl) {
   drawInstrumentMarker(ctx, playerPoint.x, playerPoint.y, "#f7fbff", 4);
 
   if (mapSectorValue) mapSectorValue.textContent = formatMapSector(playerPosition);
-  if (mapCoordinateValue) mapCoordinateValue.textContent = `${formatWorldCoordinate(playerPosition)} x${zoomScale}`;
+  if (mapCoordinateValue) mapCoordinateValue.textContent = `${formatWorldCoordinate(playerPosition)}\n${formatMapBounds(bounds)}\nZoom x${zoomScale}`;
 }
 
 function drawRadarInstrument(canvas, statusElement, playerPosition, radarContacts, landZones, heading, range = 360) {
@@ -1557,54 +1616,16 @@ function drawMapLandZone(ctx, zone, bounds, width, height, scale) {
   drawMapLandWater(ctx, zone, bounds, width, height, scale);
 }
 
-function drawMapSectorLabels(ctx, bounds, width, height, scale) {
+function formatMapBounds(bounds) {
   const firstCol = Math.floor((bounds.minX + mapSectorOrigin) / mapSectorSize);
   const lastCol = Math.floor((bounds.maxX + mapSectorOrigin) / mapSectorSize);
   const firstRow = Math.floor((mapSectorOrigin - bounds.maxZ) / mapSectorSize);
   const lastRow = Math.floor((mapSectorOrigin - bounds.minZ) / mapSectorSize);
-  const cellPixels = mapSectorSize * scale;
-  const drawEvery = cellPixels < 34 ? Math.ceil(34 / Math.max(1, cellPixels)) : 1;
-
-  ctx.save();
-  ctx.fillStyle = "rgba(247, 251, 255, 0.58)";
-  ctx.strokeStyle = "rgba(247, 251, 255, 0.12)";
-  ctx.lineWidth = 1;
-  ctx.font = "800 9px Inter, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-
-  for (let col = firstCol; col <= lastCol; col += 1) {
-    if (col < 0 || col % drawEvery !== 0) continue;
-    const xWorld = col * mapSectorSize - mapSectorOrigin;
-    const x = worldToMapPoint({ x: xWorld + mapSectorSize * 0.5, z: bounds.maxZ }, bounds, width, height, scale).x;
-    if (x < 13 || x > width - 13) continue;
-    ctx.fillText(formatSectorColumn(col), x, 8);
-    ctx.fillText(formatSectorColumn(col), x, height - 34);
-    ctx.beginPath();
-    ctx.moveTo(x, 14);
-    ctx.lineTo(x, 18);
-    ctx.moveTo(x, height - 44);
-    ctx.lineTo(x, height - 40);
-    ctx.stroke();
-  }
-
-  ctx.textAlign = "center";
-  for (let row = firstRow; row <= lastRow; row += 1) {
-    if (row < 0 || row % drawEvery !== 0) continue;
-    const zWorld = mapSectorOrigin - row * mapSectorSize;
-    const y = worldToMapPoint({ x: bounds.minX, z: zWorld - mapSectorSize * 0.5 }, bounds, width, height, scale).y;
-    if (y < 17 || y > height - 43) continue;
-    ctx.fillText(String(row + 1), 10, y);
-    ctx.fillText(String(row + 1), width - 10, y);
-    ctx.beginPath();
-    ctx.moveTo(17, y);
-    ctx.lineTo(21, y);
-    ctx.moveTo(width - 21, y);
-    ctx.lineTo(width - 17, y);
-    ctx.stroke();
-  }
-
-  ctx.restore();
+  const colStart = formatSectorColumn(Math.max(0, firstCol));
+  const colEnd = formatSectorColumn(Math.max(0, lastCol));
+  const rowStart = Math.max(1, firstRow + 1);
+  const rowEnd = Math.max(1, lastRow + 1);
+  return `Cols ${colStart}-${colEnd}\nRows ${rowStart}-${rowEnd}`;
 }
 
 function drawMapLandLabel(ctx, zone, bounds, width, height, scale) {
@@ -1662,7 +1683,7 @@ function getLandDisplayName(zone) {
 function drawRadarLandZone(ctx, zone, playerPosition, centerX, centerY, scale, heading) {
   if (zone.kind !== "coastline") {
     const point = worldToRadarPoint(zone, playerPosition, centerX, centerY, scale, heading);
-    drawInstrumentEllipse(ctx, point.x, point.y, getZoneVisualRx(zone) * scale, getZoneVisualRz(zone) * scale, "rgba(96, 124, 83, 0.92)", "rgba(232, 217, 159, 0.4)", -heading);
+    drawInstrumentEllipse(ctx, point.x, point.y, getZoneRadarRx(zone) * scale, getZoneRadarRz(zone) * scale, "rgba(96, 124, 83, 0.92)", "rgba(232, 217, 159, 0.4)", -heading);
     return;
   }
 
@@ -1893,6 +1914,11 @@ function formatWorldCoordinate(position) {
   return `${northLabel} / ${eastLabel}`;
 }
 
+function formatHeadingDegrees(headingValue) {
+  const degrees = Math.round(((headingValue * 180 / Math.PI) % 360 + 360) % 360);
+  return String(degrees).padStart(3, "0");
+}
+
 function formatMapSector(position) {
   const x = Number.isFinite(position.x) ? position.x : 0;
   const z = Number.isFinite(position.z) ? position.z : 0;
@@ -1920,6 +1946,14 @@ function getZoneVisualRx(zone) {
 
 function getZoneVisualRz(zone) {
   return zone.visualRz ?? zone.rz;
+}
+
+function getZoneRadarRx(zone) {
+  return Math.max(getZoneVisualRx(zone), getZoneShallowRx(zone));
+}
+
+function getZoneRadarRz(zone) {
+  return Math.max(getZoneVisualRz(zone), getZoneShallowRz(zone));
 }
 
 function getZoneShallowRx(zone) {
@@ -2739,18 +2773,40 @@ function updateTorpedoSystem(system, dt, time, enemyMotions, landZones, playerPo
     effect.age += dt;
     const t = effect.age / effect.lifetime;
     if (t >= 1) {
-      effect.mesh.dispose();
+      if (effect.light) effect.light.dispose();
+      if (effect.mesh) {
+        if (effect.disposeTexture && effect.texture) effect.texture.dispose();
+        if (effect.disposeMaterial && effect.mesh.material) effect.mesh.material.dispose();
+        effect.mesh.dispose();
+      }
       return false;
     }
 
     const eased = easeOutCubic(t);
-    effect.mesh.position.x = effect.origin.x + effect.velocity.x * t;
-    effect.mesh.position.z = effect.origin.z + effect.velocity.z * t;
-    effect.mesh.position.y = effect.origin.y + effect.velocity.y * t - effect.gravity * t * t + Math.sin(time * 9 + effect.seed) * 0.01;
-    effect.mesh.scaling.x = effect.baseScale.x * (1 + eased * effect.grow.x);
-    effect.mesh.scaling.y = effect.baseScale.y * (1 + eased * effect.grow.y);
-    effect.mesh.scaling.z = effect.baseScale.z * (1 + eased * effect.grow.z);
-    effect.mesh.setEnabled(t < 0.96);
+    if (effect.light) {
+      const flash = Math.sin(Math.PI * t);
+      effect.light.intensity = effect.intensity * flash * (1 - t * 0.35);
+      effect.light.range = effect.range * (0.65 + eased * 0.7);
+    }
+    if (effect.skyFlash && effect.mesh) {
+      const pulse = Math.sin(Math.PI * t);
+      effect.mesh.position.copyFrom(effect.origin);
+      effect.mesh.material.alpha = effect.alpha * pulse * (1 - t * 0.18);
+      effect.mesh.scaling.x = effect.baseScale.x * (1 + eased * effect.grow.x);
+      effect.mesh.scaling.y = effect.baseScale.y * (1 + eased * effect.grow.y);
+      effect.mesh.scaling.z = effect.baseScale.z * (1 + eased * effect.grow.z);
+      effect.mesh.setEnabled(t < 0.98);
+      return true;
+    }
+    if (effect.mesh) {
+      effect.mesh.position.x = effect.origin.x + effect.velocity.x * t;
+      effect.mesh.position.z = effect.origin.z + effect.velocity.z * t;
+      effect.mesh.position.y = effect.origin.y + effect.velocity.y * t - effect.gravity * t * t + Math.sin(time * 9 + effect.seed) * 0.01;
+      effect.mesh.scaling.x = effect.baseScale.x * (1 + eased * effect.grow.x);
+      effect.mesh.scaling.y = effect.baseScale.y * (1 + eased * effect.grow.y);
+      effect.mesh.scaling.z = effect.baseScale.z * (1 + eased * effect.grow.z);
+      effect.mesh.setEnabled(t < 0.96);
+    }
     return true;
   });
 
@@ -3112,6 +3168,8 @@ function updateTorpedoWake(torpedo, visible, time) {
 function createHitChurn(system, position, heading) {
   const forward = getForwardVector(heading);
   const right = getRightVector(heading);
+  createExplosionLightFlash(system, position);
+  createExplosionSkyFlash(system, position);
 
   for (let i = 0; i < 4; i += 1) {
     const wall = createJaggedHitWall(`torpedo_hit_wall_${system.hits}_${i}`, system.scene, 1.0 + i * 0.28, 1.35 + i * 0.32, i);
@@ -3171,6 +3229,98 @@ function createHitChurn(system, position, heading) {
       seed: i + 10
     });
   }
+}
+
+function createExplosionLightFlash(system, position) {
+  if (isExplosionLightOccludedFromPlayer(position)) {
+    return;
+  }
+
+  const activeFlashes = system.hitEffects.filter((effect) => effect.light);
+  activeFlashes.slice(0, Math.max(0, activeFlashes.length - 2)).forEach((effect) => {
+    effect.age = effect.lifetime;
+  });
+
+  const light = new PointLight(`torpedo_flash_${system.hits}`, position.add(new Vector3(0, 3.4, 0)), system.scene);
+  light.diffuse = new Color3(1.0, 0.7, 0.38);
+  light.specular = new Color3(1.0, 0.82, 0.5);
+  light.intensity = 0;
+  light.range = 115;
+  system.hitEffects.push({
+    light,
+    age: 0,
+    lifetime: 0.78,
+    intensity: 4.8,
+    range: 115
+  });
+}
+
+function isExplosionLightOccludedFromPlayer(position) {
+  const playerPosition = boat?.root?.position;
+  if (!playerPosition) return false;
+  const flashRange = 115;
+  if (distance2D(position, playerPosition) > flashRange) return true;
+  return isLineBlockedByLand(position, playerPosition, blockedWaters);
+}
+
+function createExplosionSkyFlash(system, position) {
+  const activeSkyFlashes = system.hitEffects.filter((effect) => effect.skyFlash);
+  activeSkyFlashes.slice(0, Math.max(0, activeSkyFlashes.length - 2)).forEach((effect) => {
+    effect.age = effect.lifetime;
+  });
+
+  const texture = createRadialFlashTexture(system.scene, `torpedo_sky_flash_texture_${system.hits}`);
+  const material = new StandardMaterial(`torpedo_sky_flash_material_${system.hits}`, system.scene);
+  material.diffuseColor = new Color3(1.0, 0.62, 0.34);
+  material.emissiveColor = new Color3(1.0, 0.46, 0.18);
+  material.specularColor = Color3.Black();
+  material.opacityTexture = texture;
+  material.alpha = 0;
+  material.disableLighting = true;
+  material.fogEnabled = false;
+  material.backFaceCulling = false;
+
+  const flash = MeshBuilder.CreatePlane(`torpedo_sky_flash_${system.hits}`, { width: 170, height: 96 }, system.scene);
+  flash.parent = system.root;
+  flash.position.copyFrom(position.add(new Vector3(0, 68, 0)));
+  flash.billboardMode = Mesh.BILLBOARDMODE_ALL;
+  flash.material = material;
+  flash.isPickable = false;
+
+  const distanceToPlayer = distance2D(position, boat.root.position);
+  const distanceAlpha = 0.62 + 0.38 * (1 - clamp(distanceToPlayer / 1200, 0, 1));
+
+  system.hitEffects.push({
+    mesh: flash,
+    skyFlash: true,
+    texture,
+    disposeTexture: true,
+    disposeMaterial: true,
+    age: 0,
+    lifetime: 0.95,
+    origin: flash.position.clone(),
+    baseScale: new Vector3(1, 1, 1),
+    grow: new Vector3(0.55, 0.38, 0.55),
+    alpha: 0.34 * distanceAlpha
+  });
+}
+
+function createRadialFlashTexture(scene, name) {
+  const size = 256;
+  const texture = new DynamicTexture(name, { width: size, height: size }, scene, false);
+  const context = texture.getContext();
+  const center = size * 0.5;
+  const gradient = context.createRadialGradient(center, center, size * 0.02, center, center, size * 0.48);
+  gradient.addColorStop(0, "rgba(255, 232, 176, 1)");
+  gradient.addColorStop(0.28, "rgba(255, 154, 72, 0.76)");
+  gradient.addColorStop(0.58, "rgba(255, 102, 38, 0.28)");
+  gradient.addColorStop(1, "rgba(255, 102, 38, 0)");
+  context.clearRect(0, 0, size, size);
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, size, size);
+  texture.hasAlpha = true;
+  texture.update();
+  return texture;
 }
 
 function createJaggedHitWall(name, scene, width, height, seed) {
@@ -3366,10 +3516,18 @@ function createMaterials(scene) {
   volcanicSmoke.alpha = 0.42;
   volcanicSmoke.backFaceCulling = false;
 
+  const volcanicSmokeWarm = new StandardMaterial("volcanic_smoke_warm_material", scene);
+  volcanicSmokeWarm.diffuseColor = new Color3(0.25, 0.21, 0.18);
+  volcanicSmokeWarm.emissiveColor = new Color3(0.08, 0.045, 0.025);
+  volcanicSmokeWarm.specularColor = new Color3(0, 0, 0);
+  volcanicSmokeWarm.alpha = 0.38;
+  volcanicSmokeWarm.backFaceCulling = false;
+
   const volcanicGlow = new StandardMaterial("volcanic_glow_material", scene);
   volcanicGlow.diffuseColor = new Color3(1.0, 0.31, 0.06);
   volcanicGlow.emissiveColor = new Color3(1.0, 0.22, 0.02);
   volcanicGlow.specularColor = new Color3(0.15, 0.06, 0.02);
+  volcanicGlow.alpha = 0.88;
 
   return {
     water,
@@ -3397,6 +3555,7 @@ function createMaterials(scene) {
     darkFunnel,
     foam,
     volcanicSmoke,
+    volcanicSmokeWarm,
     volcanicGlow
   };
 }
@@ -4065,14 +4224,24 @@ function createVolcanoPlume(land, position, scene, materials, parent) {
   root.position = new Vector3(position.x, 0, position.z);
 
   const craterY = 38 + (land.peakBoost ?? 34) * 0.46;
-  const glow = MeshBuilder.CreateCylinder(`${land.name}_crater_glow`, {
-    diameter: 18,
-    height: 0.9,
-    tessellation: 18
+  const craterRim = MeshBuilder.CreateCylinder(`${land.name}_crater_rim`, {
+    diameterTop: 13,
+    diameterBottom: 28,
+    height: 8.5,
+    tessellation: 14
+  }, scene);
+  craterRim.parent = root;
+  craterRim.position.set(0, craterY - 2.6, 0);
+  craterRim.scaling.z = 0.72;
+  craterRim.material = materials.terrain;
+
+  const glow = MeshBuilder.CreateSphere(`${land.name}_crater_glow`, {
+    diameter: 17,
+    segments: 12
   }, scene);
   glow.parent = root;
-  glow.position.set(0, craterY, 0);
-  glow.scaling.z = 0.72;
+  glow.position.set(0, craterY + 0.45, 0);
+  glow.scaling.set(1, 0.28, 0.72);
   glow.material = materials.volcanicGlow;
 
   const smoke = [];
@@ -4086,7 +4255,7 @@ function createVolcanoPlume(land, position, scene, materials, parent) {
     puff.position.set(Math.cos(angle) * (3 + i * 1.8), craterY + 8 + i * 13, Math.sin(angle) * (2 + i * 1.3));
     puff.scaling.set(1.2 + i * 0.1, 0.62 + i * 0.04, 0.85 + i * 0.09);
     puff.rotation.y = angle;
-    puff.material = materials.volcanicSmoke;
+    puff.material = i < 3 ? materials.volcanicSmokeWarm : materials.volcanicSmoke;
     smoke.push({
       mesh: puff,
       baseY: puff.position.y,
@@ -4525,10 +4694,27 @@ function getWaterSafety(position, zones) {
 function getShipWaterSafety(position, heading, zones) {
   let shallowAmount = 0;
 
-  for (const point of getShipNavigationPoints(position, heading)) {
-    const safety = getWaterSafety(point, zones);
+  for (const sample of getShipNavigationSamples(position, heading)) {
+    const safety = getWaterSafety(sample.point, zones);
     if (safety.isBlocked) {
-      return { ...safety, blockedPoint: point };
+      return { ...safety, blockedPoint: sample.point, blockedSample: sample };
+    }
+    shallowAmount = Math.max(shallowAmount, safety.shallowAmount);
+  }
+
+  return { isBlocked: false, isShallow: shallowAmount > 0, shallowAmount };
+}
+
+function getShipMovementWaterSafety(position, heading, speedValue, zones) {
+  let shallowAmount = 0;
+  const movementSign = Math.sign(speedValue);
+  const samples = getShipNavigationSamples(position, heading)
+    .filter((sample) => movementSign < 0 ? sample.forwardOffset <= 0.05 : sample.forwardOffset >= -0.05);
+
+  for (const sample of samples) {
+    const safety = getWaterSafety(sample.point, zones);
+    if (safety.isBlocked) {
+      return { ...safety, blockedPoint: sample.point, blockedSample: sample };
     }
     shallowAmount = Math.max(shallowAmount, safety.shallowAmount);
   }
@@ -4567,6 +4753,10 @@ function getShipWaterDepth(position, heading, zones) {
 }
 
 function getShipNavigationPoints(position, heading) {
+  return getShipNavigationSamples(position, heading).map((sample) => sample.point);
+}
+
+function getShipNavigationSamples(position, heading) {
   const forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
   const right = new Vector3(Math.cos(heading), 0, -Math.sin(heading));
   const samples = [
@@ -4580,11 +4770,13 @@ function getShipNavigationPoints(position, heading) {
     { z: 0, x: 0 }
   ];
 
-  return samples.map((sample) => (
-    position
+  return samples.map((sample) => ({
+    forwardOffset: sample.z,
+    sideOffset: sample.x,
+    point: position
       .add(forward.scale(sample.z))
       .add(right.scale(sample.x))
-  ));
+  }));
 }
 
 function getZoneShapeDistance(position, zone, rx, rz) {
