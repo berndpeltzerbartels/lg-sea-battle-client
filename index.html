@@ -23,7 +23,9 @@
         <div class="nav-instrument nav-instrument-map">
           <div class="nav-title">Map</div>
           <div class="map-control">
-            <canvas id="mapCanvas" width="180" height="136"></canvas>
+            <div id="mapRowLabels" class="map-row-labels" aria-hidden="true"></div>
+            <canvas id="mapCanvas" width="320" height="230"></canvas>
+            <div id="mapColumnLabels" class="map-column-labels" aria-hidden="true"></div>
             <input id="mapZoom" type="range" min="0" max="5" step="1" value="1" aria-label="Map zoom" />
             <div class="map-meta">
               <strong id="mapSectorValue">--</strong>
@@ -34,7 +36,7 @@
       </div>
       <div class="nav-instrument nav-instrument-radar" aria-hidden="true">
         <div class="nav-title">Radar</div>
-        <canvas id="radarCanvas" width="136" height="136"></canvas>
+        <canvas id="radarCanvas" width="300" height="300"></canvas>
         <small id="radarStatus">Clear</small>
       </div>
       <div class="fleet-status" aria-hidden="true">

@@ -47,6 +47,8 @@ const compassPointer = document.getElementById("compassPointer");
 const compassHeading = document.getElementById("compassHeading");
 const mapCanvas = document.getElementById("mapCanvas");
 const mapZoom = document.getElementById("mapZoom");
+const mapRowLabels = document.getElementById("mapRowLabels");
+const mapColumnLabels = document.getElementById("mapColumnLabels");
 const mapSectorValue = document.getElementById("mapSectorValue");
 const mapCoordinateValue = document.getElementById("mapCoordinateValue");
 const radarCanvas = document.getElementById("radarCanvas");
@@ -75,7 +77,8 @@ const engineHoldInitialDelaySeconds = 0.22;
 const engineHoldRepeatSeconds = 0.1;
 const mouseWheelEngineStep = 100;
 const testPlayerInvulnerable = false;
-const playerInitials = await requirePlayerInitials();
+const playerLogin = await requirePlayerLogin();
+const playerInitials = playerLogin.initials;
 const worldLandmasses = await loadWorldLandmasses();
 document.body.dataset.worldSource = "server";
 document.body.dataset.worldLandmasses = String(worldLandmasses.length);
@@ -85,7 +88,7 @@ document.body.dataset.serverGameState = gameState.state;
 document.body.dataset.serverShips = String(gameState.ships.length);
 document.body.dataset.serverTorpedoes = String(gameState.torpedoes.length);
 const playerId = getLocalPlayerId(playerInitials);
-const playerTeamId = getRequestedPlayerTeamId(gameState.ships);
+const playerTeamId = getRequestedPlayerTeamId(gameState.ships, playerLogin.teamId);
 const playerShips = getTeamShips(gameState.ships, playerTeamId);
 const enemyShips = getEnemyShips(gameState.ships, playerTeamId);
 const initialPlayerSpawn = createPlayerSpawn(playerShips, playerId);
@@ -140,7 +143,7 @@ document.body.dataset.meshCount = String(scene.meshes.length);
 
 const camera = new FreeCamera("follow_camera", new Vector3(0, 7, -13), scene);
 camera.minZ = 0.2;
-camera.maxZ = 1800;
+camera.maxZ = 4200;
 camera.fov = 0.78;
 scene.activeCamera = camera;
 
@@ -211,15 +214,11 @@ window.addEventListener("mousedown", (event) => {
     event.preventDefault();
     return;
   }
-  if (startMouseRudder(event.button)) {
-    mouseButtonMask = event.buttons;
-    event.preventDefault();
-  }
 });
 
 window.addEventListener("pointerdown", (event) => {
   if (isHudControlEvent(event)) return;
-  if (startMouseRudder(event.button)) {
+  if (startGlobalMouseRudder(event)) {
     mouseButtonMask = event.buttons;
     event.target?.setPointerCapture?.(event.pointerId);
     event.preventDefault();
@@ -228,7 +227,7 @@ window.addEventListener("pointerdown", (event) => {
 
 window.addEventListener("mouseup", (event) => {
   if (isHudControlEvent(event)) return;
-  if (stopMouseRudder(event.button)) {
+  if (stopGlobalMouseRudder(event.button)) {
     mouseButtonMask = event.buttons;
     event.preventDefault();
   }
@@ -236,7 +235,7 @@ window.addEventListener("mouseup", (event) => {
 
 window.addEventListener("pointerup", (event) => {
   if (isHudControlEvent(event)) return;
-  if (stopMouseRudder(event.button)) {
+  if (stopGlobalMouseRudder(event.button)) {
     mouseButtonMask = event.buttons;
     event.target?.releasePointerCapture?.(event.pointerId);
     event.preventDefault();
@@ -245,14 +244,17 @@ window.addEventListener("pointerup", (event) => {
 
 window.addEventListener("pointermove", (event) => {
   mouseButtonMask = event.buttons;
+  updateGlobalMouseRudder(event);
 });
 
 window.addEventListener("pointercancel", () => {
   mouseButtonMask = 0;
+  rightMouseRudderActive = false;
 });
 
 window.addEventListener("blur", () => {
   mouseButtonMask = 0;
+  rightMouseRudderActive = false;
 });
 
 window.addEventListener("contextmenu", (event) => {
@@ -306,6 +308,9 @@ let nextEngineHoldChangeTime = 0;
 let heldRudderDirection = 0;
 let mouseButtonMask = 0;
 let mouseWheelEngineAccumulator = 0;
+let rightMouseRudderActive = false;
+let rightMouseRudderStartX = 0;
+let rightMouseRudderStartDegrees = 0;
 let cameraPosition = camera.position.clone();
 let cameraTarget = boat.root.position.clone();
 let time = 0;
@@ -340,7 +345,6 @@ let fireTorpedoRequestInFlight = false;
 const maxRudderDegrees = 35;
 const rudderStepDegrees = 2.5;
 const rudderHoldDegreesPerSecond = 72;
-const mouseRudderHoldDegreesPerSecond = 24;
 boat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
 const playerRespawnPoints = createPlayerRespawnPoints(playerShips, initialPlayerSpawn);
 const torpedoLaunchDefaults = {
@@ -352,6 +356,8 @@ const torpedoSystem = createTorpedoSystem(scene, materials, world);
 connectGameEventStream();
 
 const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
+setupTelegraphDragControl(telegraphScale);
+setupRudderDragControl(document.querySelector(".rudder-gauge"));
 enemyMotions
   .filter((enemyMotion) => !enemyMotion.isServerControlled)
   .forEach((enemyMotion, index) => startLocalEnemyEventSource(enemyMotion, index));
@@ -367,15 +373,6 @@ scene.onBeforeRenderObservable.add(() => {
       -maxRudderDegrees,
       maxRudderDegrees
     );
-  } else {
-    const mouseRudderDirection = getMouseRudderDirection();
-    if (playerActive && mouseRudderDirection !== 0) {
-      rudderDegrees = clamp(
-        rudderDegrees + mouseRudderDirection * mouseRudderHoldDegreesPerSecond * dt,
-        -maxRudderDegrees,
-        maxRudderDegrees
-      );
-    }
   }
 
   if (playerActive && heldEngineDirection !== 0 && time >= nextEngineHoldChangeTime) {
@@ -587,6 +584,59 @@ function setupMapZoomControl(input) {
   });
 }
 
+function setupTelegraphDragControl(scale) {
+  if (!scale) return;
+
+  const setOrderFromPointer = (event) => {
+    if (playerDamageState !== "active") return;
+    const rect = scale.getBoundingClientRect();
+    if (rect.height <= 0) return;
+    const ratio = clamp((event.clientY - rect.top) / rect.height, 0, 1);
+    engineOrder = clamp(engineOrders.length - 1 - Math.round(ratio * (engineOrders.length - 1)), 0, engineOrders.length - 1);
+    nextEngineHoldChangeTime = time + engineHoldInitialDelaySeconds;
+  };
+
+  scale.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    setOrderFromPointer(event);
+    scale.setPointerCapture?.(event.pointerId);
+    event.stopPropagation();
+    event.preventDefault();
+  });
+  scale.addEventListener("pointermove", (event) => {
+    if ((event.buttons & 1) === 0) return;
+    setOrderFromPointer(event);
+    event.stopPropagation();
+    event.preventDefault();
+  });
+}
+
+function setupRudderDragControl(gauge) {
+  if (!gauge) return;
+
+  const setRudderFromPointer = (event) => {
+    if (playerDamageState !== "active") return;
+    const rect = gauge.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const ratio = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+    rudderDegrees = clamp((ratio * 2 - 1) * maxRudderDegrees, -maxRudderDegrees, maxRudderDegrees);
+  };
+
+  gauge.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    setRudderFromPointer(event);
+    gauge.setPointerCapture?.(event.pointerId);
+    event.stopPropagation();
+    event.preventDefault();
+  });
+  gauge.addEventListener("pointermove", (event) => {
+    if ((event.buttons & 1) === 0) return;
+    setRudderFromPointer(event);
+    event.stopPropagation();
+    event.preventDefault();
+  });
+}
+
 function isTorpedoFireKey(event) {
   const keyCode = event.keyCode ?? event.which;
   const code = event.code;
@@ -634,13 +684,19 @@ function stepRudderDegrees(currentDegrees, direction) {
   return clamp(steppedDegrees, -maxRudderDegrees, maxRudderDegrees);
 }
 
-function startMouseRudder(button) {
-  if (playerDamageState !== "active") return false;
-  return button === 0 || button === 2;
+function startGlobalMouseRudder(event) {
+  if (playerDamageState !== "active" || event.button !== 2) return false;
+  rightMouseRudderActive = true;
+  rightMouseRudderStartX = event.clientX;
+  rightMouseRudderStartDegrees = rudderDegrees;
+  updateGlobalMouseRudder(event);
+  return true;
 }
 
-function stopMouseRudder(button) {
-  return button === 0 || button === 2;
+function stopGlobalMouseRudder(button) {
+  if (button !== 2) return false;
+  rightMouseRudderActive = false;
+  return true;
 }
 
 function fireMouseTorpedo(button) {
@@ -653,11 +709,10 @@ function isMouseTorpedoButton(button) {
   return button === 1 || button === 3;
 }
 
-function getMouseRudderDirection() {
-  if (playerDamageState !== "active") return 0;
-  if ((mouseButtonMask & 1) !== 0) return -1;
-  if ((mouseButtonMask & 2) !== 0) return 1;
-  return 0;
+function updateGlobalMouseRudder(event) {
+  if (!rightMouseRudderActive || playerDamageState !== "active" || (event.buttons & 2) === 0) return;
+  const dragDegrees = (event.clientX - rightMouseRudderStartX) * 0.22;
+  rudderDegrees = clamp(rightMouseRudderStartDegrees + dragDegrees, -maxRudderDegrees, maxRudderDegrees);
 }
 
 async function loadWorldLandmasses() {
@@ -775,11 +830,13 @@ function getLocalPlayerId(initials = "PL") {
   return id;
 }
 
-function requirePlayerInitials() {
+function requirePlayerLogin() {
+  const params = new URLSearchParams(location.search);
+  const requestedTeamId = sanitizeTeamId(params.get("team") ?? params.get("side"));
   const storageKey = "seaBattlePlayerInitials";
   const existing = sanitizeInitials(localStorage.getItem(storageKey));
-  if (existing) {
-    return Promise.resolve(existing);
+  if (existing && requestedTeamId) {
+    return Promise.resolve({ initials: existing, teamId: requestedTeamId });
   }
 
   document.body.classList.add("login-active");
@@ -789,22 +846,34 @@ function requirePlayerInitials() {
     <form class="login-card">
       <strong>Sea Battle</strong>
       <label for="playerInitials">Initialen</label>
-      <input id="playerInitials" name="initials" maxlength="3" autocomplete="off" autofocus />
+      <input id="playerInitials" name="initials" maxlength="3" autocomplete="off" value="${existing}" autofocus />
+      <label for="playerTeam">Seite</label>
+      <select id="playerTeam" name="team">
+        <option value="red">Dark</option>
+        <option value="blue">Light</option>
+      </select>
       <button type="submit">Start</button>
     </form>
   `;
   document.body.appendChild(overlay);
   const input = overlay.querySelector("input");
+  const teamSelect = overlay.querySelector("select");
+  if (requestedTeamId && teamSelect) {
+    teamSelect.value = requestedTeamId;
+  }
   input?.focus();
+  input?.select();
 
   return new Promise((resolve) => {
     overlay.querySelector("form")?.addEventListener("submit", (event) => {
       event.preventDefault();
       const initials = sanitizeInitials(input?.value) || "PL";
+      const teamId = sanitizeTeamId(teamSelect?.value) || "red";
       localStorage.setItem(storageKey, initials);
+      setRequestedTeamInUrl(teamId);
       document.body.classList.remove("login-active");
       overlay.remove();
-      resolve(initials);
+      resolve({ initials, teamId });
     });
   });
 }
@@ -814,9 +883,21 @@ function sanitizeInitials(value) {
   return initials.length > 0 ? initials : "";
 }
 
-function getRequestedPlayerTeamId(ships) {
+function sanitizeTeamId(value) {
+  const teamId = String(value ?? "").trim().toLowerCase();
+  return teamId === "red" || teamId === "blue" ? teamId : "";
+}
+
+function setRequestedTeamInUrl(teamId) {
+  if (!history.replaceState) return;
+  const url = new URL(location.href);
+  url.searchParams.set("team", teamId);
+  history.replaceState(null, "", url);
+}
+
+function getRequestedPlayerTeamId(ships, selectedTeamId = "") {
   const params = new URLSearchParams(location.search);
-  const requestedTeamId = params.get("team") ?? params.get("side");
+  const requestedTeamId = selectedTeamId || params.get("team") || params.get("side");
   const teamIds = [...new Set(ships.map((ship) => ship.teamId).filter(Boolean))];
 
   if (requestedTeamId && teamIds.includes(requestedTeamId)) {
@@ -887,12 +968,16 @@ function updateFleetStatus(ships, destroyedShipsByTeam = {}) {
   const activeCounts = getFleetCounts(ships);
   const lightLost = Number.isFinite(destroyedShipsByTeam.blue) ? destroyedShipsByTeam.blue : 0;
   const darkLost = Number.isFinite(destroyedShipsByTeam.red) ? destroyedShipsByTeam.red : 0;
-  if (lightFleetValue) lightFleetValue.textContent = `${activeCounts.light}/${fleetTotals.light} -${lightLost}`;
-  if (darkFleetValue) darkFleetValue.textContent = `${activeCounts.dark}/${fleetTotals.dark} -${darkLost}`;
+  const lightKills = darkLost;
+  const darkKills = lightLost;
+  if (lightFleetValue) lightFleetValue.textContent = `${activeCounts.light}/${fleetTotals.light} K${lightKills}`;
+  if (darkFleetValue) darkFleetValue.textContent = `${activeCounts.dark}/${fleetTotals.dark} K${darkKills}`;
   document.body.dataset.fleetLight = `${activeCounts.light}/${fleetTotals.light}`;
   document.body.dataset.fleetDark = `${activeCounts.dark}/${fleetTotals.dark}`;
   document.body.dataset.fleetLightLost = String(lightLost);
   document.body.dataset.fleetDarkLost = String(darkLost);
+  document.body.dataset.fleetLightKills = String(lightKills);
+  document.body.dataset.fleetDarkKills = String(darkKills);
 }
 
 function updatePlayerList(ships) {
@@ -1443,20 +1528,7 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl) {
   ctx.fillStyle = "rgba(7, 31, 43, 0.78)";
   ctx.fillRect(0, 0, width, height);
 
-  ctx.strokeStyle = "rgba(247, 251, 255, 0.14)";
-  ctx.lineWidth = 1;
-  for (let x = 0; x < width; x += 30) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, height);
-    ctx.stroke();
-  }
-  for (let y = 0; y < height; y += 30) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(width, y);
-    ctx.stroke();
-  }
+  drawMapSectorGrid(ctx, bounds, width, height, scale);
 
   landZones.filter((zone) => zoneIntersectsBounds(zone, bounds)).forEach((zone) => {
     drawMapLandZone(ctx, zone, bounds, width, height, scale);
@@ -1470,6 +1542,40 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl) {
 
   if (mapSectorValue) mapSectorValue.textContent = formatMapSector(playerPosition);
   if (mapCoordinateValue) mapCoordinateValue.textContent = `${formatWorldCoordinate(playerPosition)}\n${formatMapBounds(bounds)}\nZoom x${zoomScale}`;
+  updateMapGridEdgeLabels(bounds);
+}
+
+function drawMapSectorGrid(ctx, bounds, width, height, scale) {
+  const firstCol = Math.floor((bounds.minX + mapSectorOrigin) / mapSectorSize);
+  const lastCol = Math.floor((bounds.maxX + mapSectorOrigin) / mapSectorSize);
+  const firstRow = Math.floor((mapSectorOrigin - bounds.maxZ) / mapSectorSize);
+  const lastRow = Math.floor((mapSectorOrigin - bounds.minZ) / mapSectorSize);
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(247, 251, 255, 0.18)";
+  ctx.lineWidth = 1;
+
+  for (let col = firstCol; col <= lastCol + 1; col += 1) {
+    const worldX = col * mapSectorSize - mapSectorOrigin;
+    const x = (worldX - bounds.minX) * scale;
+    if (x < -0.5 || x > width + 0.5) continue;
+    ctx.beginPath();
+    ctx.moveTo(Math.round(x) + 0.5, 0);
+    ctx.lineTo(Math.round(x) + 0.5, height);
+    ctx.stroke();
+  }
+
+  for (let row = firstRow; row <= lastRow + 1; row += 1) {
+    const worldZ = mapSectorOrigin - row * mapSectorSize;
+    const y = (bounds.maxZ - worldZ) * scale;
+    if (y < -0.5 || y > height + 0.5) continue;
+    ctx.beginPath();
+    ctx.moveTo(0, Math.round(y) + 0.5);
+    ctx.lineTo(width, Math.round(y) + 0.5);
+    ctx.stroke();
+  }
+
+  ctx.restore();
 }
 
 function drawRadarInstrument(canvas, statusElement, playerPosition, radarContacts, landZones, heading, range = 360) {
@@ -1626,6 +1732,30 @@ function formatMapBounds(bounds) {
   const rowStart = Math.max(1, firstRow + 1);
   const rowEnd = Math.max(1, lastRow + 1);
   return `Cols ${colStart}-${colEnd}\nRows ${rowStart}-${rowEnd}`;
+}
+
+function updateMapGridEdgeLabels(bounds) {
+  if (mapColumnLabels) {
+    const firstCol = Math.max(0, Math.floor((bounds.minX + mapSectorOrigin) / mapSectorSize));
+    const lastCol = Math.max(0, Math.floor((bounds.maxX + mapSectorOrigin) / mapSectorSize));
+    mapColumnLabels.innerHTML = "";
+    for (let col = firstCol; col <= lastCol; col += 1) {
+      const label = document.createElement("span");
+      label.textContent = formatSectorColumn(col);
+      mapColumnLabels.append(label);
+    }
+  }
+
+  if (mapRowLabels) {
+    const firstRow = Math.max(0, Math.floor((mapSectorOrigin - bounds.maxZ) / mapSectorSize));
+    const lastRow = Math.max(0, Math.floor((mapSectorOrigin - bounds.minZ) / mapSectorSize));
+    mapRowLabels.innerHTML = "";
+    for (let row = firstRow; row <= lastRow; row += 1) {
+      const label = document.createElement("span");
+      label.textContent = String(row + 1);
+      mapRowLabels.append(label);
+    }
+  }
 }
 
 function drawMapLandLabel(ctx, zone, bounds, width, height, scale) {
