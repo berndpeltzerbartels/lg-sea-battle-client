@@ -32,9 +32,10 @@ const engine = new Engine(canvas, true, {
 const scene = new Scene(engine);
 document.body.dataset.appStarted = "true";
 scene.clearColor = new Color4(0.64, 0.82, 0.95, 1);
-scene.fogMode = Scene.FOGMODE_EXP2;
+scene.fogMode = Scene.FOGMODE_LINEAR;
 scene.fogColor = new Color3(0.68, 0.84, 0.94);
-scene.fogDensity = 0.007;
+scene.fogStart = 65;
+scene.fogEnd = 560;
 
 const speedValue = document.getElementById("speedValue");
 const depthValue = document.getElementById("depthValue");
@@ -44,18 +45,35 @@ const telegraphScale = document.getElementById("telegraphScale");
 const compassPointer = document.getElementById("compassPointer");
 const mapCanvas = document.getElementById("mapCanvas");
 const mapZoom = document.getElementById("mapZoom");
+const mapSectorValue = document.getElementById("mapSectorValue");
+const mapCoordinateValue = document.getElementById("mapCoordinateValue");
 const radarCanvas = document.getElementById("radarCanvas");
 const radarStatus = document.getElementById("radarStatus");
 const rudderIndicator = document.getElementById("rudderIndicator");
 const rudderValue = document.getElementById("rudderValue");
 const sinkingWaterOverlay = document.getElementById("sinkingWaterOverlay");
+const lightFleetValue = document.getElementById("lightFleetValue");
+const darkFleetValue = document.getElementById("darkFleetValue");
+const torpedoStockValue = document.getElementById("torpedoStockValue");
+const playerListRows = document.getElementById("playerListRows");
+const resetGameButton = document.getElementById("resetGameButton");
 
 const radarOcclusionScale = 0.72;
 const mapTileSize = 1200;
+const mapSectorSize = 600;
+const mapSectorOrigin = 5400;
 const mapZoomScales = [0.5, 1, 2, 4, 8, 16];
 const worldMetersPerUnit = 20;
 const torpedoLogLimit = 40;
 const torpedoMinimumWaterDepthMeters = 1;
+const enemyTorpedoFireArcRadians = 0.14;
+const enemyTorpedoAimJitterRadians = 0.035;
+const enemyTargetingRange = 420;
+const engineHoldInitialDelaySeconds = 0.22;
+const engineHoldRepeatSeconds = 0.1;
+const mouseWheelEngineStep = 100;
+const testPlayerInvulnerable = false;
+const playerInitials = await requirePlayerInitials();
 const worldLandmasses = await loadWorldLandmasses();
 document.body.dataset.worldSource = "server";
 document.body.dataset.worldLandmasses = String(worldLandmasses.length);
@@ -64,13 +82,27 @@ document.body.dataset.gameStateSource = "server";
 document.body.dataset.serverGameState = gameState.state;
 document.body.dataset.serverShips = String(gameState.ships.length);
 document.body.dataset.serverTorpedoes = String(gameState.torpedoes.length);
+const playerId = getLocalPlayerId(playerInitials);
 const playerTeamId = getRequestedPlayerTeamId(gameState.ships);
 const playerShips = getTeamShips(gameState.ships, playerTeamId);
 const enemyShips = getEnemyShips(gameState.ships, playerTeamId);
-const initialPlayerSpawn = createPlayerSpawn(playerShips);
+const initialPlayerSpawn = createPlayerSpawn(playerShips, playerId);
+let playerServerShipId = initialPlayerSpawn.shipId;
+const fleetTotals = getFleetCounts(gameState.ships);
+let playerTorpedoesRemaining = Number.isFinite(initialPlayerSpawn.torpedoesRemaining)
+  ? initialPlayerSpawn.torpedoesRemaining
+  : null;
 document.body.dataset.playerTeam = playerTeamId;
+document.body.dataset.playerId = playerId;
+document.body.dataset.playerInitials = playerInitials;
+document.body.dataset.playerShipId = playerServerShipId ?? "pending";
 document.body.dataset.serverOwnShips = String(playerShips.length);
 document.body.dataset.serverEnemyShips = String(enemyShips.length);
+document.body.dataset.testPlayerInvulnerable = String(testPlayerInvulnerable);
+updateFleetStatus(gameState.ships, gameState.destroyedShipsByTeam);
+updatePlayerList(gameState.ships);
+updatePlayerTorpedoStock(playerTorpedoesRemaining);
+setupResetGameControl(resetGameButton);
 
 const materials = createMaterials(scene);
 const world = new TransformNode("world", scene);
@@ -88,20 +120,21 @@ const ocean = MeshBuilder.CreateGround("ocean", { width: 2300, height: 2300, sub
 ocean.material = materials.water;
 ocean.parent = world;
 const foam = createFoamPatches(scene, materials, world);
+const volcanoPlumes = [];
 
 const blockedWaters = worldLandmasses.map(getLandZone);
 createWorldLandmasses(worldLandmasses, scene, materials, world);
 
-const boat = createPlayerBow(scene, materials);
+const boat = createPlayerBow(scene, materials, "player_bow", playerTeamId);
 boat.root.position.copyFrom(initialPlayerSpawn.position);
 
 // Until SSE arrives, backend ships seed the visual fleet and local motion keeps them inspectable.
-const enemyMotions = createEnemyFleet(scene, materials, enemyShips);
+const enemyMotions = createEnemyFleet(scene, materials, getOtherServerShips(gameState.ships, playerServerShipId));
 document.body.dataset.meshCount = String(scene.meshes.length);
 
 const camera = new FreeCamera("follow_camera", new Vector3(0, 7, -13), scene);
 camera.minZ = 0.2;
-camera.maxZ = 800;
+camera.maxZ = 1800;
 camera.fov = 0.78;
 scene.activeCamera = camera;
 
@@ -109,35 +142,51 @@ window.addEventListener("keydown", (event) => {
   document.body.dataset.lastKey = formatInputEvent(event);
   const playerActive = playerDamageState === "active";
 
-  if (playerActive && isInputKey(event, "up") && !event.repeat) {
-    engineOrder = clamp(engineOrder + 1, 0, engineOrders.length - 1);
+  if (playerActive && isInputKey(event, "up")) {
+    heldEngineDirection = 1;
+    if (!event.repeat) {
+      changeEngineOrder(1);
+      nextEngineHoldChangeTime = time + engineHoldInitialDelaySeconds;
+    }
     event.preventDefault();
   }
-  if (playerActive && isInputKey(event, "down") && !event.repeat) {
-    engineOrder = clamp(engineOrder - 1, 0, engineOrders.length - 1);
+  if (playerActive && isInputKey(event, "down")) {
+    heldEngineDirection = -1;
+    if (!event.repeat) {
+      changeEngineOrder(-1);
+      nextEngineHoldChangeTime = time + engineHoldInitialDelaySeconds;
+    }
     event.preventDefault();
   }
   if (playerActive && isInputKey(event, "left")) {
     heldRudderDirection = -1;
     if (!event.repeat) {
-      rudderDegrees = clamp(rudderDegrees - rudderStepDegrees, -maxRudderDegrees, maxRudderDegrees);
+      rudderDegrees = stepRudderDegrees(rudderDegrees, -1);
     }
     event.preventDefault();
   }
   if (playerActive && isInputKey(event, "right")) {
     heldRudderDirection = 1;
     if (!event.repeat) {
-      rudderDegrees = clamp(rudderDegrees + rudderStepDegrees, -maxRudderDegrees, maxRudderDegrees);
+      rudderDegrees = stepRudderDegrees(rudderDegrees, 1);
     }
     event.preventDefault();
   }
   if (playerActive && isTorpedoFireKey(event) && !event.repeat) {
-    firePlayerTorpedo(torpedoSystem, boat.root, heading, turnVelocity, speed, time);
+    requestPlayerTorpedoFire();
     event.preventDefault();
   }
 });
 
 window.addEventListener("keyup", (event) => {
+  if (isInputKey(event, "up") && heldEngineDirection > 0) {
+    heldEngineDirection = 0;
+    event.preventDefault();
+  }
+  if (isInputKey(event, "down") && heldEngineDirection < 0) {
+    heldEngineDirection = 0;
+    event.preventDefault();
+  }
   if (isInputKey(event, "left") && heldRudderDirection < 0) {
     heldRudderDirection = 0;
     event.preventDefault();
@@ -148,14 +197,87 @@ window.addEventListener("keyup", (event) => {
   }
 });
 
+window.addEventListener("mousedown", (event) => {
+  if (fireMouseTorpedo(event.button)) {
+    event.preventDefault();
+    return;
+  }
+  if (startMouseRudder(event.button)) {
+    mouseButtonMask = event.buttons;
+    event.preventDefault();
+  }
+});
+
+window.addEventListener("pointerdown", (event) => {
+  if (startMouseRudder(event.button)) {
+    mouseButtonMask = event.buttons;
+    event.target?.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  }
+});
+
+window.addEventListener("mouseup", (event) => {
+  if (stopMouseRudder(event.button)) {
+    mouseButtonMask = event.buttons;
+    event.preventDefault();
+  }
+});
+
+window.addEventListener("pointerup", (event) => {
+  if (stopMouseRudder(event.button)) {
+    mouseButtonMask = event.buttons;
+    event.target?.releasePointerCapture?.(event.pointerId);
+    event.preventDefault();
+  }
+});
+
+window.addEventListener("pointermove", (event) => {
+  mouseButtonMask = event.buttons;
+});
+
+window.addEventListener("pointercancel", () => {
+  mouseButtonMask = 0;
+});
+
+window.addEventListener("blur", () => {
+  mouseButtonMask = 0;
+});
+
+window.addEventListener("contextmenu", (event) => {
+  if (playerDamageState === "active") {
+    event.preventDefault();
+  }
+});
+
+window.addEventListener("auxclick", (event) => {
+  if (isMouseTorpedoButton(event.button)) {
+    event.preventDefault();
+  }
+});
+
+window.addEventListener("wheel", (event) => {
+  if (playerDamageState !== "active") return;
+
+  mouseWheelEngineAccumulator -= event.deltaY;
+  while (mouseWheelEngineAccumulator <= -mouseWheelEngineStep) {
+    changeEngineOrder(1);
+    mouseWheelEngineAccumulator += mouseWheelEngineStep;
+  }
+  while (mouseWheelEngineAccumulator >= mouseWheelEngineStep) {
+    changeEngineOrder(-1);
+    mouseWheelEngineAccumulator -= mouseWheelEngineStep;
+  }
+  event.preventDefault();
+}, { passive: false });
+
 const engineOrders = [
   { label: "Astern Full", shortLabel: "Full Ast", speed: -4.2 },
   { label: "Astern Half", shortLabel: "Half Ast", speed: -2.2 },
   { label: "Stop", speed: 0 },
-  { label: "Ahead Slow", shortLabel: "Slow", speed: 1.6 },
-  { label: "Ahead 1/3", shortLabel: "1/3", speed: 3.2 },
-  { label: "Ahead Half", shortLabel: "Half", speed: 5.2 },
-  { label: "Ahead 2/3", shortLabel: "2/3", speed: 7.2 },
+  { label: "Ahead Slow", shortLabel: "Slow", speed: 0.55 },
+  { label: "Ahead 1/3", shortLabel: "1/3", speed: 1.8 },
+  { label: "Ahead Half", shortLabel: "Half", speed: 3.8 },
+  { label: "Ahead 2/3", shortLabel: "2/3", speed: 6.4 },
   { label: "Ahead Full", shortLabel: "Full", speed: 9.6 },
   { label: "Flank", speed: 12.4 }
 ];
@@ -167,7 +289,11 @@ let speed = 0;
 let engineOrder = 2;
 let turnVelocity = 0;
 let rudderDegrees = 0;
+let heldEngineDirection = 0;
+let nextEngineHoldChangeTime = 0;
 let heldRudderDirection = 0;
+let mouseButtonMask = 0;
+let mouseWheelEngineAccumulator = 0;
 let cameraPosition = camera.position.clone();
 let cameraTarget = boat.root.position.clone();
 let time = 0;
@@ -179,9 +305,30 @@ let playerSinkStartTime = 0;
 let playerSinkStartY = 0;
 let playerSinkSide = -1;
 let playerRespawnIndex = 0;
+let pendingPlayerServerShip = null;
+let playerServerTarget = null;
+let playerServerPositionCorrection = Vector3.Zero();
+let playerServerHeadingCorrection = 0;
+let playerServerTurnRateCorrection = 0;
+let nextPlayerStateSendTime = 0;
+let playerStateRequestInFlight = false;
+let remoteCorrectionSamples = 0;
+let remoteCorrectionTotal = 0;
+let remoteCorrectionMax = 0;
+let playerServerSnapshotReceived = false;
+let serverRadarReady = false;
+let serverRadarContacts = [];
+let serverRadarObserverPosition = null;
+let serverRadarObserverHeading = null;
+let serverRadarRange = 360;
+let serverShipsById = indexShipsById(gameState.ships);
+let gameEventSource = null;
+let gameEventSourceReady = false;
+let fireTorpedoRequestInFlight = false;
 const maxRudderDegrees = 35;
-const rudderStepDegrees = 5;
-const rudderHoldDegreesPerSecond = 18;
+const rudderStepDegrees = 2.5;
+const rudderHoldDegreesPerSecond = 72;
+const mouseRudderHoldDegreesPerSecond = 24;
 boat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
 const playerRespawnPoints = createPlayerRespawnPoints(playerShips, initialPlayerSpawn);
 const torpedoLaunchDefaults = {
@@ -190,9 +337,12 @@ const torpedoLaunchDefaults = {
   startY: 0.6
 };
 const torpedoSystem = createTorpedoSystem(scene, materials, world);
+connectGameEventStream();
 
 const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
-enemyMotions.forEach((enemyMotion, index) => startLocalEnemyEventSource(enemyMotion, index));
+enemyMotions
+  .filter((enemyMotion) => !enemyMotion.isServerControlled)
+  .forEach((enemyMotion, index) => startLocalEnemyEventSource(enemyMotion, index));
 
 scene.onBeforeRenderObservable.add(() => {
   const dt = Math.min(engine.getDeltaTime() / 1000, 0.05);
@@ -205,25 +355,39 @@ scene.onBeforeRenderObservable.add(() => {
       -maxRudderDegrees,
       maxRudderDegrees
     );
+  } else {
+    const mouseRudderDirection = getMouseRudderDirection();
+    if (playerActive && mouseRudderDirection !== 0) {
+      rudderDegrees = clamp(
+        rudderDegrees + mouseRudderDirection * mouseRudderHoldDegreesPerSecond * dt,
+        -maxRudderDegrees,
+        maxRudderDegrees
+      );
+    }
+  }
+
+  if (playerActive && heldEngineDirection !== 0 && time >= nextEngineHoldChangeTime) {
+    changeEngineOrder(heldEngineDirection);
+    nextEngineHoldChangeTime = time + engineHoldRepeatSeconds;
   }
 
   // Heavy ship feel: the selected telegraph order is a target, and speed eases toward it.
-  const waterSafety = getWaterSafety(boat.root.position, blockedWaters);
+  const waterSafety = getShipWaterSafety(boat.root.position, heading, blockedWaters);
   let forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
   let nextWaterSafety = waterSafety;
 
-  if (playerActive) {
-    const maxForwardSpeed = 14.4 - waterSafety.shallowAmount * 9.2;
+  if (playerActive && !playerServerTarget) {
+    const maxForwardSpeed = 12.4;
     const engineTargetSpeed = engineOrders[engineOrder].speed;
     const targetSpeed = engineTargetSpeed > 0 ? Math.min(engineTargetSpeed, maxForwardSpeed) : engineTargetSpeed;
-    const response = Math.abs(targetSpeed) > Math.abs(speed) ? 0.42 : 0.72;
+    const response = Math.abs(targetSpeed) > Math.abs(speed) ? 0.45 : 0.75;
     speed += (targetSpeed - speed) * Math.min(1, dt * response);
 
-    const turnStrength = speed >= 0 ? 0.36 : -0.24;
-    const rudderGrip = clamp(0.18 + Math.abs(speed) / 3.4, 0.18, 1);
+    const turnStrength = speed >= 0 ? 0.24 : -0.16;
+    const rudderGrip = clamp(Math.abs(speed) / 4.2, 0, 1);
     const steer = rudderDegrees / maxRudderDegrees;
     const targetTurnVelocity = steer * turnStrength * rudderGrip;
-    turnVelocity += (targetTurnVelocity - turnVelocity) * Math.min(1, dt * 2.4);
+    turnVelocity += (targetTurnVelocity - turnVelocity) * Math.min(1, dt * 2.0);
     heading += turnVelocity * dt;
     forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
 
@@ -232,26 +396,33 @@ scene.onBeforeRenderObservable.add(() => {
     boat.root.position.x = clamp(boat.root.position.x, -worldLimit, worldLimit);
     boat.root.position.z = clamp(boat.root.position.z, -worldLimit, worldLimit);
 
-    nextWaterSafety = getWaterSafety(boat.root.position, blockedWaters);
+    nextWaterSafety = getShipWaterSafety(boat.root.position, heading, blockedWaters);
     if (nextWaterSafety.isBlocked) {
       boat.root.position.copyFrom(previousPosition);
 
       // Grounding stops the ship, but a tiny escape nudge prevents numeric edge-locking.
-      if (getWaterSafety(boat.root.position, blockedWaters).isBlocked) {
-        boat.root.position.addInPlace(getWaterEscapeVector(boat.root.position, blockedWaters).scale(0.18));
+      const groundedSafety = getShipWaterSafety(boat.root.position, heading, blockedWaters);
+      if (groundedSafety.isBlocked) {
+        boat.root.position.addInPlace(getWaterEscapeVector(groundedSafety.blockedPoint ?? boat.root.position, blockedWaters).scale(0.18));
       }
 
       speed = 0;
       turnVelocity *= 0.4;
-    } else if (nextWaterSafety.isShallow) {
-      speed *= 1 - nextWaterSafety.shallowAmount * 0.004;
     }
   } else {
-    engineOrder = 2;
     heldRudderDirection = 0;
-    speed *= Math.max(0, 1 - dt * 1.7);
-    turnVelocity *= Math.max(0, 1 - dt * 2.0);
-    rudderDegrees += (0 - rudderDegrees) * Math.min(1, dt * 1.8);
+    if (!playerActive) {
+      engineOrder = 2;
+      speed *= Math.max(0, 1 - dt * 1.7);
+      turnVelocity *= Math.max(0, 1 - dt * 2.0);
+      rudderDegrees += (0 - rudderDegrees) * Math.min(1, dt * 1.8);
+    }
+  }
+
+  if (playerActive && playerServerTarget) {
+    applyPlayerServerTarget(dt);
+    forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
+    nextWaterSafety = getShipWaterSafety(boat.root.position, heading, blockedWaters);
   }
 
   const bob = Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035;
@@ -271,14 +442,21 @@ scene.onBeforeRenderObservable.add(() => {
   materials.water.diffuseTexture.uOffset += dt * 0.01;
   materials.water.diffuseTexture.vOffset += dt * 0.018;
   updateFoamPatches(foam, boat.root.position, time);
-  enemyMotions.forEach((enemyMotion) => updateEnemyMotion(enemyMotion, dt, time));
+  updateVolcanoPlumes(volcanoPlumes, time);
+  enemyMotions.forEach((enemyMotion) => updateEnemyMotion(enemyMotion, dt, time, boat.root.position, blockedWaters));
   updateEnemyFireControl(torpedoSystem, enemyMotions, boat.root.position, blockedWaters, time);
+  updateServerTorpedoVisuals(torpedoSystem, dt, time);
+  syncMultiplayerState(time);
   const torpedoResult = updateTorpedoSystem(torpedoSystem, dt, time, enemyMotions, blockedWaters, boat.root.position);
   if (torpedoResult.playerHit && playerDamageState === "active") {
     playerHits += torpedoResult.playerHit;
     ramShake = 1;
     speed *= 0.55;
-    beginPlayerSinking(torpedoResult.playerHitPosition, time);
+    if (testPlayerInvulnerable) {
+      document.body.dataset.playerDamageState = "invulnerable-hit";
+    } else {
+      beginPlayerSinking(torpedoResult.playerHitPosition, time);
+    }
   }
 
   const ramHit = playerActive ? getPlayerRamHit(boat.root.position, heading, speed, enemyMotions, time) : null;
@@ -319,7 +497,7 @@ scene.onBeforeRenderObservable.add(() => {
   document.body.dataset.ramReady = time >= nextRamHitTime ? "true" : "false";
 
   const displayedSpeed = Math.abs(speed) < 0.08 ? 0 : Math.abs(speed);
-  const waterDepth = getWaterDepth(boat.root.position, blockedWaters);
+  const waterDepth = getShipWaterDepth(boat.root.position, heading, blockedWaters);
   speedValue.textContent = displayedSpeed.toFixed(1);
   engineValue.textContent = engineOrders[engineOrder].label;
   updateTelegraphSteps(telegraphSteps, engineOrder);
@@ -379,6 +557,48 @@ function formatInputEvent(event) {
   const code = event.code ?? "";
   const key = event.key ?? "";
   return `${code || "-"} / ${key || "-"} / ${keyCode || "-"}`;
+}
+
+function changeEngineOrder(direction) {
+  engineOrder = clamp(engineOrder + direction, 0, engineOrders.length - 1);
+}
+
+function stepRudderDegrees(currentDegrees, direction) {
+  const step = rudderStepDegrees * Math.sign(direction);
+  if (currentDegrees !== 0 && Math.sign(currentDegrees) !== Math.sign(step) && Math.abs(currentDegrees) <= rudderStepDegrees) {
+    return 0;
+  }
+  const steppedDegrees = currentDegrees + step;
+  if (currentDegrees !== 0 && Math.sign(currentDegrees) !== Math.sign(steppedDegrees)) {
+    return 0;
+  }
+  return clamp(steppedDegrees, -maxRudderDegrees, maxRudderDegrees);
+}
+
+function startMouseRudder(button) {
+  if (playerDamageState !== "active") return false;
+  return button === 0 || button === 2;
+}
+
+function stopMouseRudder(button) {
+  return button === 0 || button === 2;
+}
+
+function fireMouseTorpedo(button) {
+  if (!isMouseTorpedoButton(button) || playerDamageState !== "active") return false;
+  requestPlayerTorpedoFire();
+  return true;
+}
+
+function isMouseTorpedoButton(button) {
+  return button === 1 || button === 3;
+}
+
+function getMouseRudderDirection() {
+  if (playerDamageState !== "active") return 0;
+  if ((mouseButtonMask & 1) !== 0) return -1;
+  if ((mouseButtonMask & 2) !== 0) return 1;
+  return 0;
 }
 
 async function loadWorldLandmasses() {
@@ -456,6 +676,85 @@ function getGameStateEndpoint() {
   return "/game/state";
 }
 
+function getPlayerStateEndpoint() {
+  if (location.port === "5173" || location.port === "4173") {
+    return `${location.protocol}//${location.hostname}/game/player-state`;
+  }
+
+  return "/game/player-state";
+}
+
+function getFireTorpedoEndpoint() {
+  if (location.port === "5173" || location.port === "4173") {
+    return `${location.protocol}//${location.hostname}/game/fire-torpedo`;
+  }
+
+  return "/game/fire-torpedo";
+}
+
+function getGameEventsEndpoint() {
+  const safePlayerId = encodeURIComponent(playerId);
+  const safeTeamId = encodeURIComponent(playerTeamId);
+  if (location.port === "5173" || location.port === "4173") {
+    return `${location.protocol}//${location.hostname}/game/events/${safePlayerId}/${safeTeamId}`;
+  }
+
+  return `/game/events/${safePlayerId}/${safeTeamId}`;
+}
+
+function getLocalPlayerId(initials = "PL") {
+  const storageKey = "seaBattlePlayerId";
+  const idPrefix = `player-${initials}-`;
+  const existingId = localStorage.getItem(storageKey);
+  if (existingId?.startsWith(idPrefix)) {
+    return existingId;
+  }
+
+  const randomPart = Math.random().toString(36).slice(2, 10);
+  const id = `${idPrefix}${Date.now().toString(36)}-${randomPart}`;
+  localStorage.setItem(storageKey, id);
+  return id;
+}
+
+function requirePlayerInitials() {
+  const storageKey = "seaBattlePlayerInitials";
+  const existing = sanitizeInitials(localStorage.getItem(storageKey));
+  if (existing) {
+    return Promise.resolve(existing);
+  }
+
+  document.body.classList.add("login-active");
+  const overlay = document.createElement("section");
+  overlay.className = "login-screen";
+  overlay.innerHTML = `
+    <form class="login-card">
+      <strong>Sea Battle</strong>
+      <label for="playerInitials">Initialen</label>
+      <input id="playerInitials" name="initials" maxlength="3" autocomplete="off" autofocus />
+      <button type="submit">Start</button>
+    </form>
+  `;
+  document.body.appendChild(overlay);
+  const input = overlay.querySelector("input");
+  input?.focus();
+
+  return new Promise((resolve) => {
+    overlay.querySelector("form")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const initials = sanitizeInitials(input?.value) || "PL";
+      localStorage.setItem(storageKey, initials);
+      document.body.classList.remove("login-active");
+      overlay.remove();
+      resolve(initials);
+    });
+  });
+}
+
+function sanitizeInitials(value) {
+  const initials = String(value ?? "").replace(/[^a-z0-9]/gi, "").slice(0, 3).toUpperCase();
+  return initials.length > 0 ? initials : "";
+}
+
 function getRequestedPlayerTeamId(ships) {
   const params = new URLSearchParams(location.search);
   const requestedTeamId = params.get("team") ?? params.get("side");
@@ -470,6 +769,44 @@ function getRequestedPlayerTeamId(ships) {
   return teamIds[0] ?? "red";
 }
 
+function setupResetGameControl(button) {
+  if (button) {
+    button.hidden = true;
+  }
+
+  window.addEventListener("keydown", (event) => {
+    if (!(event.altKey && event.shiftKey && event.code === "KeyR")) return;
+    event.preventDefault();
+    requestHostGameReset();
+  });
+}
+
+async function requestHostGameReset() {
+  const adminKey = window.prompt("Host key");
+  if (!adminKey) return;
+
+  try {
+    const response = await fetch(getResetGameEndpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ adminKey })
+    });
+    if (!response.ok) {
+      throw new Error(`Reset failed with ${response.status}`);
+    }
+    window.location.reload();
+  } catch (error) {
+    document.body.dataset.resetGameError = error.message;
+  }
+}
+
+function getResetGameEndpoint() {
+  if (location.protocol === "file:") {
+    return "http://127.0.0.1:9090/game/reset";
+  }
+  return "/game/reset";
+}
+
 function getTeamShips(ships, teamId) {
   return ships.filter((ship) => ship.teamId === teamId);
 }
@@ -478,18 +815,107 @@ function getEnemyShips(ships, teamId) {
   return ships.filter((ship) => ship.teamId !== teamId);
 }
 
-function createPlayerSpawn(teamShips) {
-  const ship = teamShips.find((candidate) => candidate.state === "active") ?? teamShips[0];
+function getFleetCounts(ships) {
+  return ships.reduce((counts, ship) => {
+    if (ship.teamId === "blue") counts.light += 1;
+    if (ship.teamId === "red") counts.dark += 1;
+    return counts;
+  }, { light: 0, dark: 0 });
+}
+
+function updateFleetStatus(ships, destroyedShipsByTeam = {}) {
+  const activeCounts = getFleetCounts(ships);
+  const lightLost = Number.isFinite(destroyedShipsByTeam.blue) ? destroyedShipsByTeam.blue : 0;
+  const darkLost = Number.isFinite(destroyedShipsByTeam.red) ? destroyedShipsByTeam.red : 0;
+  if (lightFleetValue) lightFleetValue.textContent = `${activeCounts.light}/${fleetTotals.light} -${lightLost}`;
+  if (darkFleetValue) darkFleetValue.textContent = `${activeCounts.dark}/${fleetTotals.dark} -${darkLost}`;
+  document.body.dataset.fleetLight = `${activeCounts.light}/${fleetTotals.light}`;
+  document.body.dataset.fleetDark = `${activeCounts.dark}/${fleetTotals.dark}`;
+  document.body.dataset.fleetLightLost = String(lightLost);
+  document.body.dataset.fleetDarkLost = String(darkLost);
+}
+
+function updatePlayerList(ships) {
+  if (!playerListRows || !Array.isArray(ships)) return;
+
+  const humanShips = ships
+    .filter((ship) => isHumanController(ship.controlledBy))
+    .sort((left, right) => {
+      if (left.teamId !== right.teamId) return left.teamId.localeCompare(right.teamId);
+      return getPlayerInitialsFromId(left.controlledBy).localeCompare(getPlayerInitialsFromId(right.controlledBy));
+    });
+
+  playerListRows.innerHTML = "";
+  if (humanShips.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "player-list-empty";
+    empty.textContent = "No players";
+    playerListRows.append(empty);
+    document.body.dataset.humanPlayers = "0";
+    return;
+  }
+
+  humanShips.forEach((ship) => {
+    const row = document.createElement("div");
+    const teamClass = ship.teamId === "blue" ? "player-list-row-light" : "player-list-row-dark";
+    row.className = `player-list-row ${teamClass}${ship.controlledBy === playerId ? " player-list-row-own" : ""}`;
+
+    const initials = document.createElement("strong");
+    initials.textContent = getPlayerInitialsFromId(ship.controlledBy);
+
+    const shipLabel = document.createElement("span");
+    shipLabel.textContent = createShipDesignation(ship);
+
+    const sector = document.createElement("small");
+    sector.textContent = formatMapSector(ship);
+
+    row.append(initials, shipLabel, sector);
+    playerListRows.append(row);
+  });
+
+  document.body.dataset.humanPlayers = String(humanShips.length);
+}
+
+function isHumanController(controller) {
+  return typeof controller === "string" && controller.length > 0 && controller !== "bot";
+}
+
+function getPlayerInitialsFromId(controller) {
+  if (!isHumanController(controller)) return "BOT";
+  const match = controller.match(/^player-([A-Z0-9]{1,3})-/i);
+  return (match?.[1] ?? controller.slice(0, 3)).toUpperCase();
+}
+
+function updatePlayerTorpedoStock(torpedoesRemaining) {
+  playerTorpedoesRemaining = Number.isFinite(torpedoesRemaining) ? torpedoesRemaining : null;
+  if (torpedoStockValue) {
+    torpedoStockValue.textContent = playerTorpedoesRemaining === null ? "--" : String(playerTorpedoesRemaining);
+  }
+  document.body.dataset.playerTorpedoesRemaining = playerTorpedoesRemaining === null
+    ? ""
+    : String(playerTorpedoesRemaining);
+}
+
+function createPlayerSpawn(teamShips, currentPlayerId) {
+  const ship =
+    teamShips.find((candidate) => candidate.state === "active" && candidate.controlledBy === currentPlayerId) ??
+    teamShips.find((candidate) => candidate.state === "active" && candidate.controlledBy === "bot") ??
+    teamShips.find((candidate) => candidate.state === "active") ??
+    teamShips[0];
   if (!ship) {
     return {
+      shipId: null,
       position: new Vector3(46, 0.28, 52),
-      heading: -2.12
+      heading: -2.12,
+      torpedoesRemaining: null
     };
   }
 
   return {
+    shipId: ship.id,
     position: new Vector3(ship.x, 0.28, ship.z),
-    heading: Number.isFinite(ship.heading) ? ship.heading : 0
+    heading: Number.isFinite(ship.heading) ? ship.heading : 0,
+    torpedoesRemaining: Number.isFinite(ship.torpedoesRemaining) ? ship.torpedoesRemaining : null
   };
 }
 
@@ -502,6 +928,399 @@ function createPlayerRespawnPoints(teamShips, fallbackSpawn) {
     }));
 
   return spawns.length > 0 ? spawns : [fallbackSpawn];
+}
+
+function getOtherServerShips(ships, ownShipId) {
+  return ships.filter((ship) => ship.id !== ownShipId);
+}
+
+function syncMultiplayerState(now) {
+  if (now >= nextPlayerStateSendTime && !playerStateRequestInFlight && playerDamageState === "active") {
+    nextPlayerStateSendTime = now + 0.25;
+    sendPlayerState();
+  }
+}
+
+async function sendPlayerState() {
+  playerStateRequestInFlight = true;
+  try {
+    const response = await fetch(getPlayerStateEndpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        playerId,
+        teamId: playerTeamId,
+        x: boat.root.position.x,
+        z: boat.root.position.z,
+        heading,
+        speed,
+        engineOrder,
+        rudderDegrees: Math.round(rudderDegrees)
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`Player state request failed with ${response.status}`);
+    }
+    await response.json();
+    document.body.dataset.playerStateSync = "command-ok";
+  } catch (error) {
+    document.body.dataset.playerStateSync = "error";
+    document.body.dataset.playerStateSyncError = error.message;
+  } finally {
+    playerStateRequestInFlight = false;
+  }
+}
+
+async function requestPlayerTorpedoFire() {
+  if (fireTorpedoRequestInFlight || playerDamageState !== "active") return;
+
+  fireTorpedoRequestInFlight = true;
+  try {
+    const response = await fetch(getFireTorpedoEndpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        playerId,
+        teamId: playerTeamId
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`Fire torpedo request failed with ${response.status}`);
+    }
+    applyServerGameSnapshot(await response.json());
+    document.body.dataset.fireTorpedoSync = "ok";
+  } catch (error) {
+    document.body.dataset.fireTorpedoSync = "error";
+    document.body.dataset.fireTorpedoSyncError = error.message;
+  } finally {
+    fireTorpedoRequestInFlight = false;
+  }
+}
+
+function applyServerGameSnapshot(snapshot) {
+  if (!snapshot || !Array.isArray(snapshot.ships)) return;
+  serverShipsById = indexShipsById(snapshot.ships);
+  updateFleetStatus(snapshot.ships, snapshot.destroyedShipsByTeam);
+  updatePlayerList(snapshot.ships);
+
+  const ownShip = snapshot.ships.find((ship) => ship.controlledBy === playerId && ship.teamId === playerTeamId);
+  const previousOwnShip = snapshot.ships.find((ship) => ship.id === playerServerShipId);
+  const activeIds = new Set(snapshot.ships.map((ship) => ship.id));
+  if (ownShip) {
+    const assignedShipChanged = playerServerShipId !== ownShip.id;
+    if (assignedShipChanged && playerServerSnapshotReceived && playerServerShipId) {
+      pendingPlayerServerShip = ownShip;
+      document.body.dataset.pendingPlayerShipId = ownShip.id;
+      if (playerDamageState === "active") {
+        beginPlayerSinking(null, time);
+      }
+    } else if (playerDamageState === "sinking") {
+      pendingPlayerServerShip = ownShip;
+      document.body.dataset.pendingPlayerShipId = ownShip.id;
+    } else {
+      playerServerShipId = ownShip.id;
+      document.body.dataset.playerShipId = playerServerShipId;
+      document.body.dataset.pendingPlayerShipId = "";
+      updatePlayerServerTarget(ownShip, snapshot.t);
+      updatePlayerTorpedoStock(Number.isFinite(ownShip.torpedoesRemaining) ? ownShip.torpedoesRemaining : null);
+      if (!playerServerSnapshotReceived || assignedShipChanged) {
+        alignPlayerBoatToServerShip(ownShip);
+        playerServerSnapshotReceived = true;
+      }
+    }
+  } else if (
+    playerServerSnapshotReceived &&
+    playerServerShipId &&
+    playerDamageState === "active" &&
+    (!previousOwnShip || previousOwnShip.controlledBy !== playerId || previousOwnShip.state !== "active")
+  ) {
+    pendingPlayerServerShip = null;
+    document.body.dataset.pendingPlayerShipId = "";
+    beginPlayerSinking(null, time);
+  }
+
+  snapshot.ships
+    .filter((ship) => ship.id !== playerServerShipId)
+    .filter((ship) => ship.id !== pendingPlayerServerShip?.id)
+    .forEach((ship) => updateOrCreateRemoteShip(ship));
+
+  enemyMotions.forEach((motion) => {
+    if (!activeIds.has(motion.id) || motion.id === playerServerShipId || motion.id === pendingPlayerServerShip?.id) {
+      motion.root.setEnabled(false);
+      motion.state = motion.id === playerServerShipId || motion.id === pendingPlayerServerShip?.id ? "hidden-own-ship" : "sunk";
+    }
+  });
+
+  syncServerTorpedoes(Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes : []);
+  document.body.dataset.remoteShips = String(snapshot.ships.length);
+  document.body.dataset.serverTorpedoes = String(Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes.length : 0);
+  document.body.dataset.playerStateSync = "ok";
+}
+
+function alignPlayerBoatToServerShip(ship) {
+  updatePlayerServerTarget(ship, null, true);
+  boat.root.position.x = ship.x;
+  boat.root.position.z = ship.z;
+  heading = Number.isFinite(ship.heading) ? ship.heading : heading;
+  speed = Number.isFinite(ship.speed) ? ship.speed : speed;
+  engineOrder = Number.isInteger(ship.engineOrder) ? ship.engineOrder : engineOrder;
+  rudderDegrees = Number.isFinite(ship.rudderDegrees) ? ship.rudderDegrees : rudderDegrees;
+  turnVelocity = 0;
+  playerServerPositionCorrection = Vector3.Zero();
+  playerServerHeadingCorrection = 0;
+  playerServerTurnRateCorrection = 0;
+  boat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
+  document.body.dataset.playerServerAligned = ship.id;
+}
+
+function updatePlayerServerTarget(ship, serverTime, force = false) {
+  const previousPrediction = playerServerTarget?.id === ship.id
+    ? predictPlayerServerMotion(playerServerTarget, clamp(time - playerServerTarget.receivedAt, 0, 0.35))
+    : null;
+
+  if (playerServerTarget?.id === ship.id) {
+    const serverHeading = Number.isFinite(ship.heading) ? ship.heading : previousPrediction.heading;
+    const headingError = Math.abs(getSignedAngularDistance(serverHeading, previousPrediction.heading));
+    document.body.dataset.playerServerHeadingError = headingError.toFixed(4);
+  }
+
+  const nextTarget = createPlayerServerTarget(ship, serverTime);
+  if (!force && playerServerTarget?.id === nextTarget.id && nextTarget.serverTime <= playerServerTarget.serverTime) {
+    document.body.dataset.playerServerSnapshotIgnored = String(nextTarget.serverTime);
+    return;
+  }
+
+  if (!force && previousPrediction) {
+    const nextPrediction = predictPlayerServerMotion(nextTarget, 0);
+    playerServerPositionCorrection = boat.root.position.subtract(nextPrediction.position);
+    playerServerPositionCorrection.y = 0;
+    playerServerHeadingCorrection = getSignedAngularDistance(heading, nextPrediction.heading);
+    playerServerTurnRateCorrection = turnVelocity - nextTarget.turnRate;
+    document.body.dataset.playerServerCorrection = `${playerServerPositionCorrection.length().toFixed(2)},${Math.abs(playerServerHeadingCorrection).toFixed(4)}`;
+  } else {
+    playerServerPositionCorrection = Vector3.Zero();
+    playerServerHeadingCorrection = 0;
+    playerServerTurnRateCorrection = 0;
+  }
+
+  playerServerTarget = nextTarget;
+}
+
+function createPlayerServerTarget(ship, serverTime) {
+  const snapshotHeading = Number.isFinite(ship.heading) ? ship.heading : heading;
+  const snapshotSpeed = Number.isFinite(ship.speed) ? ship.speed : speed;
+  const previous = playerServerTarget?.id === ship.id ? playerServerTarget : null;
+  const snapshotServerTime = Number.isFinite(serverTime) ? serverTime : (previous?.serverTime ?? time);
+  const elapsed = previous ? snapshotServerTime - previous.serverTime : 0;
+  const canComputeRates = previous && elapsed > 0.04;
+  const rawTurnRate = Number.isFinite(ship.turnVelocity)
+    ? ship.turnVelocity
+    : canComputeRates
+    ? getSignedAngularDistance(snapshotHeading, previous.heading) / elapsed
+    : 0;
+
+  return {
+    id: ship.id,
+    position: new Vector3(ship.x, 0.28, ship.z),
+    heading: snapshotHeading,
+    speed: snapshotSpeed,
+    turnRate: clamp(rawTurnRate, -0.8, 0.8),
+    speedRate: canComputeRates
+      ? clamp((snapshotSpeed - previous.speed) / elapsed, -10, 10)
+      : 0,
+    engineOrder: Number.isInteger(ship.engineOrder) ? ship.engineOrder : engineOrder,
+    rudderDegrees: Number.isFinite(ship.rudderDegrees) ? ship.rudderDegrees : rudderDegrees,
+    serverTime: snapshotServerTime,
+    receivedAt: time
+  };
+}
+
+function applyPlayerServerTarget(dt) {
+  if (!playerServerTarget) return;
+
+  const snapshotAge = clamp(time - playerServerTarget.receivedAt, 0, 0.35);
+  const prediction = predictPlayerServerMotion(playerServerTarget, snapshotAge);
+  const correctedPosition = prediction.position.add(playerServerPositionCorrection);
+  const correctedTurnRate = playerServerTarget.turnRate + playerServerTurnRateCorrection;
+  const correctedHeading = prediction.heading + playerServerHeadingCorrection
+    + playerServerTurnRateCorrection * Math.min(snapshotAge, 0.25);
+  const distance = distance2D(correctedPosition, boat.root.position);
+
+  boat.root.position.x = correctedPosition.x;
+  boat.root.position.z = correctedPosition.z;
+  heading = correctedHeading;
+  speed = prediction.speed;
+  turnVelocity = correctedTurnRate;
+  const correctionDecay = Math.min(1, dt * 8.0);
+  playerServerPositionCorrection.scaleInPlace(1 - correctionDecay);
+  playerServerHeadingCorrection *= 1 - correctionDecay;
+  playerServerTurnRateCorrection *= 1 - correctionDecay;
+  document.body.dataset.playerServerDistance = distance.toFixed(2);
+}
+
+function predictPlayerServerMotion(target, age) {
+  const steps = Math.max(1, Math.ceil(age / 0.035));
+  const stepSeconds = steps === 0 ? 0 : age / steps;
+  let predictedPosition = target.position.clone();
+  let predictedHeading = target.heading;
+  let predictedSpeed = target.speed;
+
+  for (let index = 0; index < steps; index += 1) {
+    const sampleTime = (index + 0.5) * stepSeconds;
+    predictedHeading = target.heading + target.turnRate * sampleTime;
+    predictedSpeed = target.speed + target.speedRate * sampleTime;
+    predictedPosition = predictedPosition.add(
+      new Vector3(Math.sin(predictedHeading), 0, Math.cos(predictedHeading)).scale(predictedSpeed * stepSeconds)
+    );
+  }
+
+  return {
+    position: predictedPosition,
+    heading: target.heading + target.turnRate * age,
+    speed: target.speed + target.speedRate * age
+  };
+}
+
+function applyServerRadarSnapshot(snapshot) {
+  if (!snapshot || !Array.isArray(snapshot.contacts)) return;
+
+  serverRadarReady = true;
+  serverRadarObserverPosition = Number.isFinite(snapshot.observerX) && Number.isFinite(snapshot.observerZ)
+    ? new Vector3(snapshot.observerX, 0.28, snapshot.observerZ)
+    : null;
+  serverRadarObserverHeading = Number.isFinite(snapshot.observerHeading) ? snapshot.observerHeading : null;
+  serverRadarRange = Number.isFinite(snapshot.range) ? snapshot.range : 360;
+  serverRadarContacts = snapshot.contacts.map((contact) => {
+    const ship = serverShipsById.get(contact.id);
+    return {
+      id: `radar-${contact.id}`,
+      shipId: contact.id,
+      team: contact.teamId === playerTeamId ? "light" : "dark",
+      teamId: contact.teamId,
+      controlledBy: ship?.controlledBy ?? "bot",
+      label: createRadarContactLabel(ship ?? contact),
+      position: new Vector3(contact.x, 0.28, contact.z),
+      heading: contact.heading,
+      distance: contact.distance,
+      bearing: contact.bearing,
+      serverVisible: true
+    };
+  });
+  document.body.dataset.radarStateSync = "ok";
+  document.body.dataset.radarShipId = snapshot.shipId ?? "";
+  document.body.dataset.radarContacts = String(serverRadarContacts.length);
+}
+
+function connectGameEventStream() {
+  const endpoint = getGameEventsEndpoint();
+  gameEventSource?.close();
+  gameEventSourceReady = false;
+  document.body.dataset.gameEventSource = "connecting";
+  document.body.dataset.gameEventEndpoint = endpoint;
+
+  gameEventSource = new EventSource(endpoint);
+  gameEventSource.onopen = () => {
+    gameEventSourceReady = true;
+    document.body.dataset.gameEventSource = "open";
+  };
+  gameEventSource.onmessage = (event) => {
+    applyGameStreamMessage(event.data);
+  };
+  gameEventSource.onerror = () => {
+    gameEventSourceReady = false;
+    document.body.dataset.gameEventSource = "error";
+  };
+}
+
+function applyGameStreamMessage(data) {
+  let message;
+  try {
+    message = JSON.parse(data);
+  } catch (error) {
+    document.body.dataset.gameEventSource = "parse-error";
+    document.body.dataset.gameEventError = error.message;
+    return;
+  }
+
+  if (message.type !== "game-stream") {
+    document.body.dataset.gameEventSource = "unexpected";
+    return;
+  }
+
+  applyServerGameSnapshot(message.state);
+  applyServerRadarSnapshot(message.radar);
+  document.body.dataset.gameEventSource = gameEventSourceReady ? "open" : "message";
+  document.body.dataset.gameEventTime = String(message.state?.t ?? "");
+}
+
+function updateOrCreateRemoteShip(ship) {
+  const existing = enemyMotions.find((motion) => motion.id === ship.id);
+  if (existing) {
+    applyServerShipSnapshot(existing, ship);
+    return existing;
+  }
+
+  const boatModel = createEnemyTorpedoBoat(scene, materials, `server_ship_${ship.id}`, ship.teamId, createShipDesignation(ship));
+  const headingValue = Number.isFinite(ship.heading) ? ship.heading : 0;
+  boatModel.root.position = new Vector3(ship.x, 0.26, ship.z);
+  boatModel.root.rotationQuaternion = Quaternion.FromEulerAngles(0, headingValue, 0);
+  boatModel.root.metadata = {
+    serverShipId: ship.id,
+    teamId: ship.teamId,
+    controlledBy: ship.controlledBy
+  };
+  const motion = createEnemyMotion(boatModel.root, boatModel.bowWake, headingValue, ship.engineOrder ?? 2, enemyMotions.length, ship);
+  enemyMotions.push(motion);
+  return motion;
+}
+
+function applyServerShipSnapshot(motion, ship) {
+  if (motion.state === "sinking") return;
+
+  if (ship.state === "sunk") {
+    motion.serverState = "sunk";
+    motion.serverPosition.x = Number.isFinite(ship.x) ? ship.x : motion.serverPosition.x;
+    motion.serverPosition.z = Number.isFinite(ship.z) ? ship.z : motion.serverPosition.z;
+    motion.serverHeading = Number.isFinite(ship.heading) ? ship.heading : motion.serverHeading;
+    motion.root.position.x = motion.serverPosition.x;
+    motion.root.position.z = motion.serverPosition.z;
+    motion.heading = Number.isFinite(ship.heading) ? ship.heading : motion.heading;
+    motion.root.setEnabled(true);
+    beginEnemySinking(motion, getStableSinkSide(motion.id), time);
+    return;
+  }
+
+  const correctionDistance = distance2D(motion.root.position, { x: ship.x, z: ship.z });
+  remoteCorrectionSamples += 1;
+  remoteCorrectionTotal += correctionDistance;
+  remoteCorrectionMax = Math.max(remoteCorrectionMax, correctionDistance);
+  document.body.dataset.remoteCorrection = correctionDistance.toFixed(2);
+  document.body.dataset.remoteCorrectionAvg = (remoteCorrectionTotal / remoteCorrectionSamples).toFixed(2);
+  document.body.dataset.remoteCorrectionMax = remoteCorrectionMax.toFixed(2);
+
+  motion.teamId = ship.teamId;
+  motion.controlledBy = ship.controlledBy;
+  motion.serverState = ship.state;
+  motion.serverPosition.x = Number.isFinite(ship.x) ? ship.x : motion.serverPosition.x;
+  motion.serverPosition.z = Number.isFinite(ship.z) ? ship.z : motion.serverPosition.z;
+  motion.serverHeading = Number.isFinite(ship.heading) ? ship.heading : motion.serverHeading;
+  motion.serverSpeed = Number.isFinite(ship.speed) ? ship.speed : motion.serverSpeed;
+  motion.serverSnapshotTime = time;
+  motion.heading = Number.isFinite(ship.heading) ? blendAngle(motion.heading, ship.heading, 0.18) : motion.heading;
+  motion.speed = Number.isFinite(ship.speed) ? motion.speed + (ship.speed - motion.speed) * 0.18 : motion.speed;
+  motion.engineOrder = Number.isInteger(ship.engineOrder) ? ship.engineOrder : motion.engineOrder;
+  motion.rudder = Number.isFinite(ship.rudderDegrees) ? clamp(ship.rudderDegrees / maxRudderDegrees, -1, 1) : motion.rudder;
+  if (correctionDistance > 55) {
+    motion.root.position.x = motion.serverPosition.x;
+    motion.root.position.z = motion.serverPosition.z;
+  }
+  motion.root.setEnabled(true);
+  motion.state = "active";
+  motion.root.metadata = {
+    ...motion.root.metadata,
+    teamId: ship.teamId,
+    controlledBy: ship.controlledBy
+  };
 }
 
 function escapeHtml(value) {
@@ -545,7 +1364,7 @@ function updateRudderGauge(indicator, valueElement, degrees) {
 
 function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading) {
   drawMapInstrument(mapCanvas, playerPosition, landZones, mapZoom);
-  drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading);
+  drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading, serverRadarRange);
 }
 
 function drawMapInstrument(canvas, playerPosition, landZones, zoomControl) {
@@ -582,17 +1401,19 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl) {
   landZones.filter((zone) => zoneIntersectsBounds(zone, bounds)).forEach((zone) => {
     drawMapLandZone(ctx, zone, bounds, width, height, scale);
   });
+  drawMapSectorLabels(ctx, bounds, width, height, scale);
+  landZones.filter((zone) => zoneIntersectsBounds(zone, bounds)).forEach((zone) => {
+    drawMapLandLabel(ctx, zone, bounds, width, height, scale);
+  });
 
   const playerPoint = clampInstrumentPoint(worldToMapPoint(playerPosition, bounds, width, height, scale), width, height, 6);
   drawInstrumentMarker(ctx, playerPoint.x, playerPoint.y, "#f7fbff", 4);
 
-  ctx.fillStyle = "rgba(247, 251, 255, 0.78)";
-  ctx.font = "700 10px Inter, sans-serif";
-  ctx.fillText(`Tile ${tile.x},${tile.z} x${zoomScale}`, 9, height - 22);
-  ctx.fillText(formatWorldCoordinate(playerPosition), 9, height - 9);
+  if (mapSectorValue) mapSectorValue.textContent = formatMapSector(playerPosition);
+  if (mapCoordinateValue) mapCoordinateValue.textContent = `${formatWorldCoordinate(playerPosition)} x${zoomScale}`;
 }
 
-function drawRadarInstrument(canvas, statusElement, playerPosition, radarContacts, landZones, heading) {
+function drawRadarInstrument(canvas, statusElement, playerPosition, radarContacts, landZones, heading, range = 360) {
   if (!canvas) return;
 
   const ctx = prepareInstrumentCanvas(canvas);
@@ -601,7 +1422,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   const centerX = width * 0.5;
   const centerY = height * 0.5;
   const radius = Math.min(width, height) * 0.5 - 7;
-  const radarRange = 360;
+  const radarRange = range;
   const scale = radius / radarRange;
 
   ctx.clearRect(0, 0, width, height);
@@ -622,14 +1443,14 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   const contacts = radarContacts
     .map((contact) => ({
       ...contact,
-      distance: distance2D(playerPosition, contact.position),
-      blocked: isLineBlockedByLand(playerPosition, contact.position, landZones)
+      distance: Number.isFinite(contact.distance) ? contact.distance : distance2D(playerPosition, contact.position),
+      blocked: contact.serverVisible ? false : isLineBlockedByLand(playerPosition, contact.position, landZones)
     }))
     .filter((contact) => contact.distance <= radarRange);
   const visibleContacts = contacts.filter((contact) => !contact.blocked);
   visibleContacts.forEach((contact) => {
     const contactPoint = worldToRadarPoint(contact.position, playerPosition, centerX, centerY, scale, heading);
-    drawRadarContactMarker(ctx, contactPoint.x, contactPoint.y, contact.team);
+    drawRadarContactMarker(ctx, contactPoint.x, contactPoint.y, contact.team, false, contact.heading, heading, contact.label);
   });
 
   const nearestVisible = visibleContacts.reduce((nearest, contact) => (
@@ -707,6 +1528,13 @@ function worldToRadarPoint(position, origin, centerX, centerY, scale, heading) {
   };
 }
 
+function bearingToRadarPoint(bearing, distance, centerX, centerY, scale) {
+  return {
+    x: centerX + Math.sin(bearing) * distance * scale,
+    y: centerY - Math.cos(bearing) * distance * scale
+  };
+}
+
 function drawInstrumentEllipse(ctx, x, y, rx, rz, fill, stroke, rotation = 0) {
   ctx.fillStyle = fill;
   ctx.strokeStyle = stroke;
@@ -727,6 +1555,108 @@ function drawMapLandZone(ctx, zone, bounds, width, height, scale) {
   const points = getCoastContourPoints(zone, 96).map((point) => worldToMapPoint(point, bounds, width, height, scale));
   drawInstrumentPolygon(ctx, points, "rgba(98, 129, 89, 0.95)", "rgba(238, 218, 164, 0.78)");
   drawMapLandWater(ctx, zone, bounds, width, height, scale);
+}
+
+function drawMapSectorLabels(ctx, bounds, width, height, scale) {
+  const firstCol = Math.floor((bounds.minX + mapSectorOrigin) / mapSectorSize);
+  const lastCol = Math.floor((bounds.maxX + mapSectorOrigin) / mapSectorSize);
+  const firstRow = Math.floor((mapSectorOrigin - bounds.maxZ) / mapSectorSize);
+  const lastRow = Math.floor((mapSectorOrigin - bounds.minZ) / mapSectorSize);
+  const cellPixels = mapSectorSize * scale;
+  const drawEvery = cellPixels < 34 ? Math.ceil(34 / Math.max(1, cellPixels)) : 1;
+
+  ctx.save();
+  ctx.fillStyle = "rgba(247, 251, 255, 0.58)";
+  ctx.strokeStyle = "rgba(247, 251, 255, 0.12)";
+  ctx.lineWidth = 1;
+  ctx.font = "800 9px Inter, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  for (let col = firstCol; col <= lastCol; col += 1) {
+    if (col < 0 || col % drawEvery !== 0) continue;
+    const xWorld = col * mapSectorSize - mapSectorOrigin;
+    const x = worldToMapPoint({ x: xWorld + mapSectorSize * 0.5, z: bounds.maxZ }, bounds, width, height, scale).x;
+    if (x < 13 || x > width - 13) continue;
+    ctx.fillText(formatSectorColumn(col), x, 8);
+    ctx.fillText(formatSectorColumn(col), x, height - 34);
+    ctx.beginPath();
+    ctx.moveTo(x, 14);
+    ctx.lineTo(x, 18);
+    ctx.moveTo(x, height - 44);
+    ctx.lineTo(x, height - 40);
+    ctx.stroke();
+  }
+
+  ctx.textAlign = "center";
+  for (let row = firstRow; row <= lastRow; row += 1) {
+    if (row < 0 || row % drawEvery !== 0) continue;
+    const zWorld = mapSectorOrigin - row * mapSectorSize;
+    const y = worldToMapPoint({ x: bounds.minX, z: zWorld - mapSectorSize * 0.5 }, bounds, width, height, scale).y;
+    if (y < 17 || y > height - 43) continue;
+    ctx.fillText(String(row + 1), 10, y);
+    ctx.fillText(String(row + 1), width - 10, y);
+    ctx.beginPath();
+    ctx.moveTo(17, y);
+    ctx.lineTo(21, y);
+    ctx.moveTo(width - 21, y);
+    ctx.lineTo(width - 17, y);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawMapLandLabel(ctx, zone, bounds, width, height, scale) {
+  const area = getZoneVisualRx(zone) * getZoneVisualRz(zone);
+  const screenWidth = getZoneVisualRx(zone) * scale * 2;
+  const screenHeight = getZoneVisualRz(zone) * scale * 2;
+  if (area < 3300 || screenWidth < 28 || screenHeight < 16) return;
+
+  const label = getLandDisplayName(zone);
+  const point = worldToMapPoint(zone, bounds, width, height, scale);
+  if (point.x < 18 || point.x > width - 18 || point.y < 18 || point.y > height - 40) return;
+
+  ctx.save();
+  ctx.font = "800 9px Inter, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "rgba(5, 27, 40, 0.82)";
+  ctx.fillStyle = "rgba(247, 251, 255, 0.76)";
+  ctx.strokeText(label, point.x, point.y);
+  ctx.fillText(label, point.x, point.y);
+  ctx.restore();
+}
+
+function getLandDisplayName(zone) {
+  const names = {
+    western_coast: "Western Coast",
+    volcanic_highland: "Volcano Highland",
+    fjord_coast: "Fjord Coast",
+    storm_peak: "Storm Peak",
+    mist_gate_north: "Mist Gate",
+    mist_gate_south: "Mist Gate",
+    mist_gate_east: "Mist Gate",
+    northern_ridge: "Northern Ridge",
+    north_sound_west: "North Sound",
+    north_sound_east: "North Sound",
+    north_sound_outer: "North Sound",
+    eastern_delta_coast: "Delta Coast",
+    southern_cliffs: "Southern Cliffs",
+    crown_mountain: "Crown Mountain",
+    western_continent: "Western Continent",
+    western_continent_north: "Western Continent",
+    western_continent_south: "Western Continent",
+    western_sound_north_bank: "Western Sound",
+    western_sound_south_bank: "Western Sound"
+  };
+
+  return names[zone.name] ?? zone.name
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function drawRadarLandZone(ctx, zone, playerPosition, centerX, centerY, scale, heading) {
@@ -779,17 +1709,49 @@ function drawInstrumentMarker(ctx, x, y, color, radius) {
   ctx.fill();
 }
 
-function drawRadarContactMarker(ctx, x, y, team, isPlayer = false) {
+function drawRadarContactMarker(ctx, x, y, team, isPlayer = false, contactHeading = null, radarHeading = 0, label = "") {
   const color = team === "light" ? "#7fd7ff" : "#ff6b4a";
   const ring = team === "light" ? "rgba(127, 215, 255, 0.42)" : "rgba(255, 107, 74, 0.48)";
   const radius = isPlayer ? 4.2 : 4;
 
-  drawInstrumentMarker(ctx, x, y, color, radius);
+  if (!isPlayer && Number.isFinite(contactHeading)) {
+    drawRadarShipMarker(ctx, x, y, color, contactHeading - radarHeading);
+  } else {
+    drawInstrumentMarker(ctx, x, y, color, radius);
+  }
   ctx.strokeStyle = ring;
   ctx.lineWidth = 1.2;
   ctx.beginPath();
   ctx.arc(x, y, radius + 3.2, 0, Math.PI * 2);
   ctx.stroke();
+
+  if (!isPlayer && label) {
+    ctx.font = "700 9px Inter, Arial, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(2, 16, 21, 0.92)";
+    ctx.strokeText(label, x + 9, y - 8);
+    ctx.fillStyle = color;
+    ctx.fillText(label, x + 9, y - 8);
+  }
+}
+
+function drawRadarShipMarker(ctx, x, y, color, relativeHeading) {
+  const noseX = Math.sin(relativeHeading) * 7;
+  const noseY = -Math.cos(relativeHeading) * 7;
+  const sideX = Math.cos(relativeHeading) * 3.4;
+  const sideY = Math.sin(relativeHeading) * 3.4;
+  const sternX = -Math.sin(relativeHeading) * 4.4;
+  const sternY = Math.cos(relativeHeading) * 4.4;
+
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x + noseX, y + noseY);
+  ctx.lineTo(x + sternX + sideX, y + sternY + sideY);
+  ctx.lineTo(x + sternX - sideX, y + sternY - sideY);
+  ctx.closePath();
+  ctx.fill();
 }
 
 function clampInstrumentPoint(point, width, height, padding) {
@@ -931,6 +1893,27 @@ function formatWorldCoordinate(position) {
   return `${northLabel} / ${eastLabel}`;
 }
 
+function formatMapSector(position) {
+  const x = Number.isFinite(position.x) ? position.x : 0;
+  const z = Number.isFinite(position.z) ? position.z : 0;
+  const colIndex = Math.max(0, Math.floor((x + mapSectorOrigin) / mapSectorSize));
+  const rowIndex = Math.max(0, Math.floor((mapSectorOrigin - z) / mapSectorSize));
+
+  return `${formatSectorColumn(colIndex)}${rowIndex + 1}`;
+}
+
+function formatSectorColumn(index) {
+  let value = index;
+  let label = "";
+
+  do {
+    label = String.fromCharCode(65 + (value % 26)) + label;
+    value = Math.floor(value / 26) - 1;
+  } while (value >= 0);
+
+  return label;
+}
+
 function getZoneVisualRx(zone) {
   return zone.visualRx ?? zone.rx;
 }
@@ -947,9 +1930,36 @@ function getZoneShallowRz(zone) {
   return zone.shallowRz ?? zone.rz * 1.08;
 }
 
+function createShipDesignation(ship) {
+  const match = String(ship.id ?? "").match(/(\d+)$/);
+  const number = match ? Number.parseInt(match[1], 10) : 0;
+  const base = ship.teamId === "red" ? 80 : 50;
+  return `S ${base + number}`;
+}
+
+function createRadarContactLabel(ship) {
+  const controlledBy = ship?.controlledBy ?? "bot";
+  if (controlledBy && controlledBy !== "bot") {
+    return getPlayerInitials(controlledBy);
+  }
+  return createShipDesignation(ship);
+}
+
+function getPlayerInitials(playerIdentifier) {
+  const match = String(playerIdentifier ?? "").match(/^player-([a-z0-9]{1,3})-/i);
+  if (match) {
+    return match[1].toUpperCase();
+  }
+  return sanitizeInitials(playerIdentifier) || "PL";
+}
+
+function indexShipsById(ships) {
+  return new Map((ships ?? []).map((ship) => [ship.id, ship]));
+}
+
 function createEnemyFleet(scene, materials, serverShips) {
   return serverShips.map((ship, index) => {
-    const enemyBoat = createEnemyTorpedoBoat(scene, materials, `server_ship_${ship.id}`);
+    const enemyBoat = createEnemyTorpedoBoat(scene, materials, `server_ship_${ship.id}`, ship.teamId, createShipDesignation(ship));
     const heading = Number.isFinite(ship.heading) ? ship.heading : 0;
     const engineOrder = Number.isInteger(ship.engineOrder) ? ship.engineOrder : 2;
     enemyBoat.root.position = new Vector3(ship.x, 0.26, ship.z);
@@ -974,6 +1984,11 @@ function createEnemyMotion(root, bowWake, heading, engineOrder, index = 0, serve
     bowWake,
     heading,
     speed: serverShip?.speed ?? 0,
+    isServerControlled: Boolean(serverShip),
+    serverPosition: new Vector3(serverShip?.x ?? root.position.x, 0.28, serverShip?.z ?? root.position.z),
+    serverHeading: Number.isFinite(serverShip?.heading) ? serverShip.heading : heading,
+    serverSpeed: Number.isFinite(serverShip?.speed) ? serverShip.speed : 0,
+    serverSnapshotTime: 0,
     turnVelocity: 0,
     rollImpulse: 0,
     engineOrder,
@@ -1021,13 +2036,22 @@ function applyEnemyMotionEvent(motion, event) {
   }
 }
 
-function updateEnemyMotion(motion, dt, time) {
+function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
   if (motion.state === "sunk") return;
 
   if (motion.state === "sinking") {
     updateEnemySinking(motion, dt, time);
     return;
   }
+
+  if (motion.state !== "active") return;
+
+  if (motion.isServerControlled) {
+    updateServerEnemyMotion(motion, dt, time);
+    return;
+  }
+
+  updateEnemyHelmTowardTarget(motion, playerPosition, landZones, time);
 
   const targetSpeed = engineOrders[motion.engineOrder].speed;
   const speedResponse = Math.abs(targetSpeed) > Math.abs(motion.speed) ? 0.58 : 0.78;
@@ -1052,6 +2076,58 @@ function updateEnemyMotion(motion, dt, time) {
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
   document.body.dataset.enemyEngineOrder = engineOrders[motion.engineOrder].label;
   document.body.dataset.enemySpeed = motion.speed.toFixed(1);
+}
+
+function updateServerEnemyMotion(motion, dt, time) {
+  const snapshotAge = Math.max(0, time - (motion.serverSnapshotTime ?? time));
+  const serverForward = new Vector3(Math.sin(motion.serverHeading), 0, Math.cos(motion.serverHeading));
+  const projectedServerPosition = motion.serverPosition.add(serverForward.scale(motion.serverSpeed * snapshotAge));
+  const correctionDistance = distance2D(motion.root.position, projectedServerPosition);
+
+  motion.speed += (motion.serverSpeed - motion.speed) * Math.min(1, dt * 3.5);
+  motion.heading = blendAngle(motion.heading, motion.serverHeading, Math.min(1, dt * 3.2));
+
+  const forward = new Vector3(Math.sin(motion.heading), 0, Math.cos(motion.heading));
+  motion.root.position.addInPlace(forward.scale(motion.speed * dt));
+
+  const correctionStrength = correctionDistance > 18 ? 4.2 : 1.8;
+  motion.root.position.x += (projectedServerPosition.x - motion.root.position.x) * Math.min(1, dt * correctionStrength);
+  motion.root.position.z += (projectedServerPosition.z - motion.root.position.z) * Math.min(1, dt * correctionStrength);
+  motion.root.position.y = 0.28 + Math.sin(time * 1.6 + 1.9) * 0.04;
+  motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
+    Math.sin(time * 1.9 + 0.8) * 0.015,
+    motion.heading,
+    Math.sin(time * 1.4) * 0.01
+  );
+  updateEnemyBowWake(motion.bowWake, motion.speed, time);
+
+  document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
+  document.body.dataset.enemyEngineOrder = engineOrders[motion.engineOrder].label;
+  document.body.dataset.enemySpeed = motion.speed.toFixed(1);
+}
+
+function updateEnemyHelmTowardTarget(motion, playerPosition, landZones, time) {
+  if (motion.teamId === playerTeamId) return;
+
+  const distance = distance2D(playerPosition, motion.root.position);
+  if (distance < 70 || distance > enemyTargetingRange) return;
+  if (isLineBlockedByLand(motion.root.position, playerPosition, landZones)) return;
+
+  const targetHeading = Math.atan2(
+    playerPosition.x - motion.root.position.x,
+    playerPosition.z - motion.root.position.z
+  );
+  const imperfectHeading = targetHeading + Math.sin(time * 0.48 + motion.numericIndex * 1.7) * 0.075;
+  const headingError = getSignedAngularDistance(imperfectHeading, motion.heading);
+
+  motion.rudder = clamp(headingError / 0.62, -1, 1);
+  if (distance > 250) {
+    motion.engineOrder = Math.max(motion.engineOrder, 5);
+  } else if (distance < 130) {
+    motion.engineOrder = Math.min(motion.engineOrder, 3);
+  } else {
+    motion.engineOrder = clamp(motion.engineOrder, 3, 5);
+  }
 }
 
 function beginEnemySinking(motion, side, time) {
@@ -1096,13 +2172,12 @@ function updateEnemySinking(motion, dt, time) {
 }
 
 function getRadarContacts(enemyMotions) {
+  if (serverRadarReady) {
+    return serverRadarContacts;
+  }
+
   return enemyMotions
-    .filter((enemyMotion) => enemyMotion.state === "active")
-    .map((enemyMotion) => ({
-      id: `enemy-${enemyMotion.id}`,
-      team: "dark",
-      position: enemyMotion.root.position
-    }));
+    .filter(() => false);
 }
 
 function beginPlayerSinking(hitPosition, now) {
@@ -1140,6 +2215,19 @@ function updatePlayerSinking(playerBoat, now) {
 }
 
 function respawnPlayerBoat(playerBoat) {
+  if (pendingPlayerServerShip) {
+    const nextShip = pendingPlayerServerShip;
+    pendingPlayerServerShip = null;
+    playerServerShipId = nextShip.id;
+    document.body.dataset.playerShipId = playerServerShipId;
+    document.body.dataset.pendingPlayerShipId = "";
+    alignPlayerBoatToServerShip(nextShip);
+    updatePlayerTorpedoStock(Number.isFinite(nextShip.torpedoesRemaining) ? nextShip.torpedoesRemaining : null);
+    playerDamageState = "active";
+    updateSinkingWaterOverlay(0);
+    return;
+  }
+
   playerRespawnIndex = (playerRespawnIndex + 1) % playerRespawnPoints.length;
   const spawn = playerRespawnPoints[playerRespawnIndex];
 
@@ -1151,6 +2239,8 @@ function respawnPlayerBoat(playerBoat) {
   engineOrder = 2;
   ramShake = 0.72;
   playerDamageState = "active";
+  playerServerShipId = null;
+  document.body.dataset.playerShipId = "pending";
   playerBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
   updateSinkingWaterOverlay(0);
 }
@@ -1215,6 +2305,7 @@ function createTorpedoSystem(scene, materials, parent) {
     puffs: [],
     muzzleEffects: [],
     hitEffects: [],
+    serverVisuals: new Map(),
     nextTube: 0,
     nextFireTime: 0,
     nextEnemyFireTime: 10,
@@ -1317,7 +2408,8 @@ function firePlayerTorpedo(system, shipRoot, heading, turnVelocity, shipSpeed, n
 function fireEnemyTorpedo(system, motion, targetPosition, now) {
   if (motion.state !== "active" || now < motion.nextFireTime || now < system.nextEnemyFireTime) return false;
 
-  const launchHeading = Math.atan2(targetPosition.x - motion.root.position.x, targetPosition.z - motion.root.position.z);
+  const aimJitter = (pseudoRandom(system.nextId + motion.numericIndex * 17, 97) - 0.5) * enemyTorpedoAimJitterRadians;
+  const launchHeading = motion.heading + aimJitter;
   const forward = getForwardVector(launchHeading);
   const right = getRightVector(launchHeading);
   const tubeSide = motion.nextTube === 0 ? -1 : 1;
@@ -1390,13 +2482,178 @@ function fireEnemyTorpedo(system, motion, targetPosition, now) {
 function updateEnemyFireControl(system, enemyMotions, playerPosition, landZones, time) {
   enemyMotions.forEach((motion) => {
     if (motion.state !== "active") return;
+    if (motion.isServerControlled) return;
+    if (motion.teamId === playerTeamId) return;
 
     const distance = distance2D(playerPosition, motion.root.position);
     if (distance < 75 || distance > 330) return;
+    if (!isTargetInEnemyTorpedoArc(motion, playerPosition)) return;
     if (isLineBlockedByLand(motion.root.position, playerPosition, landZones)) return;
 
     fireEnemyTorpedo(system, motion, playerPosition, time);
   });
+}
+
+function isTargetInEnemyTorpedoArc(motion, targetPosition) {
+  const targetHeading = Math.atan2(
+    targetPosition.x - motion.root.position.x,
+    targetPosition.z - motion.root.position.z
+  );
+  return getAngularDistance(targetHeading, motion.heading) <= enemyTorpedoFireArcRadians;
+}
+
+function syncServerTorpedoes(torpedoes) {
+  const activeIds = new Set();
+
+  torpedoes.forEach((snapshot) => {
+    activeIds.add(snapshot.id);
+    const visual = torpedoSystem.serverVisuals.get(snapshot.id) ?? createServerTorpedoVisual(torpedoSystem, snapshot);
+    applyServerTorpedoSnapshot(visual, snapshot);
+  });
+
+  torpedoSystem.serverVisuals.forEach((visual, id) => {
+    if (activeIds.has(id)) return;
+
+    createHitChurn(torpedoSystem, visual.root.position.clone(), visual.heading);
+    disposeServerTorpedoVisual(visual);
+    torpedoSystem.serverVisuals.delete(id);
+  });
+}
+
+function createServerTorpedoVisual(system, snapshot) {
+  const root = new TransformNode(`server_torpedo_${snapshot.id}`, system.scene);
+  root.parent = system.root;
+  const launch = getServerTorpedoLaunch(system, snapshot);
+  root.position.copyFrom(launch.start);
+  root.rotationQuaternion = Quaternion.FromEulerAngles(0, launch.heading, 0);
+
+  const body = MeshBuilder.CreateCylinder(`${root.name}_body`, {
+    diameter: 0.2,
+    height: 3.84,
+    tessellation: 12
+  }, system.scene);
+  body.parent = root;
+  body.rotation.x = Math.PI / 2;
+  body.material = system.materials.funnel;
+
+  const nose = MeshBuilder.CreateCylinder(`${root.name}_nose`, {
+    diameterTop: 0.035,
+    diameterBottom: 0.2,
+    height: 0.36,
+    tessellation: 12
+  }, system.scene);
+  nose.parent = root;
+  nose.position.z = 2.1;
+  nose.rotation.x = Math.PI / 2;
+  nose.material = system.materials.funnel;
+
+  const visual = {
+    id: snapshot.id,
+    root,
+    body,
+    nose,
+    wake: createTorpedoWake(system.scene, system.materials, root.name),
+    heading: Number.isFinite(snapshot.heading) ? snapshot.heading : 0,
+    forward: getForwardVector(Number.isFinite(snapshot.heading) ? snapshot.heading : 0),
+    speed: Number.isFinite(snapshot.speed) ? snapshot.speed : 24,
+    serverPosition: new Vector3(snapshot.x, 0.05, snapshot.z),
+    serverSnapshotTime: time,
+    runDistance: 0,
+    launchBlendUntil: launch.blendUntil
+  };
+  system.serverVisuals.set(snapshot.id, visual);
+
+  if (launch.showMuzzleEffect) {
+    createLaunchPuff(system, launch.puffPosition, launch.heading, launch.tubeSide);
+    createMuzzleEffect(system, launch.muzzlePosition, launch.heading, launch.tubeSide);
+  }
+  return visual;
+}
+
+function getServerTorpedoLaunch(system, snapshot) {
+  const heading = Number.isFinite(snapshot.heading) ? snapshot.heading : 0;
+  const forward = getForwardVector(heading);
+  const serverPosition = new Vector3(snapshot.x, 0.05, snapshot.z);
+
+  if (snapshot.shipId !== playerServerShipId) {
+    return {
+      heading,
+      start: serverPosition,
+      puffPosition: serverPosition,
+      muzzlePosition: serverPosition,
+      tubeSide: 1,
+      blendUntil: 0,
+      showMuzzleEffect: false
+    };
+  }
+
+  const tubeSide = system.nextTube === 0 ? -1 : 1;
+  system.nextTube = 1 - system.nextTube;
+  const right = getRightVector(heading);
+  const tuning = torpedoLaunchDefaults;
+  const tubeX = tubeSide * tuning.tubeX;
+  const tubeStartZ = tuning.startZ;
+  const muzzleZ = 3.05;
+  const start = boat.root.position
+    .add(right.scale(tubeX))
+    .add(forward.scale(tubeStartZ))
+    .add(new Vector3(0, tuning.startY, 0));
+  const muzzlePosition = boat.root.position
+    .add(right.scale(tubeSide * 0.32))
+    .add(forward.scale(tubeStartZ))
+    .add(new Vector3(0, tuning.startY, 0));
+  const puffPosition = boat.root.position
+    .add(right.scale(tubeSide * 0.32))
+    .add(forward.scale(muzzleZ + 0.4))
+    .add(new Vector3(0, -0.04, 0));
+
+  return {
+    heading,
+    start,
+    puffPosition,
+    muzzlePosition,
+    tubeSide,
+    blendUntil: time + 0.34,
+    showMuzzleEffect: true
+  };
+}
+
+function applyServerTorpedoSnapshot(visual, snapshot) {
+  visual.serverPosition = new Vector3(snapshot.x, 0.05, snapshot.z);
+  visual.serverSnapshotTime = time;
+  visual.heading = Number.isFinite(snapshot.heading) ? snapshot.heading : visual.heading;
+  visual.forward = getForwardVector(visual.heading);
+  visual.speed = Number.isFinite(snapshot.speed) ? snapshot.speed : visual.speed;
+
+  if (!visual.root.rotationQuaternion) {
+    visual.root.rotationQuaternion = Quaternion.FromEulerAngles(0, visual.heading, 0);
+  }
+  if (time >= (visual.launchBlendUntil ?? 0) && distance2D(visual.root.position, visual.serverPosition) > 45) {
+    visual.root.position.copyFrom(visual.serverPosition);
+  }
+}
+
+function updateServerTorpedoVisuals(system, dt, now) {
+  system.serverVisuals.forEach((visual) => {
+    const snapshotAge = Math.max(0, now - (visual.serverSnapshotTime ?? now));
+    const forward = visual.forward;
+    const projected = visual.serverPosition.add(forward.scale(visual.speed * snapshotAge));
+    const step = visual.speed * dt;
+
+    visual.root.position.addInPlace(forward.scale(step));
+    visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 4.5);
+    visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 4.5);
+    visual.root.position.y = 0.05 + Math.sin(now * 7.5 + getNameSeed(visual.id)) * 0.012;
+    visual.root.rotationQuaternion = Quaternion.FromEulerAngles(0, visual.heading, 0);
+    visual.runDistance += step;
+    updateTorpedoWake(visual, true, now);
+  });
+}
+
+function disposeServerTorpedoVisual(visual) {
+  visual.wake.forEach((segment) => segment.dispose());
+  visual.root.getChildMeshes().forEach((mesh) => mesh.dispose());
+  visual.root.dispose();
 }
 
 function createTorpedoWake(scene, materials, name) {
@@ -1736,6 +2993,7 @@ function getPlayerRamHit(playerPosition, playerHeading, playerSpeed, enemyMotion
   ];
 
   for (const enemyMotion of enemyMotions) {
+    if (enemyMotion.teamId === playerTeamId) continue;
     const hitPoint = bowProbePoints.find((point) => pointHitsEnemyHull(point, enemyMotion, 0.16));
     if (!hitPoint) continue;
 
@@ -1759,7 +3017,10 @@ function getRamShakeOffset(heading, strength, time) {
 }
 
 function getTorpedoEnemyHit(torpedoPosition, enemyMotions) {
-  return enemyMotions.find((enemyMotion) => pointHitsEnemyHull(torpedoPosition, enemyMotion, 0.22)) ?? null;
+  return enemyMotions.find((enemyMotion) => (
+    enemyMotion.teamId !== playerTeamId &&
+    pointHitsEnemyHull(torpedoPosition, enemyMotion, 0.22)
+  )) ?? null;
 }
 
 function torpedoHitsPlayer(torpedoPosition, playerPosition) {
@@ -1787,6 +3048,15 @@ function pointHitsEnemyHull(point, enemyMotion, radius) {
 function getEnemySinkSide(point, enemyMotion) {
   const hit = getEnemyHitLocalPoint(point, enemyMotion.root.position, enemyMotion.heading);
   return hit.right >= 0 ? -1 : 1;
+}
+
+function getStableSinkSide(id) {
+  const text = String(id ?? "");
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (hash * 31 + text.charCodeAt(index)) | 0;
+  }
+  return hash % 2 === 0 ? 1 : -1;
 }
 
 function getEnemyHitLocalPoint(point, enemyPosition, enemyHeading) {
@@ -1990,9 +3260,9 @@ function createMaterials(scene) {
   terrain.specularColor = new Color3(0.04, 0.05, 0.04);
 
   const shallow = new StandardMaterial("shallow_water_material", scene);
-  shallow.diffuseColor = new Color3(0.08, 0.55, 0.56);
-  shallow.emissiveColor = new Color3(0.02, 0.07, 0.07);
-  shallow.specularColor = new Color3(0.18, 0.46, 0.46);
+  shallow.diffuseColor = new Color3(0.03, 0.33, 0.48);
+  shallow.emissiveColor = new Color3(0.0, 0.04, 0.055);
+  shallow.specularColor = new Color3(0.55, 0.78, 0.9);
   shallow.alpha = 1;
 
   const rock = new StandardMaterial("rock_material", scene);
@@ -2002,18 +3272,22 @@ function createMaterials(scene) {
   const hull = new StandardMaterial("hull_material", scene);
   hull.diffuseColor = new Color3(0.18, 0.21, 0.21);
   hull.specularColor = new Color3(0.07, 0.08, 0.08);
+  hull.backFaceCulling = false;
 
   const deck = new StandardMaterial("deck_material", scene);
   deck.diffuseColor = new Color3(0.15, 0.17, 0.17);
   deck.specularColor = new Color3(0.06, 0.07, 0.07);
+  deck.backFaceCulling = false;
 
   const cabin = new StandardMaterial("cabin_material", scene);
   cabin.diffuseColor = new Color3(0.22, 0.25, 0.25);
   cabin.specularColor = new Color3(0.1, 0.12, 0.12);
+  cabin.backFaceCulling = false;
 
   const funnel = new StandardMaterial("funnel_material", scene);
   funnel.diffuseColor = new Color3(0.16, 0.18, 0.18);
   funnel.specularColor = new Color3(0.05, 0.05, 0.05);
+  funnel.backFaceCulling = false;
 
   const glass = new StandardMaterial("glass_material", scene);
   glass.diffuseColor = new Color3(0.18, 0.42, 0.54);
@@ -2021,29 +3295,81 @@ function createMaterials(scene) {
   glass.specularColor = new Color3(0.7, 0.9, 1);
 
   const lightHull = new StandardMaterial("light_party_hull_material", scene);
-  lightHull.diffuseColor = new Color3(0.28, 0.34, 0.35);
-  lightHull.specularColor = new Color3(0.09, 0.11, 0.11);
+  lightHull.diffuseColor = new Color3(0.43, 0.5, 0.51);
+  lightHull.specularColor = new Color3(0.12, 0.14, 0.14);
+  lightHull.backFaceCulling = false;
 
   const lightDeck = new StandardMaterial("light_party_deck_material", scene);
-  lightDeck.diffuseColor = new Color3(0.23, 0.28, 0.28);
-  lightDeck.specularColor = new Color3(0.07, 0.08, 0.08);
+  lightDeck.diffuseColor = new Color3(0.48, 0.55, 0.56);
+  lightDeck.specularColor = new Color3(0.13, 0.15, 0.15);
+  lightDeck.backFaceCulling = false;
+
+  const lightCabin = new StandardMaterial("light_party_cabin_material", scene);
+  lightCabin.diffuseColor = new Color3(0.62, 0.68, 0.69);
+  lightCabin.specularColor = new Color3(0.16, 0.18, 0.18);
+  lightCabin.backFaceCulling = false;
+
+  const lightFunnel = new StandardMaterial("light_party_funnel_material", scene);
+  lightFunnel.diffuseColor = new Color3(0.5, 0.56, 0.57);
+  lightFunnel.specularColor = new Color3(0.13, 0.15, 0.15);
+  lightFunnel.backFaceCulling = false;
+
+  const playerLightHull = new StandardMaterial("player_light_hull_material", scene);
+  playerLightHull.diffuseColor = new Color3(0.32, 0.39, 0.4);
+  playerLightHull.specularColor = new Color3(0.1, 0.12, 0.12);
+  playerLightHull.backFaceCulling = false;
+
+  const playerLightDeck = new StandardMaterial("player_light_deck_material", scene);
+  playerLightDeck.diffuseColor = new Color3(0.34, 0.4, 0.41);
+  playerLightDeck.specularColor = new Color3(0.1, 0.12, 0.12);
+  playerLightDeck.backFaceCulling = false;
+
+  const playerLightCabin = new StandardMaterial("player_light_cabin_material", scene);
+  playerLightCabin.diffuseColor = new Color3(0.42, 0.48, 0.49);
+  playerLightCabin.specularColor = new Color3(0.12, 0.14, 0.14);
+  playerLightCabin.backFaceCulling = false;
+
+  const playerLightFunnel = new StandardMaterial("player_light_funnel_material", scene);
+  playerLightFunnel.diffuseColor = new Color3(0.34, 0.4, 0.41);
+  playerLightFunnel.specularColor = new Color3(0.1, 0.12, 0.12);
+  playerLightFunnel.backFaceCulling = false;
 
   const darkHull = new StandardMaterial("dark_party_hull_material", scene);
   darkHull.diffuseColor = new Color3(0.12, 0.14, 0.14);
   darkHull.specularColor = new Color3(0.05, 0.06, 0.06);
+  darkHull.backFaceCulling = false;
+
+  const darkDeck = new StandardMaterial("dark_party_deck_material", scene);
+  darkDeck.diffuseColor = new Color3(0.1, 0.12, 0.12);
+  darkDeck.specularColor = new Color3(0.04, 0.05, 0.05);
+  darkDeck.backFaceCulling = false;
 
   const darkCabin = new StandardMaterial("dark_party_cabin_material", scene);
   darkCabin.diffuseColor = new Color3(0.17, 0.18, 0.18);
   darkCabin.specularColor = new Color3(0.08, 0.09, 0.09);
+  darkCabin.backFaceCulling = false;
 
   const darkFunnel = new StandardMaterial("dark_party_funnel_material", scene);
   darkFunnel.diffuseColor = new Color3(0.1, 0.11, 0.11);
   darkFunnel.specularColor = new Color3(0.04, 0.04, 0.04);
+  darkFunnel.backFaceCulling = false;
 
   const foam = new StandardMaterial("foam_material", scene);
   foam.diffuseColor = new Color3(0.9, 0.97, 0.96);
   foam.emissiveColor = new Color3(0.18, 0.22, 0.22);
   foam.specularColor = new Color3(0.05, 0.06, 0.06);
+
+  const volcanicSmoke = new StandardMaterial("volcanic_smoke_material", scene);
+  volcanicSmoke.diffuseColor = new Color3(0.19, 0.21, 0.2);
+  volcanicSmoke.emissiveColor = new Color3(0.03, 0.035, 0.03);
+  volcanicSmoke.specularColor = new Color3(0, 0, 0);
+  volcanicSmoke.alpha = 0.42;
+  volcanicSmoke.backFaceCulling = false;
+
+  const volcanicGlow = new StandardMaterial("volcanic_glow_material", scene);
+  volcanicGlow.diffuseColor = new Color3(1.0, 0.31, 0.06);
+  volcanicGlow.emissiveColor = new Color3(1.0, 0.22, 0.02);
+  volcanicGlow.specularColor = new Color3(0.15, 0.06, 0.02);
 
   return {
     water,
@@ -2059,10 +3385,19 @@ function createMaterials(scene) {
     glass,
     lightHull,
     lightDeck,
+    lightCabin,
+    lightFunnel,
+    playerLightHull,
+    playerLightDeck,
+    playerLightCabin,
+    playerLightFunnel,
     darkHull,
+    darkDeck,
     darkCabin,
     darkFunnel,
-    foam
+    foam,
+    volcanicSmoke,
+    volcanicGlow
   };
 }
 
@@ -2104,6 +3439,8 @@ function createFoamPatches(scene, materials, parent) {
   const area = 180;
   const count = 128;
   const windAngle = Math.PI * 0.56;
+  const windSpeed = 0.775;
+  const waveTravelAngle = windAngle + Math.PI / 2;
 
   for (let i = 0; i < count; i += 1) {
     const seed = seededFoam(i);
@@ -2121,9 +3458,11 @@ function createFoamPatches(scene, materials, parent) {
       mesh: patch,
       x: (seed.x - 0.5) * area,
       z: (seed.z - 0.5) * area,
-      driftX: Math.sin(windAngle) * (0.12 + seed.driftX * 0.08),
-      driftZ: Math.cos(windAngle) * (0.12 + seed.driftZ * 0.08),
-      baseAngle: windAngle
+      driftX: Math.sin(waveTravelAngle) * windSpeed + (seed.driftX - 0.5) * 0.28,
+      driftZ: Math.cos(waveTravelAngle) * windSpeed + (seed.driftZ - 0.5) * 0.28,
+      baseAngle: windAngle,
+      baseLength: 1 + seed.length * 0.34,
+      phase: seed.spin * Math.PI * 2
     });
   }
 
@@ -2136,8 +3475,10 @@ function updateFoamPatches(foam, center, time) {
   foam.patches.forEach((patch) => {
     patch.mesh.position.x = center.x + wrapCentered(patch.x + time * patch.driftX - center.x, foam.area);
     patch.mesh.position.z = center.z + wrapCentered(patch.z + time * patch.driftZ - center.z, foam.area);
-    patch.mesh.position.y = 0.13 + Math.sin(time * 0.9 + patch.x * 0.07 + patch.z * 0.03) * 0.012;
+    const wave = Math.sin(time * 2.2 + patch.phase + patch.x * 0.07 + patch.z * 0.03);
+    patch.mesh.position.y = 0.13 + wave * 0.014;
     patch.mesh.rotation.y = patch.baseAngle;
+    patch.mesh.scaling.z = patch.baseLength * (0.82 + Math.max(0, wave) * 0.28);
 
     const distanceFromCenter = Math.max(
       Math.abs(patch.mesh.position.x - center.x),
@@ -2173,13 +3514,45 @@ function wrapCentered(value, size) {
   return ((((value + size / 2) % size) + size) % size) - size / 2;
 }
 
-// Player ship is only the visible foredeck. Enemy ships should get their own full model later.
-// A shared Ship base class would be premature until network interpolation and combat state exist.
-function createPlayerBow(scene, materials, name = "player_bow") {
+function getShipTeamMaterials(materials, teamId) {
+  if (teamId === "blue") {
+    return {
+      hull: materials.lightHull ?? materials.hull,
+      deck: materials.lightDeck ?? materials.deck,
+      cabin: materials.lightCabin ?? materials.cabin,
+      funnel: materials.lightFunnel ?? materials.funnel
+    };
+  }
+
+  return {
+    hull: materials.darkHull ?? materials.hull,
+    deck: materials.darkDeck ?? materials.deck,
+    cabin: materials.darkCabin ?? materials.cabin,
+    funnel: materials.darkFunnel ?? materials.funnel
+  };
+}
+
+function getPlayerShipTeamMaterials(materials, teamId) {
+  if (teamId === "blue") {
+    return {
+      hull: materials.playerLightHull ?? materials.lightHull ?? materials.hull,
+      deck: materials.playerLightDeck ?? materials.lightDeck ?? materials.deck,
+      cabin: materials.playerLightCabin ?? materials.lightCabin ?? materials.cabin,
+      funnel: materials.playerLightFunnel ?? materials.lightFunnel ?? materials.funnel
+    };
+  }
+
+  return getShipTeamMaterials(materials, teamId);
+}
+
+// Player ship is only the visible foredeck. It still uses absolute team colors,
+// otherwise every client would incorrectly see its own party as the light one.
+function createPlayerBow(scene, materials, name = "player_bow", teamId = "blue") {
   const root = new TransformNode(name, scene);
-  const hullMaterial = materials.lightHull ?? materials.hull;
-  const deckMaterial = materials.lightDeck ?? materials.deck;
-  const tubeMaterial = materials.lightHull ?? materials.funnel;
+  const teamMaterials = getPlayerShipTeamMaterials(materials, teamId);
+  const hullMaterial = teamMaterials.hull;
+  const deckMaterial = teamMaterials.deck;
+  const tubeMaterial = teamMaterials.hull;
 
   const hull = createTaperedHull(`${name}_hull`, scene, [
     { z: -1.35, width: 1.7, top: 0.72, bottom: 0.12 },
@@ -2250,7 +3623,7 @@ function createPlayerBow(scene, materials, name = "player_bow") {
   hatch.parent = root;
   hatch.position.y = 0.91;
   hatch.position.z = -0.36;
-  hatch.material = materials.cabin;
+  hatch.material = teamMaterials.cabin;
 
   return { root };
 }
@@ -2339,11 +3712,12 @@ function createMeshFromData(name, scene, positions, indices) {
 }
 
 // Low-poly external ship model for opponents. Keep it cheap: enemies may appear in groups later.
-function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat") {
+function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = "red", designation = "") {
   const root = new TransformNode(name, scene);
-  const hullMaterial = materials.darkHull ?? materials.hull;
-  const cabinMaterial = materials.darkCabin ?? materials.cabin;
-  const funnelMaterial = materials.darkFunnel ?? materials.funnel;
+  const teamMaterials = getShipTeamMaterials(materials, teamId);
+  const hullMaterial = teamMaterials.hull;
+  const cabinMaterial = teamMaterials.cabin;
+  const funnelMaterial = teamMaterials.funnel;
 
   const body = createEnemyBoatBody(`${name}_body`, scene);
   body.parent = root;
@@ -2408,9 +3782,59 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat") {
   mast.rotation.x = -0.16;
   mast.material = funnelMaterial;
 
+  if (designation) {
+    createShipDesignationPlates(scene, root, name, designation);
+  }
+
   const bowWake = createEnemyBowWake(scene, materials, root, name);
 
   return { root, bowWake };
+}
+
+function createShipDesignationPlates(scene, parent, name, designation) {
+  [-1, 1].forEach((side) => {
+    const material = createDesignationMaterial(scene, `${name}_designation_material_${side}`, designation, side < 0);
+    const plate = MeshBuilder.CreatePlane(`${name}_designation_${side}`, {
+      width: 1.18,
+      height: 0.36
+    }, scene);
+    plate.parent = parent;
+    plate.material = material;
+    plate.position.x = side * 0.64;
+    plate.position.y = 0.56;
+    plate.position.z = 2.34;
+    plate.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+  });
+}
+
+function createDesignationMaterial(scene, name, designation, mirror = false) {
+  const texture = new DynamicTexture(`${name}_texture`, { width: 256, height: 96 }, scene, true);
+  const context = texture.getContext();
+  context.clearRect(0, 0, 256, 96);
+  context.save();
+  if (mirror) {
+    context.translate(256, 0);
+    context.scale(-1, 1);
+  }
+  context.font = "900 60px Arial";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.lineWidth = 10;
+  context.strokeStyle = "rgba(4, 15, 20, 0.92)";
+  context.strokeText(designation, 128, 50);
+  context.fillStyle = "#f7fbff";
+  context.fillText(designation, 128, 50);
+  context.restore();
+  texture.update();
+
+  const material = new StandardMaterial(name, scene);
+  material.diffuseTexture = texture;
+  material.opacityTexture = texture;
+  material.emissiveColor = new Color3(0.92, 0.97, 1);
+  material.specularColor = new Color3(0, 0, 0);
+  material.useAlphaFromDiffuseTexture = true;
+  material.backFaceCulling = false;
+  return material;
 }
 
 function createEnemyBowWake(scene, materials, parent, name) {
@@ -2626,26 +4050,80 @@ function createWorldLandmasses(landmasses, scene, materials, parent) {
     if (land.kind === "coastline") {
       createCoastline(land, position, scene, materials, parent);
       createWaterways(land, position, scene, materials, parent);
+      if (land.name === "volcanic_highland") {
+        volcanoPlumes.push(createVolcanoPlume(land, position, scene, materials, parent));
+      }
     } else {
       createIsland(land.name, position, land.radius, land.heightScale, scene, materials, parent);
     }
   });
 }
 
-function getLandZone(land) {
-  const navigationScale = land.kind === "island" ? 0.58 : 1;
-  const shallowScale = land.kind === "island" ? 0.9 : 1.12;
-  const coastPadding = land.kind === "coastline" ? 1 + (land.coastRoughness ?? 0.09) * 1.05 : 1;
+function createVolcanoPlume(land, position, scene, materials, parent) {
+  const root = new TransformNode(`${land.name}_volcano_plume`, scene);
+  root.parent = parent;
+  root.position = new Vector3(position.x, 0, position.z);
 
+  const craterY = 38 + (land.peakBoost ?? 34) * 0.46;
+  const glow = MeshBuilder.CreateCylinder(`${land.name}_crater_glow`, {
+    diameter: 18,
+    height: 0.9,
+    tessellation: 18
+  }, scene);
+  glow.parent = root;
+  glow.position.set(0, craterY, 0);
+  glow.scaling.z = 0.72;
+  glow.material = materials.volcanicGlow;
+
+  const smoke = [];
+  for (let i = 0; i < 9; i += 1) {
+    const puff = MeshBuilder.CreateSphere(`${land.name}_smoke_${i}`, {
+      segments: 7,
+      diameter: 18 + i * 5.2
+    }, scene);
+    const angle = i * 1.72;
+    puff.parent = root;
+    puff.position.set(Math.cos(angle) * (3 + i * 1.8), craterY + 8 + i * 13, Math.sin(angle) * (2 + i * 1.3));
+    puff.scaling.set(1.2 + i * 0.1, 0.62 + i * 0.04, 0.85 + i * 0.09);
+    puff.rotation.y = angle;
+    puff.material = materials.volcanicSmoke;
+    smoke.push({
+      mesh: puff,
+      baseY: puff.position.y,
+      baseX: puff.position.x,
+      baseZ: puff.position.z,
+      phase: i * 0.81
+    });
+  }
+
+  return { root, glow, smoke };
+}
+
+function updateVolcanoPlumes(plumes, time) {
+  plumes.forEach((plume) => {
+    plume.glow.scaling.x = 1 + Math.sin(time * 2.2) * 0.08;
+    plume.glow.scaling.z = 0.72 + Math.cos(time * 2.6) * 0.06;
+
+    plume.smoke.forEach((puff, index) => {
+      const drift = time * (0.12 + index * 0.01) + puff.phase;
+      puff.mesh.position.x = puff.baseX + Math.sin(drift) * (2.8 + index * 0.55);
+      puff.mesh.position.z = puff.baseZ + Math.cos(drift * 0.82) * (1.8 + index * 0.45);
+      puff.mesh.position.y = puff.baseY + Math.sin(time * 0.34 + puff.phase) * 1.8;
+      puff.mesh.rotation.y += 0.0015 + index * 0.0002;
+    });
+  });
+}
+
+function getLandZone(land) {
   return {
     x: land.x,
     z: land.z,
-    rx: land.rx * navigationScale * coastPadding,
-    rz: land.rz * navigationScale * coastPadding,
-    visualRx: land.rx * coastPadding,
-    visualRz: land.rz * coastPadding,
-    shallowRx: land.rx * shallowScale * coastPadding,
-    shallowRz: land.rz * shallowScale * coastPadding,
+    rx: land.navigationRx,
+    rz: land.navigationRz,
+    visualRx: land.rx,
+    visualRz: land.rz,
+    shallowRx: land.shallowRx,
+    shallowRz: land.shallowRz,
     name: land.name,
     kind: land.kind,
     coastRoughness: land.coastRoughness ?? 0.09,
@@ -2678,20 +4156,20 @@ function createWaterways(land, position, scene, materials, parent) {
     segment.parent = parent;
     segment.position.x += position.x;
     segment.position.z += position.z;
-    segment.material = materials.shallow;
+    segment.material = materials.water;
   });
 
   (land.lakes ?? []).forEach((lake, index) => {
     const mesh = MeshBuilder.CreateCylinder(`${land.name}_lake_${index}`, {
       diameter: 2,
-      height: 0.018,
+      height: 0.012,
       tessellation: 36
     }, scene);
     mesh.parent = parent;
-    mesh.position = new Vector3(position.x + lake.x, 0.585, position.z + lake.z);
+    mesh.position = new Vector3(position.x + lake.x, 0.045, position.z + lake.z);
     mesh.scaling.x = lake.rx;
     mesh.scaling.z = lake.rz;
-    mesh.material = materials.shallow;
+    mesh.material = materials.water;
   });
 }
 
@@ -2701,12 +4179,12 @@ function createWaterwaySegment(name, waterway, scene) {
   const length = Math.sqrt(dx * dx + dz * dz);
   const segment = MeshBuilder.CreateBox(name, {
     width: waterway.width,
-    height: 0.018,
+    height: 0.012,
     depth: length
   }, scene);
 
   segment.position.x = (waterway.from.x + waterway.to.x) * 0.5;
-  segment.position.y = 0.58;
+  segment.position.y = 0.045;
   segment.position.z = (waterway.from.z + waterway.to.z) * 0.5;
   segment.rotation.y = Math.atan2(dx, dz);
   return segment;
@@ -2728,6 +4206,7 @@ function createCoastlineTerrainMesh(name, land, rx, rz, heightScale, peakBoost, 
       const localX = Math.cos(angle) * rx * ring * radiusFactor;
       const localZ = Math.sin(angle) * rz * ring * radiusFactor;
       const fjord = getFjordCarve(localX, localZ, rx, rz, land.fjords ?? []);
+      const landWater = isInLocalLandWater(localX, localZ, land);
       const terrainFjord = fjord * smoothstep(0.62, 0.95, ring);
       const coast = 1 - smoothstep(0.58, 0.96, ring);
       const inland = clamp(1 - ring, 0, 1);
@@ -2739,7 +4218,7 @@ function createCoastlineTerrainMesh(name, land, rx, rz, heightScale, peakBoost, 
       const cliffLift = smoothstep(0.68, 0.9, ring) * smoothstep(1.04, 0.86, ring) * 5.5;
       const mountainLift = Math.pow(inland, 0.65) * (9 + ridgeA * 10 + ridgeB * 5) * heightScale;
       const peakLift = getPeakLift(nx, nz, ring, peakBoost, land);
-      const isLand = ring <= 0.98 && terrainFjord <= 0.58;
+      const isLand = ring <= 0.98 && terrainFjord <= 0.58 && !landWater;
       const shoreBlend = 1 - smoothstep(0.9, 0.98, ring);
       const terrainHeight = 0.28 + shoreBlend * (
         0.2 + coast * (cliffLift + mountainLift + peakLift + roughness * 3.2) * (1 - terrainFjord * 0.25)
@@ -2792,8 +4271,9 @@ function createCoastlineBeachMesh(name, land, rx, rz, scene) {
       const localX = Math.cos(angle) * rx * ring * radiusFactor;
       const localZ = Math.sin(angle) * rz * ring * radiusFactor;
       const fjord = getFjordCarve(localX, localZ, rx, rz, land.fjords ?? []);
+      const landWater = isInLocalLandWater(localX, localZ, land);
       const sandBand = 1 - smoothstep(0.78, 1.08, ring);
-      const isSand = fjord <= 0.58;
+      const isSand = fjord <= 0.58 && !landWater;
 
       positions.push(localX, isSand ? 0.24 + sandBand * 0.08 : 0.16, localZ);
       mask.push(isSand);
@@ -2945,25 +4425,25 @@ function getCoastRadiusFactor(angle, land) {
 }
 
 function drawMapLandWater(ctx, zone, bounds, width, height, scale) {
-  drawInstrumentWaterways(ctx, zone, (point) => worldToMapPoint(point, bounds, width, height, scale), scale);
+  drawInstrumentWaterways(ctx, zone, (point) => worldToMapPoint(point, bounds, width, height, scale), scale, "rgba(7, 31, 43, 0.94)");
 
   (zone.lakes ?? []).forEach((lake) => {
     const point = worldToMapPoint({ x: zone.x + lake.x, z: zone.z + lake.z }, bounds, width, height, scale);
-    drawInstrumentEllipse(ctx, point.x, point.y, lake.rx * scale, lake.rz * scale, "rgba(54, 143, 157, 0.86)", "rgba(180, 236, 231, 0.72)");
+    drawInstrumentEllipse(ctx, point.x, point.y, lake.rx * scale, lake.rz * scale, "rgba(7, 31, 43, 0.94)", "rgba(7, 31, 43, 0.72)");
   });
 }
 
 function drawRadarLandWater(ctx, zone, playerPosition, centerX, centerY, scale, heading) {
-  drawInstrumentWaterways(ctx, zone, (point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading), scale);
+  drawInstrumentWaterways(ctx, zone, (point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading), scale, "rgba(2, 22, 28, 0.94)");
 
   (zone.lakes ?? []).forEach((lake) => {
     const point = worldToRadarPoint({ x: zone.x + lake.x, z: zone.z + lake.z }, playerPosition, centerX, centerY, scale, heading);
-    drawInstrumentEllipse(ctx, point.x, point.y, lake.rx * scale, lake.rz * scale, "rgba(54, 143, 157, 0.75)", "rgba(180, 236, 231, 0.48)", -heading);
+    drawInstrumentEllipse(ctx, point.x, point.y, lake.rx * scale, lake.rz * scale, "rgba(2, 22, 28, 0.94)", "rgba(2, 22, 28, 0.72)", -heading);
   });
 }
 
-function drawInstrumentWaterways(ctx, zone, project, scale) {
-  ctx.strokeStyle = "rgba(84, 180, 190, 0.86)";
+function drawInstrumentWaterways(ctx, zone, project, scale, strokeStyle) {
+  ctx.strokeStyle = strokeStyle;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
@@ -2982,6 +4462,14 @@ function drawInstrumentWaterways(ctx, zone, project, scale) {
 
 function getAngularDistance(a, b) {
   return Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+}
+
+function getSignedAngularDistance(target, current) {
+  return Math.atan2(Math.sin(target - current), Math.cos(target - current));
+}
+
+function blendAngle(current, target, amount) {
+  return current + getSignedAngularDistance(target, current) * clamp(amount, 0, 1);
 }
 
 function getNameSeed(name) {
@@ -3011,20 +4499,18 @@ function terrainNoise(x, z) {
   );
 }
 
-// Elliptical land/shallow zones are intentionally simple: one check feeds collision and slowdown.
+// Navigation uses the same coastline shape as the rendered map/radar, so the
+// ship does not run aground on invisible parts of a former coarse ellipse.
 function getWaterSafety(position, zones) {
   let shallowAmount = 0;
 
   for (const zone of zones) {
-    const nx = (position.x - zone.x) / zone.rx;
-    const nz = (position.z - zone.z) / zone.rz;
-    const distance = Math.sqrt(nx * nx + nz * nz);
+    const distance = getZoneShapeDistance(position, zone, zone.rx, zone.rz);
+    const blockDistance = getZoneBlockDistance(zone);
     const landWater = isInLandWater(position, zone);
-    const shallowNx = (position.x - zone.x) / getZoneShallowRx(zone);
-    const shallowNz = (position.z - zone.z) / getZoneShallowRz(zone);
-    const shallowDistance = Math.sqrt(shallowNx * shallowNx + shallowNz * shallowNz);
+    const shallowDistance = getZoneShapeDistance(position, zone, getZoneShallowRx(zone), getZoneShallowRz(zone));
 
-    if (distance < 1 && !landWater) {
+    if (distance < blockDistance && !landWater) {
       return { isBlocked: true, isShallow: true, shallowAmount: 1 };
     }
 
@@ -3036,17 +4522,30 @@ function getWaterSafety(position, zones) {
   return { isBlocked: false, isShallow: shallowAmount > 0, shallowAmount };
 }
 
+function getShipWaterSafety(position, heading, zones) {
+  let shallowAmount = 0;
+
+  for (const point of getShipNavigationPoints(position, heading)) {
+    const safety = getWaterSafety(point, zones);
+    if (safety.isBlocked) {
+      return { ...safety, blockedPoint: point };
+    }
+    shallowAmount = Math.max(shallowAmount, safety.shallowAmount);
+  }
+
+  return { isBlocked: false, isShallow: shallowAmount > 0, shallowAmount };
+}
+
 function getWaterDepth(position, zones) {
   const maxDepth = 110;
   let nearestCoastDistance = Number.POSITIVE_INFINITY;
 
   for (const zone of zones) {
-    const nx = (position.x - zone.x) / zone.rx;
-    const nz = (position.z - zone.z) / zone.rz;
-    const distance = Math.sqrt(nx * nx + nz * nz);
+    const distance = getZoneShapeDistance(position, zone, zone.rx, zone.rz);
+    const blockDistance = getZoneBlockDistance(zone);
     const coastDistance = isInLandWater(position, zone)
       ? Math.max(0.08, Math.abs(distance - 0.72))
-      : distance - 1;
+      : distance - blockDistance;
     nearestCoastDistance = Math.min(nearestCoastDistance, coastDistance);
   }
 
@@ -3061,15 +4560,64 @@ function getWaterDepth(position, zones) {
   };
 }
 
+function getShipWaterDepth(position, heading, zones) {
+  return getShipNavigationPoints(position, heading)
+    .map((point) => getWaterDepth(point, zones))
+    .reduce((shallowest, depth) => (depth.meters < shallowest.meters ? depth : shallowest));
+}
+
+function getShipNavigationPoints(position, heading) {
+  const forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
+  const right = new Vector3(Math.cos(heading), 0, -Math.sin(heading));
+  const samples = [
+    { z: 4.9, x: 0 },
+    { z: 3.2, x: -0.62 },
+    { z: 3.2, x: 0.62 },
+    { z: 1.0, x: -0.74 },
+    { z: 1.0, x: 0.74 },
+    { z: -1.0, x: -0.62 },
+    { z: -1.0, x: 0.62 },
+    { z: 0, x: 0 }
+  ];
+
+  return samples.map((sample) => (
+    position
+      .add(forward.scale(sample.z))
+      .add(right.scale(sample.x))
+  ));
+}
+
+function getZoneShapeDistance(position, zone, rx, rz) {
+  const localX = position.x - zone.x;
+  const localZ = position.z - zone.z;
+  const nx = localX / rx;
+  const nz = localZ / rz;
+  const distance = Math.sqrt(nx * nx + nz * nz);
+
+  if (zone.kind !== "coastline") {
+    return distance;
+  }
+
+  const angle = Math.atan2(nz, nx);
+  return distance / getCoastRadiusFactor(angle, zone);
+}
+
+function getZoneBlockDistance(zone) {
+  return zone.kind === "coastline" ? 1.055 : 1;
+}
+
 function getWaterEscapeVector(position, zones) {
   let escape = new Vector3(0, 0, 0);
 
   for (const zone of zones) {
-    const nx = (position.x - zone.x) / zone.rx;
-    const nz = (position.z - zone.z) / zone.rz;
-    const distance = Math.sqrt(nx * nx + nz * nz);
+    const localX = position.x - zone.x;
+    const localZ = position.z - zone.z;
+    const nx = localX / zone.rx;
+    const nz = localZ / zone.rz;
+    const distance = getZoneShapeDistance(position, zone, zone.rx, zone.rz);
+    const blockDistance = getZoneBlockDistance(zone);
 
-    if (distance < 1 && !isInLandWater(position, zone)) {
+    if (distance < blockDistance && !isInLandWater(position, zone)) {
       if (distance < 0.001) {
         escape.x += 1;
       } else {
