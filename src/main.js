@@ -93,6 +93,7 @@ const playerShips = getTeamShips(gameState.ships, playerTeamId);
 const enemyShips = getEnemyShips(gameState.ships, playerTeamId);
 const initialPlayerSpawn = createPlayerSpawn(playerShips, playerId);
 let playerServerShipId = initialPlayerSpawn.shipId;
+let playerBearingPosition = initialPlayerSpawn.position;
 const fleetTotals = getFleetCounts(gameState.ships);
 let playerTorpedoesRemaining = Number.isFinite(initialPlayerSpawn.torpedoesRemaining)
   ? initialPlayerSpawn.torpedoesRemaining
@@ -503,6 +504,7 @@ scene.onBeforeRenderObservable.add(() => {
   document.body.dataset.playerHits = String(playerHits);
   document.body.dataset.playerDamageState = playerDamageState;
   document.body.dataset.ramReady = time >= nextRamHitTime ? "true" : "false";
+  playerBearingPosition = boat.root.position;
 
   const displayedSpeed = Math.abs(speed) < 0.08 ? 0 : Math.abs(speed);
   speedValue.textContent = displayedSpeed.toFixed(1);
@@ -1055,7 +1057,7 @@ function getPlayerInitialsFromId(controller) {
 
 function getRelativeBearingToShip(ship) {
   if (!ship || ship.id === playerServerShipId) return null;
-  const ownPosition = boat?.root?.position;
+  const ownPosition = playerBearingPosition;
   if (!ownPosition || !Number.isFinite(ship.x) || !Number.isFinite(ship.z)) return null;
 
   const absoluteBearing = Math.atan2(ship.x - ownPosition.x, ship.z - ownPosition.z);
