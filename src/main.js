@@ -76,6 +76,7 @@ const engineHoldInitialDelaySeconds = 0.22;
 const engineHoldRepeatSeconds = 0.1;
 const mouseWheelEngineStep = 100;
 const testPlayerInvulnerable = false;
+const openSeaFoamEnabled = false;
 const performanceLoggingEnabled = true;
 const playerLogin = await requirePlayerLogin();
 const playerInitials = playerLogin.initials;
@@ -104,6 +105,7 @@ document.body.dataset.playerShipId = playerServerShipId ?? "pending";
 document.body.dataset.serverOwnShips = String(playerShips.length);
 document.body.dataset.serverEnemyShips = String(enemyShips.length);
 document.body.dataset.testPlayerInvulnerable = String(testPlayerInvulnerable);
+document.body.dataset.openSeaFoam = String(openSeaFoamEnabled);
 document.body.dataset.performanceLogging = String(performanceLoggingEnabled);
 updateFleetStatus(gameState.ships, gameState.destroyedShipsByTeam);
 updatePlayerList(gameState.ships);
@@ -357,7 +359,9 @@ const rudderStepDegrees = 2.5;
 const rudderHoldDegreesPerSecond = 72;
 const maxSimulationFrameSeconds = 0.12;
 const clientCapability = createClientCapabilitySnapshot(engine, canvas);
+const renderQuality = applyRenderQuality(engine, clientCapability);
 document.body.dataset.clientCapability = clientCapability.performanceClass;
+document.body.dataset.hardwareScalingLevel = renderQuality.hardwareScalingLevel.toFixed(2);
 boat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
 const playerRespawnPoints = createPlayerRespawnPoints(playerShips, initialPlayerSpawn);
 const torpedoLaunchDefaults = {
@@ -460,7 +464,9 @@ scene.onBeforeRenderObservable.add(() => {
 
   materials.water.diffuseTexture.uOffset += dt * 0.01;
   materials.water.diffuseTexture.vOffset += dt * 0.018;
-  updateFoamPatches(foam, boat.root.position, time);
+  if (openSeaFoamEnabled) {
+    updateFoamPatches(foam, boat.root.position, time);
+  }
   updateVolcanoPlumes(volcanoPlumes, time);
   enemyMotions.forEach((enemyMotion) => updateEnemyMotion(enemyMotion, dt, time, boat.root.position, blockedWaters));
   updateEnemyFireControl(torpedoSystem, enemyMotions, boat.root.position, blockedWaters, time);
@@ -761,6 +767,7 @@ function flushPerformanceTelemetry(now) {
     webglVendor: clientCapability.webglVendor,
     webglRenderer: clientCapability.webglRenderer,
     performanceClass: clientCapability.performanceClass,
+    hardwareScalingLevel: renderQuality.hardwareScalingLevel,
     startedAt: new Date(reportStartedWallTime).toISOString(),
     endedAt: new Date(reportEndedWallTime).toISOString(),
     frames: performanceTelemetry.frames,
@@ -856,6 +863,20 @@ function createClientCapabilitySnapshot(engineInstance, renderCanvas) {
     webglRenderer: String(webglRenderer ?? ""),
     performanceClass
   };
+}
+
+function applyRenderQuality(engineInstance, capability) {
+  const hardwareScalingLevel = chooseHardwareScalingLevel();
+  engineInstance.setHardwareScalingLevel(hardwareScalingLevel);
+  return { hardwareScalingLevel };
+}
+
+function chooseHardwareScalingLevel() {
+  const urlValue = Number(new URLSearchParams(location.search).get("scale"));
+  if (Number.isFinite(urlValue) && urlValue >= 1 && urlValue <= 3) {
+    return urlValue;
+  }
+  return 1;
 }
 
 function estimateInitialPerformanceClass(capability) {
@@ -4193,6 +4214,11 @@ function createFoamPatches(scene, materials, parent) {
 
   const patches = [];
   const area = 180;
+  if (!openSeaFoamEnabled) {
+    root.setEnabled(false);
+    return { area, patches };
+  }
+
   const count = 128;
   const windAngle = Math.PI * 0.56;
   const windSpeed = 0.775;
