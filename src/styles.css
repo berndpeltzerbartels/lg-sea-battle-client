@@ -580,18 +580,31 @@ body {
   background: rgb(2 16 21 / 28%);
 }
 
-.player-list-bearing::after {
+.player-list-bearing::before {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 0;
-  height: 0;
-  border-right: 4px solid transparent;
-  border-bottom: 8px solid #9be5df;
-  border-left: 4px solid transparent;
+  width: 2px;
+  height: 7px;
+  border-radius: 999px;
+  background: #9be5df;
+  box-shadow: 0 0 7px rgb(155 229 223 / 55%);
   content: "";
-  transform: translate(-50%, -62%) rotate(var(--bearing, 0rad));
-  transform-origin: 50% 62%;
+  transform: translate(-50%, -88%) rotate(var(--bearing, 0rad));
+  transform-origin: 50% 88%;
+}
+
+.player-list-bearing::after {
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  width: 8px;
+  height: 8px;
+  background: #e8fffb;
+  clip-path: polygon(50% 0, 100% 100%, 50% 72%, 0 100%);
+  content: "";
+  transform: translateX(-50%) rotate(var(--bearing, 0rad));
+  transform-origin: 50% 7px;
 }
 
 .player-list-bearing.is-unknown {
