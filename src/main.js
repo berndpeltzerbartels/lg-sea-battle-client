@@ -105,9 +105,6 @@ document.body.dataset.playerShipId = playerServerShipId ?? "pending";
 document.body.dataset.serverOwnShips = String(playerShips.length);
 document.body.dataset.serverEnemyShips = String(enemyShips.length);
 document.body.dataset.testPlayerInvulnerable = String(testPlayerInvulnerable);
-updateFleetStatus(gameState.ships, gameState.destroyedShipsByTeam);
-updatePlayerList(gameState.ships, gameState.killsByPlayer);
-updatePlayerTorpedoStock(playerTorpedoesRemaining);
 setupResetGameControl(resetGameButton);
 setupMapZoomControl(mapZoom);
 
@@ -360,6 +357,9 @@ connectGameEventStream();
 const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
 setupTelegraphDragControl(telegraphScale);
 setupRudderDragControl(document.querySelector(".rudder-gauge"));
+updateFleetStatus(gameState.ships, gameState.destroyedShipsByTeam);
+updatePlayerList(gameState.ships, gameState.killsByPlayer);
+updatePlayerTorpedoStock(playerTorpedoesRemaining);
 enemyMotions
   .filter((enemyMotion) => !enemyMotion.isServerControlled)
   .forEach((enemyMotion, index) => startLocalEnemyEventSource(enemyMotion, index));
