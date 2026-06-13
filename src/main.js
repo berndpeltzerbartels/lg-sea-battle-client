@@ -345,6 +345,7 @@ let fireTorpedoRequestInFlight = false;
 const maxRudderDegrees = 35;
 const rudderStepDegrees = 2.5;
 const rudderHoldDegreesPerSecond = 72;
+const maxSimulationFrameSeconds = 0.12;
 boat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
 const playerRespawnPoints = createPlayerRespawnPoints(playerShips, initialPlayerSpawn);
 const torpedoLaunchDefaults = {
@@ -363,7 +364,8 @@ enemyMotions
   .forEach((enemyMotion, index) => startLocalEnemyEventSource(enemyMotion, index));
 
 scene.onBeforeRenderObservable.add(() => {
-  const dt = Math.min(engine.getDeltaTime() / 1000, 0.05);
+  const rawFrameSeconds = engine.getDeltaTime() / 1000;
+  const dt = Math.min(rawFrameSeconds, maxSimulationFrameSeconds);
   time += dt;
   const playerActive = playerDamageState === "active";
 
@@ -385,7 +387,7 @@ scene.onBeforeRenderObservable.add(() => {
   let forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
   let nextWaterSafety = waterSafety;
 
-  if (playerActive && !playerServerTarget) {
+  if (playerActive) {
     const maxForwardSpeed = 12.4;
     const engineTargetSpeed = engineOrders[engineOrder].speed;
     const targetSpeed = engineTargetSpeed > 0 ? Math.min(engineTargetSpeed, maxForwardSpeed) : engineTargetSpeed;
@@ -423,18 +425,10 @@ scene.onBeforeRenderObservable.add(() => {
     }
   } else {
     heldRudderDirection = 0;
-    if (!playerActive) {
-      engineOrder = 2;
-      speed *= Math.max(0, 1 - dt * 1.7);
-      turnVelocity *= Math.max(0, 1 - dt * 2.0);
-      rudderDegrees += (0 - rudderDegrees) * Math.min(1, dt * 1.8);
-    }
-  }
-
-  if (playerActive && playerServerTarget) {
-    applyPlayerServerTarget(dt);
-    forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
-    nextWaterSafety = getShipWaterSafety(boat.root.position, heading, blockedWaters);
+    engineOrder = 2;
+    speed *= Math.max(0, 1 - dt * 1.7);
+    turnVelocity *= Math.max(0, 1 - dt * 2.0);
+    rudderDegrees += (0 - rudderDegrees) * Math.min(1, dt * 1.8);
   }
 
   const bob = Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035;
@@ -497,6 +491,8 @@ scene.onBeforeRenderObservable.add(() => {
   camera.setTarget(desiredTarget);
   camera.rotation.x = -Math.abs(camera.rotation.x);
   document.body.dataset.camera = `${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)}`;
+  document.body.dataset.frameMs = (rawFrameSeconds * 1000).toFixed(1);
+  document.body.dataset.simulationMs = (dt * 1000).toFixed(1);
   document.body.dataset.cameraRotation = `${camera.rotation.x.toFixed(2)},${camera.rotation.y.toFixed(2)},${camera.rotation.z.toFixed(2)}`;
   document.body.dataset.activeCamera = scene.activeCamera?.name ?? "none";
   document.body.dataset.boat = `${boat.root.position.x.toFixed(1)},${boat.root.position.y.toFixed(1)},${boat.root.position.z.toFixed(1)}`;
@@ -1109,8 +1105,10 @@ async function sendPlayerState() {
         z: boat.root.position.z,
         heading,
         speed,
+        turnVelocity,
         engineOrder,
-        rudderDegrees: Math.round(rudderDegrees)
+        rudderDegrees: Math.round(rudderDegrees),
+        clientTime: performance.now() / 1000
       })
     });
     if (!response.ok) {
@@ -1176,11 +1174,13 @@ function applyServerGameSnapshot(snapshot) {
       playerServerShipId = ownShip.id;
       document.body.dataset.playerShipId = playerServerShipId;
       document.body.dataset.pendingPlayerShipId = "";
-      updatePlayerServerTarget(ownShip, snapshot.t);
       updatePlayerTorpedoStock(Number.isFinite(ownShip.torpedoesRemaining) ? ownShip.torpedoesRemaining : null);
       if (!playerServerSnapshotReceived || assignedShipChanged) {
         alignPlayerBoatToServerShip(ownShip);
         playerServerSnapshotReceived = true;
+      } else {
+        playerServerTarget = null;
+        document.body.dataset.playerServerCorrection = "client-authoritative";
       }
     }
   } else if (
