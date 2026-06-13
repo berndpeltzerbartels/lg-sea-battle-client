@@ -69,7 +69,6 @@ const mapSectorOrigin = 5400;
 const mapZoomScales = [0.5, 1, 2, 4, 8, 16];
 const worldMetersPerUnit = 20;
 const torpedoLogLimit = 40;
-const torpedoMinimumWaterDepthMeters = 1;
 const enemyTorpedoFireArcRadians = 0.14;
 const enemyTorpedoAimJitterRadians = 0.035;
 const enemyTargetingRange = 420;
@@ -505,12 +504,11 @@ scene.onBeforeRenderObservable.add(() => {
   document.body.dataset.ramReady = time >= nextRamHitTime ? "true" : "false";
 
   const displayedSpeed = Math.abs(speed) < 0.08 ? 0 : Math.abs(speed);
-  const waterDepth = getShipWaterDepth(boat.root.position, heading, blockedWaters);
   speedValue.textContent = displayedSpeed.toFixed(1);
   engineValue.textContent = engineOrders[engineOrder].label;
   updateTelegraphSteps(telegraphSteps, engineOrder);
-  depthValue.textContent = nextWaterSafety.isBlocked ? "Ground" : `${waterDepth.meters.toFixed(0)} m`;
-  depthGauge?.style.setProperty("--depth-ratio", String(waterDepth.ratio));
+  depthValue.textContent = nextWaterSafety.isBlocked ? "Ground" : "Sea";
+  depthGauge?.style.setProperty("--depth-ratio", "1");
   compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
   if (compassHeading) compassHeading.textContent = `HDG ${formatHeadingDegrees(heading)}`;
   updateRudderGauge(rudderIndicator, rudderValue, rudderDegrees);
@@ -2262,19 +2260,11 @@ function getZoneVisualRz(zone) {
 }
 
 function getZoneRadarRx(zone) {
-  return Math.max(getZoneVisualRx(zone), getZoneShallowRx(zone));
+  return getZoneVisualRx(zone);
 }
 
 function getZoneRadarRz(zone) {
-  return Math.max(getZoneVisualRz(zone), getZoneShallowRz(zone));
-}
-
-function getZoneShallowRx(zone) {
-  return zone.shallowRx ?? zone.rx;
-}
-
-function getZoneShallowRz(zone) {
-  return zone.shallowRz ?? zone.rz;
+  return getZoneVisualRz(zone);
 }
 
 function createShipDesignation(ship) {
@@ -3255,9 +3245,6 @@ function torpedoHitsLand(torpedoPosition, landZones) {
 }
 
 function getTorpedoLandHit(torpedoPosition, landZones) {
-  const waterDepth = getWaterDepth(torpedoPosition, landZones);
-  if (waterDepth.meters > torpedoMinimumWaterDepthMeters) return null;
-
   for (const zone of landZones) {
     if (isInLandWater(torpedoPosition, zone)) return null;
 
@@ -3271,8 +3258,6 @@ function getTorpedoLandHit(torpedoPosition, landZones) {
       return {
         zone: zone.name,
         kind: zone.kind,
-        depthMeters: Number(waterDepth.meters.toFixed(1)),
-        minimumDepthMeters: torpedoMinimumWaterDepthMeters,
         normalizedDistance: Number(normalizedDistance.toFixed(3)),
         visualRx: Number(getZoneVisualRx(zone).toFixed(2)),
         visualRz: Number(getZoneVisualRz(zone).toFixed(2)),
@@ -3286,8 +3271,7 @@ function getTorpedoLandHit(torpedoPosition, landZones) {
 }
 
 function recordTorpedoEvent(system, torpedo, reason, time, details = {}, landZones = []) {
-  const depth = getWaterDepth(torpedo.root.position, landZones);
-  const snapshot = createTorpedoExplosionSnapshot(system, torpedo, reason, time, details, landZones, depth);
+  const snapshot = createTorpedoExplosionSnapshot(system, torpedo, reason, time, details, landZones);
   const log = window.__seaBattleTorpedoLog ?? [];
   log.push(snapshot);
   window.__seaBattleTorpedoLog = log.slice(-torpedoLogLimit);
@@ -3303,7 +3287,7 @@ function recordTorpedoEvent(system, torpedo, reason, time, details = {}, landZon
   console.info("[sea-battle] torpedo snapshot", snapshot);
 }
 
-function createTorpedoExplosionSnapshot(system, torpedo, reason, time, details, landZones, depth) {
+function createTorpedoExplosionSnapshot(system, torpedo, reason, time, details, landZones) {
   const entry = {
     reason,
     id: torpedo.id,
@@ -3314,7 +3298,6 @@ function createTorpedoExplosionSnapshot(system, torpedo, reason, time, details, 
     speed: Number(torpedo.speed.toFixed(2)),
     heading: Number(torpedo.heading.toFixed(3)),
     position: summarizeVector(torpedo.root.position),
-    depthMeters: Number(depth.meters.toFixed(1)),
     player: {
       position: summarizeVector(boat.root.position),
       heading: Number(heading.toFixed(3)),
@@ -4660,12 +4643,10 @@ function getLandZone(land) {
   return {
     x: land.x,
     z: land.z,
-    rx: land.navigationRx,
-    rz: land.navigationRz,
+    rx: land.rx,
+    rz: land.rz,
     visualRx: land.rx,
     visualRz: land.rz,
-    shallowRx: land.shallowRx,
-    shallowRz: land.shallowRz,
     name: land.name,
     kind: land.kind,
     coastRoughness: land.coastRoughness ?? 0.09,
@@ -5149,24 +5130,17 @@ function terrainNoise(x, z) {
 // Navigation uses the same coastline shape as the rendered map/radar, so the
 // ship does not run aground on invisible parts of a former coarse ellipse.
 function getWaterSafety(position, zones) {
-  let shallowAmount = 0;
-
   for (const zone of zones) {
     const distance = getZoneShapeDistance(position, zone, zone.rx, zone.rz);
     const blockDistance = getZoneBlockDistance(zone);
     const landWater = isInLandWater(position, zone);
-    const shallowDistance = getZoneShapeDistance(position, zone, getZoneShallowRx(zone), getZoneShallowRz(zone));
 
     if (distance < blockDistance && !landWater) {
       return { isBlocked: true, isShallow: true, shallowAmount: 1 };
     }
-
-    if (shallowDistance < 1 || landWater) {
-      shallowAmount = Math.max(shallowAmount, landWater ? 0.48 : 1 - shallowDistance);
-    }
   }
 
-  return { isBlocked: false, isShallow: shallowAmount > 0, shallowAmount };
+  return { isBlocked: false, isShallow: false, shallowAmount: 0 };
 }
 
 function getShipWaterSafety(position, heading, zones) {
@@ -5198,40 +5172,6 @@ function getShipMovementWaterSafety(position, heading, speedValue, zones) {
   }
 
   return { isBlocked: false, isShallow: shallowAmount > 0, shallowAmount };
-}
-
-function getWaterDepth(position, zones) {
-  const maxDepth = 110;
-  let nearestCoastDistance = Number.POSITIVE_INFINITY;
-
-  for (const zone of zones) {
-    const distance = getZoneShapeDistance(position, zone, zone.rx, zone.rz);
-    const blockDistance = getZoneBlockDistance(zone);
-    const coastDistance = isInLandWater(position, zone)
-      ? Math.max(0.08, Math.abs(distance - 0.72))
-      : distance - blockDistance;
-    nearestCoastDistance = Math.min(nearestCoastDistance, coastDistance);
-  }
-
-  if (nearestCoastDistance <= 0) {
-    return { meters: 0, ratio: 0 };
-  }
-
-  const ratio = clamp(1 - Math.exp(-nearestCoastDistance / 1.25), 0, 1);
-  return {
-    meters: 2 + ratio * (maxDepth - 2),
-    ratio
-  };
-}
-
-function getShipWaterDepth(position, heading, zones) {
-  return getShipNavigationPoints(position, heading)
-    .map((point) => getWaterDepth(point, zones))
-    .reduce((shallowest, depth) => (depth.meters < shallowest.meters ? depth : shallowest));
-}
-
-function getShipNavigationPoints(position, heading) {
-  return getShipNavigationSamples(position, heading).map((sample) => sample.point);
 }
 
 function getShipNavigationSamples(position, heading) {
@@ -5273,7 +5213,7 @@ function getZoneShapeDistance(position, zone, rx, rz) {
 }
 
 function getZoneBlockDistance(zone) {
-  return zone.kind === "coastline" ? 1.055 : 1;
+  return 1;
 }
 
 function getWaterEscapeVector(position, zones) {
