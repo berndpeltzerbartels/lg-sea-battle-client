@@ -67,6 +67,7 @@ const mapTileSize = 1200;
 const mapSectorSize = 600;
 const mapSectorOrigin = 5400;
 const mapZoomScales = [0.5, 1, 2, 4, 8, 16];
+const maxPlayerInitialsLength = 5;
 const worldMetersPerUnit = 20;
 const torpedoLogLimit = 40;
 const enemyTorpedoFireArcRadians = 0.14;
@@ -104,7 +105,7 @@ document.body.dataset.serverOwnShips = String(playerShips.length);
 document.body.dataset.serverEnemyShips = String(enemyShips.length);
 document.body.dataset.testPlayerInvulnerable = String(testPlayerInvulnerable);
 updateFleetStatus(gameState.ships, gameState.destroyedShipsByTeam);
-updatePlayerList(gameState.ships);
+updatePlayerList(gameState.ships, gameState.killsByPlayer);
 updatePlayerTorpedoStock(playerTorpedoesRemaining);
 setupResetGameControl(resetGameButton);
 setupMapZoomControl(mapZoom);
@@ -840,7 +841,7 @@ function requirePlayerLogin() {
     <form class="login-card">
       <strong>Sea Battle</strong>
       <label for="playerInitials">Initialen</label>
-      <input id="playerInitials" name="initials" maxlength="3" autocomplete="off" value="${existing}" autofocus />
+      <input id="playerInitials" name="initials" maxlength="${maxPlayerInitialsLength}" pattern="[A-Za-z0-9]{1,${maxPlayerInitialsLength}}" autocomplete="off" value="${existing}" autofocus />
       <label for="playerTeam">Seite</label>
       <select id="playerTeam" name="team">
         <option value="red">Dark</option>
@@ -857,6 +858,9 @@ function requirePlayerLogin() {
   }
   input?.focus();
   input?.select();
+  input?.addEventListener("input", () => {
+    input.value = sanitizeInitials(input.value);
+  });
 
   return new Promise((resolve) => {
     overlay.querySelector("form")?.addEventListener("submit", (event) => {
@@ -873,7 +877,7 @@ function requirePlayerLogin() {
 }
 
 function sanitizeInitials(value) {
-  const initials = String(value ?? "").replace(/[^a-z0-9]/gi, "").slice(0, 3).toUpperCase();
+  const initials = String(value ?? "").replace(/[^a-z0-9]/gi, "").slice(0, maxPlayerInitialsLength).toUpperCase();
   return initials.length > 0 ? initials : "";
 }
 
@@ -984,7 +988,7 @@ function updateFleetStatus(ships, destroyedShipsByTeam = {}) {
   document.body.dataset.fleetDarkKills = String(darkKills);
 }
 
-function updatePlayerList(ships) {
+function updatePlayerList(ships, killsByPlayer = {}) {
   if (!playerListRows || !Array.isArray(ships)) return;
 
   const humanShips = ships
@@ -1015,10 +1019,24 @@ function updatePlayerList(ships) {
     const shipLabel = document.createElement("span");
     shipLabel.textContent = createShipDesignation(ship);
 
+    const kills = document.createElement("span");
+    kills.className = "player-list-kills";
+    kills.textContent = `K${Number.isFinite(killsByPlayer?.[ship.controlledBy]) ? killsByPlayer[ship.controlledBy] : 0}`;
+
+    const bearing = document.createElement("span");
+    bearing.className = "player-list-bearing";
+    bearing.title = "Bearing";
+    const relativeBearing = getRelativeBearingToShip(ship);
+    if (Number.isFinite(relativeBearing)) {
+      bearing.style.setProperty("--bearing", `${relativeBearing}rad`);
+    } else {
+      bearing.classList.add("is-unknown");
+    }
+
     const sector = document.createElement("small");
     sector.textContent = formatMapSector(ship);
 
-    row.append(initials, shipLabel, sector);
+    row.append(initials, shipLabel, kills, bearing, sector);
     playerListRows.append(row);
   });
 
@@ -1031,8 +1049,17 @@ function isHumanController(controller) {
 
 function getPlayerInitialsFromId(controller) {
   if (!isHumanController(controller)) return "BOT";
-  const match = controller.match(/^player-([A-Z0-9]{1,3})-/i);
-  return (match?.[1] ?? controller.slice(0, 3)).toUpperCase();
+  const match = controller.match(/^player-([A-Z0-9]{1,5})-/i);
+  return (match?.[1] ?? controller.slice(0, maxPlayerInitialsLength)).toUpperCase();
+}
+
+function getRelativeBearingToShip(ship) {
+  if (!ship || ship.id === playerServerShipId) return null;
+  const ownPosition = boat?.root?.position;
+  if (!ownPosition || !Number.isFinite(ship.x) || !Number.isFinite(ship.z)) return null;
+
+  const absoluteBearing = Math.atan2(ship.x - ownPosition.x, ship.z - ownPosition.z);
+  return getSignedAngularDistance(absoluteBearing, heading);
 }
 
 function updatePlayerTorpedoStock(torpedoesRemaining) {
@@ -1152,7 +1179,7 @@ function applyServerGameSnapshot(snapshot) {
   if (!snapshot || !Array.isArray(snapshot.ships)) return;
   serverShipsById = indexShipsById(snapshot.ships);
   updateFleetStatus(snapshot.ships, snapshot.destroyedShipsByTeam);
-  updatePlayerList(snapshot.ships);
+  updatePlayerList(snapshot.ships, snapshot.killsByPlayer);
 
   const ownShip = snapshot.ships.find((ship) => ship.controlledBy === playerId && ship.teamId === playerTeamId);
   const previousOwnShip = snapshot.ships.find((ship) => ship.id === playerServerShipId);
@@ -1546,7 +1573,7 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl) {
   drawMapLandLabels(ctx, visibleLandZones, bounds, width, height, scale);
 
   const playerPoint = clampInstrumentPoint(worldToMapPoint(playerPosition, bounds, width, height, scale), width, height, 6);
-  drawInstrumentMarker(ctx, playerPoint.x, playerPoint.y, "#f7fbff", 4);
+  drawMapShipMarker(ctx, playerPoint.x, playerPoint.y, "#f7fbff", heading);
 
   if (mapSectorValue) mapSectorValue.textContent = formatMapSector(playerPosition);
   if (mapCoordinateValue) mapCoordinateValue.textContent = `${formatWorldCoordinate(playerPosition)}\n${formatMapBounds(bounds)}\nZoom x${zoomScale}`;
@@ -1646,6 +1673,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.stroke();
+  drawRadarCompassRing(ctx, centerX, centerY, radius, heading);
 }
 
 function prepareInstrumentCanvas(canvas) {
@@ -2041,6 +2069,27 @@ function drawInstrumentMarker(ctx, x, y, color, radius) {
   ctx.fill();
 }
 
+function drawMapShipMarker(ctx, x, y, color, markerHeading) {
+  const size = 7;
+  const noseX = Math.sin(markerHeading) * size;
+  const noseY = -Math.cos(markerHeading) * size;
+  const sideX = Math.cos(markerHeading) * size * 0.48;
+  const sideY = Math.sin(markerHeading) * size * 0.48;
+  const sternX = -Math.sin(markerHeading) * size * 0.58;
+  const sternY = Math.cos(markerHeading) * size * 0.58;
+
+  ctx.fillStyle = color;
+  ctx.strokeStyle = "rgba(2, 16, 21, 0.82)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x + noseX, y + noseY);
+  ctx.lineTo(x + sternX + sideX, y + sternY + sideY);
+  ctx.lineTo(x + sternX - sideX, y + sternY - sideY);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fill();
+}
+
 function drawRadarContactMarker(ctx, x, y, team, isPlayer = false, contactHeading = null, radarHeading = 0, label = "") {
   const color = team === "light" ? "#7fd7ff" : "#ff6b4a";
   const ring = team === "light" ? "rgba(127, 215, 255, 0.42)" : "rgba(255, 107, 74, 0.48)";
@@ -2067,6 +2116,33 @@ function drawRadarContactMarker(ctx, x, y, team, isPlayer = false, contactHeadin
     ctx.fillStyle = color;
     ctx.fillText(label, x + 9, y - 8);
   }
+}
+
+function drawRadarCompassRing(ctx, centerX, centerY, radius, radarHeading) {
+  const labels = [
+    ["N", 0],
+    ["E", Math.PI / 2],
+    ["S", Math.PI],
+    ["W", -Math.PI / 2]
+  ];
+  const labelRadius = Math.max(12, radius - 13);
+
+  ctx.save();
+  ctx.font = "800 10px Inter, Arial, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "rgba(216, 236, 242, 0.82)";
+  ctx.strokeStyle = "rgba(2, 16, 21, 0.74)";
+  ctx.lineWidth = 3;
+
+  labels.forEach(([label, worldBearing]) => {
+    const relative = worldBearing - radarHeading;
+    const x = centerX + Math.sin(relative) * labelRadius;
+    const y = centerY - Math.cos(relative) * labelRadius;
+    ctx.strokeText(label, x, y);
+    ctx.fillText(label, x, y);
+  });
+  ctx.restore();
 }
 
 function drawRadarShipMarker(ctx, x, y, color, relativeHeading) {
