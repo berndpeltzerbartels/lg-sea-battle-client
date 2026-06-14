@@ -451,7 +451,7 @@ body {
   top: 22px;
   left: 50%;
   display: grid;
-  grid-template-columns: repeat(2, minmax(78px, max-content));
+  grid-template-columns: repeat(4, minmax(78px, max-content));
   gap: 7px;
   transform: translateX(-50%);
 }
@@ -501,6 +501,16 @@ body {
 .fleet-status-dark::before {
   background: #303536;
   box-shadow: 0 0 0 1px rgb(255 255 255 / 34%), 0 0 10px rgb(255 255 255 / 20%);
+}
+
+.fleet-status-green::before {
+  background: #4f8d63;
+  box-shadow: 0 0 10px rgb(79 141 99 / 48%);
+}
+
+.fleet-status-sand::before {
+  background: #b9a061;
+  box-shadow: 0 0 10px rgb(185 160 97 / 46%);
 }
 
 .player-list {
@@ -614,6 +624,16 @@ body {
 .player-list-row-dark::before {
   background: #303536;
   box-shadow: 0 0 0 1px rgb(255 255 255 / 34%), 0 0 8px rgb(255 255 255 / 18%);
+}
+
+.player-list-row-green::before {
+  background: #4f8d63;
+  box-shadow: 0 0 8px rgb(79 141 99 / 48%);
+}
+
+.player-list-row-sand::before {
+  background: #b9a061;
+  box-shadow: 0 0 8px rgb(185 160 97 / 46%);
 }
 
 .player-list-row-own strong {

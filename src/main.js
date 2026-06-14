@@ -56,8 +56,7 @@ const radarStatus = document.getElementById("radarStatus");
 const rudderIndicator = document.getElementById("rudderIndicator");
 const rudderValue = document.getElementById("rudderValue");
 const sinkingWaterOverlay = document.getElementById("sinkingWaterOverlay");
-const lightFleetValue = document.getElementById("lightFleetValue");
-const darkFleetValue = document.getElementById("darkFleetValue");
+const fleetStatusRows = document.getElementById("fleetStatusRows");
 const torpedoStockValue = document.getElementById("torpedoStockValue");
 const playerListRows = document.getElementById("playerListRows");
 const resetGameButton = document.getElementById("resetGameButton");
@@ -68,6 +67,18 @@ const mapSectorSize = 600;
 const mapSectorOrigin = 5400;
 const mapZoomScales = [0.5, 1, 2, 4, 8, 16];
 const maxPlayerInitialsLength = 5;
+const teamDefinitions = [
+  { id: "light", label: "Light", className: "light", shipBase: 50 },
+  { id: "dark", label: "Dark", className: "dark", shipBase: 80 },
+  { id: "green", label: "Green", className: "green", shipBase: 110 },
+  { id: "sand", label: "Sand", className: "sand", shipBase: 140 }
+];
+const legacyTeamAliases = new Map([
+  ["blue", "light"],
+  ["red", "dark"],
+  ["khaki", "sand"],
+  ["kaki", "sand"]
+]);
 const worldMetersPerUnit = 20;
 const torpedoLogLimit = 40;
 const enemyTorpedoFireArcRadians = 0.14;
@@ -846,8 +857,7 @@ function requirePlayerLogin() {
       <input id="playerInitials" name="initials" maxlength="${maxPlayerInitialsLength}" pattern="[A-Za-z0-9]{1,${maxPlayerInitialsLength}}" autocomplete="off" value="${existing}" autofocus />
       <label for="playerTeam">Seite</label>
       <select id="playerTeam" name="team">
-        <option value="red">Dark</option>
-        <option value="blue">Light</option>
+        ${teamDefinitions.map((team) => `<option value="${team.id}">${team.label}</option>`).join("")}
       </select>
       <button type="submit">Start</button>
     </form>
@@ -868,7 +878,7 @@ function requirePlayerLogin() {
     overlay.querySelector("form")?.addEventListener("submit", (event) => {
       event.preventDefault();
       const initials = sanitizeInitials(input?.value) || "PL";
-      const teamId = sanitizeTeamId(teamSelect?.value) || "red";
+      const teamId = sanitizeTeamId(teamSelect?.value) || "light";
       localStorage.setItem(storageKey, initials);
       setRequestedTeamInUrl(teamId);
       document.body.classList.remove("login-active");
@@ -883,9 +893,15 @@ function sanitizeInitials(value) {
   return initials.length > 0 ? initials : "";
 }
 
+function getTeamDefinition(teamId) {
+  const canonicalTeamId = legacyTeamAliases.get(String(teamId ?? "").toLowerCase()) ?? String(teamId ?? "").toLowerCase();
+  return teamDefinitions.find((team) => team.id === canonicalTeamId) ?? null;
+}
+
 function sanitizeTeamId(value) {
-  const teamId = String(value ?? "").trim().toLowerCase();
-  return teamId === "red" || teamId === "blue" ? teamId : "";
+  const rawTeamId = String(value ?? "").trim().toLowerCase();
+  const teamId = legacyTeamAliases.get(rawTeamId) ?? rawTeamId;
+  return getTeamDefinition(teamId) ? teamId : "";
 }
 
 function setRequestedTeamInUrl(teamId) {
@@ -903,10 +919,10 @@ function getRequestedPlayerTeamId(ships, selectedTeamId = "") {
   if (requestedTeamId && teamIds.includes(requestedTeamId)) {
     return requestedTeamId;
   }
-  if (teamIds.includes("red")) {
-    return "red";
+  if (teamIds.includes("light")) {
+    return "light";
   }
-  return teamIds[0] ?? "red";
+  return teamIds[0] ?? "light";
 }
 
 function setupResetGameControl(button) {
@@ -943,12 +959,12 @@ async function requestHostGameReset() {
 }
 
 function promptGameSetupId() {
-  const currentSetup = new URLSearchParams(location.search).get("setup") ?? "default";
-  const choice = window.prompt("World: 1 = Islands, 2 = Dense land", currentSetup === "dense-land" ? "2" : "1");
+  const currentSetup = new URLSearchParams(location.search).get("setup") ?? "dense-land";
+  const choice = window.prompt("World: 1 = Dense land, 2 = Islands", currentSetup === "islands" ? "2" : "1");
   if (choice === null) return null;
   const normalized = choice.trim().toLowerCase();
-  if (normalized === "2" || normalized === "dense" || normalized === "dense-land") return "dense-land";
-  return undefined;
+  if (normalized === "2" || normalized === "islands" || normalized === "island") return "islands";
+  return "dense-land";
 }
 
 function getResetGameEndpoint() {
@@ -968,26 +984,38 @@ function getEnemyShips(ships, teamId) {
 
 function getFleetCounts(ships) {
   return ships.reduce((counts, ship) => {
-    if (ship.teamId === "blue") counts.light += 1;
-    if (ship.teamId === "red") counts.dark += 1;
+    const teamId = sanitizeTeamId(ship.teamId);
+    if (teamId) {
+      counts[teamId] = (counts[teamId] ?? 0) + 1;
+    }
     return counts;
-  }, { light: 0, dark: 0 });
+  }, Object.fromEntries(teamDefinitions.map((team) => [team.id, 0])));
 }
 
 function updateFleetStatus(ships, destroyedShipsByTeam = {}) {
+  if (!fleetStatusRows) return;
+
   const activeCounts = getFleetCounts(ships);
-  const lightLost = Number.isFinite(destroyedShipsByTeam.blue) ? destroyedShipsByTeam.blue : 0;
-  const darkLost = Number.isFinite(destroyedShipsByTeam.red) ? destroyedShipsByTeam.red : 0;
-  const lightKills = darkLost;
-  const darkKills = lightLost;
-  if (lightFleetValue) lightFleetValue.textContent = `${activeCounts.light}/${fleetTotals.light} K${lightKills}`;
-  if (darkFleetValue) darkFleetValue.textContent = `${activeCounts.dark}/${fleetTotals.dark} K${darkKills}`;
-  document.body.dataset.fleetLight = `${activeCounts.light}/${fleetTotals.light}`;
-  document.body.dataset.fleetDark = `${activeCounts.dark}/${fleetTotals.dark}`;
-  document.body.dataset.fleetLightLost = String(lightLost);
-  document.body.dataset.fleetDarkLost = String(darkLost);
-  document.body.dataset.fleetLightKills = String(lightKills);
-  document.body.dataset.fleetDarkKills = String(darkKills);
+  fleetStatusRows.innerHTML = "";
+
+  teamDefinitions.forEach((team) => {
+    const active = activeCounts[team.id] ?? 0;
+    const total = fleetTotals[team.id] ?? active;
+    const lost = Number.isFinite(destroyedShipsByTeam[team.id]) ? destroyedShipsByTeam[team.id] : 0;
+    const row = document.createElement("div");
+    row.className = `fleet-status-row fleet-status-${team.className}`;
+
+    const label = document.createElement("span");
+    label.textContent = team.label;
+
+    const value = document.createElement("strong");
+    value.textContent = `${active}/${total} L${lost}`;
+
+    row.append(label, value);
+    fleetStatusRows.append(row);
+    document.body.dataset[`fleet${team.id[0].toUpperCase()}${team.id.slice(1)}`] = `${active}/${total}`;
+    document.body.dataset[`fleet${team.id[0].toUpperCase()}${team.id.slice(1)}Lost`] = String(lost);
+  });
 }
 
 function updatePlayerList(ships, killsByPlayer = {}) {
@@ -1012,7 +1040,7 @@ function updatePlayerList(ships, killsByPlayer = {}) {
 
   humanShips.forEach((ship) => {
     const row = document.createElement("div");
-    const teamClass = ship.teamId === "blue" ? "player-list-row-light" : "player-list-row-dark";
+    const teamClass = `player-list-row-${getTeamDefinition(ship.teamId)?.className ?? "dark"}`;
     row.className = `player-list-row ${teamClass}${ship.controlledBy === playerId ? " player-list-row-own" : ""}`;
 
     const initials = document.createElement("strong");
@@ -2348,7 +2376,7 @@ function getZoneRadarRz(zone) {
 function createShipDesignation(ship) {
   const match = String(ship.id ?? "").match(/(\d+)$/);
   const number = match ? Number.parseInt(match[1], 10) : 0;
-  const base = ship.teamId === "red" ? 80 : 50;
+  const base = getTeamDefinition(ship.teamId)?.shipBase ?? 50;
   return `S ${base + number}`;
 }
 
@@ -3934,6 +3962,46 @@ function createMaterials(scene) {
   darkFunnel.specularColor = new Color3(0.04, 0.04, 0.04);
   darkFunnel.backFaceCulling = false;
 
+  const greenHull = new StandardMaterial("green_party_hull_material", scene);
+  greenHull.diffuseColor = new Color3(0.18, 0.3, 0.23);
+  greenHull.specularColor = new Color3(0.06, 0.08, 0.06);
+  greenHull.backFaceCulling = false;
+
+  const greenDeck = new StandardMaterial("green_party_deck_material", scene);
+  greenDeck.diffuseColor = new Color3(0.2, 0.34, 0.25);
+  greenDeck.specularColor = new Color3(0.06, 0.08, 0.06);
+  greenDeck.backFaceCulling = false;
+
+  const greenCabin = new StandardMaterial("green_party_cabin_material", scene);
+  greenCabin.diffuseColor = new Color3(0.26, 0.4, 0.3);
+  greenCabin.specularColor = new Color3(0.08, 0.1, 0.08);
+  greenCabin.backFaceCulling = false;
+
+  const greenFunnel = new StandardMaterial("green_party_funnel_material", scene);
+  greenFunnel.diffuseColor = new Color3(0.15, 0.25, 0.19);
+  greenFunnel.specularColor = new Color3(0.05, 0.06, 0.05);
+  greenFunnel.backFaceCulling = false;
+
+  const sandHull = new StandardMaterial("sand_party_hull_material", scene);
+  sandHull.diffuseColor = new Color3(0.45, 0.39, 0.28);
+  sandHull.specularColor = new Color3(0.1, 0.08, 0.05);
+  sandHull.backFaceCulling = false;
+
+  const sandDeck = new StandardMaterial("sand_party_deck_material", scene);
+  sandDeck.diffuseColor = new Color3(0.5, 0.44, 0.31);
+  sandDeck.specularColor = new Color3(0.1, 0.08, 0.05);
+  sandDeck.backFaceCulling = false;
+
+  const sandCabin = new StandardMaterial("sand_party_cabin_material", scene);
+  sandCabin.diffuseColor = new Color3(0.58, 0.51, 0.37);
+  sandCabin.specularColor = new Color3(0.12, 0.1, 0.06);
+  sandCabin.backFaceCulling = false;
+
+  const sandFunnel = new StandardMaterial("sand_party_funnel_material", scene);
+  sandFunnel.diffuseColor = new Color3(0.42, 0.36, 0.26);
+  sandFunnel.specularColor = new Color3(0.08, 0.07, 0.05);
+  sandFunnel.backFaceCulling = false;
+
   const foam = new StandardMaterial("foam_material", scene);
   foam.diffuseColor = new Color3(0.9, 0.97, 0.96);
   foam.emissiveColor = new Color3(0.18, 0.22, 0.22);
@@ -3983,6 +4051,14 @@ function createMaterials(scene) {
     darkDeck,
     darkCabin,
     darkFunnel,
+    greenHull,
+    greenDeck,
+    greenCabin,
+    greenFunnel,
+    sandHull,
+    sandDeck,
+    sandCabin,
+    sandFunnel,
     foam,
     volcanicSmoke,
     volcanicSmokeWarm,
@@ -4104,25 +4180,18 @@ function wrapCentered(value, size) {
 }
 
 function getShipTeamMaterials(materials, teamId) {
-  if (teamId === "blue") {
-    return {
-      hull: materials.lightHull ?? materials.hull,
-      deck: materials.lightDeck ?? materials.deck,
-      cabin: materials.lightCabin ?? materials.cabin,
-      funnel: materials.lightFunnel ?? materials.funnel
-    };
-  }
-
+  const key = getTeamDefinition(teamId)?.id ?? "dark";
+  const prefix = `${key[0].toUpperCase()}${key.slice(1)}`;
   return {
-    hull: materials.darkHull ?? materials.hull,
-    deck: materials.darkDeck ?? materials.deck,
-    cabin: materials.darkCabin ?? materials.cabin,
-    funnel: materials.darkFunnel ?? materials.funnel
+    hull: materials[`${key}Hull`] ?? materials[`player${prefix}Hull`] ?? materials.darkHull ?? materials.hull,
+    deck: materials[`${key}Deck`] ?? materials[`player${prefix}Deck`] ?? materials.darkDeck ?? materials.deck,
+    cabin: materials[`${key}Cabin`] ?? materials[`player${prefix}Cabin`] ?? materials.darkCabin ?? materials.cabin,
+    funnel: materials[`${key}Funnel`] ?? materials[`player${prefix}Funnel`] ?? materials.darkFunnel ?? materials.funnel
   };
 }
 
 function getPlayerShipTeamMaterials(materials, teamId) {
-  if (teamId === "blue") {
+  if (getTeamDefinition(teamId)?.id === "light") {
     return {
       hull: materials.playerLightHull ?? materials.lightHull ?? materials.hull,
       deck: materials.playerLightDeck ?? materials.lightDeck ?? materials.deck,
@@ -4136,7 +4205,7 @@ function getPlayerShipTeamMaterials(materials, teamId) {
 
 // Player ship is only the visible foredeck. It still uses absolute team colors,
 // otherwise every client would incorrectly see its own party as the light one.
-function createPlayerBow(scene, materials, name = "player_bow", teamId = "blue") {
+function createPlayerBow(scene, materials, name = "player_bow", teamId = "light") {
   const root = new TransformNode(name, scene);
   const teamMaterials = getPlayerShipTeamMaterials(materials, teamId);
   const hullMaterial = teamMaterials.hull;
@@ -4301,7 +4370,7 @@ function createMeshFromData(name, scene, positions, indices) {
 }
 
 // Low-poly external ship model for opponents. Keep it cheap: enemies may appear in groups later.
-function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = "red", designation = "") {
+function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = "dark", designation = "") {
   const root = new TransformNode(name, scene);
   const teamMaterials = getShipTeamMaterials(materials, teamId);
   const hullMaterial = teamMaterials.hull;
