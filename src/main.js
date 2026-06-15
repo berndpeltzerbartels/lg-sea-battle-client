@@ -2253,31 +2253,20 @@ function drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, r
 }
 
 function isLineBlockedByLand(from, to, landZones) {
-  return landZones.some((zone) => lineIntersectsEllipse(from, to, zone));
-}
-
-function lineIntersectsEllipse(from, to, zone) {
   const dx = to.x - from.x;
   const dz = to.z - from.z;
-  const ox = from.x - zone.x;
-  const oz = from.z - zone.z;
-  const rx = getZoneVisualRx(zone) * radarOcclusionScale;
-  const rz = getZoneVisualRz(zone) * radarOcclusionScale;
-  const startInsideOccluder = (ox * ox) / (rx * rx) + (oz * oz) / (rz * rz) <= 1;
+  const length = Math.sqrt(dx * dx + dz * dz);
+  if (length <= 0.001) return false;
 
-  if (startInsideOccluder) return false;
-
-  const a = (dx * dx) / (rx * rx) + (dz * dz) / (rz * rz);
-  const b = 2 * ((ox * dx) / (rx * rx) + (oz * dz) / (rz * rz));
-  const c = (ox * ox) / (rx * rx) + (oz * oz) / (rz * rz) - 1;
-  const discriminant = b * b - 4 * a * c;
-
-  if (discriminant <= 0) return false;
-
-  const root = Math.sqrt(discriminant);
-  const t1 = (-b - root) / (2 * a);
-  const t2 = (-b + root) / (2 * a);
-  return (t1 > 0.02 && t1 < 0.98) || (t2 > 0.02 && t2 < 0.98);
+  const samples = Math.max(1, Math.ceil(length / 8));
+  for (let i = 1; i < samples; i += 1) {
+    const t = i / samples;
+    const sample = new Vector3(from.x + dx * t, 0, from.z + dz * t);
+    if (getWaterSafety(sample, landZones).isBlocked) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function distance2D(a, b) {
