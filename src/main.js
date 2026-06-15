@@ -61,7 +61,6 @@ const torpedoStockValue = document.getElementById("torpedoStockValue");
 const playerListRows = document.getElementById("playerListRows");
 const resetGameButton = document.getElementById("resetGameButton");
 
-const radarOcclusionScale = 0.72;
 const mapTileSize = 1200;
 const mapSectorSize = 600;
 const mapSectorOrigin = 5400;
@@ -2228,15 +2227,21 @@ function drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, r
   const dx = zone.x - playerPosition.x;
   const dz = zone.z - playerPosition.z;
   const distance = Math.sqrt(dx * dx + dz * dz);
-  const landRadius = Math.max(getZoneVisualRx(zone), getZoneVisualRz(zone)) * radarOcclusionScale;
-  const shadowStartDistance = distance - landRadius;
-
-  // If the coarse occlusion shape reaches the player, drawing a shadow from
-  // the center is more misleading than helpful. Shadows start behind land.
-  if (distance < 1 || shadowStartDistance <= 0 || shadowStartDistance > radarRange) return;
-
   const centerAngle = Math.atan2(dx, dz) - heading;
-  const halfAngle = Math.asin(clamp(landRadius / Math.max(distance, landRadius), 0, 0.95));
+  let halfAngle = 0;
+  let shadowStartDistance = Number.POSITIVE_INFINITY;
+
+  for (const point of getCoastContourPoints(zone, 40)) {
+    const pointDx = point.x - playerPosition.x;
+    const pointDz = point.z - playerPosition.z;
+    const pointDistance = Math.sqrt(pointDx * pointDx + pointDz * pointDz);
+    const pointAngle = Math.atan2(pointDx, pointDz) - heading;
+    halfAngle = Math.max(halfAngle, Math.abs(normalizeAngle(pointAngle - centerAngle)));
+    shadowStartDistance = Math.min(shadowStartDistance, pointDistance);
+  }
+
+  if (distance < 1 || shadowStartDistance <= 0 || shadowStartDistance > radarRange || halfAngle <= 0.01) return;
+
   const near = clamp(shadowStartDistance / radarRange, 0.04, 1) * radius;
   const start = centerAngle - halfAngle;
   const end = centerAngle + halfAngle;
@@ -2267,6 +2272,10 @@ function isLineBlockedByLand(from, to, landZones) {
     }
   }
   return false;
+}
+
+function normalizeAngle(angle) {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
 }
 
 function distance2D(a, b) {
