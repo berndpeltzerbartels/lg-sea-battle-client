@@ -841,8 +841,13 @@ function getLocalPlayerId(initials = "PL") {
 function requirePlayerLogin() {
   const params = new URLSearchParams(location.search);
   const requestedTeamId = sanitizeTeamId(params.get("team") ?? params.get("side"));
+  const requestedInitials = sanitizeInitials(params.get("initials") ?? params.get("name") ?? params.get("player"));
   const storageKey = "seaBattlePlayerInitials";
   const existing = sanitizeInitials(localStorage.getItem(storageKey));
+  if (requestedInitials && requestedTeamId) {
+    localStorage.setItem(storageKey, requestedInitials);
+    return Promise.resolve({ initials: requestedInitials, teamId: requestedTeamId });
+  }
   if (existing && requestedTeamId) {
     return Promise.resolve({ initials: existing, teamId: requestedTeamId });
   }
@@ -2389,7 +2394,7 @@ function createRadarContactLabel(ship) {
 }
 
 function getPlayerInitials(playerIdentifier) {
-  const match = String(playerIdentifier ?? "").match(/^player-([a-z0-9]{1,3})-/i);
+  const match = String(playerIdentifier ?? "").match(/^player-([a-z0-9]{1,5})-/i);
   if (match) {
     return match[1].toUpperCase();
   }
