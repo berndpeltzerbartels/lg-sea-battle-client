@@ -180,6 +180,9 @@ window.addEventListener("keydown", (event) => {
     heldRudderDirection = -1;
     if (!event.repeat) {
       rudderDegrees = stepRudderDegrees(rudderDegrees, -1);
+      nextRudderHoldChangeTime = time + rudderHoldInitialDelaySeconds;
+    } else {
+      nextRudderHoldChangeTime = Math.min(nextRudderHoldChangeTime, time);
     }
     event.preventDefault();
   }
@@ -187,6 +190,9 @@ window.addEventListener("keydown", (event) => {
     heldRudderDirection = 1;
     if (!event.repeat) {
       rudderDegrees = stepRudderDegrees(rudderDegrees, 1);
+      nextRudderHoldChangeTime = time + rudderHoldInitialDelaySeconds;
+    } else {
+      nextRudderHoldChangeTime = Math.min(nextRudderHoldChangeTime, time);
     }
     event.preventDefault();
   }
@@ -314,6 +320,7 @@ let rudderDegrees = 0;
 let heldEngineDirection = 0;
 let nextEngineHoldChangeTime = 0;
 let heldRudderDirection = 0;
+let nextRudderHoldChangeTime = 0;
 let mouseButtonMask = 0;
 let mouseWheelEngineAccumulator = 0;
 let rightMouseRudderActive = false;
@@ -352,6 +359,7 @@ let gameEventSourceReady = false;
 let fireTorpedoRequestInFlight = false;
 const maxRudderDegrees = 35;
 const rudderStepDegrees = 1;
+const rudderHoldInitialDelaySeconds = 0.22;
 const rudderHoldDegreesPerSecond = 72;
 const maxSimulationFrameSeconds = 0.12;
 boat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
@@ -380,7 +388,7 @@ scene.onBeforeRenderObservable.add(() => {
   time += dt;
   const playerActive = playerDamageState === "active";
 
-  if (playerActive && heldRudderDirection !== 0) {
+  if (playerActive && heldRudderDirection !== 0 && time >= nextRudderHoldChangeTime) {
     rudderDegrees = clamp(
       rudderDegrees + heldRudderDirection * rudderHoldDegreesPerSecond * dt,
       -maxRudderDegrees,
