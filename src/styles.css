@@ -610,20 +610,20 @@ body {
 }
 
 .player-list-row::before {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   content: "";
 }
 
 .player-list-row-light::before {
-  background: #9fd8dc;
-  box-shadow: 0 0 8px rgb(159 216 220 / 52%);
+  background: #aeb6b4;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 42%), 0 0 8px rgb(174 182 180 / 44%);
 }
 
 .player-list-row-dark::before {
-  background: #303536;
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 34%), 0 0 8px rgb(255 255 255 / 18%);
+  background: #111516;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 36%), 0 0 8px rgb(255 255 255 / 16%);
 }
 
 .player-list-row-green::before {
