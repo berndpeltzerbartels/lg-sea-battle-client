@@ -104,7 +104,7 @@ const enemyShips = getEnemyShips(gameState.ships, playerTeamId);
 const initialPlayerSpawn = createPlayerSpawn(playerShips, playerId);
 let playerServerShipId = initialPlayerSpawn.shipId;
 let playerBearingPosition = initialPlayerSpawn.position;
-const fleetTotals = getFleetCounts(gameState.ships);
+let fleetTotals = getFleetCounts(gameState.ships);
 let playerTorpedoesRemaining = Number.isFinite(initialPlayerSpawn.torpedoesRemaining)
   ? initialPlayerSpawn.torpedoesRemaining
   : null;
@@ -358,7 +358,7 @@ let gameEventSource = null;
 let gameEventSourceReady = false;
 let fireTorpedoRequestInFlight = false;
 const maxRudderDegrees = 35;
-const rudderStepDegrees = 1;
+const rudderStepDegrees = 3;
 const rudderHoldInitialDelaySeconds = 0.22;
 const rudderHoldDegreesPerSecond = 72;
 const maxSimulationFrameSeconds = 0.12;
@@ -1008,12 +1008,18 @@ function updateFleetStatus(ships, destroyedShipsByTeam = {}) {
   if (!fleetStatusRows) return;
 
   const activeCounts = getFleetCounts(ships);
+  const activeTeamIds = new Set([
+    ...Object.keys(activeCounts).filter((teamId) => activeCounts[teamId] > 0),
+    ...Object.keys(destroyedShipsByTeam ?? {})
+  ]);
   fleetStatusRows.innerHTML = "";
 
-  teamDefinitions.forEach((team) => {
+  teamDefinitions.filter((team) => activeTeamIds.has(team.id)).forEach((team) => {
     const active = activeCounts[team.id] ?? 0;
-    const total = fleetTotals[team.id] ?? active;
     const lost = Number.isFinite(destroyedShipsByTeam[team.id]) ? destroyedShipsByTeam[team.id] : 0;
+    const observedTotal = active + lost;
+    fleetTotals[team.id] = Math.max(fleetTotals[team.id] ?? 0, observedTotal);
+    const total = fleetTotals[team.id] ?? active;
     const row = document.createElement("div");
     row.className = `fleet-status-row fleet-status-${team.className}`;
 
@@ -1063,7 +1069,7 @@ function updatePlayerList(ships, killsByPlayer = {}) {
 
     const kills = document.createElement("span");
     kills.className = "player-list-kills";
-    kills.textContent = `K${Number.isFinite(killsByPlayer?.[ship.controlledBy]) ? killsByPlayer[ship.controlledBy] : 0}`;
+    kills.textContent = String(Number.isFinite(killsByPlayer?.[ship.controlledBy]) ? killsByPlayer[ship.controlledBy] : 0);
 
     const bearing = document.createElement("span");
     bearing.className = "player-list-bearing";
