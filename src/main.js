@@ -2029,7 +2029,7 @@ function drawRadarLandZone(ctx, zone, playerPosition, centerX, centerY, scale, h
     return;
   }
 
-  const points = getCoastContourPoints(zone, 80).map((point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading));
+  const points = getCoastContourPoints(zone, 80, "radar").map((point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading));
   drawInstrumentPolygon(ctx, points, "rgba(96, 124, 83, 0.92)", "rgba(232, 217, 159, 0.46)");
   drawRadarLandWater(ctx, zone, playerPosition, centerX, centerY, scale, heading);
 }
@@ -2068,7 +2068,7 @@ function addRadarLandPath(ctx, zone, playerPosition, centerX, centerY, scale, he
       Math.PI * 2
     );
   } else {
-    const points = getCoastContourPoints(zone, 80).map((point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading));
+    const points = getCoastContourPoints(zone, 80, "radar").map((point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading));
     if (points.length < 3) return;
     ctx.moveTo(points[0].x, points[0].y);
     for (let i = 1; i < points.length; i += 1) {
@@ -2095,15 +2095,16 @@ function drawInstrumentPolygon(ctx, points, fill, stroke) {
   ctx.stroke();
 }
 
-function getCoastContourPoints(zone, samples) {
+function getCoastContourPoints(zone, samples, boundary = "visual") {
   const points = [];
+  const boundaryDistance = getZoneBoundaryDistance(zone, boundary);
 
   for (let i = 0; i < samples; i += 1) {
     const angle = (i / samples) * Math.PI * 2;
     const factor = getCoastRadiusFactor(angle, zone);
     points.push({
-      x: zone.x + Math.cos(angle) * getZoneVisualRx(zone) * factor,
-      z: zone.z + Math.sin(angle) * getZoneVisualRz(zone) * factor
+      x: zone.x + Math.cos(angle) * getZoneVisualRx(zone) * boundaryDistance * factor,
+      z: zone.z + Math.sin(angle) * getZoneVisualRz(zone) * boundaryDistance * factor
     });
   }
 
@@ -2245,7 +2246,7 @@ function drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, r
   let halfAngle = 0;
   let shadowStartDistance = Number.POSITIVE_INFINITY;
 
-  for (const point of getCoastContourPoints(zone, 40)) {
+  for (const point of getCoastContourPoints(zone, 40, "radar")) {
     const pointDx = point.x - playerPosition.x;
     const pointDz = point.z - playerPosition.z;
     const pointDistance = Math.sqrt(pointDx * pointDx + pointDz * pointDz);
@@ -2281,7 +2282,7 @@ function isLineBlockedByLand(from, to, landZones) {
   for (let i = 1; i < samples; i += 1) {
     const t = i / samples;
     const sample = new Vector3(from.x + dx * t, 0, from.z + dz * t);
-    if (getWaterSafety(sample, landZones).isBlocked) {
+    if (isRadarBlockedAt(sample, landZones)) {
       return true;
     }
   }
@@ -2383,11 +2384,35 @@ function getZoneVisualRz(zone) {
 }
 
 function getZoneRadarRx(zone) {
-  return getZoneVisualRx(zone);
+  return getZoneVisualRx(zone) * getZoneBoundaryDistance(zone, "radar");
 }
 
 function getZoneRadarRz(zone) {
-  return getZoneVisualRz(zone);
+  return getZoneVisualRz(zone) * getZoneBoundaryDistance(zone, "radar");
+}
+
+function getZoneBoundaryDistance(zone, boundary) {
+  if (boundary === "radar") {
+    if (zone.kind === "coastline") return 0.86;
+    return isSteepRockZone(zone) ? 1 : 0.92;
+  }
+  if (boundary === "navigation") {
+    if (zone.kind === "coastline") return 1.06;
+    return isSteepRockZone(zone) ? 1 : 1.02;
+  }
+  return 1;
+}
+
+function isSteepRockZone(zone) {
+  const name = String(zone.name ?? "");
+  return zone.kind === "island" && (
+    name.includes("rock") ||
+    name.includes("rocks") ||
+    name.includes("stack") ||
+    name.includes("needle") ||
+    name.includes("skerry") ||
+    name.includes("skerries")
+  );
 }
 
 function createShipDesignation(ship) {
@@ -3371,17 +3396,15 @@ function getTorpedoLandHit(torpedoPosition, landZones) {
   for (const zone of landZones) {
     if (isInLandWater(torpedoPosition, zone)) return null;
 
-    const rx = getZoneVisualRx(zone) + 0.35;
-    const rz = getZoneVisualRz(zone) + 0.35;
-    const nx = (torpedoPosition.x - zone.x) / rx;
-    const nz = (torpedoPosition.z - zone.z) / rz;
-    const normalizedDistance = Math.sqrt(nx * nx + nz * nz);
+    const normalizedDistance = getZoneShapeDistance(torpedoPosition, zone, zone.rx, zone.rz);
+    const navigationBoundary = getZoneBlockDistance(zone, "navigation");
 
-    if (normalizedDistance <= 1) {
+    if (normalizedDistance <= navigationBoundary) {
       return {
         zone: zone.name,
         kind: zone.kind,
         normalizedDistance: Number(normalizedDistance.toFixed(3)),
+        navigationBoundary: Number(navigationBoundary.toFixed(3)),
         visualRx: Number(getZoneVisualRx(zone).toFixed(2)),
         visualRz: Number(getZoneVisualRz(zone).toFixed(2)),
         localX: Number((torpedoPosition.x - zone.x).toFixed(2)),
@@ -5291,12 +5314,12 @@ function terrainNoise(x, z) {
   );
 }
 
-// Navigation uses the same coastline shape as the rendered map/radar, so the
-// ship does not run aground on invisible parts of a former coarse ellipse.
+// Navigation blocks at the calculated waterline, while radar uses the inner
+// terrain contour so a flat beach does not cast a radar shadow.
 function getWaterSafety(position, zones) {
   for (const zone of zones) {
     const distance = getZoneShapeDistance(position, zone, zone.rx, zone.rz);
-    const blockDistance = getZoneBlockDistance(zone);
+    const blockDistance = getZoneBlockDistance(zone, "navigation");
     const landWater = isInLandWater(position, zone);
 
     if (distance < blockDistance && !landWater) {
@@ -5376,8 +5399,19 @@ function getZoneShapeDistance(position, zone, rx, rz) {
   return distance / getCoastRadiusFactor(angle, zone);
 }
 
-function getZoneBlockDistance(zone) {
-  return 1;
+function getZoneBlockDistance(zone, boundary = "navigation") {
+  return getZoneBoundaryDistance(zone, boundary);
+}
+
+function isRadarBlockedAt(position, zones) {
+  for (const zone of zones) {
+    const distance = getZoneShapeDistance(position, zone, zone.rx, zone.rz);
+    if (distance < getZoneBlockDistance(zone, "radar") && !isInLandWater(position, zone)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function getWaterEscapeVector(position, zones) {
@@ -5389,7 +5423,7 @@ function getWaterEscapeVector(position, zones) {
     const nx = localX / zone.rx;
     const nz = localZ / zone.rz;
     const distance = getZoneShapeDistance(position, zone, zone.rx, zone.rz);
-    const blockDistance = getZoneBlockDistance(zone);
+    const blockDistance = getZoneBlockDistance(zone, "navigation");
 
     if (distance < blockDistance && !isInLandWater(position, zone)) {
       if (distance < 0.001) {
