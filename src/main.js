@@ -1521,6 +1521,7 @@ function applyServerShipSnapshot(motion, ship) {
     return;
   }
 
+  const wasInactive = motion.state === "sunk" || motion.serverState === "sunk" || !motion.root.isEnabled();
   const correctionDistance = distance2D(motion.root.position, { x: ship.x, z: ship.z });
   remoteCorrectionSamples += 1;
   remoteCorrectionTotal += correctionDistance;
@@ -1541,7 +1542,7 @@ function applyServerShipSnapshot(motion, ship) {
   motion.speed = Number.isFinite(ship.speed) ? motion.speed + (ship.speed - motion.speed) * 0.18 : motion.speed;
   motion.engineOrder = Number.isInteger(ship.engineOrder) ? ship.engineOrder : motion.engineOrder;
   motion.rudder = Number.isFinite(ship.rudderDegrees) ? clamp(ship.rudderDegrees / maxRudderDegrees, -1, 1) : motion.rudder;
-  if (correctionDistance > 55) {
+  if (wasInactive && correctionDistance > 55) {
     motion.root.position.x = motion.serverPosition.x;
     motion.root.position.z = motion.serverPosition.z;
   }
