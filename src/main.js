@@ -348,7 +348,7 @@ let serverRadarReady = false;
 let serverRadarContacts = [];
 let serverRadarObserverPosition = null;
 let serverRadarObserverHeading = null;
-let serverRadarRange = 360;
+let serverRadarRange = 945;
 let serverShipsById = indexShipsById(gameState.ships);
 let gameEventSource = null;
 let gameEventSourceReady = false;
@@ -1416,6 +1416,8 @@ async function requestPlayerTorpedoFire() {
 function applyServerGameSnapshot(snapshot) {
   if (!snapshot || !Array.isArray(snapshot.ships)) return;
   serverShipsById = indexShipsById(snapshot.ships);
+  serverRadarReady = false;
+  serverRadarContacts = [];
   updateFleetStatus(snapshot.ships, snapshot.destroyedShipsByTeam);
   updatePlayerList(snapshot.ships);
 
@@ -1670,7 +1672,9 @@ function applyGameStreamMessage(data) {
   }
 
   applyServerGameSnapshot(message.state);
-  applyServerRadarSnapshot(message.radar);
+  if (message.radar) {
+    applyServerRadarSnapshot(message.radar);
+  }
   document.body.dataset.gameEventSource = gameEventSourceReady ? "open" : "message";
   document.body.dataset.gameEventTime = String(message.state?.t ?? "");
 }
@@ -2779,8 +2783,30 @@ function getRadarContacts(enemyMotions) {
     return serverRadarContacts;
   }
 
-  return enemyMotions
-    .filter(() => false);
+  return getSnapshotRadarContacts();
+}
+
+function getSnapshotRadarContacts() {
+  const contacts = [];
+  for (const ship of serverShipsById.values()) {
+    if (!ship || ship.state !== "active") continue;
+    if (ship.id === playerServerShipId || ship.id === pendingPlayerServerShip?.id) continue;
+    if (!Number.isFinite(ship.x) || !Number.isFinite(ship.z)) continue;
+    contacts.push({
+      id: `radar-${ship.id}`,
+      shipId: ship.id,
+      team: ship.teamId === playerTeamId ? "light" : "dark",
+      teamId: ship.teamId,
+      controlledBy: ship.controlledBy ?? "bot",
+      label: createRadarContactLabel(ship),
+      position: new Vector3(ship.x, 0.28, ship.z),
+      heading: Number.isFinite(ship.heading) ? ship.heading : 0,
+      serverVisible: false
+    });
+  }
+  document.body.dataset.radarStateSync = "client-snapshot";
+  document.body.dataset.radarContacts = String(contacts.length);
+  return contacts;
 }
 
 function beginPlayerSinking(hitPosition, now) {
