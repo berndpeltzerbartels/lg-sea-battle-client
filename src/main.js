@@ -87,6 +87,8 @@ const engineHoldInitialDelaySeconds = 0.22;
 const engineHoldRepeatSeconds = 0.1;
 const mouseWheelEngineStep = 100;
 const testPlayerInvulnerable = false;
+const openSeaFoamEnabled = false;
+const performanceLoggingEnabled = true;
 const playerLogin = await requirePlayerLogin();
 const playerInitials = playerLogin.initials;
 const worldLandmasses = await loadWorldLandmasses();
@@ -115,6 +117,11 @@ document.body.dataset.playerShipId = playerServerShipId ?? "pending";
 document.body.dataset.serverOwnShips = String(playerShips.length);
 document.body.dataset.serverEnemyShips = String(enemyShips.length);
 document.body.dataset.testPlayerInvulnerable = String(testPlayerInvulnerable);
+document.body.dataset.openSeaFoam = String(openSeaFoamEnabled);
+document.body.dataset.performanceLogging = String(performanceLoggingEnabled);
+updateFleetStatus(gameState.ships, gameState.destroyedShipsByTeam);
+updatePlayerList(gameState.ships);
+updatePlayerTorpedoStock(playerTorpedoesRemaining);
 setupResetGameControl(resetGameButton);
 setupMapZoomControl(mapZoom);
 
@@ -323,6 +330,14 @@ let heldRudderDirection = 0;
 let nextRudderHoldChangeTime = 0;
 let mouseButtonMask = 0;
 let mouseWheelEngineAccumulator = 0;
+let measuredSpeedSample = {
+  time: 0,
+  x: initialPlayerSpawn.position.x,
+  z: initialPlayerSpawn.position.z,
+  speed: 0
+};
+let performanceTelemetry = createPerformanceTelemetry();
+let httpRequestsInFlight = 0;
 let rightMouseRudderActive = false;
 let rightMouseRudderStartX = 0;
 let rightMouseRudderStartDegrees = 0;
@@ -352,16 +367,21 @@ let serverRadarReady = false;
 let serverRadarContacts = [];
 let serverRadarObserverPosition = null;
 let serverRadarObserverHeading = null;
-let serverRadarRange = 360;
+let serverRadarRange = 945;
 let serverShipsById = indexShipsById(gameState.ships);
 let gameEventSource = null;
 let gameEventSourceReady = false;
+let lastGameStreamMessageAt = 0;
 let fireTorpedoRequestInFlight = false;
 const maxRudderDegrees = 35;
 const rudderStepDegrees = 3;
 const rudderHoldInitialDelaySeconds = 0.22;
 const rudderHoldDegreesPerSecond = 60;
 const maxSimulationFrameSeconds = 0.12;
+const clientCapability = createClientCapabilitySnapshot(engine, canvas);
+const renderQuality = applyRenderQuality(engine, clientCapability);
+document.body.dataset.clientCapability = clientCapability.performanceClass;
+document.body.dataset.hardwareScalingLevel = renderQuality.hardwareScalingLevel.toFixed(2);
 boat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
 const playerRespawnPoints = createPlayerRespawnPoints(playerShips, initialPlayerSpawn);
 const torpedoLaunchDefaults = {
@@ -386,6 +406,7 @@ scene.onBeforeRenderObservable.add(() => {
   const rawFrameSeconds = engine.getDeltaTime() / 1000;
   const dt = Math.min(rawFrameSeconds, maxSimulationFrameSeconds);
   time += dt;
+  recordPerformanceFrame(rawFrameSeconds, dt);
   const playerActive = playerDamageState === "active";
 
   if (playerActive && heldRudderDirection !== 0 && time >= nextRudderHoldChangeTime) {
@@ -466,7 +487,9 @@ scene.onBeforeRenderObservable.add(() => {
 
   materials.water.diffuseTexture.uOffset += dt * 0.01;
   materials.water.diffuseTexture.vOffset += dt * 0.018;
-  updateFoamPatches(foam, boat.root.position, time);
+  if (openSeaFoamEnabled) {
+    updateFoamPatches(foam, boat.root.position, time);
+  }
   updateVolcanoPlumes(volcanoPlumes, time);
   enemyMotions.forEach((enemyMotion) => updateEnemyMotion(enemyMotion, dt, time, boat.root.position, blockedWaters));
   updateEnemyFireControl(torpedoSystem, enemyMotions, boat.root.position, blockedWaters, time);
@@ -528,12 +551,15 @@ scene.onBeforeRenderObservable.add(() => {
   speedValue.textContent = displayedSpeed.toFixed(1);
   engineValue.textContent = engineOrders[engineOrder].label;
   updateTelegraphSteps(telegraphSteps, engineOrder);
+  updateMeasuredSpeed(boat.root.position, time);
   depthValue.textContent = nextWaterSafety.isBlocked ? "Ground" : "Sea";
   depthGauge?.style.setProperty("--depth-ratio", "1");
+  document.body.dataset.measuredSpeed = measuredSpeedSample.speed.toFixed(2);
   compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
   if (compassHeading) compassHeading.textContent = `HDG ${formatHeadingDegrees(heading)}`;
   updateRudderGauge(rudderIndicator, rudderValue, rudderDegrees);
   updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, getRadarContacts(enemyMotions), blockedWaters, heading);
+  flushPerformanceTelemetry(time);
 });
 
 engine.runRenderLoop(() => {
@@ -650,6 +676,240 @@ function setupRudderDragControl(gauge) {
     event.stopPropagation();
     event.preventDefault();
   });
+}
+
+function updateMeasuredSpeed(position, now) {
+  const elapsed = now - measuredSpeedSample.time;
+  if (elapsed < 1) return;
+  const dx = position.x - measuredSpeedSample.x;
+  const dz = position.z - measuredSpeedSample.z;
+  measuredSpeedSample = {
+    time: now,
+    x: position.x,
+    z: position.z,
+    speed: Math.sqrt(dx * dx + dz * dz) / elapsed
+  };
+}
+
+function createPerformanceTelemetry() {
+  return {
+    startedAt: 0,
+    lastFlushAt: 0,
+    startedWallTime: Date.now(),
+    frames: 0,
+    frameMsTotal: 0,
+    frameMsMax: 0,
+    simulationMsTotal: 0,
+    simulationMsMax: 0,
+    slowFrames50: 0,
+    slowFrames80: 0,
+    clampedFrames: 0,
+    httpRequests: 0,
+    httpTotalMs: 0,
+    httpMaxMs: 0,
+    httpInFlightMax: 0,
+    playerStateHttpRequests: 0,
+    playerStateHttpTotalMs: 0,
+    playerStateHttpMaxMs: 0,
+    fireTorpedoHttpRequests: 0,
+    fireTorpedoHttpTotalMs: 0,
+    fireTorpedoHttpMaxMs: 0,
+    performanceHttpRequests: 0,
+    performanceHttpTotalMs: 0,
+    performanceHttpMaxMs: 0
+  };
+}
+
+function recordPerformanceFrame(rawFrameSeconds, simulationSeconds) {
+  if (!performanceLoggingEnabled) return;
+  const frameMs = rawFrameSeconds * 1000;
+  const simulationMs = simulationSeconds * 1000;
+  performanceTelemetry.frames += 1;
+  performanceTelemetry.frameMsTotal += frameMs;
+  performanceTelemetry.frameMsMax = Math.max(performanceTelemetry.frameMsMax, frameMs);
+  performanceTelemetry.simulationMsTotal += simulationMs;
+  performanceTelemetry.simulationMsMax = Math.max(performanceTelemetry.simulationMsMax, simulationMs);
+  if (frameMs >= 50) performanceTelemetry.slowFrames50 += 1;
+  if (frameMs >= 80) performanceTelemetry.slowFrames80 += 1;
+  if (simulationSeconds < rawFrameSeconds) performanceTelemetry.clampedFrames += 1;
+}
+
+function beginHttpRequest() {
+  httpRequestsInFlight += 1;
+  performanceTelemetry.httpInFlightMax = Math.max(performanceTelemetry.httpInFlightMax, httpRequestsInFlight);
+  return performance.now();
+}
+
+function finishHttpRequest(kind, startedAt) {
+  const elapsedMs = Math.max(0, performance.now() - startedAt);
+  httpRequestsInFlight = Math.max(0, httpRequestsInFlight - 1);
+  performanceTelemetry.httpRequests += 1;
+  performanceTelemetry.httpTotalMs += elapsedMs;
+  performanceTelemetry.httpMaxMs = Math.max(performanceTelemetry.httpMaxMs, elapsedMs);
+
+  const keyPrefix = kind === "playerState"
+    ? "playerStateHttp"
+    : kind === "fireTorpedo"
+      ? "fireTorpedoHttp"
+      : kind === "performance"
+        ? "performanceHttp"
+        : "";
+  if (!keyPrefix) return;
+  performanceTelemetry[`${keyPrefix}Requests`] += 1;
+  performanceTelemetry[`${keyPrefix}TotalMs`] += elapsedMs;
+  performanceTelemetry[`${keyPrefix}MaxMs`] = Math.max(performanceTelemetry[`${keyPrefix}MaxMs`], elapsedMs);
+}
+
+function flushPerformanceTelemetry(now) {
+  if (!performanceLoggingEnabled || performanceTelemetry.frames === 0) return;
+  if (performanceTelemetry.startedAt === 0) {
+    performanceTelemetry.startedAt = now;
+    performanceTelemetry.lastFlushAt = now;
+    return;
+  }
+  if (now - performanceTelemetry.lastFlushAt < 4) return;
+
+  const elapsed = Math.max(0.001, now - performanceTelemetry.lastFlushAt);
+  const reportStartedWallTime = performanceTelemetry.startedWallTime;
+  const reportEndedWallTime = Date.now();
+  const report = {
+    playerId,
+    teamId: playerTeamId,
+    shipId: playerServerShipId ?? "",
+    setupId: getRequestedSetupId(),
+    userAgent: navigator.userAgent,
+    platform: clientCapability.platform,
+    vendor: clientCapability.vendor,
+    hardwareConcurrency: clientCapability.hardwareConcurrency,
+    deviceMemory: clientCapability.deviceMemory,
+    maxTouchPoints: clientCapability.maxTouchPoints,
+    devicePixelRatio: clientCapability.devicePixelRatio,
+    screenWidth: clientCapability.screenWidth,
+    screenHeight: clientCapability.screenHeight,
+    viewportWidth: canvas.clientWidth,
+    viewportHeight: canvas.clientHeight,
+    webglVendor: clientCapability.webglVendor,
+    webglRenderer: clientCapability.webglRenderer,
+    performanceClass: clientCapability.performanceClass,
+    hardwareScalingLevel: renderQuality.hardwareScalingLevel,
+    startedAt: new Date(reportStartedWallTime).toISOString(),
+    endedAt: new Date(reportEndedWallTime).toISOString(),
+    frames: performanceTelemetry.frames,
+    seconds: Number(elapsed.toFixed(2)),
+    avgFrameMs: Number((performanceTelemetry.frameMsTotal / performanceTelemetry.frames).toFixed(2)),
+    maxFrameMs: Number(performanceTelemetry.frameMsMax.toFixed(2)),
+    avgSimulationMs: Number((performanceTelemetry.simulationMsTotal / performanceTelemetry.frames).toFixed(2)),
+    maxSimulationMs: Number(performanceTelemetry.simulationMsMax.toFixed(2)),
+    slowFrames50: performanceTelemetry.slowFrames50,
+    slowFrames80: performanceTelemetry.slowFrames80,
+    clampedFrames: performanceTelemetry.clampedFrames,
+    measuredSpeed: Number(measuredSpeedSample.speed.toFixed(2)),
+    selectedSpeed: Number(speed.toFixed(2)),
+    turnVelocity: Number(turnVelocity.toFixed(4)),
+    rudderDegrees: Number(rudderDegrees.toFixed(1)),
+    meshCount: scene.meshes.length,
+    visibleMeshCount: scene.meshes.filter((mesh) => mesh.isEnabled() && mesh.isVisible).length,
+    enemyCount: enemyMotions.filter((motion) => motion.root.isEnabled()).length,
+    foamCount: foam?.patches?.length ?? 0,
+    torpedoCount: torpedoSystem.active.length,
+    radarContacts: serverRadarContacts.length,
+    serverShips: serverShipsById.size,
+    gameEventSourceReady,
+    gameStreamAgeSeconds: lastGameStreamMessageAt > 0 ? Number((time - lastGameStreamMessageAt).toFixed(2)) : -1,
+    httpRequests: performanceTelemetry.httpRequests,
+    avgHttpMs: averageMs(performanceTelemetry.httpTotalMs, performanceTelemetry.httpRequests),
+    maxHttpMs: Number(performanceTelemetry.httpMaxMs.toFixed(2)),
+    httpInFlightMax: performanceTelemetry.httpInFlightMax,
+    playerStateHttpRequests: performanceTelemetry.playerStateHttpRequests,
+    avgPlayerStateHttpMs: averageMs(performanceTelemetry.playerStateHttpTotalMs, performanceTelemetry.playerStateHttpRequests),
+    maxPlayerStateHttpMs: Number(performanceTelemetry.playerStateHttpMaxMs.toFixed(2)),
+    fireTorpedoHttpRequests: performanceTelemetry.fireTorpedoHttpRequests,
+    avgFireTorpedoHttpMs: averageMs(performanceTelemetry.fireTorpedoHttpTotalMs, performanceTelemetry.fireTorpedoHttpRequests),
+    maxFireTorpedoHttpMs: Number(performanceTelemetry.fireTorpedoHttpMaxMs.toFixed(2)),
+    performanceHttpRequests: performanceTelemetry.performanceHttpRequests,
+    avgPerformanceHttpMs: averageMs(performanceTelemetry.performanceHttpTotalMs, performanceTelemetry.performanceHttpRequests),
+    maxPerformanceHttpMs: Number(performanceTelemetry.performanceHttpMaxMs.toFixed(2))
+  };
+
+  sendPerformanceReport(report);
+  performanceTelemetry = createPerformanceTelemetry();
+  performanceTelemetry.startedAt = now;
+  performanceTelemetry.lastFlushAt = now;
+}
+
+function sendPerformanceReport(report) {
+  const requestStartedAt = beginHttpRequest();
+  fetch("/game/client-performance", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(report),
+    keepalive: true
+  })
+    .catch((error) => {
+      document.body.dataset.performanceLogError = error.message;
+    })
+    .finally(() => finishHttpRequest("performance", requestStartedAt));
+}
+
+function averageMs(totalMs, count) {
+  return count > 0 ? Number((totalMs / count).toFixed(2)) : 0;
+}
+
+function createClientCapabilitySnapshot(engineInstance, renderCanvas) {
+  const gl = engineInstance?._gl ?? null;
+  const debugInfo = gl?.getExtension?.("WEBGL_debug_renderer_info");
+  const webglVendor = debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : "";
+  const webglRenderer = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : "";
+  const hardwareConcurrency = navigator.hardwareConcurrency ?? 0;
+  const deviceMemory = navigator.deviceMemory ?? 0;
+  const devicePixelRatio = window.devicePixelRatio || 1;
+  const maxTouchPoints = navigator.maxTouchPoints ?? 0;
+  const performanceClass = estimateInitialPerformanceClass({
+    hardwareConcurrency,
+    deviceMemory,
+    devicePixelRatio,
+    maxTouchPoints,
+    webglRenderer,
+    screenWidth: window.screen?.width ?? 0,
+    screenHeight: window.screen?.height ?? 0
+  });
+
+  return {
+    platform: navigator.platform ?? "",
+    vendor: navigator.vendor ?? "",
+    hardwareConcurrency,
+    deviceMemory,
+    maxTouchPoints,
+    devicePixelRatio,
+    screenWidth: window.screen?.width ?? renderCanvas.clientWidth,
+    screenHeight: window.screen?.height ?? renderCanvas.clientHeight,
+    webglVendor: String(webglVendor ?? ""),
+    webglRenderer: String(webglRenderer ?? ""),
+    performanceClass
+  };
+}
+
+function applyRenderQuality(engineInstance, capability) {
+  const hardwareScalingLevel = chooseHardwareScalingLevel();
+  engineInstance.setHardwareScalingLevel(hardwareScalingLevel);
+  return { hardwareScalingLevel };
+}
+
+function chooseHardwareScalingLevel() {
+  const urlValue = Number(new URLSearchParams(location.search).get("scale"));
+  if (Number.isFinite(urlValue) && urlValue >= 1 && urlValue <= 3) {
+    return urlValue;
+  }
+  return 1;
+}
+
+function estimateInitialPerformanceClass(capability) {
+  const renderer = String(capability.webglRenderer ?? "").toLowerCase();
+  if (renderer.includes("swiftshader")) return "software";
+  if (capability.hardwareConcurrency > 0 && capability.hardwareConcurrency <= 2) return "low";
+  if (capability.devicePixelRatio >= 2.5 && capability.maxTouchPoints > 0) return "mobile-high-dpi";
+  if (capability.screenWidth >= 3000 || capability.screenHeight >= 1800) return "large-screen";
+  return "standard";
 }
 
 function isTorpedoFireKey(event) {
@@ -979,6 +1239,10 @@ function promptGameSetupId() {
   return "dense-land";
 }
 
+function getRequestedSetupId() {
+  return new URLSearchParams(location.search).get("setup") ?? "default";
+}
+
 function getResetGameEndpoint() {
   if (location.protocol === "file:") {
     return "http://127.0.0.1:9090/game/reset";
@@ -1167,6 +1431,7 @@ function syncMultiplayerState(now) {
 
 async function sendPlayerState() {
   playerStateRequestInFlight = true;
+  const requestStartedAt = beginHttpRequest();
   try {
     const response = await fetch(getPlayerStateEndpoint(), {
       method: "POST",
@@ -1193,6 +1458,7 @@ async function sendPlayerState() {
     document.body.dataset.playerStateSync = "error";
     document.body.dataset.playerStateSyncError = error.message;
   } finally {
+    finishHttpRequest("playerState", requestStartedAt);
     playerStateRequestInFlight = false;
   }
 }
@@ -1201,6 +1467,7 @@ async function requestPlayerTorpedoFire() {
   if (fireTorpedoRequestInFlight || playerDamageState !== "active") return;
 
   fireTorpedoRequestInFlight = true;
+  const requestStartedAt = beginHttpRequest();
   try {
     const response = await fetch(getFireTorpedoEndpoint(), {
       method: "POST",
@@ -1219,6 +1486,7 @@ async function requestPlayerTorpedoFire() {
     document.body.dataset.fireTorpedoSync = "error";
     document.body.dataset.fireTorpedoSyncError = error.message;
   } finally {
+    finishHttpRequest("fireTorpedo", requestStartedAt);
     fireTorpedoRequestInFlight = false;
   }
 }
@@ -1226,6 +1494,8 @@ async function requestPlayerTorpedoFire() {
 function applyServerGameSnapshot(snapshot) {
   if (!snapshot || !Array.isArray(snapshot.ships)) return;
   serverShipsById = indexShipsById(snapshot.ships);
+  serverRadarReady = false;
+  serverRadarContacts = [];
   updateFleetStatus(snapshot.ships, snapshot.destroyedShipsByTeam);
   updatePlayerList(snapshot.ships, snapshot.killsByPlayer);
 
@@ -1464,6 +1734,7 @@ function connectGameEventStream() {
 }
 
 function applyGameStreamMessage(data) {
+  lastGameStreamMessageAt = time;
   let message;
   try {
     message = JSON.parse(data);
@@ -1479,7 +1750,9 @@ function applyGameStreamMessage(data) {
   }
 
   applyServerGameSnapshot(message.state);
-  applyServerRadarSnapshot(message.radar);
+  if (message.radar) {
+    applyServerRadarSnapshot(message.radar);
+  }
   document.body.dataset.gameEventSource = gameEventSourceReady ? "open" : "message";
   document.body.dataset.gameEventTime = String(message.state?.t ?? "");
 }
@@ -2662,8 +2935,30 @@ function getRadarContacts(enemyMotions) {
     return serverRadarContacts;
   }
 
-  return enemyMotions
-    .filter(() => false);
+  return getSnapshotRadarContacts();
+}
+
+function getSnapshotRadarContacts() {
+  const contacts = [];
+  for (const ship of serverShipsById.values()) {
+    if (!ship || ship.state !== "active") continue;
+    if (ship.id === playerServerShipId || ship.id === pendingPlayerServerShip?.id) continue;
+    if (!Number.isFinite(ship.x) || !Number.isFinite(ship.z)) continue;
+    contacts.push({
+      id: `radar-${ship.id}`,
+      shipId: ship.id,
+      team: ship.teamId === playerTeamId ? "light" : "dark",
+      teamId: ship.teamId,
+      controlledBy: ship.controlledBy ?? "bot",
+      label: createRadarContactLabel(ship),
+      position: new Vector3(ship.x, 0.28, ship.z),
+      heading: Number.isFinite(ship.heading) ? ship.heading : 0,
+      serverVisible: false
+    });
+  }
+  document.body.dataset.radarStateSync = "client-snapshot";
+  document.body.dataset.radarContacts = String(contacts.length);
+  return contacts;
 }
 
 function beginPlayerSinking(hitPosition, now) {
@@ -4143,6 +4438,11 @@ function createFoamPatches(scene, materials, parent) {
 
   const patches = [];
   const area = 180;
+  if (!openSeaFoamEnabled) {
+    root.setEnabled(false);
+    return { area, patches };
+  }
+
   const count = 128;
   const windAngle = Math.PI * 0.56;
   const windSpeed = 0.775;
