@@ -32,9 +32,9 @@ const engine = new Engine(canvas, true, {
 
 const scene = new Scene(engine);
 document.body.dataset.appStarted = "true";
-scene.clearColor = new Color4(0.42, 0.58, 0.72, 1);
+scene.clearColor = new Color4(0.36, 0.52, 0.66, 1);
 scene.fogMode = Scene.FOGMODE_LINEAR;
-scene.fogColor = new Color3(0.34, 0.45, 0.54);
+scene.fogColor = new Color3(0.29, 0.39, 0.48);
 scene.fogStart = 65;
 scene.fogEnd = 560;
 
@@ -60,6 +60,7 @@ const fleetStatusRows = document.getElementById("fleetStatusRows");
 const torpedoStockValue = document.getElementById("torpedoStockValue");
 const playerListRows = document.getElementById("playerListRows");
 const resetGameButton = document.getElementById("resetGameButton");
+const mobileFireButton = document.getElementById("mobileFireButton");
 
 const mapTileSize = 1200;
 const mapSectorSize = 600;
@@ -90,6 +91,7 @@ const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = true;
 let debugMapEnabled = new URLSearchParams(location.search).get("debug") === "1";
+let lastMapViewport = null;
 const playerLogin = await requirePlayerLogin();
 const playerInitials = playerLogin.initials;
 const worldLandmasses = await loadWorldLandmasses();
@@ -104,9 +106,10 @@ const playerId = getLocalPlayerId(playerInitials);
 const playerTeamId = getRequestedPlayerTeamId(gameState.ships, playerLogin.teamId);
 const playerShips = getTeamShips(gameState.ships, playerTeamId);
 const enemyShips = getEnemyShips(gameState.ships, playerTeamId);
-const initialPlayerSpawn = createPlayerSpawn(playerShips, playerId);
+const initialPlayerSpawn = applyRequestedTestSpawn(createPlayerSpawn(playerShips, playerId), worldLandmasses);
 let playerServerShipId = initialPlayerSpawn.shipId;
 let playerBearingPosition = initialPlayerSpawn.position;
+let heading = initialPlayerSpawn.heading;
 let fleetTotals = getFleetCounts(gameState.ships);
 let playerTorpedoesRemaining = Number.isFinite(initialPlayerSpawn.torpedoesRemaining)
   ? initialPlayerSpawn.torpedoesRemaining
@@ -126,19 +129,26 @@ updatePlayerList(gameState.ships);
 updatePlayerTorpedoStock(playerTorpedoesRemaining);
 setupResetGameControl(resetGameButton);
 setupMapZoomControl(mapZoom);
+setupDebugMapTeleport(mapCanvas);
+
+const clientCapability = createClientCapabilitySnapshot(engine, canvas);
+const renderQuality = applyRenderQuality(engine, clientCapability);
+document.body.dataset.clientCapability = clientCapability.performanceClass;
+document.body.dataset.hardwareScalingLevel = renderQuality.hardwareScalingLevel.toFixed(2);
+document.body.dataset.visualEffects = renderQuality.visualEffects;
 
 const materials = createMaterials(scene);
 const world = new TransformNode("world", scene);
 
 const sun = new DirectionalLight("sun", new Vector3(-0.45, -0.9, 0.32), scene);
 sun.position = new Vector3(35, 80, -45);
-sun.intensity = 0.92;
+sun.intensity = 0.82;
 sun.diffuse = new Color3(1.0, 0.78, 0.52);
 sun.specular = new Color3(0.58, 0.42, 0.3);
 
 const ambient = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
-ambient.intensity = 0.44;
-ambient.diffuse = new Color3(0.62, 0.72, 0.82);
+ambient.intensity = 0.38;
+ambient.diffuse = new Color3(0.54, 0.65, 0.76);
 ambient.groundColor = new Color3(0.055, 0.095, 0.11);
 
 const worldLimit = 5000;
@@ -147,9 +157,13 @@ ocean.material = materials.water;
 ocean.parent = world;
 const foam = createFoamPatches(scene, materials, world);
 const volcanoPlumes = [];
+const navigationLights = [];
 
 const blockedWaters = worldLandmasses.map(getLandZone);
 createWorldLandmasses(worldLandmasses, scene, materials, world);
+if (renderQuality.visualEffects !== "low") {
+  navigationLights.push(...createNavigationLights(worldLandmasses, scene, materials, world, renderQuality.visualEffects));
+}
 
 const boat = createPlayerBow(scene, materials, "player_bow", playerTeamId);
 boat.root.position.copyFrom(initialPlayerSpawn.position);
@@ -321,7 +335,6 @@ const engineOrders = [
 
 // Keep propulsion as discrete ship orders, not held-key throttle.
 // Later multiplayer can send this order index plus heading/speed instead of raw input.
-let heading = initialPlayerSpawn.heading;
 let speed = 0;
 let engineOrder = 2;
 let turnVelocity = 0;
@@ -380,10 +393,6 @@ const rudderStepDegrees = 3;
 const rudderHoldInitialDelaySeconds = 0.22;
 const rudderHoldDegreesPerSecond = 60;
 const maxSimulationFrameSeconds = 0.12;
-const clientCapability = createClientCapabilitySnapshot(engine, canvas);
-const renderQuality = applyRenderQuality(engine, clientCapability);
-document.body.dataset.clientCapability = clientCapability.performanceClass;
-document.body.dataset.hardwareScalingLevel = renderQuality.hardwareScalingLevel.toFixed(2);
 boat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
 const playerRespawnPoints = createPlayerRespawnPoints(playerShips, initialPlayerSpawn);
 const torpedoLaunchDefaults = {
@@ -397,6 +406,7 @@ connectGameEventStream();
 const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
 setupTelegraphDragControl(telegraphScale);
 setupRudderDragControl(document.querySelector(".rudder-gauge"));
+setupMobileFireButton(mobileFireButton);
 updateFleetStatus(gameState.ships, gameState.destroyedShipsByTeam);
 updatePlayerList(gameState.ships, gameState.killsByPlayer);
 updatePlayerTorpedoStock(playerTorpedoesRemaining);
@@ -493,6 +503,7 @@ scene.onBeforeRenderObservable.add(() => {
     updateFoamPatches(foam, boat.root.position, time);
   }
   updateVolcanoPlumes(volcanoPlumes, time);
+  updateNavigationLights(navigationLights, time, boat.root.position);
   enemyMotions.forEach((enemyMotion) => updateEnemyMotion(enemyMotion, dt, time, boat.root.position, blockedWaters));
   updateEnemyFireControl(torpedoSystem, enemyMotions, boat.root.position, blockedWaters, time);
   updateServerTorpedoVisuals(torpedoSystem, dt, time);
@@ -627,8 +638,31 @@ function setupMapZoomControl(input) {
   });
 }
 
+function setupDebugMapTeleport(canvas) {
+  if (!canvas) return;
+
+  canvas.addEventListener("pointerdown", (event) => {
+    if (!debugMapEnabled || event.button !== 0 || !lastMapViewport) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (event.clientX - rect.left) * (canvas.clientWidth / rect.width);
+    const y = (event.clientY - rect.top) * (canvas.clientHeight / rect.height);
+    const target = mapPointToWorld(x, y, lastMapViewport);
+
+    boat.root.position.x = target.x;
+    boat.root.position.z = target.z;
+    playerBearingPosition = new Vector3(target.x, boat.root.position.y, target.z);
+    speed = 0;
+    engineOrder = 2;
+    turnVelocity = 0;
+    document.body.dataset.debugTeleport = `${Math.round(target.x)},${Math.round(target.z)}`;
+    event.stopPropagation();
+    event.preventDefault();
+  });
+}
+
 function setupTelegraphDragControl(scale) {
   if (!scale) return;
+  let activePointerId = null;
 
   const setOrderFromPointer = (event) => {
     if (playerDamageState !== "active") return;
@@ -641,21 +675,29 @@ function setupTelegraphDragControl(scale) {
 
   scale.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
+    activePointerId = event.pointerId;
     setOrderFromPointer(event);
     scale.setPointerCapture?.(event.pointerId);
     event.stopPropagation();
     event.preventDefault();
   });
   scale.addEventListener("pointermove", (event) => {
-    if ((event.buttons & 1) === 0) return;
+    if (activePointerId !== event.pointerId && (event.buttons & 1) === 0) return;
     setOrderFromPointer(event);
     event.stopPropagation();
     event.preventDefault();
+  });
+  scale.addEventListener("pointerup", (event) => {
+    if (activePointerId === event.pointerId) activePointerId = null;
+  });
+  scale.addEventListener("pointercancel", () => {
+    activePointerId = null;
   });
 }
 
 function setupRudderDragControl(gauge) {
   if (!gauge) return;
+  let activePointerId = null;
 
   const setRudderFromPointer = (event) => {
     if (playerDamageState !== "active") return;
@@ -667,14 +709,32 @@ function setupRudderDragControl(gauge) {
 
   gauge.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
+    activePointerId = event.pointerId;
     setRudderFromPointer(event);
     gauge.setPointerCapture?.(event.pointerId);
     event.stopPropagation();
     event.preventDefault();
   });
   gauge.addEventListener("pointermove", (event) => {
-    if ((event.buttons & 1) === 0) return;
+    if (activePointerId !== event.pointerId && (event.buttons & 1) === 0) return;
     setRudderFromPointer(event);
+    event.stopPropagation();
+    event.preventDefault();
+  });
+  gauge.addEventListener("pointerup", (event) => {
+    if (activePointerId === event.pointerId) activePointerId = null;
+  });
+  gauge.addEventListener("pointercancel", () => {
+    activePointerId = null;
+  });
+}
+
+function setupMobileFireButton(button) {
+  if (!button) return;
+
+  button.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    requestPlayerTorpedoFire();
     event.stopPropagation();
     event.preventDefault();
   });
@@ -894,7 +954,10 @@ function createClientCapabilitySnapshot(engineInstance, renderCanvas) {
 function applyRenderQuality(engineInstance, capability) {
   const hardwareScalingLevel = chooseHardwareScalingLevel();
   engineInstance.setHardwareScalingLevel(hardwareScalingLevel);
-  return { hardwareScalingLevel };
+  return {
+    hardwareScalingLevel,
+    visualEffects: chooseVisualEffectsLevel(capability)
+  };
 }
 
 function chooseHardwareScalingLevel() {
@@ -903,6 +966,15 @@ function chooseHardwareScalingLevel() {
     return urlValue;
   }
   return 1;
+}
+
+function chooseVisualEffectsLevel(capability) {
+  const params = new URLSearchParams(location.search);
+  const requested = String(params.get("effects") ?? params.get("quality") ?? "").toLowerCase();
+  if (["off", "low", "tv"].includes(requested)) return "low";
+  if (["high", "full"].includes(requested)) return "high";
+  if (["software", "low"].includes(capability.performanceClass)) return "low";
+  return "standard";
 }
 
 function estimateInitialPerformanceClass(capability) {
@@ -1263,12 +1335,19 @@ async function requestHostGameReset() {
 
 function promptGameSetupId() {
   const currentSetup = new URLSearchParams(location.search).get("setup") ?? "dense-land";
-  const defaultChoice = currentSetup === "islands" ? "2" : currentSetup === "escort-debug" ? "3" : "1";
-  const choice = window.prompt("World: 1 = Dense land, 2 = Islands, 3 = Escort debug", defaultChoice);
+  const defaultChoice = currentSetup === "islands"
+    ? "2"
+    : currentSetup === "escort-debug"
+      ? "3"
+      : currentSetup === "landmark-tour"
+        ? "4"
+        : "1";
+  const choice = window.prompt("World: 1 = Dense land, 2 = Islands, 3 = Escort debug, 4 = Landmark tour", defaultChoice);
   if (choice === null) return null;
   const normalized = choice.trim().toLowerCase();
   if (normalized === "2" || normalized === "islands" || normalized === "island") return "islands";
   if (normalized === "3" || normalized === "escort-debug" || normalized === "escort") return "escort-debug";
+  if (normalized === "4" || normalized === "landmark-tour" || normalized === "tour") return "landmark-tour";
   return "dense-land";
 }
 
@@ -1437,6 +1516,28 @@ function createPlayerSpawn(teamShips, currentPlayerId) {
     position: new Vector3(ship.x, 0.28, ship.z),
     heading: Number.isFinite(ship.heading) ? ship.heading : 0,
     torpedoesRemaining: Number.isFinite(ship.torpedoesRemaining) ? ship.torpedoesRemaining : null
+  };
+}
+
+function applyRequestedTestSpawn(spawn, landmasses) {
+  const params = new URLSearchParams(location.search);
+  const requestedSpawn = String(params.get("spawn") ?? params.get("testSpawn") ?? "").toLowerCase();
+  if (!["beacon", "rock-beacon", "felslampe"].includes(requestedSpawn)) return spawn;
+
+  const lighthouseLands = chooseLighthouseLandmasses(landmasses, 4);
+  const target = chooseRockBeaconLandmasses(landmasses, lighthouseLands)[0];
+  if (!target) return spawn;
+
+  const distance = Math.max(target.rx ?? 28, target.rz ?? 28) + 90;
+  const position = new Vector3(target.x - distance * 0.95, 0.28, target.z + distance * 0.45);
+  const heading = Math.atan2(target.x - position.x, target.z - position.z);
+  document.body.dataset.testSpawn = "beacon";
+  document.body.dataset.testSpawnTarget = target.name ?? "";
+
+  return {
+    ...spawn,
+    position,
+    heading
   };
 }
 
@@ -1916,6 +2017,7 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, headi
   const tile = getMapTile(playerPosition, zoomScale);
   const bounds = getMapTileBounds(tile, zoomScale);
   const scale = Math.min(width / (bounds.maxX - bounds.minX), height / (bounds.maxZ - bounds.minZ));
+  lastMapViewport = { bounds, width, height, scale };
 
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "rgba(7, 31, 43, 0.78)";
@@ -1926,6 +2028,7 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, headi
   const visibleLandZones = landZones.filter((zone) => zoneIntersectsBounds(zone, bounds));
   drawMapLandUnion(ctx, visibleLandZones, bounds, width, height, scale);
   drawMapLandLabels(ctx, visibleLandZones, bounds, width, height, scale);
+  drawMapLandmarkMarkers(ctx, landZones, bounds, width, height, scale);
 
   if (debugMapEnabled) {
     drawDebugMapShips(ctx, bounds, width, height, scale);
@@ -2085,6 +2188,19 @@ function worldToMapPoint(position, bounds, width, height, scale) {
   return {
     x: insetX + (position.x - bounds.minX) * scale,
     y: insetY + (bounds.maxZ - position.z) * scale
+  };
+}
+
+function mapPointToWorld(x, y, viewport) {
+  const { bounds, width, height, scale } = viewport;
+  const mapWidth = (bounds.maxX - bounds.minX) * scale;
+  const mapHeight = (bounds.maxZ - bounds.minZ) * scale;
+  const insetX = (width - mapWidth) * 0.5;
+  const insetY = (height - mapHeight) * 0.5;
+
+  return {
+    x: bounds.minX + (x - insetX) / scale,
+    z: bounds.maxZ - (y - insetY) / scale
   };
 }
 
@@ -2302,6 +2418,54 @@ function drawMapLandLabels(ctx, zones, bounds, width, height, scale) {
     if (group.weight <= 0) return;
     drawMapLandLabelAt(ctx, group.label, { x: group.x / group.weight, z: group.z / group.weight }, bounds, width, height);
   });
+}
+
+function drawMapLandmarkMarkers(ctx, zones, bounds, width, height, scale) {
+  const lighthouseLands = chooseLighthouseLandmasses(zones, 3);
+  const lighthouseNames = new Set(lighthouseLands.map((zone) => zone.name));
+
+  lighthouseLands.forEach((zone, index) => {
+    drawMapLightMarker(ctx, getLighthousePosition(zone, index), bounds, width, height, scale, "lighthouse");
+  });
+  zones
+    .filter((zone) => isVolcanicLandmass(zone))
+    .filter((zone) => !lighthouseNames.has(zone.name))
+    .forEach((zone) => drawMapVolcanoMarker(ctx, { x: zone.x, z: zone.z }, bounds, width, height, scale));
+}
+
+function drawMapLightMarker(ctx, position, bounds, width, height, scale, kind) {
+  if (!position || position.x < bounds.minX || position.x > bounds.maxX || position.z < bounds.minZ || position.z > bounds.maxZ) return;
+  const point = worldToMapPoint(position, bounds, width, height, scale);
+
+  ctx.save();
+  ctx.lineWidth = 1.8;
+  ctx.strokeStyle = "rgba(255, 246, 184, 0.92)";
+  ctx.fillStyle = "rgba(255, 250, 214, 0.95)";
+  ctx.beginPath();
+  ctx.arc(point.x, point.y, 4.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(point.x, point.y, 7, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawMapVolcanoMarker(ctx, position, bounds, width, height, scale) {
+  if (!position || position.x < bounds.minX || position.x > bounds.maxX || position.z < bounds.minZ || position.z > bounds.maxZ) return;
+  const point = worldToMapPoint(position, bounds, width, height, scale);
+
+  ctx.save();
+  ctx.fillStyle = "rgba(238, 87, 55, 0.88)";
+  ctx.strokeStyle = "rgba(5, 27, 40, 0.72)";
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(point.x, point.y - 6);
+  ctx.lineTo(point.x + 5, point.y + 4);
+  ctx.lineTo(point.x - 5, point.y + 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawMapLandLabelAt(ctx, label, position, bounds, width, height) {
@@ -3644,6 +3808,16 @@ function updateTorpedoSystem(system, dt, time, enemyMotions, landZones, playerPo
       effect.mesh.setEnabled(t < 0.98);
       return true;
     }
+    if (effect.coreFlash && effect.mesh) {
+      const pulse = Math.sin(Math.PI * t);
+      effect.mesh.visibility = effect.alpha * pulse * (1 - t * 0.12);
+      effect.mesh.position.copyFrom(effect.origin);
+      effect.mesh.scaling.x = effect.baseScale.x * (1 + eased * effect.grow.x);
+      effect.mesh.scaling.y = effect.baseScale.y * (1 + eased * effect.grow.y);
+      effect.mesh.scaling.z = effect.baseScale.z * (1 + eased * effect.grow.z);
+      effect.mesh.setEnabled(t < 0.96);
+      return true;
+    }
     if (effect.mesh) {
       effect.mesh.position.x = effect.origin.x + effect.velocity.x * t;
       effect.mesh.position.z = effect.origin.z + effect.velocity.z * t;
@@ -4036,6 +4210,7 @@ function createHitChurn(system, position, heading) {
   const right = getRightVector(heading);
   createExplosionLightFlash(system, position);
   createExplosionSkyFlash(system, position);
+  createExplosionCoreFlash(system, position);
 
   for (let i = 0; i < 4; i += 1) {
     const wall = createJaggedHitWall(`torpedo_hit_wall_${system.hits}_${i}`, system.scene, 1.0 + i * 0.28, 1.35 + i * 0.32, i);
@@ -4097,6 +4272,29 @@ function createHitChurn(system, position, heading) {
   }
 }
 
+function createExplosionCoreFlash(system, position) {
+  const core = MeshBuilder.CreateSphere(`torpedo_hit_core_${system.hits}`, {
+    diameter: 0.62,
+    segments: 10
+  }, system.scene);
+  core.parent = system.root;
+  core.material = system.materials.explosionCore;
+  core.position.copyFrom(position.add(new Vector3(0, 0.08, 0)));
+  core.isPickable = false;
+  core.visibility = 0;
+  system.hitEffects.push({
+    mesh: core,
+    coreFlash: true,
+    age: 0,
+    lifetime: 0.42,
+    origin: core.position.clone(),
+    baseScale: new Vector3(1, 1, 1),
+    grow: new Vector3(1.05, 0.38, 1.05),
+    alpha: 0.98,
+    seed: 72 + system.hits
+  });
+}
+
 function createExplosionLightFlash(system, position) {
   if (isExplosionLightOccludedFromPlayer(position)) {
     return;
@@ -4107,24 +4305,24 @@ function createExplosionLightFlash(system, position) {
     effect.age = effect.lifetime;
   });
 
-  const light = new PointLight(`torpedo_flash_${system.hits}`, position.add(new Vector3(0, 3.4, 0)), system.scene);
-  light.diffuse = new Color3(1.0, 0.7, 0.38);
+  const light = new PointLight(`torpedo_flash_${system.hits}`, position.add(new Vector3(0, 3.8, 0)), system.scene);
+  light.diffuse = new Color3(1.0, 0.76, 0.42);
   light.specular = new Color3(1.0, 0.82, 0.5);
   light.intensity = 0;
-  light.range = 115;
+  light.range = 145;
   system.hitEffects.push({
     light,
     age: 0,
-    lifetime: 0.78,
-    intensity: 4.8,
-    range: 115
+    lifetime: 0.86,
+    intensity: 5.4,
+    range: 145
   });
 }
 
 function isExplosionLightOccludedFromPlayer(position) {
   const playerPosition = boat?.root?.position;
   if (!playerPosition) return false;
-  const flashRange = 115;
+  const flashRange = 145;
   if (distance2D(position, playerPosition) > flashRange) return true;
   return isLineBlockedByLand(position, playerPosition, blockedWaters);
 }
@@ -4146,7 +4344,7 @@ function createExplosionSkyFlash(system, position) {
   material.fogEnabled = false;
   material.backFaceCulling = false;
 
-  const flash = MeshBuilder.CreatePlane(`torpedo_sky_flash_${system.hits}`, { width: 170, height: 96 }, system.scene);
+  const flash = MeshBuilder.CreatePlane(`torpedo_sky_flash_${system.hits}`, { width: 210, height: 118 }, system.scene);
   flash.parent = system.root;
   flash.position.copyFrom(position.add(new Vector3(0, 68, 0)));
   flash.billboardMode = Mesh.BILLBOARDMODE_ALL;
@@ -4154,7 +4352,7 @@ function createExplosionSkyFlash(system, position) {
   flash.isPickable = false;
 
   const distanceToPlayer = distance2D(position, boat.root.position);
-  const distanceAlpha = 0.62 + 0.38 * (1 - clamp(distanceToPlayer / 1200, 0, 1));
+  const distanceAlpha = 0.52 + 0.48 * (1 - clamp(distanceToPlayer / 1800, 0, 1));
 
   system.hitEffects.push({
     mesh: flash,
@@ -4163,11 +4361,11 @@ function createExplosionSkyFlash(system, position) {
     disposeTexture: true,
     disposeMaterial: true,
     age: 0,
-    lifetime: 0.95,
+    lifetime: 1.02,
     origin: flash.position.clone(),
     baseScale: new Vector3(1, 1, 1),
-    grow: new Vector3(0.55, 0.38, 0.55),
-    alpha: 0.34 * distanceAlpha
+    grow: new Vector3(0.62, 0.42, 0.62),
+    alpha: 0.42 * distanceAlpha
   });
 }
 
@@ -4177,9 +4375,9 @@ function createRadialFlashTexture(scene, name) {
   const context = texture.getContext();
   const center = size * 0.5;
   const gradient = context.createRadialGradient(center, center, size * 0.02, center, center, size * 0.48);
-  gradient.addColorStop(0, "rgba(255, 232, 176, 1)");
-  gradient.addColorStop(0.28, "rgba(255, 154, 72, 0.76)");
-  gradient.addColorStop(0.58, "rgba(255, 102, 38, 0.28)");
+  gradient.addColorStop(0, "rgba(255, 248, 214, 1)");
+  gradient.addColorStop(0.2, "rgba(255, 194, 92, 0.82)");
+  gradient.addColorStop(0.56, "rgba(255, 114, 42, 0.3)");
   gradient.addColorStop(1, "rgba(255, 102, 38, 0)");
   context.clearRect(0, 0, size, size);
   context.fillStyle = gradient;
@@ -4307,8 +4505,10 @@ function createMaterials(scene) {
 
   const glass = new StandardMaterial("glass_material", scene);
   glass.diffuseColor = new Color3(0.18, 0.42, 0.54);
-  glass.emissiveColor = new Color3(0.02, 0.08, 0.1);
+  glass.emissiveColor = new Color3(0.025, 0.09, 0.12);
   glass.specularColor = new Color3(0.7, 0.9, 1);
+  glass.alpha = 0.42;
+  glass.backFaceCulling = false;
 
   const lightHull = new StandardMaterial("light_party_hull_material", scene);
   lightHull.diffuseColor = new Color3(0.43, 0.5, 0.51);
@@ -4411,9 +4611,9 @@ function createMaterials(scene) {
   sandFunnel.backFaceCulling = false;
 
   const foam = new StandardMaterial("foam_material", scene);
-  foam.diffuseColor = new Color3(0.9, 0.97, 0.96);
-  foam.emissiveColor = new Color3(0.18, 0.22, 0.22);
-  foam.specularColor = new Color3(0.05, 0.06, 0.06);
+  foam.diffuseColor = new Color3(0.84, 0.91, 0.94);
+  foam.emissiveColor = new Color3(0.26, 0.29, 0.31);
+  foam.specularColor = new Color3(0.03, 0.035, 0.04);
 
   const volcanicSmoke = new StandardMaterial("volcanic_smoke_material", scene);
   volcanicSmoke.diffuseColor = new Color3(0.19, 0.21, 0.2);
@@ -4434,6 +4634,38 @@ function createMaterials(scene) {
   volcanicGlow.emissiveColor = new Color3(1.0, 0.22, 0.02);
   volcanicGlow.specularColor = new Color3(0.15, 0.06, 0.02);
   volcanicGlow.alpha = 0.88;
+
+  const lighthouseWall = new StandardMaterial("lighthouse_wall_material", scene);
+  lighthouseWall.diffuseColor = new Color3(0.72, 0.68, 0.58);
+  lighthouseWall.specularColor = new Color3(0.08, 0.07, 0.05);
+
+  const lighthouseCap = new StandardMaterial("lighthouse_cap_material", scene);
+  lighthouseCap.diffuseColor = new Color3(0.46, 0.45, 0.4);
+  lighthouseCap.specularColor = new Color3(0.08, 0.08, 0.07);
+
+  const lighthouseStripe = new StandardMaterial("lighthouse_stripe_material", scene);
+  lighthouseStripe.diffuseColor = new Color3(0.72, 0.12, 0.09);
+  lighthouseStripe.specularColor = new Color3(0.11, 0.04, 0.03);
+
+  const explosionCore = new StandardMaterial("explosion_core_material", scene);
+  explosionCore.diffuseColor = new Color3(1.0, 1.0, 0.96);
+  explosionCore.emissiveColor = new Color3(1.0, 1.0, 0.92);
+  explosionCore.specularColor = new Color3(1.0, 1.0, 0.96);
+  explosionCore.disableLighting = true;
+
+  const beaconGlow = new StandardMaterial("beacon_glow_material", scene);
+  beaconGlow.diffuseColor = new Color3(1.0, 0.98, 0.82);
+  beaconGlow.emissiveColor = new Color3(1.0, 0.96, 0.68);
+  beaconGlow.specularColor = new Color3(1.0, 0.92, 0.62);
+  beaconGlow.disableLighting = true;
+
+  const beaconBeam = new StandardMaterial("beacon_beam_material", scene);
+  beaconBeam.diffuseColor = new Color3(1.0, 0.92, 0.58);
+  beaconBeam.emissiveColor = new Color3(1.0, 0.86, 0.42);
+  beaconBeam.specularColor = Color3.Black();
+  beaconBeam.alpha = 0.18;
+  beaconBeam.disableLighting = true;
+  beaconBeam.backFaceCulling = false;
 
   return {
     water,
@@ -4470,7 +4702,13 @@ function createMaterials(scene) {
     foam,
     volcanicSmoke,
     volcanicSmokeWarm,
-    volcanicGlow
+    volcanicGlow,
+    lighthouseWall,
+    lighthouseCap,
+    lighthouseStripe,
+    explosionCore,
+    beaconGlow,
+    beaconBeam
   };
 }
 
@@ -5199,6 +5437,483 @@ function updateVolcanoPlumes(plumes, time) {
   });
 }
 
+function createNavigationLights(landmasses, scene, materials, parent, visualEffects) {
+  const lights = [];
+  const lighthouseLands = chooseLighthouseLandmasses(landmasses, 3);
+  lighthouseLands.forEach((land, index) => {
+    lights.push(createLighthouse(land, index, scene, materials, parent, visualEffects));
+  });
+
+  const rockBeacons = chooseRockBeaconLandmasses(landmasses, lighthouseLands).slice(0, visualEffects === "high" ? 14 : 10);
+  rockBeacons.forEach((land, index) => {
+    lights.push(createRockBeacon(land, index, scene, materials, parent));
+  });
+
+  return lights.filter(Boolean);
+}
+
+function chooseLighthouseLandmasses(landmasses, maxCount = 4) {
+  const preferredNames = ["western_continent", "blackwater_basin", "delta_head"];
+  const byName = new Map(landmasses.map((land) => [String(land.name ?? ""), land]));
+  const preferred = preferredNames.map((name) => byName.get(name)).filter(Boolean);
+  const largeCoastlines = landmasses
+    .filter((land) => land.kind === "coastline" && !isVolcanicLandmass(land))
+    .filter((land) => !String(land.name ?? "").includes("volcanic"))
+    .sort((left, right) => (right.rx * right.rz) - (left.rx * left.rz))
+    .slice(0, 8);
+  const candidates = [...preferred, ...largeCoastlines]
+    .filter((land, index, all) => all.findIndex((other) => other.name === land.name) === index);
+
+  return pickSeparatedLighthouseLandmasses(candidates, maxCount);
+}
+
+function pickSeparatedLighthouseLandmasses(candidates, maxCount) {
+  const selected = [];
+  const minDistance = 560;
+
+  candidates.forEach((land) => {
+    if (selected.length >= maxCount) return;
+    const index = selected.length;
+    const position = getLighthousePosition(land, index);
+    const separated = selected.every((entry) => distance2D(position, entry.position) >= minDistance);
+    if (separated) selected.push({ land, position });
+  });
+
+  if (selected.length >= 2 || candidates.length <= selected.length) {
+    return selected.map((entry) => entry.land);
+  }
+
+  candidates.forEach((land) => {
+    if (selected.length >= Math.min(maxCount, 2)) return;
+    if (!selected.some((entry) => entry.land.name === land.name)) {
+      selected.push({ land, position: getLighthousePosition(land, selected.length) });
+    }
+  });
+
+  return selected.map((entry) => entry.land);
+}
+
+function chooseRockBeaconLandmasses(landmasses, lighthouseLands) {
+  const lighthouseNames = new Set(lighthouseLands.map((land) => land.name));
+  return landmasses
+    .filter((land) => !lighthouseNames.has(land.name))
+    .filter((land) => isSteepRockLand(land) || String(land.name ?? "").includes("passage"))
+    .sort((left, right) => {
+      const leftScore = passageBeaconScore(left);
+      const rightScore = passageBeaconScore(right);
+      return rightScore - leftScore;
+    });
+}
+
+function passageBeaconScore(land) {
+  const name = String(land.name ?? "");
+  let score = 0;
+  if (name.includes("passage")) score += 90;
+  if (name.includes("sound")) score += 30;
+  if (name.includes("gate")) score += 25;
+  if (name.includes("rock")) score += 20;
+  score -= Math.abs(land.x ?? 0) * 0.01;
+  score -= Math.abs(land.z ?? 0) * 0.006;
+  return score;
+}
+
+function createLighthouse(land, index, scene, materials, parent, visualEffects) {
+  const root = new TransformNode(`${land.name}_lighthouse`, scene);
+  root.parent = parent;
+  const position = getLighthousePosition(land, index);
+  root.position = new Vector3(position.x, position.y, position.z);
+  const scale = lighthouseScaleFor(land);
+  const baseHeight = 0.44 * scale;
+  const towerHeight = 14 * scale;
+  const towerCenterY = baseHeight + towerHeight * 0.5;
+  const towerTopY = baseHeight + towerHeight;
+  const galleryY = towerTopY + 0.15 * scale;
+  const lanternY = towerTopY + 1.15 * scale;
+  const capY = towerTopY + 2.15 * scale;
+
+  const base = MeshBuilder.CreateCylinder(`${land.name}_lighthouse_base`, {
+    diameterTop: 3.8 * scale,
+    diameterBottom: 4.6 * scale,
+    height: baseHeight,
+    tessellation: 10
+  }, scene);
+  base.parent = root;
+  base.position.y = baseHeight * 0.5;
+  base.material = materials.lighthouseCap;
+
+  const tower = MeshBuilder.CreateCylinder(`${land.name}_lighthouse_tower`, {
+    diameterTop: 2.2 * scale,
+    diameterBottom: 3.0 * scale,
+    height: towerHeight,
+    tessellation: 10
+  }, scene);
+  tower.parent = root;
+  tower.position.y = towerCenterY;
+  tower.material = getLighthouseTowerMaterial(land, scene, materials);
+
+  const gallery = MeshBuilder.CreateCylinder(`${land.name}_lighthouse_gallery`, {
+    diameterTop: 3.8 * scale,
+    diameterBottom: 4.0 * scale,
+    height: 0.5 * scale,
+    tessellation: 10
+  }, scene);
+  gallery.parent = root;
+  gallery.position.y = galleryY;
+  gallery.material = materials.lighthouseCap;
+
+  const lanternHouse = MeshBuilder.CreateCylinder(`${land.name}_lighthouse_lantern_house`, {
+    diameterTop: 2.35 * scale,
+    diameterBottom: 2.45 * scale,
+    height: 1.85 * scale,
+    tessellation: 10
+  }, scene);
+  lanternHouse.parent = root;
+  lanternHouse.position.y = lanternY;
+  const lanternMaterial = materials.glass.clone(`${land.name}_lighthouse_lantern_material`);
+  lanternMaterial.fogEnabled = false;
+  lanternHouse.material = lanternMaterial;
+
+  const cap = MeshBuilder.CreateCylinder(`${land.name}_lighthouse_cap`, {
+    diameterTop: 2.25 * scale,
+    diameterBottom: 2.65 * scale,
+    height: 0.62 * scale,
+    tessellation: 10
+  }, scene);
+  cap.parent = root;
+  cap.position.y = capY;
+  cap.material = materials.lighthouseCap;
+
+  const lampMaterial = materials.beaconGlow.clone(`${land.name}_lighthouse_lamp_material`);
+  lampMaterial.fogEnabled = false;
+  lampMaterial.disableLighting = true;
+  const lamp = MeshBuilder.CreateCylinder(`${land.name}_lighthouse_lamp`, {
+    diameterTop: 1.08 * scale,
+    diameterBottom: 1.08 * scale,
+    height: 1.12 * scale,
+    tessellation: 12
+  }, scene);
+  lamp.parent = root;
+  lamp.position.y = lanternY;
+  lamp.material = lampMaterial;
+  lamp.isPickable = false;
+  lamp.renderingGroupId = 1;
+
+  const beamPivot = new TransformNode(`${land.name}_lighthouse_beam_pivot`, scene);
+  beamPivot.parent = root;
+  beamPivot.position.y = lanternY;
+
+  const beam = MeshBuilder.CreateCylinder(`${land.name}_lighthouse_beam`, {
+    diameter: 1,
+    height: 82,
+    tessellation: 8
+  }, scene);
+  beam.parent = beamPivot;
+  beam.position.z = 41;
+  beam.rotation.x = Math.PI / 2;
+  beam.scaling.x = 0.32;
+  beam.scaling.z = 0.04;
+  beam.material = materials.beaconBeam;
+  beam.isPickable = false;
+  beam.setEnabled(false);
+
+  let pointLight = null;
+  if (visualEffects === "high" || visualEffects === "standard") {
+    pointLight = new PointLight(`${land.name}_lighthouse_point`, root.position.add(new Vector3(0, lanternY, 0)), scene);
+    pointLight.diffuse = new Color3(1.0, 1.0, 0.94);
+    pointLight.specular = new Color3(1.0, 1.0, 0.92);
+    pointLight.intensity = 0;
+    pointLight.range = visualEffects === "high" ? 240 : 165;
+  }
+
+  return {
+    kind: "lighthouse",
+    root,
+    lamp,
+    lampMaterial,
+    lanternMaterial,
+    beam,
+    beamPivot,
+    pointLight,
+    phase: index * 1.7 + stableNamePhase(land.name),
+    period: 5.8 + index * 0.9,
+    directionalPeak: 1.7,
+    baseRange: pointLight?.range ?? 0
+  };
+}
+
+function lighthouseScaleFor(land) {
+  const name = String(land.name ?? "");
+  if (name.includes("western")) return 1.18;
+  return 1.55;
+}
+
+function isStripedLighthouse(land) {
+  return String(land.name ?? "").includes("blackwater");
+}
+
+function getLighthouseTowerMaterial(land, scene, materials) {
+  if (!isStripedLighthouse(land)) return materials.lighthouseWall;
+
+  const material = materials.lighthouseWall.clone(`${land.name}_striped_lighthouse_material`);
+  const texture = new DynamicTexture(`${land.name}_striped_lighthouse_texture`, { width: 64, height: 256 }, scene);
+  const context = texture.getContext();
+  const bandHeight = 42;
+  for (let y = 0; y < 256; y += bandHeight) {
+    context.fillStyle = (Math.floor(y / bandHeight) % 2) === 0 ? "#d8d5c4" : "#8e1f18";
+    context.fillRect(0, y, 64, bandHeight);
+  }
+  texture.update();
+  material.diffuseTexture = texture;
+  material.diffuseColor = Color3.White();
+  material.specularColor = new Color3(0.08, 0.07, 0.06);
+  return material;
+}
+
+function createRockBeacon(land, index, scene, materials, parent) {
+  const root = new TransformNode(`${land.name}_rock_beacon`, scene);
+  root.parent = parent;
+  const mount = getRockBeaconMountPosition(land);
+  root.position = new Vector3(mount.x, mount.y, mount.z);
+
+  const diameter = 0.24;
+  const totalHeight = diameter * 5;
+  const footHeight = totalHeight * 0.2;
+  const lampHeight = totalHeight * 0.8 / 3;
+
+  const base = MeshBuilder.CreateCylinder(`${land.name}_beacon_base`, {
+    diameterTop: diameter * 1.05,
+    diameterBottom: diameter * 1.18,
+    height: footHeight,
+    tessellation: 8
+  }, scene);
+  base.parent = root;
+  base.position.y = footHeight / 2;
+  base.material = materials.lighthouseCap;
+
+  const lampMaterial = materials.beaconGlow.clone(`${land.name}_beacon_lamp_material`);
+  const lamp = MeshBuilder.CreateCylinder(`${land.name}_beacon_lamp`, {
+    diameterTop: diameter,
+    diameterBottom: diameter,
+    height: lampHeight,
+    tessellation: 10
+  }, scene);
+  lamp.parent = root;
+  lamp.position.y = footHeight + lampHeight / 2;
+  lamp.material = lampMaterial;
+  lamp.isPickable = false;
+
+  return {
+    kind: "rock-beacon",
+    root,
+    lamp,
+    lampMaterial,
+    markerRange: 980,
+    phase: index * 0.82 + stableNamePhase(land.name),
+    period: 3.2 + (index % 2) * 0.7
+  };
+}
+
+function getRockBeaconMountPosition(land) {
+  const rx = land.rx ?? land.radius ?? 20;
+  const rz = land.rz ?? land.radius ?? 20;
+  const radius = land.radius ?? Math.min(rx, rz);
+  const heightScale = land.heightScale ?? 1;
+
+  if (!isSteepRockLand(land)) {
+    return {
+      x: land.x,
+      y: getLandSurfaceHeightAt(land, land.x, land.z) + 0.12,
+      z: land.z
+    };
+  }
+
+  let best = { x: 0, y: 0.8, z: 0 };
+  const stackCount = Math.max(2, Math.min(3, Math.round(radius / 9)));
+  for (let i = 0; i < stackCount; i += 1) {
+    const angle = radius * 0.18 + i * 2.15;
+    const distance = i === 0 ? 0 : 0.18 + i * 0.07;
+    const rockHeightProfile = [0.34, 0.48, 0.39];
+    const height = radius * rockHeightProfile[i % rockHeightProfile.length] * heightScale;
+    const x = Math.cos(angle) * rx * distance;
+    const z = Math.sin(angle) * rz * distance * 0.82;
+    const y = Math.max(0.8, height - radius * 0.2 + 0.1);
+    if (y > best.y) {
+      best = { x, y, z };
+    }
+  }
+
+  return {
+    x: land.x + best.x,
+    y: best.y,
+    z: land.z + best.z
+  };
+}
+
+function updateNavigationLights(lights, time, playerPosition) {
+  lights.forEach((light) => {
+    const distanceFade = getNavigationLightDistanceFade(light, playerPosition);
+    const intensity = light.kind === "lighthouse"
+      ? lighthouseBeamIntensity(light, time, playerPosition, distanceFade)
+      : rockBeaconBlink(time, light.period, light.phase) * distanceFade;
+
+    updateLampMaterial(light, intensity);
+    if (light.beam) {
+      const sweep = time * (Math.PI * 2 / light.period) + light.phase;
+      light.beamPivot.rotation.y = sweep;
+      light.beam.setEnabled(false);
+    }
+    if (light.pointLight) {
+      light.pointLight.intensity = intensity * 5.0;
+      light.pointLight.range = light.baseRange * (0.45 + intensity * 0.55);
+    }
+  });
+}
+
+function getNavigationLightDistanceFade(light, playerPosition) {
+  const visibilityRange = light.kind === "lighthouse" ? 2300 : (light.markerRange ?? 980);
+  return 1 - clamp(distance2D(light.root.position, playerPosition) / visibilityRange, 0, 0.72);
+}
+
+function lighthouseBeamIntensity(light, time, playerPosition, distanceFade) {
+  const sweep = time * (Math.PI * 2 / light.period) + light.phase;
+  const bearingToPlayer = Math.atan2(playerPosition.x - light.root.position.x, playerPosition.z - light.root.position.z);
+  const facing = Math.max(0, Math.cos(getSignedAngularDistance(sweep, bearingToPlayer)));
+  const flash = Math.pow(facing, 14);
+  return (0.035 + flash * (light.directionalPeak ?? 1.5)) * distanceFade;
+}
+
+function updateLampMaterial(light, intensity) {
+  const base = light.kind === "lighthouse" ? 0.16 : 0.1;
+  const glow = clamp(base + intensity, 0.08, 1.85);
+  light.lamp.visibility = 1;
+  light.lamp.setEnabled(true);
+  if (light.kind === "rock-beacon") {
+    light.lampMaterial.diffuseColor = new Color3(0.88 + glow * 0.1, 0.9 + glow * 0.1, 0.92 + glow * 0.08);
+    light.lampMaterial.emissiveColor = new Color3(0.36 + glow * 0.64, 0.38 + glow * 0.62, 0.42 + glow * 0.58);
+    light.lampMaterial.specularColor = new Color3(0.9, 0.92, 0.95);
+    return;
+  }
+
+  const flash = clamp(intensity, 0, 1.8);
+  const visibleGlow = clamp(0.08 + flash * 2.15, 0.05, 2.6);
+  light.lampMaterial.alpha = 1;
+  light.lampMaterial.diffuseColor = Color3.White();
+  light.lampMaterial.emissiveColor = new Color3(visibleGlow, visibleGlow, visibleGlow * 0.94);
+  light.lampMaterial.specularColor = Color3.White();
+  if (light.lanternMaterial) {
+    const lanternGlow = clamp(0.035 + flash * 1.42, 0.025, 1.45);
+    light.lanternMaterial.alpha = clamp(0.38 + flash * 0.3, 0.36, 0.76);
+    light.lanternMaterial.diffuseColor = new Color3(0.82 + lanternGlow * 0.08, 0.88 + lanternGlow * 0.08, 0.9 + lanternGlow * 0.04);
+    light.lanternMaterial.emissiveColor = new Color3(lanternGlow, lanternGlow, lanternGlow * 0.92);
+    light.lanternMaterial.specularColor = Color3.White();
+  }
+}
+
+function lighthouseBlink(time, period, phase) {
+  const cycle = ((time + phase) % period) / period;
+  const primary = smoothstep(0.02, 0.06, cycle) * (1 - smoothstep(0.06, 0.14, cycle));
+  const secondary = smoothstep(0.52, 0.56, cycle) * (1 - smoothstep(0.56, 0.64, cycle)) * 0.36;
+  return Math.max(primary, secondary);
+}
+
+function rockBeaconBlink(time, period, phase) {
+  const cycle = ((time + phase) % period) / period;
+  return smoothstep(0.04, 0.08, cycle) * (1 - smoothstep(0.08, 0.22, cycle));
+}
+
+function lighthouseAngleFor(land, index) {
+  const name = String(land.name ?? "");
+  if (name.includes("western")) return -0.18;
+  if (name.includes("delta")) return 0.2;
+  if (name.includes("blackwater")) return -2.35;
+  if (name.includes("eagle")) return Math.PI;
+  return stableNamePhase(name) + index * 1.9;
+}
+
+function getLighthousePosition(land, index) {
+  const angle = lighthouseAngleFor(land, index);
+  const rx = land.rx ?? land.radius ?? 28;
+  const rz = land.rz ?? land.radius ?? 28;
+  const radiusFactor = land.kind === "coastline" ? getCoastRadiusFactor(angle, land) : 1;
+  const radialPosition = land.kind === "coastline" ? 0.64 : 0.5;
+  const x = land.x + Math.cos(angle) * rx * radiusFactor * radialPosition;
+  const z = land.z + Math.sin(angle) * rz * radiusFactor * radialPosition;
+  return {
+    x,
+    y: getLandSurfaceHeightAt(land, x, z) + 0.05,
+    z
+  };
+}
+
+function getLandSurfaceHeightAt(land, worldX, worldZ) {
+  const localX = worldX - land.x;
+  const localZ = worldZ - land.z;
+  const rx = land.rx ?? land.radius ?? 28;
+  const rz = land.rz ?? land.radius ?? 28;
+
+  if (land.kind === "coastline") {
+    return getCoastlineTerrainHeightAt(land, localX, localZ, rx, rz);
+  }
+
+  if (isSteepRockLand(land)) {
+    return 0.85;
+  }
+
+  return getSmallIslandTerrainHeightAt(land, localX, localZ, rx, rz);
+}
+
+function getCoastlineTerrainHeightAt(land, localX, localZ, rx, rz) {
+  const angle = Math.atan2(localZ / rz, localX / rx);
+  const radiusFactor = getCoastRadiusFactor(angle, land);
+  const ring = Math.sqrt((localX / (rx * radiusFactor)) ** 2 + (localZ / (rz * radiusFactor)) ** 2);
+  const fjord = getFjordCarve(localX, localZ, rx, rz, land.fjords ?? []);
+  const terrainFjord = fjord * smoothstep(0.62, 0.95, ring);
+  const coast = 1 - smoothstep(0.58, 0.96, ring);
+  const inland = clamp(1 - ring, 0, 1);
+  const nx = localX / rx;
+  const nz = localZ / rz;
+  const ridgeA = Math.sin(localX * 0.065 + localZ * 0.035) * 0.5 + 0.5;
+  const ridgeB = Math.sin(localX * -0.028 + localZ * 0.082 + 2.4) * 0.5 + 0.5;
+  const roughness = terrainNoise(localX, localZ);
+  const cliffLift = smoothstep(0.68, 0.9, ring) * smoothstep(1.04, 0.86, ring) * 5.5;
+  const mountainLift = Math.pow(inland, 0.65) * (9 + ridgeA * 10 + ridgeB * 5) * (land.heightScale ?? 1);
+  const peakLift = getPeakLift(nx, nz, ring, land.peakBoost ?? 0, land);
+  const shoreBlend = 1 - smoothstep(0.9, 0.98, ring);
+
+  return 0.28 + shoreBlend * (
+    0.2 + coast * (cliffLift + mountainLift + peakLift + roughness * 3.2) * (1 - terrainFjord * 0.25)
+  );
+}
+
+function getSmallIslandTerrainHeightAt(land, localX, localZ, rx, rz) {
+  const seed = getNameSeed(land.name);
+  const hillRx = rx * (0.72 + (seed % 5) * 0.018);
+  const hillRz = rz * (0.62 + (seed % 7) * 0.014);
+  const heightScale = land.heightScale ?? 1;
+  const height = Math.max(1.1, Math.min(4.2, Math.min(rx, rz) * 0.15 * heightScale));
+  const offsetX = rx * (0.01 + ((seed % 9) - 4) * 0.006);
+  const offsetZ = rz * (-0.015 + ((seed % 11) - 5) * 0.005);
+  const peakAngle = seed * 0.017;
+  const peakX = Math.cos(peakAngle) * hillRx * 0.16;
+  const peakZ = Math.sin(peakAngle) * hillRz * 0.16;
+  const dx = (localX - offsetX - peakX * 0.4) / hillRx;
+  const dz = (localZ - offsetZ - peakZ * 0.4) / hillRz;
+  const ring = clamp(Math.sqrt(dx * dx + dz * dz), 0, 1);
+  const crown = Math.pow(1 - ring, 0.72);
+  const shoreDrop = smoothstep(0.72, 1.0, ring);
+
+  return 0.34 + height * crown * (1 - shoreDrop * 0.9);
+}
+
+function stableNamePhase(name) {
+  const text = String(name ?? "");
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (hash * 31 + text.charCodeAt(index)) % 9973;
+  }
+  return (hash / 9973) * Math.PI * 2;
+}
+
 function getLandZone(land) {
   return {
     x: land.x,
@@ -5210,6 +5925,9 @@ function getLandZone(land) {
     name: land.name,
     kind: land.kind,
     coastRoughness: land.coastRoughness ?? 0.09,
+    heightScale: land.heightScale ?? 1,
+    peakBoost: land.peakBoost ?? 0,
+    caldera: land.caldera,
     radarOcclusion: land.radarOcclusion ?? true,
     fjords: land.fjords ?? [],
     waterways: land.waterways ?? [],

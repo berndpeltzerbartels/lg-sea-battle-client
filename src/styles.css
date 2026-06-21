@@ -140,6 +140,34 @@ body {
   pointer-events: none;
 }
 
+.mobile-orientation-hint {
+  position: fixed;
+  inset: 0;
+  z-index: 12;
+  display: none;
+  place-content: center;
+  gap: 10px;
+  padding: 24px;
+  box-sizing: border-box;
+  background: rgb(5 24 34 / 92%);
+  color: #f7fbff;
+  text-align: center;
+}
+
+.mobile-orientation-hint strong {
+  color: #9be5df;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.mobile-orientation-hint span {
+  color: rgb(247 251 255 / 78%);
+  font-size: 14px;
+  font-weight: 750;
+}
+
 .engine-status {
   position: fixed;
   top: 22px;
@@ -803,6 +831,7 @@ body {
   background: rgb(5 27 40 / 42%);
   box-shadow: 0 12px 38px rgb(1 15 24 / 22%);
   backdrop-filter: blur(7px);
+  pointer-events: auto;
 }
 
 .telegraph-title {
@@ -966,20 +995,28 @@ body {
   text-transform: uppercase;
 }
 
-@media (max-width: 700px) {
+.mobile-fire-button {
+  display: none;
+}
+
+@media (pointer: coarse) and (orientation: portrait) and (max-width: 820px) {
+  .mobile-orientation-hint {
+    display: grid;
+  }
+
+  .hud {
+    visibility: hidden;
+  }
+}
+
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 560px) {
   body {
-    --map-canvas-width: 132px;
-    --map-canvas-height: 86px;
-    --map-meta-width: 36px;
-    --radar-size: 112px;
-    --compass-size: 86px;
+    --radar-size: clamp(128px, 18vw, 168px);
+    --compass-size: clamp(76px, 10vw, 94px);
   }
 
   .nav-panel {
-    top: 14px;
-    left: 14px;
-    grid-template-columns: 190px;
-    gap: 7px;
+    display: none;
   }
 
   .nav-instrument {
@@ -991,95 +1028,129 @@ body {
   }
 
   .map-control {
-    grid-template-columns: 14px var(--map-canvas-width) var(--map-meta-width);
-    grid-template-rows: var(--map-canvas-height) 10px 18px;
-    gap: 5px;
-  }
-
-  .map-row-labels,
-  .map-column-labels {
-    font-size: 7px;
-  }
-
-  .map-meta {
-    font-size: 8px;
-  }
-
-  .map-meta strong {
-    font-size: 13px;
+    display: none;
   }
 
   .nav-instrument-radar {
-    left: 14px;
-    bottom: 14px;
+    top: 10px;
+    left: 10px;
+    bottom: auto;
     width: var(--radar-size);
+    padding: 7px;
   }
 
   .nav-instrument-radar canvas {
     height: auto;
   }
 
+  .nav-title,
+  .nav-instrument small {
+    font-size: 8px;
+  }
+
   .compass {
-    top: 14px;
-    right: 14px;
-    font-size: 11px;
+    top: 10px;
+    right: 10px;
+    font-size: 10px;
   }
 
-  .fleet-status {
-    top: 112px;
-    right: 14px;
-    left: auto;
-    grid-template-columns: 1fr;
-    transform: none;
-  }
-
-  .fleet-status-row {
-    min-width: 56px;
-    padding: 7px 8px;
-  }
-
+  .fleet-status,
   .player-list {
-    top: 184px;
-    right: 14px;
-    min-width: 174px;
-    max-width: 190px;
-    padding: 7px;
-  }
-
-  .player-list-row {
-    grid-template-columns: 8px minmax(36px, auto) 28px 22px 18px 32px;
-    gap: 5px;
-    font-size: 9px;
-  }
-
-  .player-list-bearing {
-    width: 16px;
-    height: 16px;
+    display: none;
   }
 
   .speed {
-    left: 128px;
-    bottom: 14px;
+    left: 10px;
+    bottom: 12px;
+    min-width: 82px;
+    padding: 9px 10px 8px;
+  }
+
+  .speed span {
+    min-width: 38px;
+    font-size: 22px;
+  }
+
+  .speed small {
+    font-size: 10px;
+  }
+
+  .speed strong {
+    margin-top: 4px;
+    font-size: 9px;
+  }
+
+  .torpedo-stock {
+    margin-top: 6px;
+  }
+
+  .depth-gauge {
+    display: none;
   }
 
   .telegraph {
-    right: 14px;
-    bottom: 14px;
-    width: 116px;
-    padding: 10px;
+    right: 10px;
+    bottom: 92px;
+    width: 118px;
+    padding: 9px;
+  }
+
+  .telegraph-title {
+    margin-bottom: 6px;
+    font-size: 9px;
+  }
+
+  .telegraph-scale {
+    gap: 5px;
+    touch-action: none;
+  }
+
+  .telegraph-step {
+    min-height: 19px;
+    font-size: 9px;
   }
 
   .rudder {
-    left: auto;
-    right: 156px;
-    bottom: 184px;
-    width: 96px;
-    padding: 10px 8px;
-    transform: none;
+    left: 50%;
+    bottom: 12px;
+    width: min(230px, 45vw);
+    padding: 9px 9px 8px;
+    transform: translateX(-50%);
+  }
+
+  .rudder-title {
+    margin-bottom: 6px;
+    font-size: 9px;
   }
 
   .rudder-gauge {
-    height: 26px;
+    height: 34px;
+    touch-action: none;
   }
 
+  .mobile-fire-button {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    display: grid;
+    width: 68px;
+    height: 68px;
+    place-items: center;
+    border: 1px solid rgb(255 255 255 / 38%);
+    border-radius: 50%;
+    background: rgb(171 64 48 / 82%);
+    box-shadow: 0 12px 34px rgb(0 0 0 / 28%), 0 0 20px rgb(224 93 70 / 28%);
+    color: #ffffff;
+    cursor: pointer;
+    font: 900 11px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    touch-action: manipulation;
+    pointer-events: auto;
+  }
+
+  .mobile-fire-button:active {
+    background: rgb(214 82 60 / 92%);
+    transform: translateY(1px);
+  }
 }
