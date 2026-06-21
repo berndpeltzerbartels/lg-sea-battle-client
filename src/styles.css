@@ -16,6 +16,12 @@ body {
     sans-serif;
 }
 
+body.big-map {
+  --map-canvas-width: min(70vw, 920px);
+  --map-canvas-height: min(48vw, 640px);
+  --map-meta-width: 116px;
+}
+
 .startup-error {
   display: grid;
   min-height: 100%;
@@ -431,6 +437,37 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: pre-line;
+}
+
+body.big-map .nav-panel {
+  top: 14px;
+  left: 14px;
+}
+
+body.big-map .nav-instrument-map {
+  background: rgb(5 27 40 / 54%);
+}
+
+body.big-map .nav-title {
+  font-size: 12px;
+}
+
+body.big-map .map-row-labels,
+body.big-map .map-column-labels {
+  color: rgb(232 246 250 / 86%);
+  font-size: 12px;
+}
+
+body.big-map .map-meta {
+  font-size: 12px;
+}
+
+body.big-map .map-meta strong {
+  font-size: 28px;
+}
+
+body.big-map .map-meta span {
+  line-height: 1.08;
 }
 
 #mapCanvas {

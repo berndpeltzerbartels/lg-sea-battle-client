@@ -32,6 +32,10 @@ const engine = new Engine(canvas, true, {
 
 const scene = new Scene(engine);
 document.body.dataset.appStarted = "true";
+const urlParams = new URLSearchParams(location.search);
+const bigMapEnabled = urlParams.get("bigMap") === "1";
+document.body.classList.toggle("big-map", bigMapEnabled);
+document.body.dataset.bigMap = String(bigMapEnabled);
 scene.clearColor = new Color4(0.36, 0.52, 0.66, 1);
 scene.fogMode = Scene.FOGMODE_LINEAR;
 scene.fogColor = new Color3(0.29, 0.39, 0.48);
@@ -90,7 +94,7 @@ const mouseWheelEngineStep = 100;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = true;
-let debugMapEnabled = new URLSearchParams(location.search).get("debug") === "1";
+let debugMapEnabled = urlParams.get("debug") === "1";
 let lastMapViewport = null;
 const playerLogin = await requirePlayerLogin();
 const playerInitials = playerLogin.initials;
@@ -2379,19 +2383,22 @@ function drawMapLandLabel(ctx, zone, bounds, width, height, scale) {
   const area = getZoneVisualRx(zone) * getZoneVisualRz(zone);
   const screenWidth = getZoneVisualRx(zone) * scale * 2;
   const screenHeight = getZoneVisualRz(zone) * scale * 2;
-  if (area < 3300 || screenWidth < 28 || screenHeight < 16) return;
+  const minArea = bigMapEnabled ? 700 : 3300;
+  const minWidth = bigMapEnabled ? 12 : 28;
+  const minHeight = bigMapEnabled ? 8 : 16;
+  if (area < minArea || screenWidth < minWidth || screenHeight < minHeight) return;
 
   const label = getLandDisplayName(zone);
   const point = worldToMapPoint(zone, bounds, width, height, scale);
   if (point.x < 18 || point.x > width - 18 || point.y < 18 || point.y > height - 40) return;
 
   ctx.save();
-  ctx.font = "800 9px Inter, sans-serif";
+  ctx.font = bigMapEnabled ? "800 13px Inter, sans-serif" : "800 9px Inter, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = "rgba(5, 27, 40, 0.82)";
-  ctx.fillStyle = "rgba(247, 251, 255, 0.76)";
+  ctx.lineWidth = bigMapEnabled ? 4 : 3;
+  ctx.strokeStyle = "rgba(5, 27, 40, 0.88)";
+  ctx.fillStyle = bigMapEnabled ? "rgba(247, 251, 255, 0.9)" : "rgba(247, 251, 255, 0.76)";
   ctx.strokeText(label, point.x, point.y);
   ctx.fillText(label, point.x, point.y);
   ctx.restore();
@@ -2404,7 +2411,10 @@ function drawMapLandLabels(ctx, zones, bounds, width, height, scale) {
     const area = getZoneVisualRx(zone) * getZoneVisualRz(zone);
     const screenWidth = getZoneVisualRx(zone) * scale * 2;
     const screenHeight = getZoneVisualRz(zone) * scale * 2;
-    if (area < 3300 || screenWidth < 28 || screenHeight < 16) return;
+    const minArea = bigMapEnabled ? 700 : 3300;
+    const minWidth = bigMapEnabled ? 12 : 28;
+    const minHeight = bigMapEnabled ? 8 : 16;
+    if (area < minArea || screenWidth < minWidth || screenHeight < minHeight) return;
 
     const label = getLandDisplayName(zone);
     const group = groups.get(label) ?? { label, x: 0, z: 0, weight: 0 };
@@ -2473,12 +2483,12 @@ function drawMapLandLabelAt(ctx, label, position, bounds, width, height) {
   if (point.x < 18 || point.x > width - 18 || point.y < 18 || point.y > height - 40) return;
 
   ctx.save();
-  ctx.font = "800 9px Inter, sans-serif";
+  ctx.font = bigMapEnabled ? "800 13px Inter, sans-serif" : "800 9px Inter, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = "rgba(5, 27, 40, 0.82)";
-  ctx.fillStyle = "rgba(247, 251, 255, 0.76)";
+  ctx.lineWidth = bigMapEnabled ? 4 : 3;
+  ctx.strokeStyle = "rgba(5, 27, 40, 0.88)";
+  ctx.fillStyle = bigMapEnabled ? "rgba(247, 251, 255, 0.9)" : "rgba(247, 251, 255, 0.76)";
   ctx.strokeText(label, point.x, point.y);
   ctx.fillText(label, point.x, point.y);
   ctx.restore();
@@ -2497,6 +2507,10 @@ function getLandDisplayName(zone) {
     north_sound_west: "North Sound",
     north_sound_east: "North Sound",
     north_sound_outer: "North Sound",
+    north_outer_rocks: "North Outer Rocks",
+    copper_sound: "Copper Sound",
+    copper_north_ridge: "Copper North Ridge",
+    crow_west: "Crow West",
     eastern_delta_coast: "Delta Coast",
     southern_cliffs: "Southern Cliffs",
     crown_mountain: "Crown Mountain",
@@ -2926,6 +2940,10 @@ function isSteepRockZone(zone) {
 }
 
 function createShipDesignation(ship) {
+  const controlledBy = ship?.controlledBy ?? "bot";
+  if (controlledBy && controlledBy !== "bot") {
+    return getPlayerInitials(controlledBy);
+  }
   const match = String(ship.id ?? "").match(/(\d+)$/);
   const number = match ? Number.parseInt(match[1], 10) : 0;
   const base = getTeamDefinition(ship.teamId)?.shipBase ?? 50;
@@ -5104,14 +5122,14 @@ function createShipDesignationPlates(scene, parent, name, designation) {
   [-1, 1].forEach((side) => {
     const material = createDesignationMaterial(scene, `${name}_designation_material_${side}`, designation, side < 0);
     const plate = MeshBuilder.CreatePlane(`${name}_designation_${side}`, {
-      width: 1.18,
-      height: 0.36
+      width: 0.86,
+      height: 0.3
     }, scene);
     plate.parent = parent;
     plate.material = material;
-    plate.position.x = side * 0.64;
-    plate.position.y = 0.56;
-    plate.position.z = 2.34;
+    plate.position.x = side * 0.535;
+    plate.position.y = 0.44;
+    plate.position.z = 1.85;
     plate.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
   });
 }
@@ -5795,16 +5813,16 @@ function updateLampMaterial(light, intensity) {
   }
 
   const flash = clamp(intensity, 0, 1.8);
-  const visibleGlow = clamp(0.08 + flash * 2.15, 0.05, 2.6);
+  const visibleGlow = clamp(0.18 + flash * 2.05, 0.14, 2.6);
   light.lampMaterial.alpha = 1;
-  light.lampMaterial.diffuseColor = Color3.White();
-  light.lampMaterial.emissiveColor = new Color3(visibleGlow, visibleGlow, visibleGlow * 0.94);
+  light.lampMaterial.diffuseColor = new Color3(0.88, 0.86, 0.78);
+  light.lampMaterial.emissiveColor = new Color3(visibleGlow, visibleGlow, visibleGlow * 0.96);
   light.lampMaterial.specularColor = Color3.White();
   if (light.lanternMaterial) {
-    const lanternGlow = clamp(0.035 + flash * 1.42, 0.025, 1.45);
+    const lanternGlow = clamp(0.12 + flash * 1.3, 0.1, 1.45);
     light.lanternMaterial.alpha = clamp(0.38 + flash * 0.3, 0.36, 0.76);
-    light.lanternMaterial.diffuseColor = new Color3(0.82 + lanternGlow * 0.08, 0.88 + lanternGlow * 0.08, 0.9 + lanternGlow * 0.04);
-    light.lanternMaterial.emissiveColor = new Color3(lanternGlow, lanternGlow, lanternGlow * 0.92);
+    light.lanternMaterial.diffuseColor = new Color3(0.78 + lanternGlow * 0.1, 0.78 + lanternGlow * 0.09, 0.7 + lanternGlow * 0.08);
+    light.lanternMaterial.emissiveColor = new Color3(lanternGlow, lanternGlow * 0.98, lanternGlow * 0.86);
     light.lanternMaterial.specularColor = Color3.White();
   }
 }
