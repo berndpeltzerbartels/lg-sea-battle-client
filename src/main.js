@@ -2016,6 +2016,7 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, headi
   const ctx = prepareInstrumentCanvas(canvas);
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
+  if (!ctx || width < 2 || height < 2) return;
   const zoomIndex = clamp(Number(zoomControl?.value ?? 1), 0, mapZoomScales.length - 1);
   const zoomScale = mapZoomScales[zoomIndex];
   const tile = getMapTile(playerPosition, zoomScale);
@@ -2099,9 +2100,10 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   const ctx = prepareInstrumentCanvas(canvas);
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
+  if (!ctx || width < 18 || height < 18) return;
   const centerX = width * 0.5;
   const centerY = height * 0.5;
-  const radius = Math.min(width, height) * 0.5 - 7;
+  const radius = Math.max(1, Math.min(width, height) * 0.5 - 7);
   const radarRange = range;
   const scale = radius / radarRange;
 
@@ -2163,6 +2165,7 @@ function prepareInstrumentCanvas(canvas) {
   const ratio = Math.min(window.devicePixelRatio || 1, 2);
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
+  if (width < 1 || height < 1) return null;
   const targetWidth = Math.round(width * ratio);
   const targetHeight = Math.round(height * ratio);
 
@@ -2618,6 +2621,7 @@ function getCoastContourPoints(zone, samples, boundary = "visual") {
 }
 
 function drawInstrumentMarker(ctx, x, y, color, radius) {
+  if (!Number.isFinite(radius) || radius <= 0) return;
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, Math.PI * 2);
@@ -2743,6 +2747,7 @@ function clampInstrumentPoint(point, width, height, padding) {
 }
 
 function drawRadarRangeRings(ctx, centerX, centerY, radius) {
+  if (!Number.isFinite(radius) || radius <= 0) return;
   ctx.strokeStyle = "rgba(155, 229, 223, 0.22)";
   ctx.lineWidth = 1;
 
@@ -2762,6 +2767,7 @@ function drawRadarRangeRings(ctx, centerX, centerY, radius) {
 
 function drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, radius, radarRange) {
   if (!zone.radarOcclusion) return;
+  if (!Number.isFinite(radius) || radius <= 0) return;
 
   const dx = zone.x - playerPosition.x;
   const dz = zone.z - playerPosition.z;
