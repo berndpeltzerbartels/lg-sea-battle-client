@@ -2103,7 +2103,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   if (!ctx || width < 18 || height < 18) return;
   const centerX = width * 0.5;
   const centerY = height * 0.5;
-  const radius = Math.max(1, Math.min(width, height) * 0.5 - 7);
+  const radius = Math.max(1, Math.min(width, height) * 0.46);
   const radarRange = range;
   const scale = radius / radarRange;
 
@@ -2702,7 +2702,7 @@ function drawRadarCompassRing(ctx, centerX, centerY, radius, radarHeading) {
     ["S", Math.PI],
     ["W", -Math.PI / 2]
   ];
-  const labelRadius = Math.max(12, radius - 13);
+  const labelRadius = Math.max(1, radius * 0.86);
 
   ctx.save();
   ctx.font = "800 10px Inter, Arial, sans-serif";
