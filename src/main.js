@@ -5613,11 +5613,11 @@ function createLighthouse(land, index, scene, materials, parent, visualEffects) 
   const lamp = MeshBuilder.CreateCylinder(`${land.name}_lighthouse_lamp`, {
     diameterTop: 1.08 * scale,
     diameterBottom: 1.08 * scale,
-    height: 1.12 * scale,
+    height: 0.82 * scale,
     tessellation: 12
   }, scene);
   lamp.parent = root;
-  lamp.position.y = lanternY;
+  lamp.position.y = lanternY + 0.15 * scale;
   lamp.material = lampMaterial;
   lamp.isPickable = false;
   lamp.renderingGroupId = 1;
@@ -5819,15 +5819,15 @@ function updateLampMaterial(light, intensity) {
   }
 
   const flash = clamp(intensity, 0, 1.8);
-  const visibleGlow = clamp(0.18 + flash * 2.05, 0.14, 2.6);
+  const visibleGlow = clamp(0.34 + flash * 1.9, 0.28, 2.6);
   light.lampMaterial.alpha = 1;
-  light.lampMaterial.diffuseColor = new Color3(0.88, 0.86, 0.78);
-  light.lampMaterial.emissiveColor = new Color3(visibleGlow, visibleGlow, visibleGlow * 0.96);
+  light.lampMaterial.diffuseColor = new Color3(0.76, 0.74, 0.66);
+  light.lampMaterial.emissiveColor = new Color3(visibleGlow, visibleGlow, visibleGlow * 0.95);
   light.lampMaterial.specularColor = Color3.White();
   if (light.lanternMaterial) {
-    const lanternGlow = clamp(0.12 + flash * 1.3, 0.1, 1.45);
-    light.lanternMaterial.alpha = clamp(0.38 + flash * 0.3, 0.36, 0.76);
-    light.lanternMaterial.diffuseColor = new Color3(0.78 + lanternGlow * 0.1, 0.78 + lanternGlow * 0.09, 0.7 + lanternGlow * 0.08);
+    const lanternGlow = clamp(0.2 + flash * 1.22, 0.18, 1.45);
+    light.lanternMaterial.alpha = clamp(0.7 + flash * 0.08, 0.68, 0.82);
+    light.lanternMaterial.diffuseColor = new Color3(0.66 + lanternGlow * 0.13, 0.65 + lanternGlow * 0.12, 0.58 + lanternGlow * 0.1);
     light.lanternMaterial.emissiveColor = new Color3(lanternGlow, lanternGlow * 0.98, lanternGlow * 0.86);
     light.lanternMaterial.specularColor = Color3.White();
   }
