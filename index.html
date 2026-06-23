@@ -91,35 +91,53 @@
 
         function errorDetails(payload, fallback) {
           var lines = [];
+          var stack = payload && payload.stack ? payload.stack : stackOf(fallback);
+          lines.push("STACK TRACE");
+          lines.push(stack || "NO STACK TRACE PROVIDED BY THIS BROWSER");
+          lines.push("");
           lines.push("MESSAGE");
           lines.push(payload && payload.message ? payload.message : messageOf(fallback));
           lines.push("");
-          lines.push("SOURCE");
-          lines.push(payload && payload.source ? payload.source : "not available");
+          lines.push("SOURCE / POSITION");
+          lines.push("source: " + (payload && payload.source ? payload.source : "not available"));
+          lines.push("line: " + (payload && payload.line ? payload.line : 0));
+          lines.push("column: " + (payload && payload.column ? payload.column : 0));
           lines.push("");
-          lines.push("POSITION");
-          lines.push("line: " + (payload && payload.line ? payload.line : 0) + " column: " + (payload && payload.column ? payload.column : 0));
+          lines.push("ERROR TYPE");
+          lines.push(payload && payload.type ? payload.type : "unknown");
           lines.push("");
-          lines.push("STACK");
-          lines.push(payload && payload.stack ? payload.stack : "not available from this browser");
+          lines.push("ONERROR ARGUMENTS");
+          lines.push("message: " + (payload && payload.rawMessage ? payload.rawMessage : "not available"));
+          lines.push("error: " + (payload && payload.rawError ? payload.rawError : "not available"));
+          lines.push("");
+          lines.push("EVENT FIELDS");
+          lines.push("eventType: " + (payload && payload.eventType ? payload.eventType : "not available"));
+          lines.push("eventPhase: " + (payload && payload.eventPhase ? payload.eventPhase : "not available"));
+          lines.push("targetTagName: " + (payload && payload.targetTagName ? payload.targetTagName : "not available"));
+          lines.push("targetSource: " + (payload && payload.targetSource ? payload.targetSource : "not available"));
+          if (fallback && typeof fallback !== "string") {
+            lines.push("");
+            lines.push("RAW DETAIL OBJECT");
+            lines.push(describeValue(fallback, 2));
+          }
+          if (payload && payload.rawEvent) {
+            lines.push("");
+            lines.push("RAW EVENT OBJECT");
+            lines.push(payload.rawEvent);
+          }
+          if (payload && payload.rawReason) {
+            lines.push("");
+            lines.push("RAW REJECTION REASON");
+            lines.push(payload.rawReason);
+          }
           lines.push("");
           lines.push("CONTEXT");
           lines.push("url: " + location.href);
           lines.push("userAgent: " + navigator.userAgent);
           lines.push("screen: " + screen.width + "x" + screen.height + " viewport: " + window.innerWidth + "x" + window.innerHeight);
-          lines.push("");
-          lines.push("RAW PAYLOAD");
-          try {
-            lines.push(JSON.stringify(payload || {}, null, 2));
-          } catch (error) {
-            lines.push("[payload stringify failed] " + messageOf(error));
-            lines.push(describeValue(payload, 2));
-          }
-          if (fallback && typeof fallback !== "string") {
-            lines.push("");
-            lines.push("RAW DETAIL");
-            lines.push(describeValue(fallback, 2));
-          }
+          lines.push("clientVersion: " + (payload && payload.clientVersion ? payload.clientVersion : buildLabel(window.__SEA_BATTLE_CLIENT_VERSION__)));
+          lines.push("serverVersion: " + (payload && payload.serverVersion ? payload.serverVersion : buildLabel(serverBuild)));
+          lines.push("reportStatus: " + reportStatus);
           return lines.join("\n");
         }
 
@@ -143,7 +161,6 @@
           body.innerHTML =
             '<main class="startup-error">' +
             '<h1>' + String(title || 'Sea Battle JavaScript error') + '</h1>' +
-            '<p>' + escape(message) + '</p>' +
             '<small id="startupDiagnostic">' + escape(diagnosticText()) + '</small>' +
             '<pre id="startupErrorDetails">' + escape(errorDetails(payload, detail)) + '</pre>' +
             '</main>';
