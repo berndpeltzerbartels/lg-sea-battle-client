@@ -48,8 +48,8 @@ body.big-map {
 }
 
 .startup-error pre {
-  width: min(920px, calc(100vw - 48px));
-  max-height: 48vh;
+  width: calc(100vw - 28px);
+  max-height: 68vh;
   margin: 4px 0 0;
   padding: 12px;
   overflow: auto;
