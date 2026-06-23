@@ -63,12 +63,6 @@
             " | Report " + reportStatus;
         }
 
-        function escape(value) {
-          return String(value || "").replace(/[<>&]/g, function (character) {
-            return character === '<' ? '&lt;' : character === '>' ? '&gt;' : '&amp;';
-          });
-        }
-
         function errorDetails(payload, fallback) {
           var lines = [];
           var stack = payload && payload.stack ? payload.stack : "";
@@ -146,12 +140,21 @@
             return;
           }
           body.setAttribute("data-startup-error", message);
-          body.innerHTML =
-            '<main class="startup-error">' +
-            '<h1>' + String(title || 'Sea Battle JavaScript error') + '</h1>' +
-            '<small id="startupDiagnostic">' + escape(diagnosticText()) + '</small>' +
-            '<pre id="startupErrorDetails">' + escape(errorDetails(payload, detail)) + '</pre>' +
-            '</main>';
+          body.textContent = "";
+          var main = document.createElement("main");
+          main.className = "startup-error";
+          var heading = document.createElement("h1");
+          heading.textContent = String(title || "Sea Battle JavaScript error");
+          var diagnostic = document.createElement("small");
+          diagnostic.id = "startupDiagnostic";
+          diagnostic.textContent = diagnosticText();
+          var details = document.createElement("pre");
+          details.id = "startupErrorDetails";
+          details.textContent = errorDetails(payload, detail);
+          main.appendChild(heading);
+          main.appendChild(diagnostic);
+          main.appendChild(details);
+          body.appendChild(main);
           refreshDiagnostics();
         }
 
@@ -161,24 +164,6 @@
           reported[key] = true;
           copyBasicContext(payload);
           var body = JSON.stringify(payload);
-          if (navigator.sendBeacon && typeof Blob === "function") {
-            if (navigator.sendBeacon("/game/client-error", new Blob([body], { type: "application/json" }))) {
-              reportStatus = "sent by beacon";
-              refreshDiagnostics();
-              return;
-            }
-          }
-          if (window.fetch) {
-            fetch("/game/client-error", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: body
-            }).then(function (response) {
-              reportStatus = response && response.ok ? "sent by fetch" : "fetch status " + (response ? response.status : "unknown");
-              refreshDiagnostics();
-            });
-            return;
-          }
           var request = new XMLHttpRequest();
           request.open("POST", "/game/client-error", true);
           request.setRequestHeader("Content-Type", "application/json");
