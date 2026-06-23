@@ -29,34 +29,14 @@
           return value && value.stack ? String(value.stack) : "";
         }
 
-        function describeValue(value, depth) {
+        function nameOf(value) {
+          return value && value.name ? String(value.name) : "";
+        }
+
+        function typeOf(value) {
           if (value === null) return "null";
           if (value === undefined) return "undefined";
-          if (typeof value === "string") return JSON.stringify(value);
-          if (typeof value === "number" || typeof value === "boolean") return String(value);
-          if (typeof value === "function") return "[function " + (value.name || "anonymous") + "]";
-          if (depth <= 0) return Object.prototype.toString.call(value);
-          var parts = [];
-          try {
-            var keys = [];
-            for (var key in value) keys.push(key);
-            Object.getOwnPropertyNames(value).forEach(function (key) {
-              if (keys.indexOf(key) < 0) keys.push(key);
-            });
-            keys.slice(0, 40).forEach(function (key) {
-              var entry;
-              try {
-                entry = describeValue(value[key], depth - 1);
-              } catch (error) {
-                entry = "[unreadable: " + messageOf(error) + "]";
-              }
-              parts.push(key + ": " + entry);
-            });
-            if (keys.length > 40) parts.push("... " + (keys.length - 40) + " more");
-          } catch (error) {
-            parts.push("[properties unavailable: " + messageOf(error) + "]");
-          }
-          return Object.prototype.toString.call(value) + " { " + parts.join(", ") + " }";
+          return Object.prototype.toString.call(value);
         }
 
         function copyBasicContext(payload) {
@@ -91,7 +71,7 @@
 
         function errorDetails(payload, fallback) {
           var lines = [];
-          var stack = payload && payload.stack ? payload.stack : stackOf(fallback);
+          var stack = payload && payload.stack ? payload.stack : "";
           lines.push("STACK TRACE");
           lines.push(stack || "NO STACK TRACE PROVIDED BY THIS BROWSER");
           lines.push("");
@@ -106,30 +86,38 @@
           lines.push("ERROR TYPE");
           lines.push(payload && payload.type ? payload.type : "unknown");
           lines.push("");
-          lines.push("ONERROR ARGUMENTS");
-          lines.push("message: " + (payload && payload.rawMessage ? payload.rawMessage : "not available"));
-          lines.push("error: " + (payload && payload.rawError ? payload.rawError : "not available"));
+          lines.push("WINDOW.ONERROR ARGUMENTS");
+          lines.push("message: " + (payload && payload.onerrorMessage ? payload.onerrorMessage : "not available"));
+          lines.push("source: " + (payload && payload.onerrorSource ? payload.onerrorSource : "not available"));
+          lines.push("line: " + (payload && payload.onerrorLine ? payload.onerrorLine : 0));
+          lines.push("column: " + (payload && payload.onerrorColumn ? payload.onerrorColumn : 0));
+          lines.push("errorType: " + (payload && payload.onerrorErrorType ? payload.onerrorErrorType : "not available"));
+          lines.push("errorName: " + (payload && payload.onerrorErrorName ? payload.onerrorErrorName : "not available"));
+          lines.push("errorMessage: " + (payload && payload.onerrorErrorMessage ? payload.onerrorErrorMessage : "not available"));
+          lines.push("errorStack:");
+          lines.push(payload && payload.onerrorErrorStack ? payload.onerrorErrorStack : "not available");
           lines.push("");
           lines.push("EVENT FIELDS");
           lines.push("eventType: " + (payload && payload.eventType ? payload.eventType : "not available"));
           lines.push("eventPhase: " + (payload && payload.eventPhase ? payload.eventPhase : "not available"));
           lines.push("targetTagName: " + (payload && payload.targetTagName ? payload.targetTagName : "not available"));
           lines.push("targetSource: " + (payload && payload.targetSource ? payload.targetSource : "not available"));
-          if (fallback && typeof fallback !== "string") {
-            lines.push("");
-            lines.push("RAW DETAIL OBJECT");
-            lines.push(describeValue(fallback, 2));
-          }
-          if (payload && payload.rawEvent) {
-            lines.push("");
-            lines.push("RAW EVENT OBJECT");
-            lines.push(payload.rawEvent);
-          }
-          if (payload && payload.rawReason) {
-            lines.push("");
-            lines.push("RAW REJECTION REASON");
-            lines.push(payload.rawReason);
-          }
+          lines.push("eventMessage: " + (payload && payload.eventMessage ? payload.eventMessage : "not available"));
+          lines.push("eventFilename: " + (payload && payload.eventFilename ? payload.eventFilename : "not available"));
+          lines.push("eventLine: " + (payload && payload.eventLine ? payload.eventLine : 0));
+          lines.push("eventColumn: " + (payload && payload.eventColumn ? payload.eventColumn : 0));
+          lines.push("eventErrorType: " + (payload && payload.eventErrorType ? payload.eventErrorType : "not available"));
+          lines.push("eventErrorName: " + (payload && payload.eventErrorName ? payload.eventErrorName : "not available"));
+          lines.push("eventErrorMessage: " + (payload && payload.eventErrorMessage ? payload.eventErrorMessage : "not available"));
+          lines.push("eventErrorStack:");
+          lines.push(payload && payload.eventErrorStack ? payload.eventErrorStack : "not available");
+          lines.push("");
+          lines.push("UNHANDLED REJECTION");
+          lines.push("reasonType: " + (payload && payload.reasonType ? payload.reasonType : "not available"));
+          lines.push("reasonName: " + (payload && payload.reasonName ? payload.reasonName : "not available"));
+          lines.push("reasonMessage: " + (payload && payload.reasonMessage ? payload.reasonMessage : "not available"));
+          lines.push("reasonStack:");
+          lines.push(payload && payload.reasonStack ? payload.reasonStack : "not available");
           lines.push("");
           lines.push("CONTEXT");
           lines.push("url: " + location.href);
@@ -168,54 +156,46 @@
         }
 
         function report(payload) {
-          try {
-            var key = [payload.message, payload.source, payload.line, payload.column].join("|");
-            if (reported[key]) return;
-            reported[key] = true;
-            copyBasicContext(payload);
-            var body = JSON.stringify(payload);
-            if (navigator.sendBeacon && typeof Blob === "function") {
-              if (navigator.sendBeacon("/game/client-error", new Blob([body], { type: "application/json" }))) {
-                reportStatus = "sent by beacon";
-                refreshDiagnostics();
-                return;
-              }
-            }
-            if (window.fetch) {
-              fetch("/game/client-error", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: body
-              }).then(function (response) {
-                reportStatus = response && response.ok ? "sent by fetch" : "fetch status " + (response ? response.status : "unknown");
-                refreshDiagnostics();
-              }).catch(function () {
-                reportStatus = "fetch failed";
-                refreshDiagnostics();
-              });
+          var key = [payload.message, payload.source, payload.line, payload.column].join("|");
+          if (reported[key]) return;
+          reported[key] = true;
+          copyBasicContext(payload);
+          var body = JSON.stringify(payload);
+          if (navigator.sendBeacon && typeof Blob === "function") {
+            if (navigator.sendBeacon("/game/client-error", new Blob([body], { type: "application/json" }))) {
+              reportStatus = "sent by beacon";
+              refreshDiagnostics();
               return;
             }
-            var request = new XMLHttpRequest();
-            request.open("POST", "/game/client-error", true);
-            request.setRequestHeader("Content-Type", "application/json");
-            request.onreadystatechange = function () {
-              if (request.readyState === 4) {
-                reportStatus = request.status >= 200 && request.status < 300 ? "sent by xhr" : "xhr status " + request.status;
-                refreshDiagnostics();
-              }
-            };
-            request.send(body);
-          } catch (ignored) {
-            // Do not let diagnostic reporting create another startup failure.
           }
+          if (window.fetch) {
+            fetch("/game/client-error", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: body
+            }).then(function (response) {
+              reportStatus = response && response.ok ? "sent by fetch" : "fetch status " + (response ? response.status : "unknown");
+              refreshDiagnostics();
+            });
+            return;
+          }
+          var request = new XMLHttpRequest();
+          request.open("POST", "/game/client-error", true);
+          request.setRequestHeader("Content-Type", "application/json");
+          request.onreadystatechange = function () {
+            if (request.readyState === 4) {
+              reportStatus = request.status >= 200 && request.status < 300 ? "sent by xhr" : "xhr status " + request.status;
+              refreshDiagnostics();
+            }
+          };
+          request.send(body);
         }
 
         window.__seaBattleShowStartupError = function (title, detail) {
           var payload = copyBasicContext({
             type: "startup",
             message: messageOf(detail) || title || "startup error",
-            stack: stackOf(detail),
-            rawDetail: describeValue(detail, 2)
+            stack: stackOf(detail)
           });
           show(title, detail, payload);
           report(payload);
@@ -229,8 +209,14 @@
             line: line || 0,
             column: column || 0,
             stack: stackOf(error),
-            rawMessage: describeValue(message, 2),
-            rawError: describeValue(error, 2)
+            onerrorMessage: messageOf(message),
+            onerrorSource: source || "",
+            onerrorLine: line || 0,
+            onerrorColumn: column || 0,
+            onerrorErrorType: typeOf(error),
+            onerrorErrorName: nameOf(error),
+            onerrorErrorMessage: messageOf(error),
+            onerrorErrorStack: stackOf(error)
           });
           show("Sea Battle JavaScript error", error || message, payload);
           report(payload);
@@ -255,8 +241,14 @@
             eventPhase: event.eventPhase || 0,
             targetTagName: event.target && event.target.tagName ? event.target.tagName : "",
             targetSource: event.target && (event.target.src || event.target.href) ? (event.target.src || event.target.href) : "",
-            rawEvent: describeValue(event, 2),
-            rawError: describeValue(event.error, 2)
+            eventMessage: messageOf(event.message),
+            eventFilename: event.filename || "",
+            eventLine: event.lineno || 0,
+            eventColumn: event.colno || 0,
+            eventErrorType: typeOf(event.error),
+            eventErrorName: nameOf(event.error),
+            eventErrorMessage: messageOf(event.error),
+            eventErrorStack: stackOf(event.error)
           });
           show("Sea Battle JavaScript error", detail || message, payload);
           report(payload);
@@ -268,8 +260,10 @@
             type: "unhandledrejection",
             message: message,
             stack: stackOf(event.reason),
-            rawReason: describeValue(event.reason, 2),
-            rawEvent: describeValue(event, 2)
+            reasonType: typeOf(event.reason),
+            reasonName: nameOf(event.reason),
+            reasonMessage: messageOf(event.reason),
+            reasonStack: stackOf(event.reason)
           });
           show("Sea Battle startup failed", event.reason || message, payload);
           report(payload);
@@ -286,23 +280,15 @@
           }
         });
 
-        try {
-          var versionRequest = new XMLHttpRequest();
-          versionRequest.open("GET", "/game/version", true);
-          versionRequest.onreadystatechange = function () {
-            if (versionRequest.readyState === 4 && versionRequest.status >= 200 && versionRequest.status < 300) {
-              try {
-                serverBuild = JSON.parse(versionRequest.responseText);
-              } catch (ignored) {
-                serverBuild = { version: "invalid response" };
-              }
-              refreshDiagnostics();
-            }
-          };
-          versionRequest.send();
-        } catch (ignored) {
-          // The module code also asks for the version once it starts successfully.
-        }
+        var versionRequest = new XMLHttpRequest();
+        versionRequest.open("GET", "/game/version", true);
+        versionRequest.onreadystatechange = function () {
+          if (versionRequest.readyState === 4 && versionRequest.status >= 200 && versionRequest.status < 300) {
+            serverBuild = JSON.parse(versionRequest.responseText);
+            refreshDiagnostics();
+          }
+        };
+        versionRequest.send();
       })();
     </script>
     <title>LG Sea Battle</title>
