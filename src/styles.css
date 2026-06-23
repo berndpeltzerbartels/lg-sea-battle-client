@@ -47,6 +47,24 @@ body.big-map {
   color: #c8d7df;
 }
 
+.startup-error pre {
+  width: min(920px, calc(100vw - 48px));
+  max-height: 48vh;
+  margin: 4px 0 0;
+  padding: 12px;
+  overflow: auto;
+  box-sizing: border-box;
+  border: 1px solid rgb(192 230 238 / 28%);
+  border-radius: 8px;
+  background: rgb(0 0 0 / 26%);
+  color: #eef8ff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
 .login-active #renderCanvas,
 .login-active .hud,
 .login-active .sinking-water-overlay {
@@ -590,6 +608,31 @@ body.big-map .map-meta span {
   background: rgb(5 27 40 / 42%);
   box-shadow: 0 12px 38px rgb(1 15 24 / 22%);
   backdrop-filter: blur(7px);
+}
+
+.version-panel {
+  position: absolute;
+  right: 24px;
+  bottom: 18px;
+  display: grid;
+  gap: 2px;
+  max-width: 420px;
+  padding: 7px 9px;
+  border: 1px solid rgb(255 255 255 / 24%);
+  border-radius: 8px;
+  background: rgb(5 27 40 / 34%);
+  color: rgb(247 251 255 / 62%);
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1.2;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.version-panel strong {
+  color: rgb(247 251 255 / 82%);
+  font-weight: 850;
+  text-transform: none;
 }
 
 .player-list-title {

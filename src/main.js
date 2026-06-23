@@ -65,6 +65,8 @@ const torpedoStockValue = document.getElementById("torpedoStockValue");
 const playerListRows = document.getElementById("playerListRows");
 const resetGameButton = document.getElementById("resetGameButton");
 const mobileFireButton = document.getElementById("mobileFireButton");
+const clientVersionValue = document.getElementById("clientVersionValue");
+const serverVersionValue = document.getElementById("serverVersionValue");
 
 const mapTileSize = 1200;
 const mapSectorSize = 600;
@@ -96,6 +98,11 @@ const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = true;
 let debugMapEnabled = urlParams.get("debug") === "1";
 let lastMapViewport = null;
+const clientBuildInfo = window.__SEA_BATTLE_CLIENT_VERSION__ ?? { version: "dev", commit: "local" };
+updateBuildInfoPanel(clientBuildInfo, null);
+loadServerBuildInfo()
+  .then((serverBuildInfo) => updateBuildInfoPanel(clientBuildInfo, serverBuildInfo))
+  .catch((error) => updateBuildInfoPanel(clientBuildInfo, { version: "unavailable", commit: error.message }));
 const playerLogin = await requirePlayerLogin();
 const playerInitials = playerLogin.initials;
 const worldLandmasses = await loadWorldLandmasses();
@@ -1141,6 +1148,41 @@ function getGameStateEndpoint() {
   }
 
   return "/game/state";
+}
+
+async function loadServerBuildInfo() {
+  const response = await fetch(getServerBuildInfoEndpoint(), { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`status ${response.status}`);
+  }
+  return response.json();
+}
+
+function getServerBuildInfoEndpoint() {
+  if (location.port === "5173" || location.port === "4173") {
+    return `${location.protocol}//${location.hostname}/game/version`;
+  }
+
+  return "/game/version";
+}
+
+function updateBuildInfoPanel(clientBuild, serverBuild) {
+  if (clientVersionValue) {
+    clientVersionValue.textContent = formatBuildInfo(clientBuild);
+  }
+  if (serverVersionValue) {
+    serverVersionValue.textContent = serverBuild ? formatBuildInfo(serverBuild) : "pending";
+  }
+  document.body.dataset.clientBuild = formatBuildInfo(clientBuild);
+  document.body.dataset.serverBuild = serverBuild ? formatBuildInfo(serverBuild) : "pending";
+}
+
+function formatBuildInfo(info) {
+  if (!info) return "unknown";
+  const version = info.version ?? "unknown";
+  const commit = info.commit ? ` ${info.commit}` : "";
+  const buildTime = info.buildTime ? ` ${info.buildTime}` : "";
+  return `${version}${commit}${buildTime}`;
 }
 
 function getPlayerStateEndpoint() {
