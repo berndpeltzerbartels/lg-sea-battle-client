@@ -912,16 +912,19 @@ function flushPerformanceTelemetry(now) {
 
 function sendPerformanceReport(report) {
   const requestStartedAt = beginHttpRequest();
+  const finishPerformanceRequest = () => finishHttpRequest("performance", requestStartedAt);
   fetch("/game/client-performance", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(report),
     keepalive: true
-  })
-    .catch((error) => {
+  }).then(
+    finishPerformanceRequest,
+    (error) => {
       document.body.dataset.performanceLogError = error.message;
-    })
-    .finally(() => finishHttpRequest("performance", requestStartedAt));
+      finishPerformanceRequest();
+    }
+  );
 }
 
 function averageMs(totalMs, count) {
