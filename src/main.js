@@ -395,6 +395,7 @@ let serverRadarObserverPosition = null;
 let serverRadarObserverHeading = null;
 let serverRadarRange = 945;
 let serverShipsById = indexShipsById(gameState.ships);
+let serverClockOffset = Number.isFinite(gameState.t) ? -gameState.t : null;
 let gameEventSource = null;
 let gameEventSourceReady = false;
 let lastGameStreamMessageAt = 0;
@@ -1676,6 +1677,7 @@ async function requestPlayerTorpedoFire() {
 
 function applyServerGameSnapshot(snapshot) {
   if (!snapshot || !Array.isArray(snapshot.ships)) return;
+  const snapshotClientTime = getSnapshotClientTime(snapshot);
   serverShipsById = indexShipsById(snapshot.ships);
   serverRadarReady = false;
   serverRadarContacts = [];
@@ -1734,11 +1736,23 @@ function applyServerGameSnapshot(snapshot) {
 
   syncServerTorpedoes(
     Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes : [],
-    Array.isArray(snapshot.torpedoImpacts) ? snapshot.torpedoImpacts : []
+    Array.isArray(snapshot.torpedoImpacts) ? snapshot.torpedoImpacts : [],
+    snapshotClientTime
   );
   document.body.dataset.remoteShips = String(snapshot.ships.length);
   document.body.dataset.serverTorpedoes = String(Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes.length : 0);
   document.body.dataset.playerStateSync = "ok";
+}
+
+function getSnapshotClientTime(snapshot) {
+  if (!Number.isFinite(snapshot?.t)) return time;
+
+  const observedOffset = time - snapshot.t;
+  serverClockOffset = serverClockOffset === null
+    ? observedOffset
+    : Math.min(serverClockOffset, observedOffset);
+  document.body.dataset.serverClockOffset = serverClockOffset.toFixed(3);
+  return snapshot.t + serverClockOffset;
 }
 
 function alignPlayerBoatToServerShip(ship) {
@@ -3589,13 +3603,13 @@ function isTargetInEnemyTorpedoArc(motion, targetPosition) {
   return getAngularDistance(targetHeading, motion.heading) <= enemyTorpedoFireArcRadians;
 }
 
-function syncServerTorpedoes(torpedoes, impacts = []) {
+function syncServerTorpedoes(torpedoes, impacts = [], snapshotClientTime = time) {
   const activeIds = new Set();
 
   torpedoes.forEach((snapshot) => {
     activeIds.add(snapshot.id);
-    const visual = torpedoSystem.serverVisuals.get(snapshot.id) ?? createServerTorpedoVisual(torpedoSystem, snapshot);
-    applyServerTorpedoSnapshot(visual, snapshot);
+    const visual = torpedoSystem.serverVisuals.get(snapshot.id) ?? createServerTorpedoVisual(torpedoSystem, snapshot, snapshotClientTime);
+    applyServerTorpedoSnapshot(visual, snapshot, snapshotClientTime);
   });
 
   renderServerTorpedoImpacts(impacts);
@@ -3633,10 +3647,10 @@ function renderServerTorpedoImpacts(impacts) {
   }
 }
 
-function createServerTorpedoVisual(system, snapshot) {
+function createServerTorpedoVisual(system, snapshot, snapshotClientTime = time) {
   const root = new TransformNode(`server_torpedo_${snapshot.id}`, system.scene);
   root.parent = system.root;
-  const launch = getServerTorpedoLaunch(system, snapshot);
+  const launch = getServerTorpedoLaunch(snapshot);
   root.position.copyFrom(launch.start);
   root.rotationQuaternion = Quaternion.FromEulerAngles(0, launch.heading, 0);
 
@@ -3670,7 +3684,7 @@ function createServerTorpedoVisual(system, snapshot) {
     forward: getForwardVector(Number.isFinite(snapshot.heading) ? snapshot.heading : 0),
     speed: Number.isFinite(snapshot.speed) ? snapshot.speed : 24,
     serverPosition: new Vector3(snapshot.x, 0.05, snapshot.z),
-    serverSnapshotTime: time,
+    serverSnapshotTime: snapshotClientTime,
     runDistance: 0,
     launchBlendUntil: launch.blendUntil
   };
@@ -3683,57 +3697,24 @@ function createServerTorpedoVisual(system, snapshot) {
   return visual;
 }
 
-function getServerTorpedoLaunch(system, snapshot) {
+function getServerTorpedoLaunch(snapshot) {
   const heading = Number.isFinite(snapshot.heading) ? snapshot.heading : 0;
-  const forward = getForwardVector(heading);
   const serverPosition = new Vector3(snapshot.x, 0.05, snapshot.z);
-
-  if (snapshot.shipId !== playerServerShipId) {
-    return {
-      heading,
-      start: serverPosition,
-      puffPosition: serverPosition,
-      muzzlePosition: serverPosition,
-      tubeSide: 1,
-      blendUntil: 0,
-      showMuzzleEffect: false
-    };
-  }
-
-  const tubeSide = system.nextTube === 0 ? -1 : 1;
-  system.nextTube = 1 - system.nextTube;
-  const right = getRightVector(heading);
-  const tuning = torpedoLaunchDefaults;
-  const tubeX = tubeSide * tuning.tubeX;
-  const tubeStartZ = tuning.startZ;
-  const muzzleZ = 3.05;
-  const start = boat.root.position
-    .add(right.scale(tubeX))
-    .add(forward.scale(tubeStartZ))
-    .add(new Vector3(0, tuning.startY, 0));
-  const muzzlePosition = boat.root.position
-    .add(right.scale(tubeSide * 0.32))
-    .add(forward.scale(tubeStartZ))
-    .add(new Vector3(0, tuning.startY, 0));
-  const puffPosition = boat.root.position
-    .add(right.scale(tubeSide * 0.32))
-    .add(forward.scale(muzzleZ + 0.4))
-    .add(new Vector3(0, -0.04, 0));
 
   return {
     heading,
-    start,
-    puffPosition,
-    muzzlePosition,
-    tubeSide,
-    blendUntil: time + 0.34,
-    showMuzzleEffect: true
+    start: serverPosition,
+    puffPosition: serverPosition,
+    muzzlePosition: serverPosition,
+    tubeSide: 1,
+    blendUntil: 0,
+    showMuzzleEffect: false
   };
 }
 
-function applyServerTorpedoSnapshot(visual, snapshot) {
+function applyServerTorpedoSnapshot(visual, snapshot, snapshotClientTime = time) {
   visual.serverPosition = new Vector3(snapshot.x, 0.05, snapshot.z);
-  visual.serverSnapshotTime = time;
+  visual.serverSnapshotTime = snapshotClientTime;
   visual.heading = Number.isFinite(snapshot.heading) ? snapshot.heading : visual.heading;
   visual.forward = getForwardVector(visual.heading);
   visual.speed = Number.isFinite(snapshot.speed) ? snapshot.speed : visual.speed;
