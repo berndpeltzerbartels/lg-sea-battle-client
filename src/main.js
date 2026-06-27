@@ -96,6 +96,7 @@ const mouseWheelEngineStep = 100;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = true;
+const centerPeakLighthouseLandNames = new Set(["far_east_bank", "eastern_delta_coast"]);
 let debugMapEnabled = urlParams.get("debug") === "1";
 let lastMapViewport = null;
 const clientBuildInfo = window.__SEA_BATTLE_CLIENT_VERSION__ ?? { version: "dev", commit: "local" };
@@ -2493,7 +2494,7 @@ function drawMapLandLabels(ctx, zones, bounds, width, height, scale) {
 }
 
 function drawMapLandmarkMarkers(ctx, zones, bounds, width, height, scale) {
-  const lighthouseLands = chooseLighthouseLandmasses(zones, 3);
+  const lighthouseLands = chooseNavigationLighthouseLandmasses(zones, 3);
   const lighthouseNames = new Set(lighthouseLands.map((zone) => zone.name));
 
   lighthouseLands.forEach((zone, index) => {
@@ -5512,7 +5513,7 @@ function updateVolcanoPlumes(plumes, time) {
 
 function createNavigationLights(landmasses, scene, materials, parent, visualEffects) {
   const lights = [];
-  const lighthouseLands = chooseLighthouseLandmasses(landmasses, 3);
+  const lighthouseLands = chooseNavigationLighthouseLandmasses(landmasses, 3);
   lighthouseLands.forEach((land, index) => {
     lights.push(createLighthouse(land, index, scene, materials, parent, visualEffects));
   });
@@ -5523,6 +5524,20 @@ function createNavigationLights(landmasses, scene, materials, parent, visualEffe
   });
 
   return lights.filter(Boolean);
+}
+
+function chooseNavigationLighthouseLandmasses(landmasses, maxCount = 4) {
+  const lighthouseLands = chooseLighthouseLandmasses(landmasses, maxCount);
+  const byName = new Map(landmasses.map((land) => [String(land.name ?? ""), land]));
+
+  centerPeakLighthouseLandNames.forEach((name) => {
+    const land = byName.get(name);
+    if (land && !lighthouseLands.some((existing) => existing.name === land.name)) {
+      lighthouseLands.push(land);
+    }
+  });
+
+  return lighthouseLands;
 }
 
 function chooseLighthouseLandmasses(landmasses, maxCount = 4) {
@@ -5904,6 +5919,10 @@ function lighthouseAngleFor(land, index) {
 }
 
 function getLighthousePosition(land, index) {
+  if (centerPeakLighthouseLandNames.has(String(land.name ?? ""))) {
+    return getCenterPeakLighthousePosition(land);
+  }
+
   const angle = lighthouseAngleFor(land, index);
   const rx = land.rx ?? land.radius ?? 28;
   const rz = land.rz ?? land.radius ?? 28;
@@ -5915,6 +5934,43 @@ function getLighthousePosition(land, index) {
     x,
     y: getLandSurfaceHeightAt(land, x, z) + 0.05,
     z
+  };
+}
+
+function getCenterPeakLighthousePosition(land) {
+  const rx = land.rx ?? land.radius ?? 28;
+  const rz = land.rz ?? land.radius ?? 28;
+  const candidates = [
+    [0, 0],
+    [-0.18, 0],
+    [0.18, 0],
+    [0, -0.18],
+    [0, 0.18],
+    [-0.26, -0.12],
+    [-0.26, 0.12],
+    [0.26, -0.12],
+    [0.26, 0.12]
+  ];
+  let best = {
+    x: land.x,
+    z: land.z,
+    y: getLandSurfaceHeightAt(land, land.x, land.z)
+  };
+
+  candidates.forEach(([offsetX, offsetZ]) => {
+    const x = land.x + rx * offsetX;
+    const z = land.z + rz * offsetZ;
+    const probe = new Vector3(x, 0, z);
+    if (getZoneShapeDistance(probe, land, rx, rz) > 0.62 || isInLandWater(probe, land)) return;
+
+    const y = getLandSurfaceHeightAt(land, x, z);
+    if (y > best.y) best = { x, z, y };
+  });
+
+  return {
+    x: best.x,
+    y: best.y + 0.05,
+    z: best.z
   };
 }
 
