@@ -512,7 +512,7 @@ scene.onBeforeRenderObservable.add(() => {
   materials.water.diffuseTexture.uOffset += dt * 0.01;
   materials.water.diffuseTexture.vOffset += dt * 0.018;
   if (openSeaFoamEnabled) {
-    updateFoamPatches(foam, boat.root.position, time);
+    updateFoamPatches(foam, boat.root.position, time, blockedWaters);
   }
   updateVolcanoPlumes(volcanoPlumes, time);
   updateNavigationLights(navigationLights, time, boat.root.position);
@@ -4824,18 +4824,21 @@ function createFoamPatches(scene, materials, parent) {
       mesh: patch,
       x: (seed.x - 0.5) * area,
       z: (seed.z - 0.5) * area,
+      checkLength: 0.42 + seed.length * 0.85,
       driftX: Math.sin(waveTravelAngle) * windSpeed + (seed.driftX - 0.5) * 0.28,
       driftZ: Math.cos(waveTravelAngle) * windSpeed + (seed.driftZ - 0.5) * 0.28,
       baseAngle: windAngle,
       baseLength: 1 + seed.length * 0.34,
-      phase: seed.spin * Math.PI * 2
+      phase: seed.spin * Math.PI * 2,
+      nextWaterCheckAt: seed.spin * 0.18,
+      isOverWater: true
     });
   }
 
   return { area, patches };
 }
 
-function updateFoamPatches(foam, center, time) {
+function updateFoamPatches(foam, center, time, landZones = []) {
   const halfArea = foam.area / 2;
 
   foam.patches.forEach((patch) => {
@@ -4850,8 +4853,28 @@ function updateFoamPatches(foam, center, time) {
       Math.abs(patch.mesh.position.x - center.x),
       Math.abs(patch.mesh.position.z - center.z)
     );
-    patch.mesh.setEnabled(distanceFromCenter < halfArea - 8);
+    const inActiveArea = distanceFromCenter < halfArea - 8;
+    if (inActiveArea && time >= patch.nextWaterCheckAt) {
+      patch.isOverWater = isFoamPatchOverWater(patch, landZones);
+      patch.nextWaterCheckAt = time + 0.22 + (patch.phase % 0.11);
+    }
+    patch.mesh.setEnabled(inActiveArea && patch.isOverWater);
   });
+}
+
+function isFoamPatchOverWater(patch, landZones) {
+  if (!landZones.length) return true;
+
+  const forward = new Vector3(Math.sin(patch.baseAngle), 0, Math.cos(patch.baseAngle));
+  const halfLength = Math.max(0.28, patch.checkLength * patch.mesh.scaling.z * 0.55);
+  const center = patch.mesh.position;
+  const samples = [
+    center,
+    center.add(forward.scale(halfLength)),
+    center.add(forward.scale(-halfLength))
+  ];
+
+  return samples.every((sample) => !getWaterSafety(sample, landZones).isBlocked);
 }
 
 function seededFoam(index) {
