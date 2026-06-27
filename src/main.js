@@ -96,6 +96,7 @@ const mouseWheelEngineStep = 100;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = true;
+const navigationLightOcclusionEnabled = false;
 const centerPeakLighthouseLandNames = new Set(["far_east_bank", "eastern_delta_coast", "blackwater_basin"]);
 const lighthouseHeightOffsets = new Map([
   ["blackwater_basin", -1.2],
@@ -520,7 +521,7 @@ scene.onBeforeRenderObservable.add(() => {
     updateFoamPatches(foam, boat.root.position, time, blockedWaters);
   }
   updateVolcanoPlumes(volcanoPlumes, time);
-  updateNavigationLights(navigationLights, time, boat.root.position);
+  updateNavigationLights(navigationLights, time, boat.root.position, blockedWaters);
   enemyMotions.forEach((enemyMotion) => updateEnemyMotion(enemyMotion, dt, time, boat.root.position, blockedWaters));
   updateEnemyFireControl(torpedoSystem, enemyMotions, boat.root.position, blockedWaters, time);
   updateServerTorpedoVisuals(torpedoSystem, dt, time);
@@ -5695,11 +5696,13 @@ function createLighthouse(land, index, scene, materials, parent, visualEffects) 
     kind: "lighthouse",
     root,
     lamp,
+    lanternHouse,
     lampMaterial,
     lanternMaterial,
     beam,
     beamPivot,
     pointLight,
+    lanternY,
     phase: index * 1.7 + stableNamePhase(land.name),
     period: 5.8 + index * 0.9,
     directionalPeak: 1.7,
@@ -5815,24 +5818,71 @@ function getRockBeaconMountPosition(land) {
   };
 }
 
-function updateNavigationLights(lights, time, playerPosition) {
+function updateNavigationLights(lights, time, playerPosition, landZones) {
   lights.forEach((light) => {
     const distanceFade = getNavigationLightDistanceFade(light, playerPosition);
     const intensity = light.kind === "lighthouse"
       ? lighthouseBeamIntensity(light, time, playerPosition, distanceFade)
       : rockBeaconBlink(time, light.period, light.phase) * distanceFade;
+    const occluded = light.kind === "lighthouse" && isNavigationLightOccluded(light, playerPosition, landZones, time);
+    const visibleIntensity = occluded ? 0 : intensity;
 
-    updateLampMaterial(light, intensity);
+    updateLampMaterial(light, visibleIntensity, occluded);
     if (light.beam) {
       const sweep = time * (Math.PI * 2 / light.period) + light.phase;
       light.beamPivot.rotation.y = sweep;
       light.beam.setEnabled(false);
     }
     if (light.pointLight) {
-      light.pointLight.intensity = intensity * 5.0;
+      light.pointLight.intensity = occluded ? 0 : intensity * 5.0;
       light.pointLight.range = light.baseRange * (0.45 + intensity * 0.55);
     }
   });
+}
+
+function isNavigationLightOccluded(light, playerPosition, landZones, time) {
+  if (!navigationLightOcclusionEnabled) return false;
+  if (!landZones?.length) return false;
+  if (light.nextOcclusionCheckAt !== undefined && time < light.nextOcclusionCheckAt) {
+    return Boolean(light.occluded);
+  }
+
+  light.nextOcclusionCheckAt = time + 0.18;
+  light.occluded = isLineOfSightBlockedByTerrain(
+    new Vector3(playerPosition.x, 2.2, playerPosition.z),
+    getNavigationLightWorldPosition(light),
+    landZones
+  );
+  return light.occluded;
+}
+
+function getNavigationLightWorldPosition(light) {
+  return light.root.position.add(new Vector3(0, light.lanternY ?? 0, 0));
+}
+
+function isLineOfSightBlockedByTerrain(from, to, landZones) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const dz = to.z - from.z;
+  const length = Math.sqrt(dx * dx + dz * dz);
+  if (length <= 0.001) return false;
+
+  const samples = clamp(Math.ceil(length / 9), 8, 90);
+  for (let i = 1; i < samples; i += 1) {
+    const t = i / samples;
+    const x = from.x + dx * t;
+    const z = from.z + dz * t;
+    const lineY = from.y + dy * t;
+
+    for (const zone of landZones) {
+      if (isInLandWater(new Vector3(x, 0, z), zone)) continue;
+      if (getZoneShapeDistance({ x, z }, zone, getZoneVisualRx(zone), getZoneVisualRz(zone)) > 1.08) continue;
+      const terrainY = getLandSurfaceHeightAt(zone, x, z);
+      if (terrainY > lineY + 0.08) return true;
+    }
+  }
+
+  return false;
 }
 
 function getNavigationLightDistanceFade(light, playerPosition) {
@@ -5848,11 +5898,15 @@ function lighthouseBeamIntensity(light, time, playerPosition, distanceFade) {
   return (0.035 + flash * (light.directionalPeak ?? 1.5)) * distanceFade;
 }
 
-function updateLampMaterial(light, intensity) {
+function updateLampMaterial(light, intensity, occluded = false) {
   const base = light.kind === "lighthouse" ? 0.16 : 0.1;
   const glow = clamp(base + intensity, 0.08, 1.85);
   light.lamp.visibility = 1;
-  light.lamp.setEnabled(true);
+  light.lamp.setEnabled(!occluded);
+  if (light.lanternHouse) {
+    light.lanternHouse.setEnabled(!occluded);
+  }
+  if (occluded) return;
   if (light.kind === "rock-beacon") {
     light.lampMaterial.diffuseColor = new Color3(0.88 + glow * 0.1, 0.9 + glow * 0.1, 0.92 + glow * 0.08);
     light.lampMaterial.emissiveColor = new Color3(0.36 + glow * 0.64, 0.38 + glow * 0.62, 0.42 + glow * 0.58);
