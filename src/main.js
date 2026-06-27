@@ -33,7 +33,8 @@ const engine = new Engine(canvas, true, {
 const scene = new Scene(engine);
 document.body.dataset.appStarted = "true";
 const urlParams = new URLSearchParams(location.search);
-const bigMapEnabled = urlParams.get("bigMap") === "1";
+let debugMapEnabled = urlParams.get("debug") === "1";
+let bigMapEnabled = debugMapEnabled && urlParams.get("bigMap") !== "0";
 document.body.classList.toggle("big-map", bigMapEnabled);
 document.body.dataset.bigMap = String(bigMapEnabled);
 scene.clearColor = new Color4(0.36, 0.52, 0.66, 1);
@@ -96,12 +97,11 @@ const mouseWheelEngineStep = 100;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = true;
-const centerPeakLighthouseLandNames = new Set(["far_east_bank", "eastern_delta_coast", "blackwater_basin"]);
+const centerPeakLighthouseLandNames = new Set(["far_east_bank", "north_watch_bank", "eastern_delta_coast", "blackwater_basin"]);
 const lighthouseHeightOffsets = new Map([
   ["blackwater_basin", -1.2],
   ["eastern_delta_coast", -0.45]
 ]);
-let debugMapEnabled = urlParams.get("debug") === "1";
 let lastMapViewport = null;
 const clientBuildInfo = window.__SEA_BATTLE_CLIENT_VERSION__ ?? { version: "dev", commit: "local" };
 updateBuildInfoPanel(clientBuildInfo, null);
@@ -1354,12 +1354,17 @@ function openHostSpecialMenu() {
 
 function toggleDebugMap() {
   debugMapEnabled = !debugMapEnabled;
+  bigMapEnabled = debugMapEnabled;
   document.body.dataset.debugMap = String(debugMapEnabled);
+  document.body.classList.toggle("big-map", bigMapEnabled);
+  document.body.dataset.bigMap = String(bigMapEnabled);
   const url = new URL(location.href);
   if (debugMapEnabled) {
     url.searchParams.set("debug", "1");
+    url.searchParams.delete("bigMap");
   } else {
     url.searchParams.delete("debug");
+    url.searchParams.delete("bigMap");
     document.body.dataset.debugMapShips = "0";
   }
   if (history.replaceState) {
@@ -2096,6 +2101,9 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, headi
 
   const visibleLandZones = landZones.filter((zone) => zoneIntersectsBounds(zone, bounds));
   drawMapLandUnion(ctx, visibleLandZones, bounds, width, height, scale);
+  if (debugMapEnabled) {
+    drawDebugMapHeightOverlay(ctx, visibleLandZones, bounds, width, height, scale);
+  }
   drawMapLandLabels(ctx, visibleLandZones, bounds, width, height, scale);
   drawMapLandmarkMarkers(ctx, landZones, bounds, width, height, scale);
 
@@ -2126,6 +2134,52 @@ function drawDebugMapShips(ctx, bounds, width, height, scale) {
     visibleShips += 1;
   }
   document.body.dataset.debugMapShips = String(visibleShips);
+}
+
+function drawDebugMapHeightOverlay(ctx, zones, bounds, width, height, scale) {
+  if (zones.length === 0) return;
+
+  const step = bigMapEnabled ? 3 : 7;
+  const maxHeight = 24;
+
+  ctx.save();
+  zones.forEach((zone) => {
+    const minPoint = worldToMapPoint(
+      { x: zone.x - getZoneVisualRx(zone), z: zone.z + getZoneVisualRz(zone) },
+      bounds,
+      width,
+      height,
+      scale
+    );
+    const maxPoint = worldToMapPoint(
+      { x: zone.x + getZoneVisualRx(zone), z: zone.z - getZoneVisualRz(zone) },
+      bounds,
+      width,
+      height,
+      scale
+    );
+    const minX = Math.max(0, Math.floor(Math.min(minPoint.x, maxPoint.x)));
+    const maxX = Math.min(width, Math.ceil(Math.max(minPoint.x, maxPoint.x)));
+    const minY = Math.max(0, Math.floor(Math.min(minPoint.y, maxPoint.y)));
+    const maxY = Math.min(height, Math.ceil(Math.max(minPoint.y, maxPoint.y)));
+
+    for (let y = minY; y <= maxY; y += step) {
+      for (let x = minX; x <= maxX; x += step) {
+        const world = mapPointToWorld(x + step * 0.5, y + step * 0.5, { bounds, width, height, scale });
+        if (getZoneShapeDistance(world, zone, zone.rx, zone.rz) > 0.98 || isInLandWater(world, zone)) continue;
+
+        const heightValue = clamp(getLandSurfaceHeightAt(zone, world.x, world.z), 0, maxHeight);
+        const t = Math.sqrt(heightValue / maxHeight);
+        const band = Math.floor(heightValue * 1.4) % 2;
+        const red = Math.round(48 + t * 185 + band * 12);
+        const green = Math.round(88 + t * 145 + band * 10);
+        const blue = Math.round(58 - t * 18);
+        ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, 0.56)`;
+        ctx.fillRect(x, y, step + 0.5, step + 0.5);
+      }
+    }
+  });
+  ctx.restore();
 }
 
 function drawMapSectorGrid(ctx, bounds, width, height, scale) {
@@ -2502,12 +2556,40 @@ function drawMapLandmarkMarkers(ctx, zones, bounds, width, height, scale) {
   const lighthouseNames = new Set(lighthouseLands.map((zone) => zone.name));
 
   lighthouseLands.forEach((zone, index) => {
-    drawMapLightMarker(ctx, getLighthousePosition(zone, index), bounds, width, height, scale, "lighthouse");
+    const position = getLighthousePosition(zone, index);
+    drawMapLightMarker(ctx, position, bounds, width, height, scale, "lighthouse");
+    if (debugMapEnabled) {
+      drawMapLighthouseDebugLabel(ctx, zone, position, bounds, width, height, scale);
+    }
   });
   zones
     .filter((zone) => isVolcanicLandmass(zone))
     .filter((zone) => !lighthouseNames.has(zone.name))
     .forEach((zone) => drawMapVolcanoMarker(ctx, { x: zone.x, z: zone.z }, bounds, width, height, scale));
+}
+
+function drawMapLighthouseDebugLabel(ctx, zone, position, bounds, width, height, scale) {
+  if (!position || position.x < bounds.minX || position.x > bounds.maxX || position.z < bounds.minZ || position.z > bounds.maxZ) return;
+
+  const point = worldToMapPoint(position, bounds, width, height, scale);
+  const label = `${zone.name}\n${formatMapSector(position)} ${formatWorldCoordinate(position)}`;
+  const lines = label.split("\n");
+  const x = clamp(point.x + 10, 48, width - 118);
+  const y = clamp(point.y - 18, 16, height - 34);
+
+  ctx.save();
+  ctx.font = bigMapEnabled ? "800 11px Inter, sans-serif" : "800 8px Inter, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "rgba(5, 27, 40, 0.95)";
+  ctx.fillStyle = "rgba(255, 250, 214, 0.96)";
+  lines.forEach((line, index) => {
+    const lineY = y + index * (bigMapEnabled ? 13 : 10);
+    ctx.strokeText(line, x, lineY);
+    ctx.fillText(line, x, lineY);
+  });
+  ctx.restore();
 }
 
 function drawMapLightMarker(ctx, position, bounds, width, height, scale, kind) {
@@ -5597,6 +5679,16 @@ function createLighthouse(land, index, scene, materials, parent, visualEffects) 
   const lanternY = towerTopY + 1.15 * scale;
   const capY = towerTopY + 2.15 * scale;
 
+  const terrainPlug = MeshBuilder.CreateCylinder(`${land.name}_lighthouse_terrain_plug`, {
+    diameterTop: 4.4 * scale,
+    diameterBottom: 6.2 * scale,
+    height: 2.8 * scale,
+    tessellation: 10
+  }, scene);
+  terrainPlug.parent = root;
+  terrainPlug.position.y = -1.4 * scale;
+  terrainPlug.material = materials.terrain;
+
   const base = MeshBuilder.CreateCylinder(`${land.name}_lighthouse_base`, {
     diameterTop: 3.8 * scale,
     diameterBottom: 4.6 * scale,
@@ -5881,6 +5973,14 @@ function lighthouseAngleFor(land, index) {
 }
 
 function getLighthousePosition(land, index) {
+  if (String(land.name ?? "") === "western_continent") {
+    return getLocalLighthouseFootprintPosition(land, 650, -300, 4.2, 12.5);
+  }
+
+  if (String(land.name ?? "") === "delta_head") {
+    return getLocalLighthouseFootprintPosition(land, 55, 58, 4.2, 0.4);
+  }
+
   if (centerPeakLighthouseLandNames.has(String(land.name ?? ""))) {
     return getCenterPeakLighthousePosition(land);
   }
@@ -5894,7 +5994,43 @@ function getLighthousePosition(land, index) {
   const z = land.z + Math.sin(angle) * rz * radiusFactor * radialPosition;
   return {
     x,
-    y: getLandSurfaceHeightAt(land, x, z) + 0.05,
+    y: getLandSurfaceHeightAt(land, x, z) + 0.05 + (lighthouseHeightOffsets.get(String(land.name ?? "")) ?? 0),
+    z
+  };
+}
+
+function getLocalLighthousePosition(land, localX, localZ, heightOffset = 0) {
+  const x = land.x + localX;
+  const z = land.z + localZ;
+  return {
+    x,
+    y: getLandSurfaceHeightAt(land, x, z) + 0.03 + heightOffset,
+    z
+  };
+}
+
+function getLocalLighthouseFootprintPosition(land, localX, localZ, footprintRadius, heightOffset = 0) {
+  const x = land.x + localX;
+  const z = land.z + localZ;
+  const radius = Math.max(0.1, footprintRadius);
+  const samples = [
+    [0, 0],
+    [radius, 0],
+    [-radius, 0],
+    [0, radius],
+    [0, -radius],
+    [radius * 0.7, radius * 0.7],
+    [-radius * 0.7, radius * 0.7],
+    [radius * 0.7, -radius * 0.7],
+    [-radius * 0.7, -radius * 0.7]
+  ];
+  const groundY = Math.min(...samples.map(([offsetX, offsetZ]) => (
+    getLandSurfaceHeightAt(land, x + offsetX, z + offsetZ)
+  )));
+
+  return {
+    x,
+    y: groundY + heightOffset,
     z
   };
 }
