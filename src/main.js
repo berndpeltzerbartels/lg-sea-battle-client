@@ -96,7 +96,11 @@ const mouseWheelEngineStep = 100;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = true;
-const centerPeakLighthouseLandNames = new Set(["far_east_bank", "eastern_delta_coast"]);
+const centerPeakLighthouseLandNames = new Set(["far_east_bank", "eastern_delta_coast", "blackwater_basin"]);
+const lighthouseHeightOffsets = new Map([
+  ["blackwater_basin", -1.2],
+  ["eastern_delta_coast", -0.45]
+]);
 let debugMapEnabled = urlParams.get("debug") === "1";
 let lastMapViewport = null;
 const clientBuildInfo = window.__SEA_BATTLE_CLIENT_VERSION__ ?? { version: "dev", commit: "local" };
@@ -2558,33 +2562,7 @@ function drawMapLandLabelAt(ctx, label, position, bounds, width, height) {
 }
 
 function getLandDisplayName(zone) {
-  const names = {
-    western_coast: "Western Coast",
-    volcanic_highland: "Volcano Highland",
-    fjord_coast: "Fjord Coast",
-    storm_peak: "Storm Peak",
-    mist_gate_north: "Mist Gate",
-    mist_gate_south: "Mist Gate",
-    mist_gate_east: "Mist Gate",
-    northern_ridge: "Northern Ridge",
-    north_sound_west: "North Sound",
-    north_sound_east: "North Sound",
-    north_sound_outer: "North Sound",
-    north_outer_rocks: "North Outer Rocks",
-    copper_sound: "Copper Sound",
-    copper_north_ridge: "Copper North Ridge",
-    crow_west: "Crow West",
-    eastern_delta_coast: "Delta Coast",
-    southern_cliffs: "Southern Cliffs",
-    crown_mountain: "Crown Mountain",
-    western_continent: "Western Continent",
-    western_continent_north: "Western Continent",
-    western_continent_south: "Western Continent",
-    western_sound_north_bank: "Western Sound",
-    western_sound_south_bank: "Western Sound"
-  };
-
-  return names[zone.name] ?? zone.name
+  return String(zone.name ?? "")
     .split("_")
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -5969,7 +5947,7 @@ function getCenterPeakLighthousePosition(land) {
 
   return {
     x: best.x,
-    y: best.y + 0.05,
+    y: best.y + 0.05 + (lighthouseHeightOffsets.get(String(land.name ?? "")) ?? 0),
     z: best.z
   };
 }
