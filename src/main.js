@@ -525,7 +525,8 @@ scene.onBeforeRenderObservable.add(() => {
     rudderDegrees += (0 - rudderDegrees) * Math.min(1, dt * 1.8);
   }
 
-  const bob = Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035;
+  const surfaceBob = Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035;
+  const bob = surfaceBob * getPlayerBobbingRatio();
   if (playerActive) {
     boat.root.position.y = getPlayerVisualWaterlineOffset() + bob;
     boat.root.rotationQuaternion = Quaternion.FromEulerAngles(
@@ -838,8 +839,15 @@ function getPlayerMaxForwardSpeed() {
 function getPlayerVisualWaterlineOffset() {
   if (playerVesselType !== vesselTypes.submarine) return 0.32;
   if (playerDepthState === depthStates.submerged) return -0.82;
-  if (playerDepthState === depthStates.periscope) return -0.18;
+  if (playerDepthState === depthStates.periscope) return -0.42;
   return 0.18;
+}
+
+function getPlayerBobbingRatio() {
+  if (playerVesselType !== vesselTypes.submarine) return 1;
+  if (playerDepthState === depthStates.submerged) return 0.04;
+  if (playerDepthState === depthStates.periscope) return 0.22;
+  return 0.75;
 }
 
 function getPlayerDepthLabel(waterSafety) {
