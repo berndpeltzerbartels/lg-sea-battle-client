@@ -543,7 +543,7 @@ scene.onBeforeRenderObservable.add(() => {
   materials.water.diffuseTexture.uOffset += dt * 0.01;
   materials.water.diffuseTexture.vOffset += dt * 0.018;
   if (openSeaFoamEnabled) {
-    updateFoamPatches(foam, boat.root.position, time, blockedWaters);
+    updateFoamPatches(foam, boat.root.position, time, blockedWaters, !isPlayerUnderwaterView());
   }
   updateVolcanoPlumes(volcanoPlumes, time);
   updateNavigationLights(navigationLights, time, boat.root.position);
@@ -848,6 +848,10 @@ function getPlayerBobbingRatio() {
   if (playerDepthState === depthStates.submerged) return 0.04;
   if (playerDepthState === depthStates.periscope) return 0.22;
   return 0.75;
+}
+
+function isPlayerUnderwaterView() {
+  return playerVesselType === vesselTypes.submarine && playerDepthState !== depthStates.surface;
 }
 
 function getPlayerDepthLabel(waterSafety) {
@@ -5038,7 +5042,11 @@ function createFoamPatches(scene, materials, parent) {
   return { area, patches };
 }
 
-function updateFoamPatches(foam, center, time, landZones = []) {
+function updateFoamPatches(foam, center, time, landZones = [], visible = true) {
+  if (!visible) {
+    foam.patches.forEach((patch) => patch.mesh.setEnabled(false));
+    return;
+  }
   const halfArea = foam.area / 2;
 
   foam.patches.forEach((patch) => {

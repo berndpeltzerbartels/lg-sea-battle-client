@@ -965,6 +965,28 @@ body.submarine-submerged .submarine-sonar {
   display: grid;
 }
 
+body[data-player-vessel-type="submarine"][data-player-depth-state="periscope"]::before,
+body[data-player-vessel-type="submarine"][data-player-depth-state="periscope"]::after {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  content: "";
+}
+
+body[data-player-vessel-type="submarine"][data-player-depth-state="periscope"]::before {
+  background:
+    radial-gradient(circle at 50% 48%, transparent 0 min(43vw, 43vh), rgb(0 0 0 / 96%) calc(min(43vw, 43vh) + 2px)),
+    rgb(0 0 0 / 86%);
+}
+
+body[data-player-vessel-type="submarine"][data-player-depth-state="periscope"]::after {
+  background:
+    radial-gradient(circle at 50% 48%, rgb(0 23 34 / 72%) 0 min(43vw, 43vh), transparent calc(min(43vw, 43vh) + 1px)),
+    linear-gradient(180deg, transparent 0 57%, rgb(1 20 29 / 78%) 57% 100%);
+  clip-path: circle(min(43vw, 43vh) at 50% 48%);
+}
+
 .submarine-sonar-scope {
   position: relative;
   width: min(52vw, 520px);
