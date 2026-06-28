@@ -982,6 +982,9 @@ body[data-player-vessel-type="submarine"][data-player-depth-state="periscope"]::
 
 body[data-player-vessel-type="submarine"][data-player-depth-state="periscope"]::after {
   background:
+    linear-gradient(90deg, transparent 0 calc(50% - 54px), rgb(193 251 255 / 62%) calc(50% - 54px) calc(50% - 8px), transparent calc(50% - 8px) calc(50% + 8px), rgb(193 251 255 / 62%) calc(50% + 8px) calc(50% + 54px), transparent calc(50% + 54px) 100%),
+    linear-gradient(180deg, transparent 0 calc(48% - 54px), rgb(193 251 255 / 62%) calc(48% - 54px) calc(48% - 8px), transparent calc(48% - 8px) calc(48% + 8px), rgb(193 251 255 / 62%) calc(48% + 8px) calc(48% + 54px), transparent calc(48% + 54px) 100%),
+    radial-gradient(circle at 50% 48%, transparent 0 7px, rgb(193 251 255 / 78%) 7px 8px, transparent 9px 100%),
     radial-gradient(circle at 50% 48%, rgb(0 23 34 / 72%) 0 min(43vw, 43vh), transparent calc(min(43vw, 43vh) + 1px)),
     linear-gradient(180deg, transparent 0 57%, rgb(1 20 29 / 78%) 57% 100%);
   clip-path: circle(min(43vw, 43vh) at 50% 48%);

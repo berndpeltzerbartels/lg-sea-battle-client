@@ -128,6 +128,7 @@ const playerLogin = await requirePlayerLogin();
 const playerInitials = playerLogin.initials;
 const playerVesselType = sanitizeVesselType(playerLogin.vesselType);
 let playerDepthState = depthStates.surface;
+let periscopeBearingOffset = 0;
 const worldLandmasses = await loadWorldLandmasses();
 document.body.dataset.worldSource = "server";
 document.body.dataset.worldLandmasses = String(worldLandmasses.length);
@@ -260,6 +261,9 @@ window.addEventListener("keydown", (event) => {
   }
   if (playerActive && isSubmarineDepthKey(event) && !event.repeat) {
     cycleSubmarineDepth();
+    event.preventDefault();
+  }
+  if (playerActive && handlePeriscopeKey(event)) {
     event.preventDefault();
   }
 });
@@ -574,12 +578,14 @@ scene.onBeforeRenderObservable.add(() => {
   }
 
   // Fixed bridge camera: it follows the ship immediately so acceleration never reveals the rear model.
+  const viewHeading = getPlayerViewHeading();
+  const viewForward = getForwardVector(viewHeading);
   const cameraDistance = 0.65;
   const cameraHeight = 1.48;
   const desiredCameraPosition = boat.root.position
-    .subtract(forward.scale(cameraDistance))
+    .subtract(viewForward.scale(cameraDistance))
     .add(new Vector3(0, cameraHeight, 0));
-  const desiredTarget = boat.root.position.add(forward.scale(24.0)).add(new Vector3(0, 0.95, 0));
+  const desiredTarget = boat.root.position.add(viewForward.scale(24.0)).add(new Vector3(0, 0.95, 0));
   const shakeOffset = getRamShakeOffset(heading, ramShake, time);
   ramShake = Math.max(0, ramShake - dt * 2.6);
 
@@ -640,6 +646,24 @@ function isInputKey(event, name) {
 
 function isSubmarineDepthKey(event) {
   return event.code === "KeyC" || event.code === "PageDown" || event.code === "PageUp";
+}
+
+function handlePeriscopeKey(event) {
+  if (playerVesselType !== vesselTypes.submarine || playerDepthState !== depthStates.periscope) return false;
+  if (event.code === "KeyQ") {
+    turnPeriscope(-1);
+    return true;
+  }
+  if (event.code === "KeyE") {
+    turnPeriscope(1);
+    return true;
+  }
+  if (event.code === "Home") {
+    periscopeBearingOffset = 0;
+    updatePeriscopeBearingDataset();
+    return true;
+  }
+  return false;
 }
 
 function isHudControlEvent(event) {
@@ -814,6 +838,9 @@ function setPlayerDepthState(depthState) {
   }
   playerDepthState = sanitizeDepthState(depthState);
   document.body.dataset.playerDepthState = playerDepthState;
+  if (playerDepthState !== depthStates.periscope) {
+    periscopeBearingOffset = 0;
+  }
   updateSubmarineUi();
 }
 
@@ -824,6 +851,7 @@ function updateSubmarineUi() {
     return;
   }
   document.body.dataset.playerDepthState = playerDepthState;
+  updatePeriscopeBearingDataset();
   document.body.classList.toggle("submarine-submerged", playerDepthState === depthStates.submerged);
   submarineDepthValue && (submarineDepthValue.textContent = submarineDepthLabels[playerDepthState] ?? "Surface");
   submarineControls?.querySelectorAll("[data-depth-state]").forEach((button) => {
@@ -848,6 +876,21 @@ function getPlayerBobbingRatio() {
   if (playerDepthState === depthStates.submerged) return 0.04;
   if (playerDepthState === depthStates.periscope) return 0.22;
   return 0.75;
+}
+
+function turnPeriscope(direction) {
+  const step = Math.PI / 36;
+  periscopeBearingOffset = normalizeAngle(periscopeBearingOffset + step * Math.sign(direction));
+  updatePeriscopeBearingDataset();
+}
+
+function getPlayerViewHeading() {
+  return heading + (playerDepthState === depthStates.periscope ? periscopeBearingOffset : 0);
+}
+
+function updatePeriscopeBearingDataset() {
+  const degrees = Math.round(((periscopeBearingOffset * 180 / Math.PI) % 360 + 360) % 360);
+  document.body.dataset.periscopeBearing = String(degrees);
 }
 
 function isPlayerUnderwaterView() {
