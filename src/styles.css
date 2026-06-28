@@ -900,6 +900,151 @@ body.big-map .map-meta span {
   bottom: 75%;
 }
 
+.submarine-controls {
+  position: absolute;
+  left: 50%;
+  bottom: 104px;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  width: 250px;
+  padding: 10px;
+  border: 1px solid rgb(255 255 255 / 32%);
+  border-radius: 8px;
+  background: rgb(5 27 40 / 48%);
+  box-shadow: 0 12px 38px rgb(1 15 24 / 22%);
+  backdrop-filter: blur(7px);
+  pointer-events: auto;
+  transform: translateX(-50%);
+}
+
+.submarine-controls[hidden] {
+  display: none;
+}
+
+.submarine-controls-title {
+  grid-column: 1 / -1;
+  color: #9be5df;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.submarine-controls button {
+  min-height: 30px;
+  border: 1px solid rgb(155 229 223 / 36%);
+  border-radius: 6px;
+  background: rgb(4 20 29 / 62%);
+  color: rgb(247 251 255 / 72%);
+  font: 850 9px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.submarine-controls button.is-active {
+  background: #d7edf1;
+  color: #092532;
+}
+
+.submarine-sonar {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  display: none;
+  place-items: center;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 52%, rgb(21 84 92 / 30%), transparent 34%),
+    linear-gradient(180deg, rgb(0 15 20 / 42%), rgb(0 8 12 / 62%));
+}
+
+body.submarine-submerged .submarine-sonar {
+  display: grid;
+}
+
+.submarine-sonar-scope {
+  position: relative;
+  width: min(52vw, 520px);
+  aspect-ratio: 1;
+  border: 1px solid rgb(155 229 223 / 44%);
+  border-radius: 50%;
+  background:
+    repeating-radial-gradient(circle, transparent 0 23%, rgb(155 229 223 / 12%) 23% calc(23% + 1px)),
+    conic-gradient(from 0turn, rgb(155 229 223 / 0%) 0 72%, rgb(155 229 223 / 20%) 83%, rgb(155 229 223 / 0%) 100%),
+    rgb(2 19 24 / 58%);
+  box-shadow: 0 0 42px rgb(155 229 223 / 12%), inset 0 0 38px rgb(0 0 0 / 42%);
+  animation: sonarSweep 3.8s linear infinite;
+}
+
+.submarine-sonar-scope::before,
+.submarine-sonar-scope::after {
+  position: absolute;
+  inset: 50% auto auto 0;
+  width: 100%;
+  height: 1px;
+  background: rgb(155 229 223 / 22%);
+  content: "";
+}
+
+.submarine-sonar-scope::after {
+  transform: rotate(90deg);
+}
+
+.submarine-sonar-scope span {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d7edf1;
+  box-shadow: 0 0 14px rgb(215 237 241 / 78%);
+}
+
+.submarine-sonar-scope span:nth-child(1) {
+  left: 58%;
+  top: 32%;
+}
+
+.submarine-sonar-scope span:nth-child(2) {
+  left: 34%;
+  top: 61%;
+}
+
+.submarine-sonar-scope span:nth-child(3) {
+  left: 72%;
+  top: 69%;
+}
+
+.submarine-sonar strong,
+.submarine-sonar small {
+  position: fixed;
+  left: 50%;
+  color: #d7edf1;
+  text-transform: uppercase;
+  transform: translateX(-50%);
+}
+
+.submarine-sonar strong {
+  top: 12vh;
+  font-size: clamp(22px, 4vw, 46px);
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.submarine-sonar small {
+  top: calc(12vh + 54px);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+@keyframes sonarSweep {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
 .telegraph {
   position: absolute;
   right: 24px;

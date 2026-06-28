@@ -68,12 +68,28 @@ const resetGameButton = document.getElementById("resetGameButton");
 const mobileFireButton = document.getElementById("mobileFireButton");
 const clientVersionValue = document.getElementById("clientVersionValue");
 const serverVersionValue = document.getElementById("serverVersionValue");
+const submarineControls = document.getElementById("submarineControls");
+const submarineDepthValue = document.getElementById("submarineDepthValue");
 
 const mapTileSize = 1200;
 const mapSectorSize = 600;
 const mapSectorOrigin = 5400;
 const mapZoomScales = [0.5, 1, 2, 4, 8, 16];
 const maxPlayerInitialsLength = 5;
+const vesselTypes = {
+  torpedoBoat: "torpedo_boat",
+  submarine: "submarine"
+};
+const depthStates = {
+  surface: "surface",
+  periscope: "periscope",
+  submerged: "submerged"
+};
+const submarineDepthLabels = {
+  surface: "Surface",
+  periscope: "Periscope",
+  submerged: "Submerged"
+};
 const teamDefinitions = [
   { id: "light", label: "Light", className: "light", shipBase: 50 },
   { id: "dark", label: "Dark", className: "dark", shipBase: 80 },
@@ -110,6 +126,8 @@ loadServerBuildInfo()
   .catch((error) => updateBuildInfoPanel(clientBuildInfo, { version: "unavailable", commit: error.message }));
 const playerLogin = await requirePlayerLogin();
 const playerInitials = playerLogin.initials;
+const playerVesselType = sanitizeVesselType(playerLogin.vesselType);
+let playerDepthState = depthStates.surface;
 const worldLandmasses = await loadWorldLandmasses();
 document.body.dataset.worldSource = "server";
 document.body.dataset.worldLandmasses = String(worldLandmasses.length);
@@ -133,6 +151,7 @@ let playerTorpedoesRemaining = Number.isFinite(initialPlayerSpawn.torpedoesRemai
 document.body.dataset.playerTeam = playerTeamId;
 document.body.dataset.playerId = playerId;
 document.body.dataset.playerInitials = playerInitials;
+document.body.dataset.playerVesselType = playerVesselType;
 document.body.dataset.playerShipId = playerServerShipId ?? "pending";
 document.body.dataset.serverOwnShips = String(playerShips.length);
 document.body.dataset.serverEnemyShips = String(enemyShips.length);
@@ -237,6 +256,10 @@ window.addEventListener("keydown", (event) => {
   }
   if (playerActive && isTorpedoFireKey(event) && !event.repeat) {
     requestPlayerTorpedoFire();
+    event.preventDefault();
+  }
+  if (playerActive && isSubmarineDepthKey(event) && !event.repeat) {
+    cycleSubmarineDepth();
     event.preventDefault();
   }
 });
@@ -424,6 +447,8 @@ const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
 setupTelegraphDragControl(telegraphScale);
 setupRudderDragControl(document.querySelector(".rudder-gauge"));
 setupMobileFireButton(mobileFireButton);
+setupSubmarineControls(submarineControls);
+updateSubmarineUi();
 updateFleetStatus(gameState.ships, gameState.destroyedShipsByTeam);
 updatePlayerList(gameState.ships, gameState.killsByPlayer);
 updatePlayerTorpedoStock(playerTorpedoesRemaining);
@@ -457,7 +482,7 @@ scene.onBeforeRenderObservable.add(() => {
   let nextWaterSafety = waterSafety;
 
   if (playerActive) {
-    const maxForwardSpeed = 12.4;
+    const maxForwardSpeed = getPlayerMaxForwardSpeed();
     const engineTargetSpeed = engineOrders[engineOrder].speed;
     const targetSpeed = engineTargetSpeed > 0 ? Math.min(engineTargetSpeed, maxForwardSpeed) : engineTargetSpeed;
     const response = Math.abs(targetSpeed) > Math.abs(speed) ? 0.45 : 0.75;
@@ -502,7 +527,7 @@ scene.onBeforeRenderObservable.add(() => {
 
   const bob = Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035;
   if (playerActive) {
-    boat.root.position.y = 0.32 + bob;
+    boat.root.position.y = getPlayerVisualWaterlineOffset() + bob;
     boat.root.rotationQuaternion = Quaternion.FromEulerAngles(
       Math.sin(time * 2.6) * 0.025,
       heading,
@@ -582,8 +607,8 @@ scene.onBeforeRenderObservable.add(() => {
   engineValue.textContent = engineOrders[engineOrder].label;
   updateTelegraphSteps(telegraphSteps, engineOrder);
   updateMeasuredSpeed(boat.root.position, time);
-  depthValue.textContent = nextWaterSafety.isBlocked ? "Ground" : "Sea";
-  depthGauge?.style.setProperty("--depth-ratio", "1");
+  depthValue.textContent = getPlayerDepthLabel(nextWaterSafety);
+  depthGauge?.style.setProperty("--depth-ratio", getPlayerDepthGaugeRatio(nextWaterSafety));
   document.body.dataset.measuredSpeed = measuredSpeedSample.speed.toFixed(2);
   compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
   if (compassHeading) compassHeading.textContent = `HDG ${formatHeadingDegrees(heading)}`;
@@ -610,6 +635,10 @@ function isInputKey(event, name) {
     left: code === "ArrowLeft" || keyCode === 37,
     right: code === "ArrowRight" || keyCode === 39
   }[name];
+}
+
+function isSubmarineDepthKey(event) {
+  return event.code === "KeyC" || event.code === "PageDown" || event.code === "PageUp";
 }
 
 function isHudControlEvent(event) {
@@ -755,6 +784,76 @@ function setupMobileFireButton(button) {
     event.stopPropagation();
     event.preventDefault();
   });
+}
+
+function setupSubmarineControls(container) {
+  if (!container) return;
+  container.hidden = playerVesselType !== vesselTypes.submarine;
+  container.setAttribute("aria-hidden", String(playerVesselType !== vesselTypes.submarine));
+  container.querySelectorAll("[data-depth-state]").forEach((button) => {
+    button.addEventListener("pointerdown", (event) => {
+      const depthState = sanitizeDepthState(button.dataset.depthState);
+      setPlayerDepthState(depthState);
+      event.stopPropagation();
+    });
+  });
+}
+
+function cycleSubmarineDepth() {
+  if (playerVesselType !== vesselTypes.submarine) return;
+  const states = [depthStates.surface, depthStates.periscope, depthStates.submerged];
+  const index = states.indexOf(playerDepthState);
+  setPlayerDepthState(states[(index + 1) % states.length]);
+}
+
+function setPlayerDepthState(depthState) {
+  if (playerVesselType !== vesselTypes.submarine) {
+    playerDepthState = depthStates.surface;
+    return;
+  }
+  playerDepthState = sanitizeDepthState(depthState);
+  document.body.dataset.playerDepthState = playerDepthState;
+  updateSubmarineUi();
+}
+
+function updateSubmarineUi() {
+  const isSubmarine = playerVesselType === vesselTypes.submarine;
+  if (!isSubmarine) {
+    document.body.classList.remove("submarine-submerged");
+    return;
+  }
+  document.body.dataset.playerDepthState = playerDepthState;
+  document.body.classList.toggle("submarine-submerged", playerDepthState === depthStates.submerged);
+  submarineDepthValue && (submarineDepthValue.textContent = submarineDepthLabels[playerDepthState] ?? "Surface");
+  submarineControls?.querySelectorAll("[data-depth-state]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.depthState === playerDepthState);
+  });
+}
+
+function getPlayerMaxForwardSpeed() {
+  if (playerVesselType !== vesselTypes.submarine) return 12.4;
+  return playerDepthState === depthStates.surface ? 6.4 : 3.8;
+}
+
+function getPlayerVisualWaterlineOffset() {
+  if (playerVesselType !== vesselTypes.submarine) return 0.32;
+  if (playerDepthState === depthStates.submerged) return -0.82;
+  if (playerDepthState === depthStates.periscope) return -0.18;
+  return 0.18;
+}
+
+function getPlayerDepthLabel(waterSafety) {
+  if (waterSafety.isBlocked) return "Ground";
+  if (playerVesselType !== vesselTypes.submarine) return "Sea";
+  return submarineDepthLabels[playerDepthState] ?? "Surface";
+}
+
+function getPlayerDepthGaugeRatio(waterSafety) {
+  if (waterSafety.isBlocked) return "1";
+  if (playerVesselType !== vesselTypes.submarine) return "1";
+  if (playerDepthState === depthStates.submerged) return "0.08";
+  if (playerDepthState === depthStates.periscope) return "0.45";
+  return "0.9";
 }
 
 function updateMeasuredSpeed(position, now) {
@@ -1238,14 +1337,15 @@ function requirePlayerLogin() {
   const params = new URLSearchParams(location.search);
   const requestedTeamId = sanitizeTeamId(params.get("team") ?? params.get("side"));
   const requestedInitials = sanitizeInitials(params.get("initials") ?? params.get("name") ?? params.get("player"));
+  const requestedVesselType = sanitizeVesselType(params.get("vessel") ?? params.get("ship") ?? params.get("boat"));
   const storageKey = "seaBattlePlayerInitials";
   const existing = sanitizeInitials(localStorage.getItem(storageKey));
   if (requestedInitials && requestedTeamId) {
     localStorage.setItem(storageKey, requestedInitials);
-    return Promise.resolve({ initials: requestedInitials, teamId: requestedTeamId });
+    return Promise.resolve({ initials: requestedInitials, teamId: requestedTeamId, vesselType: requestedVesselType });
   }
   if (existing && requestedTeamId) {
-    return Promise.resolve({ initials: existing, teamId: requestedTeamId });
+    return Promise.resolve({ initials: existing, teamId: requestedTeamId, vesselType: requestedVesselType });
   }
 
   document.body.classList.add("login-active");
@@ -1260,14 +1360,23 @@ function requirePlayerLogin() {
       <select id="playerTeam" name="team">
         ${teamDefinitions.map((team) => `<option value="${team.id}">${team.label}</option>`).join("")}
       </select>
+      <label for="playerVessel">Schiff</label>
+      <select id="playerVessel" name="vessel">
+        <option value="torpedo_boat">Torpedoboot</option>
+        <option value="submarine">U-Boot</option>
+      </select>
       <button type="submit">Start</button>
     </form>
   `;
   document.body.appendChild(overlay);
   const input = overlay.querySelector("input");
   const teamSelect = overlay.querySelector("select");
+  const vesselSelect = overlay.querySelector("#playerVessel");
   if (requestedTeamId && teamSelect) {
     teamSelect.value = requestedTeamId;
+  }
+  if (vesselSelect) {
+    vesselSelect.value = requestedVesselType;
   }
   input?.focus();
   input?.select();
@@ -1280,11 +1389,13 @@ function requirePlayerLogin() {
       event.preventDefault();
       const initials = sanitizeInitials(input?.value) || "PL";
       const teamId = sanitizeTeamId(teamSelect?.value) || "light";
+      const vesselType = sanitizeVesselType(vesselSelect?.value);
       localStorage.setItem(storageKey, initials);
       setRequestedTeamInUrl(teamId);
+      setRequestedVesselInUrl(vesselType);
       document.body.classList.remove("login-active");
       overlay.remove();
-      resolve({ initials, teamId });
+      resolve({ initials, teamId, vesselType });
     });
   });
 }
@@ -1305,10 +1416,28 @@ function sanitizeTeamId(value) {
   return getTeamDefinition(teamId) ? teamId : "";
 }
 
+function sanitizeVesselType(value) {
+  return String(value ?? "").trim().toLowerCase() === vesselTypes.submarine
+    ? vesselTypes.submarine
+    : vesselTypes.torpedoBoat;
+}
+
+function sanitizeDepthState(value) {
+  const depthState = String(value ?? "").trim().toLowerCase();
+  return Object.values(depthStates).includes(depthState) ? depthState : depthStates.surface;
+}
+
 function setRequestedTeamInUrl(teamId) {
   if (!history.replaceState) return;
   const url = new URL(location.href);
   url.searchParams.set("team", teamId);
+  history.replaceState(null, "", url);
+}
+
+function setRequestedVesselInUrl(vesselType) {
+  if (!history.replaceState) return;
+  const url = new URL(location.href);
+  url.searchParams.set("vessel", sanitizeVesselType(vesselType));
   history.replaceState(null, "", url);
 }
 
@@ -1640,7 +1769,9 @@ async function sendPlayerState() {
         turnVelocity,
         engineOrder,
         rudderDegrees: Math.round(rudderDegrees),
-        clientTime: performance.now() / 1000
+        clientTime: performance.now() / 1000,
+        vesselType: playerVesselType,
+        depthState: playerDepthState
       })
     });
     if (!response.ok) {

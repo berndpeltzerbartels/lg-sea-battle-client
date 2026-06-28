@@ -328,6 +328,21 @@
           <strong id="depthValue">Deep</strong>
         </div>
       </div>
+      <div id="submarineControls" class="submarine-controls" aria-hidden="true" hidden>
+        <div class="submarine-controls-title">Dive</div>
+        <button type="button" data-depth-state="surface">Surface</button>
+        <button type="button" data-depth-state="periscope">Periscope</button>
+        <button type="button" data-depth-state="submerged">Submerged</button>
+      </div>
+      <div id="submarineSonar" class="submarine-sonar" aria-hidden="true">
+        <div class="submarine-sonar-scope">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <strong>Sonar</strong>
+        <small id="submarineDepthValue">Surface</small>
+      </div>
       <div class="telegraph" aria-hidden="true">
         <div class="telegraph-title">Engine</div>
         <div id="telegraphScale" class="telegraph-scale"></div>
