@@ -650,15 +650,15 @@ function isSubmarineDepthKey(event) {
 
 function handlePeriscopeKey(event) {
   if (playerVesselType !== vesselTypes.submarine || playerDepthState !== depthStates.periscope) return false;
-  if (event.code === "KeyQ") {
+  if (event.altKey && event.code === "ArrowLeft") {
     turnPeriscope(-1);
     return true;
   }
-  if (event.code === "KeyE") {
+  if (event.altKey && event.code === "ArrowRight") {
     turnPeriscope(1);
     return true;
   }
-  if (event.code === "Home") {
+  if ((event.altKey && event.code === "Digit0") || event.code === "Home") {
     periscopeBearingOffset = 0;
     updatePeriscopeBearingDataset();
     return true;
