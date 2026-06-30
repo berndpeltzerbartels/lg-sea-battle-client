@@ -415,7 +415,7 @@ const maxSimulationFrameSeconds = 0.12;
 boat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
 const playerRespawnPoints = createPlayerRespawnPoints(playerShips, initialPlayerSpawn);
 const torpedoLaunchDefaults = {
-  tubeX: 0.6,
+  tubeX: 0.66,
   startZ: 2.45,
   startY: 0.6
 };
@@ -5024,13 +5024,13 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
   for (let i = 0; i < 2; i += 1) {
     const tube = MeshBuilder.CreateCylinder(`${name}_torpedo_tube_${i}`, {
       diameter: 0.14,
-      height: 1.82,
+      height: 2.35,
       tessellation: 12
     }, scene);
     tube.parent = root;
     tube.position.x = i === 0 ? -0.32 : 0.32;
     tube.position.y = 0.795;
-    tube.position.z = 1.24;
+    tube.position.z = 0.98;
     tube.rotation.x = Math.PI / 2;
     tube.material = tubeMaterial;
 
@@ -5039,7 +5039,7 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
       saddle.parent = root;
       saddle.position.x = tube.position.x;
       saddle.position.y = 0.755;
-      saddle.position.z = 0.56 + j * 0.78;
+      saddle.position.z = 0.34 + j * 0.9;
       saddle.material = hullMaterial;
     }
 
