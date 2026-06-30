@@ -97,7 +97,7 @@ const mouseWheelEngineStep = 100;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = true;
-const centerPeakLighthouseLandNames = new Set(["far_east_bank", "north_watch_bank", "eastern_delta_coast", "blackwater_basin"]);
+const centerPeakLighthouseLandNames = new Set(["far_east_bank", "north_watch_bank", "south_watch_bank", "eastern_delta_coast", "blackwater_basin"]);
 const lighthouseHeightOffsets = new Map([
   ["blackwater_basin", -1.2],
   ["eastern_delta_coast", -0.45]
