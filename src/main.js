@@ -37,6 +37,8 @@ let debugMapEnabled = urlParams.get("debug") === "1";
 let bigMapEnabled = debugMapEnabled && urlParams.get("bigMap") !== "0";
 document.body.classList.toggle("big-map", bigMapEnabled);
 document.body.dataset.bigMap = String(bigMapEnabled);
+const torpedoBoatWaterlineY = -0.2;
+const enemyTorpedoBoatBobAmplitude = 0.025;
 scene.clearColor = new Color4(0.36, 0.52, 0.66, 1);
 scene.fogMode = Scene.FOGMODE_LINEAR;
 scene.fogColor = new Color3(0.29, 0.39, 0.48);
@@ -502,7 +504,7 @@ scene.onBeforeRenderObservable.add(() => {
 
   const bob = Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035;
   if (playerActive) {
-    boat.root.position.y = -0.2 + bob;
+    boat.root.position.y = torpedoBoatWaterlineY + bob;
     boat.root.rotationQuaternion = Quaternion.FromEulerAngles(
       Math.sin(time * 2.6) * 0.025,
       heading,
@@ -3204,7 +3206,7 @@ function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
 
   const forward = new Vector3(Math.sin(motion.heading), 0, Math.cos(motion.heading));
   motion.root.position.addInPlace(forward.scale(motion.speed * dt));
-  motion.root.position.y = 0.28 + Math.sin(time * 1.6 + 1.9) * 0.04;
+  motion.root.position.y = torpedoBoatWaterlineY + Math.sin(time * 1.6 + 1.9) * enemyTorpedoBoatBobAmplitude;
   motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
     Math.sin(time * 1.9 + 0.8) * 0.015,
     motion.heading,
@@ -3232,7 +3234,7 @@ function updateServerEnemyMotion(motion, dt, time) {
   const correctionStrength = correctionDistance > 18 ? 4.2 : 1.8;
   motion.root.position.x += (projectedServerPosition.x - motion.root.position.x) * Math.min(1, dt * correctionStrength);
   motion.root.position.z += (projectedServerPosition.z - motion.root.position.z) * Math.min(1, dt * correctionStrength);
-  motion.root.position.y = 0.28 + Math.sin(time * 1.6 + 1.9) * 0.04;
+  motion.root.position.y = torpedoBoatWaterlineY + Math.sin(time * 1.6 + 1.9) * enemyTorpedoBoatBobAmplitude;
   motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
     Math.sin(time * 1.9 + 0.8) * 0.015,
     motion.heading,
