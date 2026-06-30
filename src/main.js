@@ -4624,42 +4624,42 @@ function createMaterials(scene) {
   glass.backFaceCulling = false;
 
   const lightHull = new StandardMaterial("light_party_hull_material", scene);
-  lightHull.diffuseColor = new Color3(0.43, 0.5, 0.51);
+  lightHull.diffuseColor = new Color3(0.47, 0.47, 0.47);
   lightHull.specularColor = new Color3(0.12, 0.14, 0.14);
   lightHull.backFaceCulling = false;
 
   const lightDeck = new StandardMaterial("light_party_deck_material", scene);
-  lightDeck.diffuseColor = new Color3(0.48, 0.55, 0.56);
+  lightDeck.diffuseColor = new Color3(0.52, 0.52, 0.52);
   lightDeck.specularColor = new Color3(0.13, 0.15, 0.15);
   lightDeck.backFaceCulling = false;
 
   const lightCabin = new StandardMaterial("light_party_cabin_material", scene);
-  lightCabin.diffuseColor = new Color3(0.62, 0.68, 0.69);
+  lightCabin.diffuseColor = new Color3(0.64, 0.64, 0.64);
   lightCabin.specularColor = new Color3(0.16, 0.18, 0.18);
   lightCabin.backFaceCulling = false;
 
   const lightFunnel = new StandardMaterial("light_party_funnel_material", scene);
-  lightFunnel.diffuseColor = new Color3(0.5, 0.56, 0.57);
+  lightFunnel.diffuseColor = new Color3(0.53, 0.53, 0.53);
   lightFunnel.specularColor = new Color3(0.13, 0.15, 0.15);
   lightFunnel.backFaceCulling = false;
 
   const playerLightHull = new StandardMaterial("player_light_hull_material", scene);
-  playerLightHull.diffuseColor = new Color3(0.32, 0.39, 0.4);
+  playerLightHull.diffuseColor = new Color3(0.36, 0.36, 0.36);
   playerLightHull.specularColor = new Color3(0.1, 0.12, 0.12);
   playerLightHull.backFaceCulling = false;
 
   const playerLightDeck = new StandardMaterial("player_light_deck_material", scene);
-  playerLightDeck.diffuseColor = new Color3(0.34, 0.4, 0.41);
+  playerLightDeck.diffuseColor = new Color3(0.38, 0.38, 0.38);
   playerLightDeck.specularColor = new Color3(0.1, 0.12, 0.12);
   playerLightDeck.backFaceCulling = false;
 
   const playerLightCabin = new StandardMaterial("player_light_cabin_material", scene);
-  playerLightCabin.diffuseColor = new Color3(0.42, 0.48, 0.49);
+  playerLightCabin.diffuseColor = new Color3(0.46, 0.46, 0.46);
   playerLightCabin.specularColor = new Color3(0.12, 0.14, 0.14);
   playerLightCabin.backFaceCulling = false;
 
   const playerLightFunnel = new StandardMaterial("player_light_funnel_material", scene);
-  playerLightFunnel.diffuseColor = new Color3(0.34, 0.4, 0.41);
+  playerLightFunnel.diffuseColor = new Color3(0.38, 0.38, 0.38);
   playerLightFunnel.specularColor = new Color3(0.1, 0.12, 0.12);
   playerLightFunnel.backFaceCulling = false;
 
@@ -5157,7 +5157,7 @@ function createMeshFromData(name, scene, positions, indices) {
 }
 
 // Low-poly external ship model for opponents. Keep it cheap: enemies may appear in groups later.
-function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = "dark", designation = "") {
+function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = "dark") {
   const root = new TransformNode(name, scene);
   const teamMaterials = getShipTeamMaterials(materials, teamId);
   const hullMaterial = teamMaterials.hull;
@@ -5227,59 +5227,9 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = 
   mast.rotation.x = -0.16;
   mast.material = funnelMaterial;
 
-  if (designation) {
-    createShipDesignationPlates(scene, root, name, designation);
-  }
-
   const bowWake = createEnemyBowWake(scene, materials, root, name);
 
   return { root, bowWake };
-}
-
-function createShipDesignationPlates(scene, parent, name, designation) {
-  [-1, 1].forEach((side) => {
-    const material = createDesignationMaterial(scene, `${name}_designation_material_${side}`, designation, side < 0);
-    const plate = MeshBuilder.CreatePlane(`${name}_designation_${side}`, {
-      width: 0.86,
-      height: 0.3
-    }, scene);
-    plate.parent = parent;
-    plate.material = material;
-    plate.position.x = side * 0.535;
-    plate.position.y = 0.44;
-    plate.position.z = 1.85;
-    plate.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
-  });
-}
-
-function createDesignationMaterial(scene, name, designation, mirror = false) {
-  const texture = new DynamicTexture(`${name}_texture`, { width: 256, height: 96 }, scene, true);
-  const context = texture.getContext();
-  context.clearRect(0, 0, 256, 96);
-  context.save();
-  if (mirror) {
-    context.translate(256, 0);
-    context.scale(-1, 1);
-  }
-  context.font = "900 60px Arial";
-  context.textAlign = "center";
-  context.textBaseline = "middle";
-  context.lineWidth = 10;
-  context.strokeStyle = "rgba(4, 15, 20, 0.92)";
-  context.strokeText(designation, 128, 50);
-  context.fillStyle = "#f7fbff";
-  context.fillText(designation, 128, 50);
-  context.restore();
-  texture.update();
-
-  const material = new StandardMaterial(name, scene);
-  material.diffuseTexture = texture;
-  material.opacityTexture = texture;
-  material.emissiveColor = new Color3(0.92, 0.97, 1);
-  material.specularColor = new Color3(0, 0, 0);
-  material.useAlphaFromDiffuseTexture = true;
-  material.backFaceCulling = false;
-  return material;
 }
 
 function createEnemyBowWake(scene, materials, parent, name) {
