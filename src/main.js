@@ -502,7 +502,7 @@ scene.onBeforeRenderObservable.add(() => {
 
   const bob = Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035;
   if (playerActive) {
-    boat.root.position.y = 0.32 + bob;
+    boat.root.position.y = -0.2 + bob;
     boat.root.rotationQuaternion = Quaternion.FromEulerAngles(
       Math.sin(time * 2.6) * 0.025,
       heading,
@@ -549,11 +549,11 @@ scene.onBeforeRenderObservable.add(() => {
 
   // Fixed bridge camera: it follows the ship immediately so acceleration never reveals the rear model.
   const cameraDistance = 0.65;
-  const cameraHeight = 1.48;
+  const cameraHeight = 1.22;
   const desiredCameraPosition = boat.root.position
     .subtract(forward.scale(cameraDistance))
     .add(new Vector3(0, cameraHeight, 0));
-  const desiredTarget = boat.root.position.add(forward.scale(24.0)).add(new Vector3(0, 0.95, 0));
+  const desiredTarget = boat.root.position.add(forward.scale(24.0)).add(new Vector3(0, 0.78, 0));
   const shakeOffset = getRamShakeOffset(heading, ramShake, time);
   ramShake = Math.max(0, ramShake - dt * 2.6);
 
@@ -4999,16 +4999,16 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
 
   const hull = createTaperedHull(`${name}_hull`, scene, [
     { z: -1.35, width: 1.7, top: 0.72, bottom: 0.12 },
-    { z: 2.55, width: 1.18, top: 0.68, bottom: 0.02 },
-    { z: 5.15, width: 0.16, top: 0.64, bottom: 0.0 }
+    { z: 1.95, width: 1.08, top: 0.68, bottom: 0.02 },
+    { z: 3.65, width: 0.18, top: 0.62, bottom: 0.0 }
   ]);
   hull.parent = root;
   hull.material = hullMaterial;
 
   const deck = createTaperedDeck(`${name}_foredeck`, scene, [
     { z: -1.08, width: 1.35, y: 0.78 },
-    { z: 2.55, width: 0.96, y: 0.76 },
-    { z: 4.75, width: 0.24, y: 0.72 }
+    { z: 1.95, width: 0.88, y: 0.76 },
+    { z: 3.32, width: 0.26, y: 0.72 }
   ]);
   deck.parent = root;
   deck.material = deckMaterial;
@@ -5022,22 +5022,22 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
   for (let i = 0; i < 2; i += 1) {
     const tube = MeshBuilder.CreateCylinder(`${name}_torpedo_tube_${i}`, {
       diameter: 0.14,
-      height: 2.65,
+      height: 1.82,
       tessellation: 12
     }, scene);
     tube.parent = root;
     tube.position.x = i === 0 ? -0.32 : 0.32;
     tube.position.y = 0.795;
-    tube.position.z = 1.55;
+    tube.position.z = 1.24;
     tube.rotation.x = Math.PI / 2;
     tube.material = tubeMaterial;
 
-    for (let j = 0; j < 3; j += 1) {
+    for (let j = 0; j < 2; j += 1) {
       const saddle = MeshBuilder.CreateBox(`${name}_torpedo_saddle_${i}_${j}`, { width: 0.2, height: 0.08, depth: 0.12 }, scene);
       saddle.parent = root;
       saddle.position.x = tube.position.x;
       saddle.position.y = 0.755;
-      saddle.position.z = 0.52 + j * 0.86;
+      saddle.position.z = 0.56 + j * 0.78;
       saddle.material = hullMaterial;
     }
 
@@ -5049,18 +5049,18 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
     cap.parent = root;
     cap.position.x = tube.position.x;
     cap.position.y = tube.position.y;
-    cap.position.z = 2.9;
+    cap.position.z = 2.15;
     cap.rotation.x = Math.PI / 2;
     cap.material = tubeMaterial;
   }
 
-  createRailSegment(`${name}_deck_edge_left`, scene, hullMaterial, root, -0.58, -1.09, -0.58, 2.15, 0.76);
-  createRailSegment(`${name}_deck_edge_right`, scene, hullMaterial, root, 0.58, -1.09, 0.58, 2.15, 0.76);
+  createRailSegment(`${name}_deck_edge_left`, scene, hullMaterial, root, -0.58, -1.09, -0.58, 1.58, 0.76);
+  createRailSegment(`${name}_deck_edge_right`, scene, hullMaterial, root, 0.58, -1.09, 0.58, 1.58, 0.76);
 
-  createRailSegment(`${name}_bow_rail_left_a`, scene, hullMaterial, root, -0.58, 2.15, -0.46, 3.02, 0.76);
-  createRailSegment(`${name}_bow_rail_left_b`, scene, hullMaterial, root, -0.2, 3.9, 0, 4.58, 0.76);
-  createRailSegment(`${name}_bow_rail_right_a`, scene, hullMaterial, root, 0.58, 2.15, 0.46, 3.02, 0.76);
-  createRailSegment(`${name}_bow_rail_right_b`, scene, hullMaterial, root, 0.2, 3.9, 0, 4.58, 0.76);
+  createRailSegment(`${name}_bow_rail_left_a`, scene, hullMaterial, root, -0.58, 1.58, -0.38, 2.45, 0.76);
+  createRailSegment(`${name}_bow_rail_left_b`, scene, hullMaterial, root, -0.16, 2.86, 0, 3.22, 0.76);
+  createRailSegment(`${name}_bow_rail_right_a`, scene, hullMaterial, root, 0.58, 1.58, 0.38, 2.45, 0.76);
+  createRailSegment(`${name}_bow_rail_right_b`, scene, hullMaterial, root, 0.16, 2.86, 0, 3.22, 0.76);
 
   const hatch = MeshBuilder.CreateBox(`${name}_deck_hatch`, { width: 0.46, height: 0.11, depth: 0.52 }, scene);
   hatch.parent = root;
