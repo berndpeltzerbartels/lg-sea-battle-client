@@ -406,6 +406,7 @@ let serverClockOffset = Number.isFinite(gameState.t) ? -gameState.t : null;
 let gameEventSource = null;
 let gameEventSourceReady = false;
 let lastGameStreamMessageAt = 0;
+let debugTeleportPending = false;
 let fireTorpedoRequestInFlight = false;
 const maxRudderDegrees = 35;
 const rudderStepDegrees = 3;
@@ -673,6 +674,15 @@ function setupDebugMapTeleport(canvas) {
     speed = 0;
     engineOrder = 2;
     turnVelocity = 0;
+    playerServerTarget = null;
+    playerServerPositionCorrection = Vector3.Zero();
+    playerServerHeadingCorrection = 0;
+    playerServerTurnRateCorrection = 0;
+    debugTeleportPending = true;
+    nextPlayerStateSendTime = 0;
+    if (!playerStateRequestInFlight) {
+      sendPlayerState();
+    }
     document.body.dataset.debugTeleport = `${Math.round(target.x)},${Math.round(target.z)}`;
     event.stopPropagation();
     event.preventDefault();
@@ -1628,6 +1638,7 @@ function syncMultiplayerState(now) {
 async function sendPlayerState() {
   playerStateRequestInFlight = true;
   const requestStartedAt = beginHttpRequest();
+  const debugTeleport = debugTeleportPending;
   try {
     const response = await fetch(getPlayerStateEndpoint(), {
       method: "POST",
@@ -1642,13 +1653,17 @@ async function sendPlayerState() {
         turnVelocity,
         engineOrder,
         rudderDegrees: Math.round(rudderDegrees),
-        clientTime: performance.now() / 1000
+        clientTime: performance.now() / 1000,
+        debugTeleport
       })
     });
     if (!response.ok) {
       throw new Error(`Player state request failed with ${response.status}`);
     }
     await response.json();
+    if (debugTeleport) {
+      debugTeleportPending = false;
+    }
     document.body.dataset.playerStateSync = "command-ok";
   } catch (error) {
     document.body.dataset.playerStateSync = "error";
