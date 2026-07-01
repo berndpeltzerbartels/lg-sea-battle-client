@@ -4434,8 +4434,8 @@ function createExplosionLightFlash(system, position) {
   });
 
   const light = new PointLight(`torpedo_flash_${system.hits}`, position.add(new Vector3(0, 3.8, 0)), system.scene);
-  light.diffuse = new Color3(1.0, 0.76, 0.42);
-  light.specular = new Color3(1.0, 0.82, 0.5);
+  light.diffuse = new Color3(0.82, 0.92, 1.0);
+  light.specular = new Color3(0.88, 0.96, 1.0);
   light.intensity = 0;
   light.range = 145;
   system.hitEffects.push({
@@ -4463,8 +4463,8 @@ function createExplosionSkyFlash(system, position) {
 
   const texture = createRadialFlashTexture(system.scene, `torpedo_sky_flash_texture_${system.hits}`);
   const material = new StandardMaterial(`torpedo_sky_flash_material_${system.hits}`, system.scene);
-  material.diffuseColor = new Color3(1.0, 0.62, 0.34);
-  material.emissiveColor = new Color3(1.0, 0.46, 0.18);
+  material.diffuseColor = new Color3(0.84, 0.93, 1.0);
+  material.emissiveColor = new Color3(0.72, 0.88, 1.0);
   material.specularColor = Color3.Black();
   material.opacityTexture = texture;
   material.alpha = 0;
@@ -4776,9 +4776,9 @@ function createMaterials(scene) {
   lighthouseStripe.specularColor = new Color3(0.11, 0.04, 0.03);
 
   const explosionCore = new StandardMaterial("explosion_core_material", scene);
-  explosionCore.diffuseColor = new Color3(1.0, 1.0, 0.96);
-  explosionCore.emissiveColor = new Color3(1.18, 1.2, 1.15);
-  explosionCore.specularColor = new Color3(1.0, 1.0, 0.96);
+  explosionCore.diffuseColor = new Color3(0.92, 0.98, 1.0);
+  explosionCore.emissiveColor = new Color3(1.08, 1.18, 1.24);
+  explosionCore.specularColor = new Color3(0.95, 1.0, 1.0);
   explosionCore.disableLighting = true;
 
   const beaconGlow = new StandardMaterial("beacon_glow_material", scene);
