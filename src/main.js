@@ -39,11 +39,11 @@ document.body.classList.toggle("big-map", bigMapEnabled);
 document.body.dataset.bigMap = String(bigMapEnabled);
 const torpedoBoatWaterlineY = -0.2;
 const enemyTorpedoBoatBobAmplitude = 0.025;
-scene.clearColor = new Color4(0.22, 0.34, 0.45, 1);
+scene.clearColor = new Color4(0.38, 0.5, 0.6, 1);
 scene.fogMode = Scene.FOGMODE_LINEAR;
-scene.fogColor = new Color3(0.2, 0.3, 0.38);
-scene.fogStart = 65;
-scene.fogEnd = 560;
+scene.fogColor = new Color3(0.35, 0.46, 0.54);
+scene.fogStart = 82;
+scene.fogEnd = 650;
 
 const speedValue = document.getElementById("speedValue");
 const depthValue = document.getElementById("depthValue");
@@ -160,14 +160,14 @@ const world = new TransformNode("world", scene);
 
 const sun = new DirectionalLight("sun", new Vector3(-0.45, -0.9, 0.32), scene);
 sun.position = new Vector3(35, 80, -45);
-sun.intensity = 0.82;
-sun.diffuse = new Color3(0.58, 0.66, 0.76);
-sun.specular = new Color3(0.34, 0.42, 0.52);
+sun.intensity = 0.94;
+sun.diffuse = new Color3(0.66, 0.74, 0.82);
+sun.specular = new Color3(0.38, 0.48, 0.58);
 
 const ambient = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
-ambient.intensity = 0.26;
-ambient.diffuse = new Color3(0.36, 0.48, 0.62);
-ambient.groundColor = new Color3(0.035, 0.06, 0.075);
+ambient.intensity = 0.34;
+ambient.diffuse = new Color3(0.48, 0.58, 0.68);
+ambient.groundColor = new Color3(0.055, 0.085, 0.1);
 
 const worldLimit = 5000;
 const ocean = MeshBuilder.CreateGround("ocean", { width: 2300, height: 2300, subdivisions: 160 }, scene);
@@ -4581,34 +4581,34 @@ function easeInOutCubic(value) {
 
 function createMaterials(scene) {
   const water = new StandardMaterial("water_material", scene);
-  water.diffuseColor = new Color3(0.02, 0.2, 0.31);
-  water.specularColor = new Color3(0.48, 0.68, 0.82);
-  water.emissiveColor = new Color3(0.0, 0.025, 0.04);
+  water.diffuseColor = new Color3(0.18, 0.36, 0.4);
+  water.specularColor = new Color3(0.68, 0.74, 0.75);
+  water.emissiveColor = new Color3(0.025, 0.075, 0.08);
   water.alpha = 1;
   water.diffuseTexture = createWaterTexture(scene);
   water.diffuseTexture.uScale = 34;
   water.diffuseTexture.vScale = 34;
 
   const sand = new StandardMaterial("sand_material", scene);
-  sand.diffuseColor = new Color3(0.5, 0.5, 0.41);
+  sand.diffuseColor = new Color3(0.58, 0.58, 0.5);
   sand.specularColor = new Color3(0.035, 0.038, 0.035);
 
   const grass = new StandardMaterial("grass_material", scene);
-  grass.diffuseColor = new Color3(0.14, 0.31, 0.24);
+  grass.diffuseColor = new Color3(0.19, 0.38, 0.29);
   grass.specularColor = new Color3(0.03, 0.05, 0.03);
 
   const terrain = new StandardMaterial("terrain_material", scene);
-  terrain.diffuseColor = new Color3(0.17, 0.28, 0.24);
+  terrain.diffuseColor = new Color3(0.22, 0.34, 0.3);
   terrain.specularColor = new Color3(0.03, 0.04, 0.04);
 
   const shallow = new StandardMaterial("shallow_water_material", scene);
-  shallow.diffuseColor = new Color3(0.02, 0.2, 0.31);
-  shallow.emissiveColor = new Color3(0.0, 0.025, 0.04);
-  shallow.specularColor = new Color3(0.4, 0.6, 0.76);
+  shallow.diffuseColor = new Color3(0.18, 0.36, 0.4);
+  shallow.emissiveColor = new Color3(0.025, 0.075, 0.08);
+  shallow.specularColor = new Color3(0.64, 0.71, 0.73);
   shallow.alpha = 1;
 
   const rock = new StandardMaterial("rock_material", scene);
-  rock.diffuseColor = new Color3(0.23, 0.25, 0.25);
+  rock.diffuseColor = new Color3(0.29, 0.31, 0.31);
   rock.specularColor = new Color3(0.03, 0.03, 0.03);
 
   const hull = new StandardMaterial("hull_material", scene);
@@ -4843,13 +4843,13 @@ function createMaterials(scene) {
 function createWaterTexture(scene) {
   const texture = new DynamicTexture("water_texture", { width: 256, height: 256 }, scene);
   const context = texture.getContext();
-  context.fillStyle = "#0a536c";
+  context.fillStyle = "#3b7780";
   context.fillRect(0, 0, 256, 256);
 
   for (let i = 0; i < 34; i += 1) {
     const y = 8 + i * 8;
     context.beginPath();
-    context.strokeStyle = i % 2 === 0 ? "rgba(155, 224, 236, 0.18)" : "rgba(5, 45, 64, 0.18)";
+    context.strokeStyle = i % 2 === 0 ? "rgba(214, 231, 230, 0.22)" : "rgba(62, 98, 103, 0.15)";
     context.lineWidth = i % 3 === 0 ? 2 : 1;
 
     for (let x = -20; x <= 276; x += 12) {
