@@ -39,6 +39,7 @@ document.body.classList.toggle("big-map", bigMapEnabled);
 document.body.dataset.bigMap = String(bigMapEnabled);
 const torpedoBoatWaterlineY = -0.2;
 const enemyTorpedoBoatBobAmplitude = 0.025;
+const enemyBowWakeSurfaceY = -torpedoBoatWaterlineY + 0.018;
 scene.clearColor = new Color4(0.38, 0.5, 0.6, 1);
 scene.fogMode = Scene.FOGMODE_LINEAR;
 scene.fogColor = new Color3(0.35, 0.46, 0.54);
@@ -3452,14 +3453,14 @@ function updateEnemyBowWake(wake, speed, time) {
     segment.setEnabled(visible);
     segment.scaling.x = 1.35 + strength * 1.85 + segment.metadata.row * 0.12;
     segment.scaling.z = (0.82 + strength * 0.62) * pulse;
-    segment.position.y = -0.05 + Math.sin(time * 2.8 + index) * 0.005;
+    segment.position.y = enemyBowWakeSurfaceY + Math.sin(time * 2.8 + index) * 0.005;
   });
 
   wake.churn.forEach((patch, index) => {
     const pulse = 0.75 + Math.sin(time * 4.1 + index * 1.7) * 0.16;
     patch.scaling.x = (0.65 + strength * 1.05) * pulse;
     patch.scaling.z = 0.55 + strength * 1.2;
-    patch.position.y = -0.045 + Math.sin(time * 3.6 + index) * 0.006;
+    patch.position.y = enemyBowWakeSurfaceY + Math.sin(time * 3.6 + index) * 0.006;
   });
 }
 
@@ -5275,7 +5276,7 @@ function createEnemyBowWake(scene, materials, parent, name) {
     patch.parent = root;
     patch.material = materials.foam;
     patch.position.x = (i - 1.5) * 0.12;
-    patch.position.y = -0.045;
+    patch.position.y = enemyBowWakeSurfaceY;
     patch.position.z = 4.54 + i * 0.05;
     patch.rotation.y = -0.28 + i * 0.18;
     churn.push(patch);
@@ -5297,7 +5298,7 @@ function createWakeRibbon(name, scene, material, parent, startX, startZ, endX, e
   ribbon.parent = parent;
   ribbon.material = material;
   ribbon.position.x = (startX + endX) / 2;
-  ribbon.position.y = -0.05;
+  ribbon.position.y = enemyBowWakeSurfaceY;
   ribbon.position.z = (startZ + endZ) / 2;
   ribbon.rotation.y = Math.atan2(dx, dz);
   return ribbon;
