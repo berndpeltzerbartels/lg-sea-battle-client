@@ -4769,9 +4769,9 @@ function createMaterials(scene) {
   lighthouseWall.specularColor = new Color3(0.08, 0.07, 0.05);
 
   const lighthouseCap = new StandardMaterial("lighthouse_cap_material", scene);
-  lighthouseCap.diffuseColor = new Color3(0.62, 0.64, 0.62);
-  lighthouseCap.emissiveColor = new Color3(0.065, 0.068, 0.066);
-  lighthouseCap.specularColor = new Color3(0.11, 0.11, 0.1);
+  lighthouseCap.diffuseColor = new Color3(0.78, 0.8, 0.8);
+  lighthouseCap.emissiveColor = new Color3(0.14, 0.15, 0.15);
+  lighthouseCap.specularColor = new Color3(0.22, 0.23, 0.23);
 
   const lighthouseStripe = new StandardMaterial("lighthouse_stripe_material", scene);
   lighthouseStripe.diffuseColor = new Color3(0.72, 0.12, 0.09);
@@ -5697,7 +5697,7 @@ function createLighthouse(land, index, scene, materials, parent, visualEffects) 
   lanternHouse.parent = root;
   lanternHouse.position.y = lanternY;
   const lanternMaterial = materials.glass.clone(`${land.name}_lighthouse_lantern_material`);
-  lanternMaterial.fogEnabled = true;
+  lanternMaterial.fogEnabled = false;
   lanternMaterial.disableLighting = true;
   lanternHouse.material = lanternMaterial;
 
@@ -5913,10 +5913,10 @@ function updateLampMaterial(light, intensity) {
   light.lampMaterial.emissiveColor = new Color3(visibleGlow, visibleGlow, visibleGlow * 0.95);
   light.lampMaterial.specularColor = Color3.White();
   if (light.lanternMaterial) {
-    const lanternGlow = clamp(0.24 + flash * 1.18, 0.22, 1.45);
-    light.lanternMaterial.alpha = clamp(0.74 + flash * 0.06, 0.72, 0.82);
-    light.lanternMaterial.diffuseColor = new Color3(0.66 + lanternGlow * 0.1, 0.68 + lanternGlow * 0.1, 0.66 + lanternGlow * 0.09);
-    light.lanternMaterial.emissiveColor = new Color3(lanternGlow * 0.88, lanternGlow * 0.92, lanternGlow * 0.86);
+    const lanternGlow = clamp(0.62 + flash * 0.86, 0.6, 1.45);
+    light.lanternMaterial.alpha = clamp(0.82 + flash * 0.03, 0.8, 0.86);
+    light.lanternMaterial.diffuseColor = new Color3(0.9 + lanternGlow * 0.035, 0.92 + lanternGlow * 0.035, 0.92 + lanternGlow * 0.03);
+    light.lanternMaterial.emissiveColor = new Color3(lanternGlow * 0.68, lanternGlow * 0.7, lanternGlow * 0.68);
     light.lanternMaterial.specularColor = Color3.White();
   }
 }
