@@ -113,6 +113,7 @@ loadServerBuildInfo()
   .catch((error) => updateBuildInfoPanel(clientBuildInfo, { version: "unavailable", commit: error.message }));
 const playerLogin = await requirePlayerLogin();
 const playerInitials = playerLogin.initials;
+await requireRegisteredGameSession(playerLogin.playerId);
 const worldLandmasses = await loadWorldLandmasses();
 document.body.dataset.worldSource = "server";
 document.body.dataset.worldLandmasses = String(worldLandmasses.length);
@@ -121,11 +122,11 @@ document.body.dataset.gameStateSource = "server";
 document.body.dataset.serverGameState = gameState.state;
 document.body.dataset.serverShips = String(gameState.ships.length);
 document.body.dataset.serverTorpedoes = String(gameState.torpedoes.length);
-const playerId = getLocalPlayerId(playerInitials);
+const playerId = playerLogin.playerId;
 const playerTeamId = getRequestedPlayerTeamId(gameState.ships, playerLogin.teamId);
 const playerShips = getTeamShips(gameState.ships, playerTeamId);
 const enemyShips = getEnemyShips(gameState.ships, playerTeamId);
-const initialPlayerSpawn = applyRequestedTestSpawn(createPlayerSpawn(playerShips, playerId), worldLandmasses);
+const initialPlayerSpawn = createPlayerSpawn(playerShips, playerId);
 let playerServerShipId = initialPlayerSpawn.shipId;
 let playerBearingPosition = initialPlayerSpawn.position;
 let heading = initialPlayerSpawn.heading;
@@ -868,7 +869,7 @@ function flushPerformanceTelemetry(now) {
     playerId,
     teamId: playerTeamId,
     shipId: playerServerShipId ?? "",
-    setupId: getRequestedSetupId(),
+    setupId: "server",
     userAgent: navigator.userAgent,
     platform: clientCapability.platform,
     vendor: clientCapability.vendor,
@@ -1225,81 +1226,83 @@ function getFireTorpedoEndpoint() {
 
 function getGameEventsEndpoint() {
   const safePlayerId = encodeURIComponent(playerId);
-  const safeTeamId = encodeURIComponent(playerTeamId);
   if (location.port === "5173" || location.port === "4173") {
-    return `${location.protocol}//${location.hostname}/game/events/${safePlayerId}/${safeTeamId}`;
+    return `${location.protocol}//${location.hostname}/game/events/${safePlayerId}`;
   }
 
-  return `/game/events/${safePlayerId}/${safeTeamId}`;
+  return `/game/events/${safePlayerId}`;
 }
 
-function getLocalPlayerId(initials = "PL") {
-  const storageKey = "seaBattlePlayerId";
-  const idPrefix = `player-${initials}-`;
-  const existingId = localStorage.getItem(storageKey);
-  if (existingId?.startsWith(idPrefix)) {
-    return existingId;
+async function requirePlayerLogin() {
+  const accountId = readStoredValue("accountId");
+  if (!accountId.trim()) {
+    window.location.replace("/index.html");
+    return new Promise(() => {});
   }
 
-  const randomPart = Math.random().toString(36).slice(2, 10);
-  const id = `${idPrefix}${Date.now().toString(36)}-${randomPart}`;
-  localStorage.setItem(storageKey, id);
-  return id;
+  const response = await fetch(getPlayerSessionByAccountEndpoint(accountId), { cache: "no-store" });
+  if (!response.ok) {
+    localStorage.removeItem("seaBattlePlayerId");
+    localStorage.removeItem("seaBattlePlayerInitials");
+    localStorage.removeItem("seaBattlePlayerTeamId");
+    window.location.replace("/index.html");
+    return new Promise(() => {});
+  }
+
+  const session = await response.json();
+  const playerId = String(session.playerId ?? "");
+  const initials = sanitizeInitials(session.initials);
+  const teamId = sanitizeTeamId(session.teamId);
+  if (playerId.startsWith(`player-${initials}-`) && initials && teamId) {
+    return { playerId, initials, teamId };
+  }
+
+  window.location.replace("/index.html");
+  return new Promise(() => {});
 }
 
-function requirePlayerLogin() {
-  const params = new URLSearchParams(location.search);
-  const requestedTeamId = sanitizeTeamId(params.get("team") ?? params.get("side"));
-  const requestedInitials = sanitizeInitials(params.get("initials") ?? params.get("name") ?? params.get("player"));
-  const storageKey = "seaBattlePlayerInitials";
-  const existing = sanitizeInitials(localStorage.getItem(storageKey));
-  if (requestedInitials && requestedTeamId) {
-    localStorage.setItem(storageKey, requestedInitials);
-    return Promise.resolve({ initials: requestedInitials, teamId: requestedTeamId });
+async function requireRegisteredGameSession(playerId) {
+  const response = await fetch(getPlayerSessionEndpoint(playerId), { cache: "no-store" });
+  if (response.ok) {
+    return;
   }
-  if (existing && requestedTeamId) {
-    return Promise.resolve({ initials: existing, teamId: requestedTeamId });
-  }
+  localStorage.removeItem("seaBattlePlayerId");
+  localStorage.removeItem("seaBattlePlayerInitials");
+  localStorage.removeItem("seaBattlePlayerTeamId");
+  window.location.replace("/index.html");
+  await new Promise(() => {});
+}
 
-  document.body.classList.add("login-active");
-  const overlay = document.createElement("section");
-  overlay.className = "login-screen";
-  overlay.innerHTML = `
-    <form class="login-card">
-      <strong>Sea Battle</strong>
-      <label for="playerInitials">Initialen</label>
-      <input id="playerInitials" name="initials" maxlength="${maxPlayerInitialsLength}" pattern="[A-Za-z0-9]{1,${maxPlayerInitialsLength}}" autocomplete="off" value="${existing}" autofocus />
-      <label for="playerTeam">Seite</label>
-      <select id="playerTeam" name="team">
-        ${teamDefinitions.map((team) => `<option value="${team.id}">${team.label}</option>`).join("")}
-      </select>
-      <button type="submit">Start</button>
-    </form>
-  `;
-  document.body.appendChild(overlay);
-  const input = overlay.querySelector("input");
-  const teamSelect = overlay.querySelector("select");
-  if (requestedTeamId && teamSelect) {
-    teamSelect.value = requestedTeamId;
+function getPlayerSessionEndpoint(playerId) {
+  const safePlayerId = encodeURIComponent(playerId);
+  if (location.port === "5173" || location.port === "4173") {
+    return `${location.protocol}//${location.hostname}/game/session/${safePlayerId}`;
   }
-  input?.focus();
-  input?.select();
-  input?.addEventListener("input", () => {
-    input.value = sanitizeInitials(input.value);
-  });
+  return `/game/session/${safePlayerId}`;
+}
 
-  return new Promise((resolve) => {
-    overlay.querySelector("form")?.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const initials = sanitizeInitials(input?.value) || "PL";
-      const teamId = sanitizeTeamId(teamSelect?.value) || "light";
-      localStorage.setItem(storageKey, initials);
-      setRequestedTeamInUrl(teamId);
-      document.body.classList.remove("login-active");
-      overlay.remove();
-      resolve({ initials, teamId });
-    });
-  });
+function getPlayerSessionByAccountEndpoint(accountId) {
+  const safeAccountId = encodeURIComponent(accountId);
+  if (location.port === "5173" || location.port === "4173") {
+    return `${location.protocol}//${location.hostname}/game/session/account/${safeAccountId}`;
+  }
+  return `/game/session/account/${safeAccountId}`;
+}
+
+function readStoredValue(key) {
+  const raw = localStorage.getItem(key) ?? "";
+  if (!raw.trim()) {
+    return "";
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && "value" in parsed) {
+      return String(parsed.value ?? "");
+    }
+  } catch (ignored) {
+    // Existing Sea Battle values were stored as plain strings. Keep supporting them.
+  }
+  return raw;
 }
 
 function sanitizeInitials(value) {
@@ -1318,16 +1321,8 @@ function sanitizeTeamId(value) {
   return getTeamDefinition(teamId) ? teamId : "";
 }
 
-function setRequestedTeamInUrl(teamId) {
-  if (!history.replaceState) return;
-  const url = new URL(location.href);
-  url.searchParams.set("team", teamId);
-  history.replaceState(null, "", url);
-}
-
 function getRequestedPlayerTeamId(ships, selectedTeamId = "") {
-  const params = new URLSearchParams(location.search);
-  const requestedTeamId = selectedTeamId || params.get("team") || params.get("side");
+  const requestedTeamId = selectedTeamId;
   const teamIds = [...new Set(ships.map((ship) => ship.teamId).filter(Boolean))];
 
   if (requestedTeamId && teamIds.includes(requestedTeamId)) {
@@ -1407,14 +1402,7 @@ async function requestHostGameReset() {
 }
 
 function promptGameSetupId() {
-  const currentSetup = new URLSearchParams(location.search).get("setup") ?? "dense-land";
-  const defaultChoice = currentSetup === "islands"
-    ? "2"
-    : currentSetup === "escort-debug"
-      ? "3"
-      : currentSetup === "landmark-tour"
-        ? "4"
-        : "1";
+  const defaultChoice = "1";
   const choice = window.prompt("World: 1 = Dense land, 2 = Islands, 3 = Escort debug, 4 = Landmark tour", defaultChoice);
   if (choice === null) return null;
   const normalized = choice.trim().toLowerCase();
@@ -1422,10 +1410,6 @@ function promptGameSetupId() {
   if (normalized === "3" || normalized === "escort-debug" || normalized === "escort") return "escort-debug";
   if (normalized === "4" || normalized === "landmark-tour" || normalized === "tour") return "landmark-tour";
   return "dense-land";
-}
-
-function getRequestedSetupId() {
-  return new URLSearchParams(location.search).get("setup") ?? "default";
 }
 
 function getResetGameEndpoint() {
@@ -1589,28 +1573,6 @@ function createPlayerSpawn(teamShips, currentPlayerId) {
     position: new Vector3(ship.x, 0.28, ship.z),
     heading: Number.isFinite(ship.heading) ? ship.heading : 0,
     torpedoesRemaining: Number.isFinite(ship.torpedoesRemaining) ? ship.torpedoesRemaining : null
-  };
-}
-
-function applyRequestedTestSpawn(spawn, landmasses) {
-  const params = new URLSearchParams(location.search);
-  const requestedSpawn = String(params.get("spawn") ?? params.get("testSpawn") ?? "").toLowerCase();
-  if (!["beacon", "rock-beacon", "felslampe"].includes(requestedSpawn)) return spawn;
-
-  const lighthouseLands = chooseLighthouseLandmasses(landmasses, 4);
-  const target = chooseRockBeaconLandmasses(landmasses, lighthouseLands)[0];
-  if (!target) return spawn;
-
-  const distance = Math.max(target.rx ?? 28, target.rz ?? 28) + 90;
-  const position = new Vector3(target.x - distance * 0.95, 0.28, target.z + distance * 0.45);
-  const heading = Math.atan2(target.x - position.x, target.z - position.z);
-  document.body.dataset.testSpawn = "beacon";
-  document.body.dataset.testSpawnTarget = target.name ?? "";
-
-  return {
-    ...spawn,
-    position,
-    heading
   };
 }
 
