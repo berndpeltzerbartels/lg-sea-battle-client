@@ -24,6 +24,7 @@ import "@babylonjs/core/Materials/Textures/dynamicTexture";
 import "./styles.css";
 
 const canvas = document.getElementById("renderCanvas");
+prepareGameFocus(canvas);
 const engine = new Engine(canvas, true, {
   preserveDrawingBuffer: false,
   stencil: false,
@@ -34,9 +35,11 @@ const scene = new Scene(engine);
 document.body.dataset.appStarted = "true";
 const urlParams = new URLSearchParams(location.search);
 let debugMapEnabled = urlParams.get("debug") === "1";
+let debugMarkerMapEnabled = debugMapEnabled && urlParams.get("markers") === "1";
 let bigMapEnabled = debugMapEnabled && urlParams.get("bigMap") !== "0";
 document.body.classList.toggle("big-map", bigMapEnabled);
 document.body.dataset.bigMap = String(bigMapEnabled);
+document.body.classList.toggle("debug-marker-map", debugMarkerMapEnabled);
 const torpedoBoatWaterlineY = -0.2;
 const enemyTorpedoBoatBobAmplitude = 0.025;
 const enemyBowWakeSurfaceY = -torpedoBoatWaterlineY + 0.018;
@@ -59,6 +62,11 @@ const mapRowLabels = document.getElementById("mapRowLabels");
 const mapColumnLabels = document.getElementById("mapColumnLabels");
 const mapSectorValue = document.getElementById("mapSectorValue");
 const mapCoordinateValue = document.getElementById("mapCoordinateValue");
+const debugMapMarkerPanel = document.getElementById("debugMapMarkerPanel");
+const debugMapMarkerOutput = document.getElementById("debugMapMarkerOutput");
+const copyDebugMapMarkersButton = document.getElementById("copyDebugMapMarkersButton");
+const undoDebugMapMarkerButton = document.getElementById("undoDebugMapMarkerButton");
+const clearDebugMapMarkersButton = document.getElementById("clearDebugMapMarkersButton");
 const radarCanvas = document.getElementById("radarCanvas");
 const radarStatus = document.getElementById("radarStatus");
 const rudderIndicator = document.getElementById("rudderIndicator");
@@ -106,6 +114,10 @@ const lighthouseHeightOffsets = new Map([
   ["eastern_delta_coast", -0.45]
 ]);
 let lastMapViewport = null;
+let debugRespawnCandidates = [];
+let debugRespawnCandidatesLoaded = false;
+let debugMapMarkers = [];
+let debugMapMarkersEdited = false;
 const clientBuildInfo = window.__SEA_BATTLE_CLIENT_VERSION__ ?? { version: "dev", commit: "local" };
 updateBuildInfoPanel(clientBuildInfo, null);
 loadServerBuildInfo()
@@ -144,12 +156,18 @@ document.body.dataset.testPlayerInvulnerable = String(testPlayerInvulnerable);
 document.body.dataset.openSeaFoam = String(openSeaFoamEnabled);
 document.body.dataset.performanceLogging = String(performanceLoggingEnabled);
 document.body.dataset.debugMap = String(debugMapEnabled);
+document.body.dataset.debugMarkerMap = String(debugMarkerMapEnabled);
 updateFleetStatus(gameState.ships, gameState.destroyedShipsByTeam);
 updatePlayerList(gameState.ships);
 updatePlayerTorpedoStock(playerTorpedoesRemaining);
 setupResetGameControl(resetGameButton);
 setupMapZoomControl(mapZoom);
+setupDebugMapMarkerPanel();
 setupDebugMapTeleport(mapCanvas);
+updateDebugMapMarkerPanel();
+if (debugMapEnabled) {
+  loadDebugRespawnCandidates();
+}
 
 const clientCapability = createClientCapabilitySnapshot(engine, canvas);
 const renderQuality = applyRenderQuality(engine, clientCapability);
@@ -169,7 +187,7 @@ sun.specular = new Color3(0.38, 0.48, 0.58);
 const ambient = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
 ambient.intensity = 0.34;
 ambient.diffuse = new Color3(0.48, 0.58, 0.68);
-ambient.groundColor = new Color3(0.055, 0.085, 0.1);
+ambient.groundColor = new Color3(0.14, 0.17, 0.19);
 
 const worldLimit = 5000;
 const ocean = MeshBuilder.CreateGround("ocean", { width: 2300, height: 2300, subdivisions: 160 }, scene);
@@ -275,6 +293,7 @@ window.addEventListener("mousedown", (event) => {
 
 window.addEventListener("pointerdown", (event) => {
   if (isHudControlEvent(event)) return;
+  focusGameCanvas();
   if (startGlobalMouseRudder(event)) {
     mouseButtonMask = event.buttons;
     event.target?.setPointerCapture?.(event.pointerId);
@@ -341,6 +360,36 @@ window.addEventListener("wheel", (event) => {
   event.preventDefault();
 }, { passive: false });
 
+window.addEventListener("pageshow", focusGameCanvas);
+window.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    focusGameCanvas();
+  }
+});
+
+function prepareGameFocus(renderCanvas) {
+  if (!renderCanvas) return;
+  renderCanvas.tabIndex = -1;
+  requestAnimationFrame(focusGameCanvas);
+  setTimeout(focusGameCanvas, 0);
+}
+
+function focusGameCanvas() {
+  if (!canvas || document.hidden) return;
+  const active = document.activeElement;
+  if (active && active !== document.body && active !== canvas && isTextEditingElement(active)) {
+    return;
+  }
+  canvas.focus({ preventScroll: true });
+}
+
+function isTextEditingElement(element) {
+  return element instanceof HTMLInputElement
+      || element instanceof HTMLTextAreaElement
+      || element instanceof HTMLSelectElement
+      || element.isContentEditable;
+}
+
 const engineOrders = [
   { label: "Astern Full", shortLabel: "Full Ast", speed: -4.2 },
   { label: "Astern Half", shortLabel: "Half Ast", speed: -2.2 },
@@ -398,11 +447,7 @@ let remoteCorrectionSamples = 0;
 let remoteCorrectionTotal = 0;
 let remoteCorrectionMax = 0;
 let playerServerSnapshotReceived = false;
-let serverRadarReady = false;
-let serverRadarContacts = [];
-let serverRadarObserverPosition = null;
-let serverRadarObserverHeading = null;
-let serverRadarRange = 945;
+const clientRadarRange = 945;
 let serverShipsById = indexShipsById(gameState.ships);
 let serverClockOffset = Number.isFinite(gameState.t) ? -gameState.t : null;
 let gameEventSource = null;
@@ -670,6 +715,21 @@ function setupDebugMapTeleport(canvas) {
     const y = (event.clientY - rect.top) * (canvas.clientHeight / rect.height);
     const target = mapPointToWorld(x, y, lastMapViewport);
 
+    if (debugMarkerMapEnabled) {
+      addDebugMapMarker(target);
+      teleportPlayerToDebugMapPosition(target);
+      event.stopPropagation();
+      event.preventDefault();
+      return;
+    }
+
+    teleportPlayerToDebugMapPosition(target);
+    event.stopPropagation();
+    event.preventDefault();
+  });
+}
+
+function teleportPlayerToDebugMapPosition(target) {
     boat.root.position.x = target.x;
     boat.root.position.z = target.z;
     playerBearingPosition = new Vector3(target.x, boat.root.position.y, target.z);
@@ -686,9 +746,90 @@ function setupDebugMapTeleport(canvas) {
       sendPlayerState();
     }
     document.body.dataset.debugTeleport = `${Math.round(target.x)},${Math.round(target.z)}`;
-    event.stopPropagation();
-    event.preventDefault();
+    document.body.dataset.debugTeleportVector = `new Vector2(${Math.round(target.x)}, ${Math.round(target.z)})`;
+    console.info("[sea-battle] debug map position", {
+      x: Math.round(target.x),
+      z: Math.round(target.z),
+      vector: document.body.dataset.debugTeleportVector
+    });
+}
+
+function setupDebugMapMarkerPanel() {
+  debugMapMarkerOutput?.addEventListener("input", () => {
+    debugMapMarkersEdited = true;
+    debugMapMarkers = parseDebugMapMarkers(debugMapMarkerOutput.value);
+    document.body.dataset.debugMapMarkers = String(debugMapMarkers.length);
   });
+
+  copyDebugMapMarkersButton?.addEventListener("click", () => {
+    const text = formatDebugMapMarkers();
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).catch(() => {
+        if (debugMapMarkerOutput) debugMapMarkerOutput.select();
+      });
+    } else if (debugMapMarkerOutput) {
+      debugMapMarkerOutput.select();
+    }
+  });
+
+  undoDebugMapMarkerButton?.addEventListener("click", () => {
+    debugMapMarkersEdited = true;
+    debugMapMarkers = debugMapMarkers.slice(0, -1);
+    updateDebugMapMarkerPanel();
+  });
+
+  clearDebugMapMarkersButton?.addEventListener("click", () => {
+    debugMapMarkersEdited = true;
+    debugMapMarkers = [];
+    updateDebugMapMarkerPanel();
+  });
+}
+
+function addDebugMapMarker(position) {
+  debugMapMarkersEdited = true;
+  const marker = {
+    x: Math.round(position.x),
+    z: Math.round(position.z)
+  };
+  debugMapMarkers = [...debugMapMarkers, marker];
+  document.body.dataset.debugMapMarkerLast = `new Vector2(${marker.x}, ${marker.z})`;
+  console.info("[sea-battle] debug map marker", document.body.dataset.debugMapMarkerLast);
+  updateDebugMapMarkerPanel();
+}
+
+function updateDebugMapMarkerPanel() {
+  if (debugMapMarkerPanel) {
+    debugMapMarkerPanel.hidden = !debugMarkerMapEnabled;
+  }
+  if (debugMapMarkerOutput) {
+    debugMapMarkerOutput.value = formatDebugMapMarkers();
+  }
+  document.body.dataset.debugMapMarkers = String(debugMapMarkers.length);
+}
+
+function formatDebugMapMarkers() {
+  return debugMapMarkers
+    .map((marker) => `new Vector2(${marker.x}, ${marker.z})`)
+    .join("\n");
+}
+
+function parseDebugMapMarkers(text) {
+  return String(text ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = line.match(/-?\d+(?:\.\d+)?/g);
+      if (!match || match.length < 2) return null;
+      const x = Number(match[0]);
+      const z = Number(match[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+      return {
+        x: Math.round(x),
+        z: Math.round(z)
+      };
+    })
+    .filter(Boolean);
 }
 
 function setupTelegraphDragControl(scale) {
@@ -905,7 +1046,6 @@ function flushPerformanceTelemetry(now) {
     enemyCount: enemyMotions.filter((motion) => motion.root.isEnabled()).length,
     foamCount: foam?.patches?.length ?? 0,
     torpedoCount: torpedoSystem.active.length,
-    radarContacts: serverRadarContacts.length,
     serverShips: serverShipsById.size,
     gameEventSourceReady,
     gameStreamAgeSeconds: lastGameStreamMessageAt > 0 ? Number((time - lastGameStreamMessageAt).toFixed(2)) : -1,
@@ -933,7 +1073,7 @@ function flushPerformanceTelemetry(now) {
 function sendPerformanceReport(report) {
   const requestStartedAt = beginHttpRequest();
   const finishPerformanceRequest = () => finishHttpRequest("performance", requestStartedAt);
-  fetch("/game/client-performance", {
+  fetch(gameEndpoint("/game/client-performance"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(report),
@@ -1130,7 +1270,38 @@ function getWorldMapEndpoint() {
     return `${location.protocol}//${location.hostname}/game/world`;
   }
 
-  return "/game/world";
+  return gameEndpoint("/game/world");
+}
+
+async function loadDebugRespawnCandidates() {
+  if (debugRespawnCandidatesLoaded) return;
+  debugRespawnCandidatesLoaded = true;
+  const endpoint = getDebugRespawnCandidatesEndpoint();
+  try {
+    const response = await fetch(endpoint, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`status ${response.status}`);
+    }
+    const payload = await response.json();
+    debugRespawnCandidates = Array.isArray(payload)
+      ? payload
+          .map((point) => ({ x: Number(point.x), z: Number(point.z) }))
+          .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.z))
+      : [];
+    document.body.dataset.debugRespawnCandidates = String(debugRespawnCandidates.length);
+  } catch (error) {
+    debugRespawnCandidatesLoaded = false;
+    document.body.dataset.debugRespawnCandidates = "error";
+    console.warn("[sea-battle] respawn candidate debug layer unavailable", error);
+  }
+}
+
+function getDebugRespawnCandidatesEndpoint() {
+  if (location.port === "5173" || location.port === "4173") {
+    return `${location.protocol}//${location.hostname}/game/debug/respawn-candidates`;
+  }
+
+  return gameEndpoint("/game/debug/respawn-candidates");
 }
 
 async function loadGameState() {
@@ -1170,7 +1341,7 @@ function getGameStateEndpoint() {
     return `${location.protocol}//${location.hostname}/game/state`;
   }
 
-  return "/game/state";
+  return gameEndpoint("/game/state");
 }
 
 async function loadServerBuildInfo() {
@@ -1186,7 +1357,7 @@ function getServerBuildInfoEndpoint() {
     return `${location.protocol}//${location.hostname}/game/version`;
   }
 
-  return "/game/version";
+  return gameEndpoint("/game/version");
 }
 
 function updateBuildInfoPanel(clientBuild, serverBuild) {
@@ -1213,7 +1384,7 @@ function getPlayerStateEndpoint() {
     return `${location.protocol}//${location.hostname}/game/player-state`;
   }
 
-  return "/game/player-state";
+  return gameEndpoint("/game/player-state");
 }
 
 function getFireTorpedoEndpoint() {
@@ -1221,7 +1392,7 @@ function getFireTorpedoEndpoint() {
     return `${location.protocol}//${location.hostname}/game/fire-torpedo`;
   }
 
-  return "/game/fire-torpedo";
+  return gameEndpoint("/game/fire-torpedo");
 }
 
 function getGameEventsEndpoint() {
@@ -1230,13 +1401,13 @@ function getGameEventsEndpoint() {
     return `${location.protocol}//${location.hostname}/game/events/${safePlayerId}`;
   }
 
-  return `/game/events/${safePlayerId}`;
+  return gameEndpoint(`/game/events/${safePlayerId}`);
 }
 
 async function requirePlayerLogin() {
   const accountId = readStoredValue("accountId");
   if (!accountId.trim()) {
-    window.location.replace("/index.html");
+    window.location.replace(startPageUrl());
     return new Promise(() => {});
   }
 
@@ -1245,7 +1416,7 @@ async function requirePlayerLogin() {
     localStorage.removeItem("seaBattlePlayerId");
     localStorage.removeItem("seaBattlePlayerInitials");
     localStorage.removeItem("seaBattlePlayerTeamId");
-    window.location.replace("/index.html");
+    window.location.replace(startPageUrl());
     return new Promise(() => {});
   }
 
@@ -1257,7 +1428,7 @@ async function requirePlayerLogin() {
     return { playerId, initials, teamId };
   }
 
-  window.location.replace("/index.html");
+  window.location.replace(startPageUrl());
   return new Promise(() => {});
 }
 
@@ -1269,7 +1440,7 @@ async function requireRegisteredGameSession(playerId) {
   localStorage.removeItem("seaBattlePlayerId");
   localStorage.removeItem("seaBattlePlayerInitials");
   localStorage.removeItem("seaBattlePlayerTeamId");
-  window.location.replace("/index.html");
+  window.location.replace(startPageUrl());
   await new Promise(() => {});
 }
 
@@ -1278,7 +1449,7 @@ function getPlayerSessionEndpoint(playerId) {
   if (location.port === "5173" || location.port === "4173") {
     return `${location.protocol}//${location.hostname}/game/session/${safePlayerId}`;
   }
-  return `/game/session/${safePlayerId}`;
+  return gameEndpoint(`/game/session/${safePlayerId}`);
 }
 
 function getPlayerSessionByAccountEndpoint(accountId) {
@@ -1286,7 +1457,21 @@ function getPlayerSessionByAccountEndpoint(accountId) {
   if (location.port === "5173" || location.port === "4173") {
     return `${location.protocol}//${location.hostname}/game/session/account/${safeAccountId}`;
   }
-  return `/game/session/account/${safeAccountId}`;
+  return gameEndpoint(`/game/session/account/${safeAccountId}`);
+}
+
+function gameEndpoint(path) {
+  return `${serverPathPrefix()}${path}`;
+}
+
+function startPageUrl() {
+  return `${serverPathPrefix()}/start.html`;
+}
+
+function serverPathPrefix() {
+  return location.pathname === "/sea-battle" || location.pathname.startsWith("/sea-battle/")
+    ? "/sea-battle"
+    : "";
 }
 
 function readStoredValue(key) {
@@ -1348,7 +1533,8 @@ function setupResetGameControl(button) {
 
 function openHostSpecialMenu() {
   const debugLabel = debugMapEnabled ? "Debug-Karte aus" : "Debug-Karte an";
-  const choice = window.prompt(`Spezialmenue: 1 = ${debugLabel}, 2 = Spiel neu starten`, "1");
+  const markerLabel = debugMarkerMapEnabled ? "Marker-Karte aus" : "Marker-Karte an";
+  const choice = window.prompt(`Spezialmenue: 1 = ${debugLabel}, 2 = Spiel neu starten, 3 = ${markerLabel}`, "1");
   if (choice === null) return;
   const normalized = choice.trim().toLowerCase();
   if (normalized === "1" || normalized === "debug" || normalized === "karte") {
@@ -1357,23 +1543,76 @@ function openHostSpecialMenu() {
   }
   if (normalized === "2" || normalized === "reset" || normalized === "restart" || normalized === "neu") {
     requestHostGameReset();
+    return;
+  }
+  if (normalized === "3" || normalized === "marker" || normalized === "punkte") {
+    toggleDebugMarkerMap();
   }
 }
 
 function toggleDebugMap() {
   debugMapEnabled = !debugMapEnabled;
+  if (!debugMapEnabled) {
+    debugMarkerMapEnabled = false;
+  }
   bigMapEnabled = debugMapEnabled;
   document.body.dataset.debugMap = String(debugMapEnabled);
+  document.body.dataset.debugMarkerMap = String(debugMarkerMapEnabled);
   document.body.classList.toggle("big-map", bigMapEnabled);
+  document.body.classList.toggle("debug-marker-map", debugMarkerMapEnabled);
+  document.body.dataset.bigMap = String(bigMapEnabled);
+  const url = new URL(location.href);
+  if (debugMapEnabled) {
+    url.searchParams.set("debug", "1");
+    if (debugMarkerMapEnabled) {
+      url.searchParams.set("markers", "1");
+    } else {
+      url.searchParams.delete("markers");
+    }
+    url.searchParams.delete("bigMap");
+    loadDebugRespawnCandidates();
+  } else {
+    url.searchParams.delete("debug");
+    url.searchParams.delete("bigMap");
+    url.searchParams.delete("markers");
+    document.body.dataset.debugMapShips = "0";
+    document.body.dataset.debugRespawnCandidates = "0";
+  }
+  updateDebugMapMarkerPanel();
+  if (mapCanvas && boat?.root?.position) {
+    drawMapInstrument(mapCanvas, boat.root.position, blockedWaters, mapZoom, heading);
+  }
+  if (history.replaceState) {
+    history.replaceState(null, "", url);
+  }
+}
+
+function toggleDebugMarkerMap() {
+  debugMarkerMapEnabled = !debugMarkerMapEnabled;
+  debugMapEnabled = debugMarkerMapEnabled || debugMapEnabled;
+  bigMapEnabled = debugMapEnabled;
+  document.body.dataset.debugMap = String(debugMapEnabled);
+  document.body.dataset.debugMarkerMap = String(debugMarkerMapEnabled);
+  document.body.classList.toggle("big-map", bigMapEnabled);
+  document.body.classList.toggle("debug-marker-map", debugMarkerMapEnabled);
   document.body.dataset.bigMap = String(bigMapEnabled);
   const url = new URL(location.href);
   if (debugMapEnabled) {
     url.searchParams.set("debug", "1");
     url.searchParams.delete("bigMap");
+    loadDebugRespawnCandidates();
   } else {
     url.searchParams.delete("debug");
     url.searchParams.delete("bigMap");
-    document.body.dataset.debugMapShips = "0";
+  }
+  if (debugMarkerMapEnabled) {
+    url.searchParams.set("markers", "1");
+  } else {
+    url.searchParams.delete("markers");
+  }
+  updateDebugMapMarkerPanel();
+  if (mapCanvas && boat?.root?.position) {
+    drawMapInstrument(mapCanvas, boat.root.position, blockedWaters, mapZoom, heading);
   }
   if (history.replaceState) {
     history.replaceState(null, "", url);
@@ -1403,12 +1642,14 @@ async function requestHostGameReset() {
 
 function promptGameSetupId() {
   const defaultChoice = "1";
-  const choice = window.prompt("World: 1 = Dense land, 2 = Islands, 3 = Escort debug, 4 = Landmark tour", defaultChoice);
+  const choice = window.prompt("World: 1 = Dense land, 2 = Islands, 3 = Escort debug, 4 = Landmark tour, 5 = Dense land crowded, 6 = Dense land crowded reverse", defaultChoice);
   if (choice === null) return null;
   const normalized = choice.trim().toLowerCase();
   if (normalized === "2" || normalized === "islands" || normalized === "island") return "islands";
   if (normalized === "3" || normalized === "escort-debug" || normalized === "escort") return "escort-debug";
   if (normalized === "4" || normalized === "landmark-tour" || normalized === "tour") return "landmark-tour";
+  if (normalized === "5" || normalized === "fleet-clash" || normalized === "clash" || normalized === "crowded") return "dense-land-crowded";
+  if (normalized === "6" || normalized === "fleet-clash-reverse" || normalized === "clash-reverse" || normalized === "crowded-reverse") return "dense-land-crowded-reverse";
   return "dense-land";
 }
 
@@ -1416,7 +1657,7 @@ function getResetGameEndpoint() {
   if (location.protocol === "file:") {
     return "http://127.0.0.1:9090/game/reset";
   }
-  return "/game/reset";
+  return gameEndpoint("/game/reset");
 }
 
 function getTeamShips(ships, teamId) {
@@ -1669,8 +1910,6 @@ function applyServerGameSnapshot(snapshot) {
   if (!snapshot || !Array.isArray(snapshot.ships)) return;
   const snapshotClientTime = getSnapshotClientTime(snapshot);
   serverShipsById = indexShipsById(snapshot.ships);
-  serverRadarReady = false;
-  serverRadarContacts = [];
   updateFleetStatus(snapshot.ships, snapshot.destroyedShipsByTeam);
   updatePlayerList(snapshot.ships, snapshot.killsByPlayer);
 
@@ -1869,36 +2108,6 @@ function predictPlayerServerMotion(target, age) {
   };
 }
 
-function applyServerRadarSnapshot(snapshot) {
-  if (!snapshot || !Array.isArray(snapshot.contacts)) return;
-
-  serverRadarReady = true;
-  serverRadarObserverPosition = Number.isFinite(snapshot.observerX) && Number.isFinite(snapshot.observerZ)
-    ? new Vector3(snapshot.observerX, 0.28, snapshot.observerZ)
-    : null;
-  serverRadarObserverHeading = Number.isFinite(snapshot.observerHeading) ? snapshot.observerHeading : null;
-  serverRadarRange = Number.isFinite(snapshot.range) ? snapshot.range : 360;
-  serverRadarContacts = snapshot.contacts.map((contact) => {
-    const ship = serverShipsById.get(contact.id);
-    return {
-      id: `radar-${contact.id}`,
-      shipId: contact.id,
-      team: contact.teamId === playerTeamId ? "light" : "dark",
-      teamId: contact.teamId,
-      controlledBy: ship?.controlledBy ?? "bot",
-      label: createRadarContactLabel(ship ?? contact),
-      position: new Vector3(contact.x, 0.28, contact.z),
-      heading: contact.heading,
-      distance: contact.distance,
-      bearing: contact.bearing,
-      serverVisible: true
-    };
-  });
-  document.body.dataset.radarStateSync = "ok";
-  document.body.dataset.radarShipId = snapshot.shipId ?? "";
-  document.body.dataset.radarContacts = String(serverRadarContacts.length);
-}
-
 function connectGameEventStream() {
   const endpoint = getGameEventsEndpoint();
   gameEventSource?.close();
@@ -1937,9 +2146,6 @@ function applyGameStreamMessage(data) {
   }
 
   applyServerGameSnapshot(message.state);
-  if (message.radar) {
-    applyServerRadarSnapshot(message.radar);
-  }
   document.body.dataset.gameEventSource = gameEventSourceReady ? "open" : "message";
   document.body.dataset.gameEventTime = String(message.state?.t ?? "");
 }
@@ -2056,7 +2262,7 @@ function updateRudderGauge(indicator, valueElement, degrees) {
 
 function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading) {
   drawMapInstrument(mapCanvas, playerPosition, landZones, mapZoom, heading);
-  drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading, serverRadarRange);
+  drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading, clientRadarRange);
 }
 
 function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, heading) {
@@ -2084,10 +2290,14 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, headi
   if (debugMapEnabled) {
     drawDebugMapHeightOverlay(ctx, visibleLandZones, bounds, width, height, scale);
   }
-  drawMapLandLabels(ctx, visibleLandZones, bounds, width, height, scale);
+  if (!debugMarkerMapEnabled) {
+    drawMapLandLabels(ctx, visibleLandZones, bounds, width, height, scale);
+  }
   drawMapLandmarkMarkers(ctx, landZones, bounds, width, height, scale);
 
   if (debugMapEnabled) {
+    drawDebugRespawnCandidates(ctx, bounds, width, height, scale);
+    drawDebugMapMarkers(ctx, bounds, width, height, scale);
     drawDebugMapShips(ctx, bounds, width, height, scale);
   }
 
@@ -2097,6 +2307,61 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, headi
   if (mapSectorValue) mapSectorValue.textContent = formatMapSector(playerPosition);
   if (mapCoordinateValue) mapCoordinateValue.textContent = `${formatWorldCoordinate(playerPosition)}\n${formatMapBounds(bounds)}\nZoom x${zoomScale}`;
   updateMapGridEdgeLabels(bounds, width, height, scale);
+}
+
+function drawDebugRespawnCandidates(ctx, bounds, width, height, scale) {
+  if (!debugRespawnCandidates.length) return;
+
+  let visibleCandidates = 0;
+  ctx.save();
+  ctx.font = bigMapEnabled ? "800 11px Inter, sans-serif" : "800 8px Inter, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  debugRespawnCandidates.forEach((position, index) => {
+    if (position.x < bounds.minX || position.x > bounds.maxX || position.z < bounds.minZ || position.z > bounds.maxZ) {
+      return;
+    }
+    const point = worldToMapPoint(position, bounds, width, height, scale);
+    const radius = bigMapEnabled ? 7 : 5;
+    ctx.fillStyle = "rgba(7, 31, 43, 0.82)";
+    ctx.strokeStyle = "rgba(171, 255, 245, 0.95)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "rgba(211, 255, 250, 0.98)";
+    ctx.fillText(String(index + 1), point.x, point.y + 0.5);
+    visibleCandidates += 1;
+  });
+  ctx.restore();
+  document.body.dataset.debugRespawnCandidatesVisible = String(visibleCandidates);
+}
+
+function drawDebugMapMarkers(ctx, bounds, width, height, scale) {
+  if (!debugMarkerMapEnabled || !debugMapMarkers.length) return;
+
+  ctx.save();
+  ctx.font = bigMapEnabled ? "900 12px Inter, sans-serif" : "900 9px Inter, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  debugMapMarkers.forEach((marker, index) => {
+    if (marker.x < bounds.minX || marker.x > bounds.maxX || marker.z < bounds.minZ || marker.z > bounds.maxZ) {
+      return;
+    }
+    const point = worldToMapPoint(marker, bounds, width, height, scale);
+    const radius = bigMapEnabled ? 8 : 5.5;
+    ctx.fillStyle = "rgba(255, 44, 44, 0.88)";
+    ctx.strokeStyle = "rgba(255, 245, 245, 0.95)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
+    ctx.fillText(String(index + 1), point.x, point.y + 0.5);
+  });
+  ctx.restore();
 }
 
 function drawDebugMapShips(ctx, bounds, width, height, scale) {
@@ -2538,7 +2803,7 @@ function drawMapLandmarkMarkers(ctx, zones, bounds, width, height, scale) {
   lighthouseLands.forEach((zone, index) => {
     const position = getLighthousePosition(zone, index);
     drawMapLightMarker(ctx, position, bounds, width, height, scale, "lighthouse");
-    if (debugMapEnabled) {
+    if (debugMapEnabled && !debugMarkerMapEnabled) {
       drawMapLighthouseDebugLabel(ctx, zone, position, bounds, width, height, scale);
     }
   });
@@ -3291,10 +3556,6 @@ function updateEnemySinking(motion, dt, time) {
 }
 
 function getRadarContacts(enemyMotions) {
-  if (serverRadarReady) {
-    return serverRadarContacts;
-  }
-
   return getSnapshotRadarContacts();
 }
 
@@ -4642,23 +4903,23 @@ function createMaterials(scene) {
   playerLightFunnel.backFaceCulling = false;
 
   const darkHull = new StandardMaterial("dark_party_hull_material", scene);
-  darkHull.diffuseColor = new Color3(0.12, 0.14, 0.14);
-  darkHull.specularColor = new Color3(0.05, 0.06, 0.06);
+  darkHull.diffuseColor = new Color3(0.1, 0.13, 0.15);
+  darkHull.specularColor = new Color3(0.045, 0.055, 0.065);
   darkHull.backFaceCulling = false;
 
   const darkDeck = new StandardMaterial("dark_party_deck_material", scene);
-  darkDeck.diffuseColor = new Color3(0.1, 0.12, 0.12);
-  darkDeck.specularColor = new Color3(0.04, 0.05, 0.05);
+  darkDeck.diffuseColor = new Color3(0.085, 0.11, 0.13);
+  darkDeck.specularColor = new Color3(0.035, 0.045, 0.055);
   darkDeck.backFaceCulling = false;
 
   const darkCabin = new StandardMaterial("dark_party_cabin_material", scene);
-  darkCabin.diffuseColor = new Color3(0.17, 0.18, 0.18);
-  darkCabin.specularColor = new Color3(0.08, 0.09, 0.09);
+  darkCabin.diffuseColor = new Color3(0.135, 0.165, 0.185);
+  darkCabin.specularColor = new Color3(0.065, 0.08, 0.09);
   darkCabin.backFaceCulling = false;
 
   const darkFunnel = new StandardMaterial("dark_party_funnel_material", scene);
-  darkFunnel.diffuseColor = new Color3(0.1, 0.11, 0.11);
-  darkFunnel.specularColor = new Color3(0.04, 0.04, 0.04);
+  darkFunnel.diffuseColor = new Color3(0.08, 0.1, 0.115);
+  darkFunnel.specularColor = new Color3(0.035, 0.04, 0.045);
   darkFunnel.backFaceCulling = false;
 
   const greenHull = new StandardMaterial("green_party_hull_material", scene);
