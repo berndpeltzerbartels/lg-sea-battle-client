@@ -1437,10 +1437,7 @@ async function requireRegisteredGameSession(playerId) {
   if (response.ok) {
     return;
   }
-  localStorage.removeItem("seaBattlePlayerId");
-  localStorage.removeItem("seaBattlePlayerInitials");
-  localStorage.removeItem("seaBattlePlayerTeamId");
-  window.location.replace(startPageUrl());
+  expireActiveLogin(`session-check-${response.status}`);
   await new Promise(() => {});
 }
 
@@ -1472,6 +1469,14 @@ function serverPathPrefix() {
   return location.pathname === "/sea-battle" || location.pathname.startsWith("/sea-battle/")
     ? "/sea-battle"
     : "";
+}
+
+function expireActiveLogin(reason) {
+  document.body.dataset.sessionExpired = reason;
+  localStorage.removeItem("seaBattlePlayerId");
+  localStorage.removeItem("seaBattlePlayerInitials");
+  localStorage.removeItem("seaBattlePlayerTeamId");
+  window.location.replace(startPageUrl());
 }
 
 function readStoredValue(key) {
@@ -1862,6 +1867,10 @@ async function sendPlayerState() {
       })
     });
     if (!response.ok) {
+      if (response.status === 403) {
+        expireActiveLogin("player-state-403");
+        return;
+      }
       throw new Error(`Player state request failed with ${response.status}`);
     }
     await response.json();
@@ -1893,6 +1902,10 @@ async function requestPlayerTorpedoFire() {
       })
     });
     if (!response.ok) {
+      if (response.status === 403) {
+        expireActiveLogin("fire-torpedo-403");
+        return;
+      }
       throw new Error(`Fire torpedo request failed with ${response.status}`);
     }
     applyServerGameSnapshot(await response.json());
