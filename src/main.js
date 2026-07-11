@@ -3922,6 +3922,7 @@ function syncServerTorpedoes(torpedoes, impacts = [], snapshotClientTime = time)
     disposeServerTorpedoVisual(visual);
     torpedoSystem.serverVisuals.delete(id);
   });
+  document.body.dataset.serverTorpedoVisuals = String(torpedoSystem.serverVisuals.size);
 }
 
 function renderServerTorpedoImpacts(impacts) {
@@ -3952,7 +3953,7 @@ function renderServerTorpedoImpacts(impacts) {
 function createServerTorpedoVisual(system, snapshot, snapshotClientTime = time) {
   const root = new TransformNode(`server_torpedo_${snapshot.id}`, system.scene);
   root.parent = system.root;
-  const launch = getServerTorpedoLaunch(snapshot);
+  const launch = getServerTorpedoLaunch(system, snapshot);
   root.position.copyFrom(launch.start);
   root.rotationQuaternion = Quaternion.FromEulerAngles(0, launch.heading, 0);
 
@@ -3999,9 +4000,47 @@ function createServerTorpedoVisual(system, snapshot, snapshotClientTime = time) 
   return visual;
 }
 
-function getServerTorpedoLaunch(snapshot) {
+function getServerTorpedoLaunch(system, snapshot) {
   const heading = Number.isFinite(snapshot.heading) ? snapshot.heading : 0;
   const serverPosition = new Vector3(snapshot.x, 0.05, snapshot.z);
+  const isOwnTorpedo = snapshot.shipId && snapshot.shipId === playerServerShipId;
+
+  if (isOwnTorpedo && boat?.root?.position && distance2D(boat.root.position, serverPosition) < 35) {
+    const tubeSide = system.nextTube === 0 ? -1 : 1;
+    system.nextTube = 1 - system.nextTube;
+
+    const launchHeading = Number.isFinite(heading) ? heading : 0;
+    const forward = getForwardVector(launchHeading);
+    const right = getRightVector(launchHeading);
+    const tuning = torpedoLaunchDefaults;
+    const tubeX = tubeSide * tuning.tubeX;
+    const muzzleEffectX = tubeSide * 0.32;
+    const tubeStartZ = tuning.startZ;
+    const muzzleZ = 3.05;
+    const start = boat.root.position
+      .add(right.scale(tubeX))
+      .add(forward.scale(tubeStartZ))
+      .add(new Vector3(0, tuning.startY, 0));
+    const puffPosition = boat.root.position
+      .add(right.scale(muzzleEffectX))
+      .add(forward.scale(muzzleZ + 0.4))
+      .add(new Vector3(0, -0.04, 0));
+    const muzzlePosition = boat.root.position
+      .add(right.scale(muzzleEffectX))
+      .add(forward.scale(tubeStartZ))
+      .add(new Vector3(0, tuning.startY, 0));
+
+    document.body.dataset.ownServerTorpedoLaunch = "local";
+    return {
+      heading: launchHeading,
+      start,
+      puffPosition,
+      muzzlePosition,
+      tubeSide,
+      blendUntil: time + 0.35,
+      showMuzzleEffect: true
+    };
+  }
 
   return {
     heading,
