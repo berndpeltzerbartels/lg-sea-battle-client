@@ -1001,7 +1001,7 @@ function flushPerformanceTelemetry(now) {
     performanceTelemetry.lastFlushAt = now;
     return;
   }
-  if (now - performanceTelemetry.lastFlushAt < 4) return;
+  if (now - performanceTelemetry.lastFlushAt < 2) return;
 
   const elapsed = Math.max(0.001, now - performanceTelemetry.lastFlushAt);
   const reportStartedWallTime = performanceTelemetry.startedWallTime;
@@ -1038,9 +1038,27 @@ function flushPerformanceTelemetry(now) {
     slowFrames80: performanceTelemetry.slowFrames80,
     clampedFrames: performanceTelemetry.clampedFrames,
     measuredSpeed: Number(measuredSpeedSample.speed.toFixed(2)),
+    x: Number(boat.root.position.x.toFixed(2)),
+    z: Number(boat.root.position.z.toFixed(2)),
+    heading: Number(heading.toFixed(4)),
     selectedSpeed: Number(speed.toFixed(2)),
+    speed: Number(speed.toFixed(2)),
     turnVelocity: Number(turnVelocity.toFixed(4)),
+    engineOrder,
     rudderDegrees: Number(rudderDegrees.toFixed(1)),
+    playerDamageState,
+    playerTorpedoesRemaining: Number.isFinite(playerTorpedoesRemaining) ? playerTorpedoesRemaining : -1,
+    localTorpedoCount: torpedoSystem.active.length,
+    serverTorpedoes: readDatasetInt("serverTorpedoes"),
+    serverTorpedoVisuals: readDatasetInt("serverTorpedoVisuals"),
+    fireTorpedoSync: document.body.dataset.fireTorpedoSync ?? "",
+    fireTorpedoSyncError: document.body.dataset.fireTorpedoSyncError ?? "",
+    playerStateSync: document.body.dataset.playerStateSync ?? "",
+    playerStateSyncError: document.body.dataset.playerStateSyncError ?? "",
+    gameEventSource: document.body.dataset.gameEventSource ?? "",
+    lastKey: document.body.dataset.lastKey ?? "",
+    ownServerTorpedoLaunch: document.body.dataset.ownServerTorpedoLaunch ?? "",
+    sessionExpired: document.body.dataset.sessionExpired ?? "",
     meshCount: scene.meshes.length,
     visibleMeshCount: scene.meshes.filter((mesh) => mesh.isEnabled() && mesh.isVisible).length,
     enemyCount: enemyMotions.filter((motion) => motion.root.isEnabled()).length,
@@ -1089,6 +1107,11 @@ function sendPerformanceReport(report) {
 
 function averageMs(totalMs, count) {
   return count > 0 ? Number((totalMs / count).toFixed(2)) : 0;
+}
+
+function readDatasetInt(name) {
+  const value = Number.parseInt(document.body.dataset[name] ?? "", 10);
+  return Number.isFinite(value) ? value : -1;
 }
 
 function createClientCapabilitySnapshot(engineInstance, renderCanvas) {
