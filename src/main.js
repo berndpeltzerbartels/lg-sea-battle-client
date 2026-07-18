@@ -105,6 +105,8 @@ const enemyTargetingRange = 945;
 const engineHoldInitialDelaySeconds = 0.22;
 const engineHoldRepeatSeconds = 0.1;
 const mouseWheelEngineStep = 100;
+const scoutPlaneSetupId = "scout-plane";
+const scoutPlaneCruiseAltitude = 34;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = true;
@@ -134,6 +136,7 @@ document.body.dataset.gameStateSource = "server";
 document.body.dataset.serverGameState = gameState.state;
 document.body.dataset.serverShips = String(gameState.ships.length);
 document.body.dataset.serverTorpedoes = String(gameState.torpedoes.length);
+const scoutPlaneMode = gameState.sessionId === scoutPlaneSetupId || urlParams.get("vehicle") === "scout-plane";
 const playerId = playerLogin.playerId;
 const playerTeamId = getRequestedPlayerTeamId(gameState.ships, playerLogin.teamId);
 const playerShips = getTeamShips(gameState.ships, playerTeamId);
@@ -149,6 +152,7 @@ let playerTorpedoesRemaining = Number.isFinite(initialPlayerSpawn.torpedoesRemai
 document.body.dataset.playerTeam = playerTeamId;
 document.body.dataset.playerId = playerId;
 document.body.dataset.playerInitials = playerInitials;
+document.body.dataset.playerVehicle = scoutPlaneMode ? "scout-plane" : "torpedo-boat";
 document.body.dataset.playerShipId = playerServerShipId ?? "pending";
 document.body.dataset.serverOwnShips = String(playerShips.length);
 document.body.dataset.serverEnemyShips = String(enemyShips.length);
@@ -203,8 +207,13 @@ if (renderQuality.visualEffects !== "low") {
   navigationLights.push(...createNavigationLights(worldLandmasses, scene, materials, world, renderQuality.visualEffects));
 }
 
-const boat = createPlayerBow(scene, materials, "player_bow", playerTeamId);
+const boat = scoutPlaneMode
+  ? createScoutPlane(scene, materials, "player_scout_plane", playerTeamId, true)
+  : createPlayerBow(scene, materials, "player_bow", playerTeamId);
 boat.root.position.copyFrom(initialPlayerSpawn.position);
+if (scoutPlaneMode) {
+  boat.root.position.y = scoutPlaneCruiseAltitude;
+}
 
 // Until SSE arrives, backend ships seed the visual fleet and local motion keeps them inspectable.
 const enemyMotions = createEnemyFleet(scene, materials, getOtherServerShips(gameState.ships, playerServerShipId));
@@ -507,17 +516,19 @@ scene.onBeforeRenderObservable.add(() => {
   let nextWaterSafety = waterSafety;
 
   if (playerActive) {
-    const maxForwardSpeed = 12.4;
+    const maxForwardSpeed = scoutPlaneMode ? 18.0 : 12.4;
     const engineTargetSpeed = engineOrders[engineOrder].speed;
-    const targetSpeed = engineTargetSpeed > 0 ? Math.min(engineTargetSpeed, maxForwardSpeed) : engineTargetSpeed;
-    const response = Math.abs(targetSpeed) > Math.abs(speed) ? 0.45 : 0.75;
+    const targetSpeed = engineTargetSpeed > 0
+      ? Math.min(engineTargetSpeed * (scoutPlaneMode ? 1.2 : 1), maxForwardSpeed)
+      : (scoutPlaneMode ? Math.max(engineTargetSpeed, -1.2) : engineTargetSpeed);
+    const response = scoutPlaneMode ? 0.32 : (Math.abs(targetSpeed) > Math.abs(speed) ? 0.45 : 0.75);
     speed += (targetSpeed - speed) * Math.min(1, dt * response);
 
-    const turnStrength = speed >= 0 ? 0.24 : -0.16;
-    const rudderGrip = clamp(Math.abs(speed) / 4.2, 0, 1);
+    const turnStrength = scoutPlaneMode ? 0.18 : (speed >= 0 ? 0.24 : -0.16);
+    const rudderGrip = scoutPlaneMode ? clamp(Math.abs(speed) / 8.5, 0.18, 1) : clamp(Math.abs(speed) / 4.2, 0, 1);
     const steer = rudderDegrees / maxRudderDegrees;
     const targetTurnVelocity = steer * turnStrength * rudderGrip;
-    turnVelocity += (targetTurnVelocity - turnVelocity) * Math.min(1, dt * 2.0);
+    turnVelocity += (targetTurnVelocity - turnVelocity) * Math.min(1, dt * (scoutPlaneMode ? 1.35 : 2.0));
     heading += turnVelocity * dt;
     forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
 
@@ -530,7 +541,7 @@ scene.onBeforeRenderObservable.add(() => {
     const movementSafety = nextWaterSafety.isBlocked
       ? getShipMovementWaterSafety(boat.root.position, heading, speed, blockedWaters)
       : nextWaterSafety;
-    if (movementSafety.isBlocked) {
+    if (!scoutPlaneMode && movementSafety.isBlocked) {
       boat.root.position.copyFrom(previousPosition);
 
       // Grounding stops the ship, but a tiny escape nudge prevents numeric edge-locking.
@@ -552,12 +563,17 @@ scene.onBeforeRenderObservable.add(() => {
 
   const bob = Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035;
   if (playerActive) {
-    boat.root.position.y = torpedoBoatWaterlineY + bob;
+    boat.root.position.y = scoutPlaneMode
+      ? scoutPlaneCruiseAltitude + Math.sin(time * 1.1) * 0.35
+      : torpedoBoatWaterlineY + bob;
     boat.root.rotationQuaternion = Quaternion.FromEulerAngles(
-      Math.sin(time * 2.6) * 0.025,
+      scoutPlaneMode ? clamp(speed / 18, 0, 1) * 0.035 : Math.sin(time * 2.6) * 0.025,
       heading,
-      -turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018
+      scoutPlaneMode ? -turnVelocity * 2.8 : -turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018
     );
+    if (scoutPlaneMode) {
+      updateScoutPlaneVisual(boat, speed, time);
+    }
   } else {
     updatePlayerSinking(boat, time);
   }
@@ -597,13 +613,15 @@ scene.onBeforeRenderObservable.add(() => {
     turnVelocity *= 0.25;
   }
 
-  // Fixed bridge camera: it follows the ship immediately so acceleration never reveals the rear model.
-  const cameraDistance = 0.65;
-  const cameraHeight = 1.22;
+  // Fixed bridge camera for ships; high chase camera for the scout-plane perspective test.
+  const cameraDistance = scoutPlaneMode ? 12.0 : 0.65;
+  const cameraHeight = scoutPlaneMode ? 58.0 : 1.22;
   const desiredCameraPosition = boat.root.position
     .subtract(forward.scale(cameraDistance))
     .add(new Vector3(0, cameraHeight, 0));
-  const desiredTarget = boat.root.position.add(forward.scale(24.0)).add(new Vector3(0, 0.78, 0));
+  const desiredTarget = boat.root.position
+    .add(forward.scale(scoutPlaneMode ? 22.0 : 24.0))
+    .add(new Vector3(0, scoutPlaneMode ? -scoutPlaneCruiseAltitude : 0.78, 0));
   const shakeOffset = getRamShakeOffset(heading, ramShake, time);
   ramShake = Math.max(0, ramShake - dt * 2.6);
 
@@ -632,8 +650,8 @@ scene.onBeforeRenderObservable.add(() => {
   engineValue.textContent = engineOrders[engineOrder].label;
   updateTelegraphSteps(telegraphSteps, engineOrder);
   updateMeasuredSpeed(boat.root.position, time);
-  depthValue.textContent = nextWaterSafety.isBlocked ? "Ground" : "Sea";
-  depthGauge?.style.setProperty("--depth-ratio", "1");
+  depthValue.textContent = scoutPlaneMode ? "Air" : (nextWaterSafety.isBlocked ? "Ground" : "Sea");
+  depthGauge?.style.setProperty("--depth-ratio", scoutPlaneMode ? "0" : "1");
   document.body.dataset.measuredSpeed = measuredSpeedSample.speed.toFixed(2);
   compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
   if (compassHeading) compassHeading.textContent = `HDG ${formatHeadingDegrees(heading)}`;
@@ -1670,7 +1688,7 @@ async function requestHostGameReset() {
 
 function promptGameSetupId() {
   const defaultChoice = "1";
-  const choice = window.prompt("World: 1 = Dense land, 2 = Islands, 3 = Escort debug, 4 = Landmark tour, 5 = Dense land crowded, 6 = Dense land crowded reverse", defaultChoice);
+  const choice = window.prompt("World: 1 = Dense land, 2 = Islands, 3 = Escort debug, 4 = Landmark tour, 5 = Dense land crowded, 6 = Dense land crowded reverse, 7 = Scout plane", defaultChoice);
   if (choice === null) return null;
   const normalized = choice.trim().toLowerCase();
   if (normalized === "2" || normalized === "islands" || normalized === "island") return "islands";
@@ -1678,6 +1696,7 @@ function promptGameSetupId() {
   if (normalized === "4" || normalized === "landmark-tour" || normalized === "tour") return "landmark-tour";
   if (normalized === "5" || normalized === "fleet-clash" || normalized === "clash" || normalized === "crowded") return "dense-land-crowded";
   if (normalized === "6" || normalized === "fleet-clash-reverse" || normalized === "clash-reverse" || normalized === "crowded-reverse") return "dense-land-crowded-reverse";
+  if (normalized === "7" || normalized === "scout-plane" || normalized === "plane" || normalized === "flugzeug" || normalized === "aufklaerer") return scoutPlaneSetupId;
   return "dense-land";
 }
 
@@ -5386,6 +5405,101 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
   hatch.material = teamMaterials.cabin;
 
   return { root };
+}
+
+function createScoutPlane(scene, materials, name = "scout_plane", teamId = "light", isPlayer = false) {
+  const root = new TransformNode(name, scene);
+  const teamMaterials = getPlayerShipTeamMaterials(materials, teamId);
+  const bodyMaterial = createScoutPlaneMaterial(scene, `${name}_body_material`, teamMaterials.cabin.diffuseColor, 0.92);
+  const wingMaterial = createScoutPlaneMaterial(scene, `${name}_wing_material`, teamMaterials.hull.diffuseColor, 0.9);
+  const glassMaterial = createScoutPlaneMaterial(scene, `${name}_glass_material`, new Color3(0.26, 0.58, 0.72), 0.72);
+  const shadowMaterial = createScoutPlaneMaterial(scene, `${name}_shadow_material`, new Color3(0.02, 0.025, 0.025), 0.23);
+  shadowMaterial.specularColor = Color3.Black();
+
+  const fuselage = MeshBuilder.CreateBox(`${name}_fuselage`, { width: 0.78, height: 0.38, depth: 5.8 }, scene);
+  fuselage.parent = root;
+  fuselage.material = bodyMaterial;
+
+  const nose = MeshBuilder.CreateCylinder(`${name}_nose`, {
+    diameterTop: 0.1,
+    diameterBottom: 0.72,
+    height: 0.82,
+    tessellation: 12
+  }, scene);
+  nose.parent = root;
+  nose.position.z = 3.28;
+  nose.rotation.x = Math.PI / 2;
+  nose.material = bodyMaterial;
+
+  const cockpit = MeshBuilder.CreateBox(`${name}_cockpit`, { width: 0.48, height: 0.24, depth: 0.82 }, scene);
+  cockpit.parent = root;
+  cockpit.position.y = 0.28;
+  cockpit.position.z = 1.0;
+  cockpit.material = glassMaterial;
+
+  const wing = MeshBuilder.CreateBox(`${name}_wing`, { width: 7.9, height: 0.12, depth: 1.05 }, scene);
+  wing.parent = root;
+  wing.position.z = 0.18;
+  wing.material = wingMaterial;
+
+  const tailWing = MeshBuilder.CreateBox(`${name}_tail_wing`, { width: 2.7, height: 0.1, depth: 0.55 }, scene);
+  tailWing.parent = root;
+  tailWing.position.z = -2.45;
+  tailWing.position.y = 0.04;
+  tailWing.material = wingMaterial;
+
+  const fin = MeshBuilder.CreateBox(`${name}_fin`, { width: 0.12, height: 0.8, depth: 0.56 }, scene);
+  fin.parent = root;
+  fin.position.y = 0.42;
+  fin.position.z = -2.72;
+  fin.material = wingMaterial;
+
+  const propellerRoot = new TransformNode(`${name}_propeller_root`, scene);
+  propellerRoot.parent = root;
+  propellerRoot.position.z = 3.78;
+  const propellerA = MeshBuilder.CreateBox(`${name}_propeller_a`, { width: 0.16, height: 1.72, depth: 0.045 }, scene);
+  propellerA.parent = propellerRoot;
+  propellerA.material = materials.funnel;
+  const propellerB = MeshBuilder.CreateBox(`${name}_propeller_b`, { width: 1.72, height: 0.16, depth: 0.045 }, scene);
+  propellerB.parent = propellerRoot;
+  propellerB.material = materials.funnel;
+
+  const shadow = MeshBuilder.CreateBox(`${name}_shadow`, { width: 8.8, height: 0.018, depth: 5.8 }, scene);
+  shadow.material = shadowMaterial;
+  shadow.position.y = -scoutPlaneCruiseAltitude + 0.045;
+  shadow.scaling.z = 0.75;
+  shadow.parent = root;
+
+  if (isPlayer) {
+    const marker = MeshBuilder.CreateBox(`${name}_player_marker`, { width: 0.35, height: 0.08, depth: 0.35 }, scene);
+    marker.parent = root;
+    marker.position.y = 0.44;
+    marker.position.z = 0.1;
+    marker.material = teamMaterials.deck;
+  }
+
+  return { root, propellerRoot, shadow };
+}
+
+function createScoutPlaneMaterial(scene, name, color, alpha) {
+  const material = new StandardMaterial(name, scene);
+  material.diffuseColor = color;
+  material.specularColor = new Color3(0.08, 0.09, 0.09);
+  material.alpha = alpha;
+  material.backFaceCulling = false;
+  return material;
+}
+
+function updateScoutPlaneVisual(plane, speed, time) {
+  if (plane.propellerRoot) {
+    plane.propellerRoot.rotation.z += Math.max(0.6, Math.abs(speed) * 0.9);
+  }
+  if (plane.shadow) {
+    const altitudeRatio = clamp((plane.root.position.y - 2) / scoutPlaneCruiseAltitude, 0.25, 1.4);
+    plane.shadow.scaling.x = 1 + altitudeRatio * 0.25;
+    plane.shadow.scaling.z = 0.75 + altitudeRatio * 0.18;
+    plane.shadow.visibility = clamp(0.34 - altitudeRatio * 0.08 + Math.sin(time * 0.9) * 0.02, 0.16, 0.32);
+  }
 }
 
 function createRailSegment(name, scene, material, parent, x1, z1, x2, z2, y, height = 0.12) {
