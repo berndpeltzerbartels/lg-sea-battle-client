@@ -106,7 +106,7 @@ const engineHoldInitialDelaySeconds = 0.22;
 const engineHoldRepeatSeconds = 0.1;
 const mouseWheelEngineStep = 100;
 const scoutPlaneSetupId = "scout-plane";
-const scoutPlaneCruiseAltitude = 34;
+const scoutPlaneCruiseAltitude = 16;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = true;
@@ -137,6 +137,10 @@ document.body.dataset.serverGameState = gameState.state;
 document.body.dataset.serverShips = String(gameState.ships.length);
 document.body.dataset.serverTorpedoes = String(gameState.torpedoes.length);
 const scoutPlaneMode = gameState.sessionId === scoutPlaneSetupId || urlParams.get("vehicle") === "scout-plane";
+if (scoutPlaneMode) {
+  scene.fogStart = 180;
+  scene.fogEnd = 1800;
+}
 const playerId = playerLogin.playerId;
 const playerTeamId = getRequestedPlayerTeamId(gameState.ships, playerLogin.teamId);
 const playerShips = getTeamShips(gameState.ships, playerTeamId);
@@ -222,7 +226,7 @@ document.body.dataset.meshCount = String(scene.meshes.length);
 const camera = new FreeCamera("follow_camera", new Vector3(0, 7, -13), scene);
 camera.minZ = 0.2;
 camera.maxZ = 4200;
-camera.fov = 0.78;
+camera.fov = scoutPlaneMode ? 1.02 : 0.78;
 scene.activeCamera = camera;
 
 window.addEventListener("keydown", (event) => {
@@ -613,15 +617,15 @@ scene.onBeforeRenderObservable.add(() => {
     turnVelocity *= 0.25;
   }
 
-  // Fixed bridge camera for ships; high chase camera for the scout-plane perspective test.
-  const cameraDistance = scoutPlaneMode ? 12.0 : 0.65;
-  const cameraHeight = scoutPlaneMode ? 58.0 : 1.22;
+  // Fixed bridge camera for ships; oblique chase camera for the scout-plane perspective test.
+  const cameraDistance = scoutPlaneMode ? 24.0 : 0.65;
+  const cameraHeight = scoutPlaneMode ? 9.5 : 1.22;
   const desiredCameraPosition = boat.root.position
     .subtract(forward.scale(cameraDistance))
     .add(new Vector3(0, cameraHeight, 0));
   const desiredTarget = boat.root.position
-    .add(forward.scale(scoutPlaneMode ? 22.0 : 24.0))
-    .add(new Vector3(0, scoutPlaneMode ? -scoutPlaneCruiseAltitude : 0.78, 0));
+    .add(forward.scale(scoutPlaneMode ? 90.0 : 24.0))
+    .add(new Vector3(0, scoutPlaneMode ? -8.0 : 0.78, 0));
   const shakeOffset = getRamShakeOffset(heading, ramShake, time);
   ramShake = Math.max(0, ramShake - dt * 2.6);
 
@@ -629,7 +633,9 @@ scene.onBeforeRenderObservable.add(() => {
   cameraTarget.copyFrom(desiredTarget);
   camera.position.copyFrom(cameraPosition);
   camera.setTarget(desiredTarget);
-  camera.rotation.x = -Math.abs(camera.rotation.x);
+  if (!scoutPlaneMode) {
+    camera.rotation.x = -Math.abs(camera.rotation.x);
+  }
   document.body.dataset.camera = `${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)}`;
   document.body.dataset.frameMs = (rawFrameSeconds * 1000).toFixed(1);
   document.body.dataset.simulationMs = (dt * 1000).toFixed(1);
