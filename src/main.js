@@ -124,7 +124,7 @@ const flakMinPitch = -0.12;
 const flakMaxPitch = 0.92;
 const flakPitchStepRadians = 0.05;
 const flakFireCooldownSeconds = 0.18;
-const flakProjectileSpeed = 145;
+const flakProjectileSpeed = 115;
 const flakProjectileGravity = 18;
 const flakProjectileLifetime = 2.2;
 const flakDemoFireIntervalSeconds = 0.25;
@@ -5881,23 +5881,23 @@ function createMaterials(scene) {
   explosionCore.disableLighting = true;
 
   const flakTracer = new StandardMaterial("flak_tracer_material", scene);
-  flakTracer.diffuseColor = new Color3(1.0, 0.74, 0.34);
-  flakTracer.emissiveColor = new Color3(1.2, 0.72, 0.28);
-  flakTracer.specularColor = new Color3(1.0, 0.86, 0.54);
+  flakTracer.diffuseColor = new Color3(1.0, 0.82, 0.62);
+  flakTracer.emissiveColor = new Color3(1.08, 0.58, 0.34);
+  flakTracer.specularColor = new Color3(1.0, 0.86, 0.72);
   flakTracer.disableLighting = true;
 
   const flakTracerTrail = new StandardMaterial("flak_tracer_trail_material", scene);
-  flakTracerTrail.diffuseColor = new Color3(1.0, 0.58, 0.18);
-  flakTracerTrail.emissiveColor = new Color3(0.9, 0.34, 0.08);
+  flakTracerTrail.diffuseColor = new Color3(1.0, 0.48, 0.24);
+  flakTracerTrail.emissiveColor = new Color3(0.82, 0.24, 0.08);
   flakTracerTrail.specularColor = Color3.Black();
   flakTracerTrail.alpha = 0.58;
   flakTracerTrail.disableLighting = true;
 
   const flakFlash = new StandardMaterial("flak_flash_material", scene);
-  flakFlash.diffuseColor = new Color3(1.0, 0.86, 0.54);
-  flakFlash.emissiveColor = new Color3(1.25, 0.82, 0.36);
-  flakFlash.specularColor = new Color3(1.0, 0.92, 0.7);
-  flakFlash.alpha = 0.82;
+  flakFlash.diffuseColor = new Color3(1.0, 0.76, 0.52);
+  flakFlash.emissiveColor = new Color3(1.08, 0.48, 0.22);
+  flakFlash.specularColor = new Color3(1.0, 0.84, 0.68);
+  flakFlash.alpha = 0.68;
   flakFlash.disableLighting = true;
 
   const beaconGlow = new StandardMaterial("beacon_glow_material", scene);
@@ -6254,8 +6254,6 @@ function createScoutPlane(scene, materials, name = "scout_plane", teamId = "ligh
   const bodyMaterial = createScoutPlaneMaterial(scene, `${name}_body_material`, teamMaterials.cabin.diffuseColor, 0.92);
   const wingMaterial = createScoutPlaneMaterial(scene, `${name}_wing_material`, teamMaterials.hull.diffuseColor, 0.9);
   const glassMaterial = createScoutPlaneMaterial(scene, `${name}_glass_material`, new Color3(0.26, 0.58, 0.72), 0.72);
-  const shadowMaterial = createScoutPlaneMaterial(scene, `${name}_shadow_material`, new Color3(0.02, 0.025, 0.025), 0.23);
-  shadowMaterial.specularColor = Color3.Black();
 
   const fuselage = MeshBuilder.CreateBox(`${name}_fuselage`, { width: 0.78, height: 0.38, depth: 5.8 }, scene);
   fuselage.parent = root;
@@ -6305,12 +6303,6 @@ function createScoutPlane(scene, materials, name = "scout_plane", teamId = "ligh
   propellerB.parent = propellerRoot;
   propellerB.material = materials.funnel;
 
-  const shadow = MeshBuilder.CreateBox(`${name}_shadow`, { width: 8.8, height: 0.018, depth: 5.8 }, scene);
-  shadow.material = shadowMaterial;
-  shadow.position.y = -scoutPlaneCruiseAltitude + 0.045;
-  shadow.scaling.z = 0.75;
-  shadow.parent = root;
-
   if (isPlayer) {
     const marker = MeshBuilder.CreateBox(`${name}_player_marker`, { width: 0.35, height: 0.08, depth: 0.35 }, scene);
     marker.parent = root;
@@ -6319,7 +6311,7 @@ function createScoutPlane(scene, materials, name = "scout_plane", teamId = "ligh
     marker.material = teamMaterials.deck;
   }
 
-  return { root, propellerRoot, shadow };
+  return { root, propellerRoot };
 }
 
 function createScoutPlaneMaterial(scene, name, color, alpha) {
@@ -6334,12 +6326,6 @@ function createScoutPlaneMaterial(scene, name, color, alpha) {
 function updateScoutPlaneVisual(plane, speed, time) {
   if (plane.propellerRoot) {
     plane.propellerRoot.rotation.z += Math.max(0.6, Math.abs(speed) * 0.9);
-  }
-  if (plane.shadow) {
-    const altitudeRatio = clamp((plane.root.position.y - 2) / scoutPlaneCruiseAltitude, 0.25, 1.4);
-    plane.shadow.scaling.x = 1 + altitudeRatio * 0.25;
-    plane.shadow.scaling.z = 0.75 + altitudeRatio * 0.18;
-    plane.shadow.visibility = clamp(0.34 - altitudeRatio * 0.08 + Math.sin(time * 0.9) * 0.02, 0.16, 0.32);
   }
 }
 
