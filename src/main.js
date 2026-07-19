@@ -6240,8 +6240,8 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   sight.material = metalMaterial;
 
   const sightSpokes = [
-    { width: 0.09, height: 0.002 },
-    { width: 0.002, height: 0.09 }
+    { width: 0.13, height: 0.002 },
+    { width: 0.002, height: 0.13 }
   ];
   sightSpokes.forEach((spoke, index) => {
     const mesh = MeshBuilder.CreateBox(`${name}_flak_ring_sight_spoke_${index}`, {
@@ -6254,6 +6254,16 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
     mesh.position.z = sightZ;
     mesh.material = metalMaterial;
   });
+
+  const sightBracket = MeshBuilder.CreateBox(`${name}_flak_ring_sight_bracket`, {
+    width: 0.014 * scale,
+    height: 0.065 * scale,
+    depth: 0.012 * scale
+  }, scene);
+  sightBracket.parent = elevationRoot;
+  sightBracket.position.y = 0.043 * scale;
+  sightBracket.position.z = sightZ;
+  sightBracket.material = metalMaterial;
 
   return { mount, elevationRoot };
 }
