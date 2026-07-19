@@ -127,7 +127,7 @@ const playerFlakElevationY = 0.91 + 0.44 * playerSternFlakScale + 0.08 * playerS
 const playerFlakMountForwardOffset = playerSternFlakZ - 0.05 * playerSternFlakScale;
 const playerFlakElevationForwardOffset = 0.28 * playerSternFlakScale;
 const playerFlakSightEyeOffset = 0.04;
-const playerFlakSightYOffset = 0.16 * playerSternFlakScale;
+const playerFlakSightYOffset = 0.08 * playerSternFlakScale;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = true;
@@ -6138,20 +6138,21 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
 
   for (let side = -1; side <= 1; side += 2) {
     const shield = MeshBuilder.CreateBox(`${name}_flak_shield_${side}`, {
-      width: (isPlayer ? 0.08 : 0.13) * scale,
-      height: (isPlayer ? 0.11 : 0.18) * scale,
+      width: (isPlayer ? 0.11 : 0.13) * scale,
+      height: (isPlayer ? 0.14 : 0.18) * scale,
       depth: 0.035 * scale
     }, scene);
     shield.parent = mount;
-    shield.position.x = side * (isPlayer ? 0.11 : 0.15) * scale;
-    shield.position.z = (isPlayer ? 0.1 : 0.16) * scale;
-    shield.position.y = (isPlayer ? -0.09 : -0.05) * scale;
+    shield.position.x = side * (isPlayer ? 0.2 : 0.15) * scale;
+    shield.position.z = (isPlayer ? 0.03 : 0.16) * scale;
+    shield.position.y = (isPlayer ? -0.08 : -0.05) * scale;
     shield.material = shieldMaterial;
   }
 
   const receiver = MeshBuilder.CreateCylinder(`${name}_flak_receiver`, {
     diameter: (isPlayer ? 0.11 : 0.16) * scale,
     height: (isPlayer ? 0.2 : 0.28) * scale,
+    cap: isPlayer ? Mesh.NO_CAP : Mesh.CAP_ALL,
     tessellation: 10
   }, scene);
   receiver.parent = mount;
@@ -6167,11 +6168,12 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
 
   const barrel = MeshBuilder.CreateCylinder(`${name}_flak_barrel`, {
     diameter: 0.045 * scale,
-    height: 1.18 * scale,
+    height: (isPlayer ? 2.0 : 1.18) * scale,
+    cap: isPlayer ? Mesh.NO_CAP : Mesh.CAP_ALL,
     tessellation: 10
   }, scene);
   barrel.parent = elevationRoot;
-  barrel.position.z = 0.4 * scale;
+  barrel.position.z = (isPlayer ? 0.7 : 0.4) * scale;
   barrel.rotation.x = Math.PI / 2;
   barrel.material = metalMaterial;
 
@@ -6181,10 +6183,10 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
     tessellation: 10
   }, scene);
   muzzle.parent = barrel;
-  muzzle.position.y = 0.57 * scale;
+  muzzle.position.y = (isPlayer ? 0.98 : 0.57) * scale;
   muzzle.material = metalMaterial;
 
-  const sightYOffset = (isPlayer ? 0.16 : 0.08) * scale;
+  const sightYOffset = (isPlayer ? 0.08 : 0.08) * scale;
   const sight = MeshBuilder.CreateTorus(`${name}_flak_ring_sight`, {
     diameter: 0.34 * scale,
     thickness: 0.012 * scale,
@@ -6218,8 +6220,8 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
     depth: 0.012 * scale
   }, scene);
   sightPost.parent = elevationRoot;
-  sightPost.position.y = sightYOffset - 0.12 * scale;
-  sightPost.position.z = 0.92 * scale;
+  sightPost.position.y = sightYOffset;
+  sightPost.position.z = (isPlayer ? 1.52 : 0.92) * scale;
   sightPost.material = metalMaterial;
 
   return { mount, elevationRoot };
