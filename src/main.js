@@ -122,6 +122,10 @@ const remoteSternFlakZ = -2.92;
 const flakMinPitch = -0.12;
 const flakMaxPitch = 0.92;
 const flakPitchStepRadians = 0.05;
+const flakFireCooldownSeconds = 0.18;
+const flakProjectileSpeed = 145;
+const flakProjectileGravity = 18;
+const flakProjectileLifetime = 2.2;
 const playerSternFlakScale = 0.54;
 const playerFlakSightYOffset = 0.14 * playerSternFlakScale;
 const playerFlakEyeZ = -0.34 * playerSternFlakScale;
@@ -336,7 +340,7 @@ window.addEventListener("keydown", (event) => {
   }
   if (playerActive && isTorpedoFireKey(event) && !event.repeat) {
     if (flakViewActive) {
-      document.body.dataset.flakFire = "not-implemented";
+      firePlayerFlak();
       event.preventDefault();
       return;
     }
@@ -592,6 +596,7 @@ const torpedoLaunchDefaults = {
 };
 const torpedoSystem = createTorpedoSystem(scene, materials, world);
 const bombSystem = createBombSystem(scene, materials, world);
+const flakSystem = createFlakSystem(scene, materials, world);
 connectGameEventStream();
 
 const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
@@ -741,6 +746,7 @@ scene.onBeforeRenderObservable.add(() => {
   updateEnemyFireControl(torpedoSystem, enemyMotions, boat.root.position, blockedWaters, time);
   updateServerTorpedoVisuals(torpedoSystem, dt, time);
   updateServerBombVisuals(bombSystem, dt, time);
+  updateFlakSystem(flakSystem, dt, time);
   syncMultiplayerState(time);
   const torpedoResult = updateTorpedoSystem(torpedoSystem, dt, time, enemyMotions, blockedWaters, boat.root.position);
   if (torpedoResult.playerHit && playerDamageState === "active") {
@@ -1140,7 +1146,11 @@ function setupMobileFireButton(button) {
 
   button.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
-    requestPlayerWeaponFire();
+    if (flakViewActive) {
+      firePlayerFlak();
+    } else {
+      requestPlayerWeaponFire();
+    }
     event.stopPropagation();
     event.preventDefault();
   });
@@ -4163,6 +4173,177 @@ function createBombSystem(scene, materials, parent) {
   };
 }
 
+function createFlakSystem(scene, materials, parent) {
+  const root = new TransformNode("flak_projectiles", scene);
+  root.parent = parent;
+
+  return {
+    root,
+    scene,
+    materials,
+    active: [],
+    flashes: [],
+    nextFireTime: 0,
+    nextId: 1
+  };
+}
+
+function firePlayerFlak() {
+  if (!flakViewActive || playerDamageState !== "active" || time < flakSystem.nextFireTime) return;
+  const shot = getPlayerFlakShot();
+  if (!shot) return;
+
+  flakSystem.nextFireTime = time + flakFireCooldownSeconds;
+  createFlakProjectile(flakSystem, shot.position, shot.velocity, shot.direction);
+  createFlakMuzzleFlash(flakSystem, shot.position, shot.direction);
+  document.body.dataset.flakFire = "ok";
+  document.body.dataset.flakShots = String(flakSystem.nextId - 1);
+}
+
+function getPlayerFlakShot() {
+  const elevationRoot = boat.sternFlak?.elevationRoot;
+  if (!elevationRoot) return null;
+
+  const scale = playerSternFlakScale;
+  const worldMatrix = elevationRoot.computeWorldMatrix(true);
+  const muzzle = Vector3.TransformCoordinates(new Vector3(0, 0.018 * scale, 1.08 * scale), worldMatrix);
+  const target = Vector3.TransformCoordinates(new Vector3(0, 0.018 * scale, 14), worldMatrix);
+  const direction = target.subtract(muzzle).normalize();
+  const shipVelocity = getForwardVector(heading).scale(speed);
+
+  return {
+    position: muzzle.add(direction.scale(0.18)),
+    direction,
+    velocity: direction.scale(flakProjectileSpeed).add(shipVelocity)
+  };
+}
+
+function createFlakProjectile(system, position, velocity, direction) {
+  const id = system.nextId;
+  system.nextId += 1;
+
+  const root = new TransformNode(`flak_shell_${id}`, system.scene);
+  root.parent = system.root;
+  root.position.copyFrom(position);
+
+  const core = MeshBuilder.CreateBox(`${root.name}_core`, {
+    width: 0.07,
+    height: 0.07,
+    depth: 0.16
+  }, system.scene);
+  core.parent = root;
+  core.material = system.materials.flakTracer;
+
+  const trail = [];
+  for (let i = 0; i < 5; i += 1) {
+    const segment = MeshBuilder.CreateBox(`${root.name}_trail_${i}`, {
+      width: 0.035 + i * 0.006,
+      height: 0.035 + i * 0.004,
+      depth: 0.22 + i * 0.08
+    }, system.scene);
+    segment.parent = root;
+    segment.material = system.materials.flakTracerTrail;
+    segment.position.copyFrom(direction.scale(-0.18 - i * 0.18));
+    trail.push(segment);
+  }
+
+  const light = new PointLight(`${root.name}_light`, position, system.scene);
+  light.diffuse = new Color3(1.0, 0.76, 0.38);
+  light.specular = new Color3(1.0, 0.72, 0.36);
+  light.intensity = 0.75;
+  light.range = 18;
+
+  system.active.push({
+    root,
+    core,
+    trail,
+    light,
+    position: position.clone(),
+    previousPosition: position.clone(),
+    velocity,
+    age: 0,
+    lifetime: flakProjectileLifetime,
+    direction: direction.clone()
+  });
+}
+
+function createFlakMuzzleFlash(system, position, direction) {
+  const flash = MeshBuilder.CreateBox(`flak_muzzle_flash_${system.nextId}`, {
+    width: 0.22,
+    height: 0.22,
+    depth: 0.34
+  }, system.scene);
+  flash.parent = system.root;
+  flash.material = system.materials.flakFlash;
+  flash.position.copyFrom(position.add(direction.scale(0.16)));
+
+  const light = new PointLight(`${flash.name}_light`, flash.position.clone(), system.scene);
+  light.diffuse = new Color3(1.0, 0.76, 0.42);
+  light.specular = new Color3(1.0, 0.78, 0.5);
+  light.intensity = 1.35;
+  light.range = 22;
+
+  system.flashes.push({
+    mesh: flash,
+    light,
+    origin: flash.position.clone(),
+    age: 0,
+    lifetime: 0.12,
+    direction: direction.clone()
+  });
+}
+
+function updateFlakSystem(system, dt, now) {
+  system.active = system.active.filter((projectile) => {
+    projectile.age += dt;
+    if (projectile.age >= projectile.lifetime) {
+      disposeFlakProjectile(projectile);
+      return false;
+    }
+
+    projectile.previousPosition.copyFrom(projectile.position);
+    projectile.velocity.y -= flakProjectileGravity * dt;
+    projectile.position.addInPlace(projectile.velocity.scale(dt));
+    projectile.root.position.copyFrom(projectile.position);
+    projectile.direction = projectile.position.subtract(projectile.previousPosition).normalize();
+
+    const pulse = 0.72 + Math.sin(now * 80 + projectile.age * 13) * 0.18;
+    projectile.core.visibility = pulse;
+    projectile.trail.forEach((segment, index) => {
+      segment.position.copyFrom(projectile.direction.scale(-0.18 - index * 0.18));
+      segment.visibility = Math.max(0.18, pulse - index * 0.11);
+    });
+    projectile.light.position.copyFrom(projectile.position);
+    projectile.light.intensity = 0.45 + pulse * 0.45;
+    return true;
+  });
+
+  system.flashes = system.flashes.filter((flash) => {
+    flash.age += dt;
+    const t = flash.age / flash.lifetime;
+    if (t >= 1) {
+      flash.light.dispose();
+      flash.mesh.dispose();
+      return false;
+    }
+    const fade = 1 - t;
+    flash.mesh.visibility = fade;
+    flash.mesh.scaling.setAll(1 + t * 1.6);
+    flash.mesh.position.copyFrom(flash.origin.add(flash.direction.scale(t * 0.35)));
+    flash.light.position.copyFrom(flash.mesh.position);
+    flash.light.intensity = 1.35 * fade;
+    return true;
+  });
+
+  document.body.dataset.flakProjectiles = String(system.active.length);
+}
+
+function disposeFlakProjectile(projectile) {
+  projectile.light.dispose();
+  projectile.root.getChildMeshes().forEach((mesh) => mesh.dispose());
+  projectile.root.dispose();
+}
+
 // A fired torpedo starts as a visible tube ejection, then becomes a simple straight-running weapon.
 function firePlayerTorpedo(system, shipRoot, heading, turnVelocity, shipSpeed, now) {
   if (now < system.nextFireTime) return false;
@@ -5609,6 +5790,26 @@ function createMaterials(scene) {
   explosionCore.specularColor = new Color3(0.95, 1.0, 1.0);
   explosionCore.disableLighting = true;
 
+  const flakTracer = new StandardMaterial("flak_tracer_material", scene);
+  flakTracer.diffuseColor = new Color3(1.0, 0.74, 0.34);
+  flakTracer.emissiveColor = new Color3(1.2, 0.72, 0.28);
+  flakTracer.specularColor = new Color3(1.0, 0.86, 0.54);
+  flakTracer.disableLighting = true;
+
+  const flakTracerTrail = new StandardMaterial("flak_tracer_trail_material", scene);
+  flakTracerTrail.diffuseColor = new Color3(1.0, 0.58, 0.18);
+  flakTracerTrail.emissiveColor = new Color3(0.9, 0.34, 0.08);
+  flakTracerTrail.specularColor = Color3.Black();
+  flakTracerTrail.alpha = 0.58;
+  flakTracerTrail.disableLighting = true;
+
+  const flakFlash = new StandardMaterial("flak_flash_material", scene);
+  flakFlash.diffuseColor = new Color3(1.0, 0.86, 0.54);
+  flakFlash.emissiveColor = new Color3(1.25, 0.82, 0.36);
+  flakFlash.specularColor = new Color3(1.0, 0.92, 0.7);
+  flakFlash.alpha = 0.82;
+  flakFlash.disableLighting = true;
+
   const beaconGlow = new StandardMaterial("beacon_glow_material", scene);
   beaconGlow.diffuseColor = new Color3(1.0, 0.98, 0.82);
   beaconGlow.emissiveColor = new Color3(1.15, 1.16, 1.04);
@@ -5663,6 +5864,9 @@ function createMaterials(scene) {
     lighthouseCap,
     lighthouseStripe,
     explosionCore,
+    flakTracer,
+    flakTracerTrail,
+    flakFlash,
     beaconGlow,
     beaconBeam
   };
