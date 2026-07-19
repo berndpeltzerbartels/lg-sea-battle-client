@@ -321,9 +321,23 @@
         <button id="resetGameButton" class="reset-game-button" type="button">Restart</button>
       </div>
       <div class="speed">
-        <span id="speedValue">0.0</span>
-        <small>kn</small>
-        <strong id="engineValue">Stop</strong>
+        <div class="boat-speed-readout">
+          <span id="speedValue">0.0</span>
+          <small>kn</small>
+          <strong id="engineValue">Stop</strong>
+        </div>
+        <div class="altimeter" aria-hidden="true">
+          <div class="altimeter-dial">
+            <span class="altimeter-mark altimeter-mark-top">0</span>
+            <span class="altimeter-mark altimeter-mark-right">5</span>
+            <span class="altimeter-mark altimeter-mark-bottom">10</span>
+            <span class="altimeter-mark altimeter-mark-left">15</span>
+            <i id="altimeterThousandsHand" class="altimeter-hand altimeter-hand-thousands"></i>
+            <i id="altimeterHundredsHand" class="altimeter-hand altimeter-hand-hundreds"></i>
+            <b></b>
+          </div>
+          <strong>ALT <span id="altitudeValue">--</span> m</strong>
+        </div>
         <div class="torpedo-stock">
           <small>Torp</small>
           <strong id="torpedoStockValue">--</strong>

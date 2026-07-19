@@ -50,6 +50,9 @@ scene.fogStart = 82;
 scene.fogEnd = 650;
 
 const speedValue = document.getElementById("speedValue");
+const altitudeValue = document.getElementById("altitudeValue");
+const altimeterHundredsHand = document.getElementById("altimeterHundredsHand");
+const altimeterThousandsHand = document.getElementById("altimeterThousandsHand");
 const depthValue = document.getElementById("depthValue");
 const depthGauge = document.querySelector(".depth-gauge");
 const engineValue = document.getElementById("engineValue");
@@ -106,11 +109,11 @@ const engineHoldInitialDelaySeconds = 0.22;
 const engineHoldRepeatSeconds = 0.1;
 const mouseWheelEngineStep = 100;
 const scoutPlaneSetupId = "scout-plane";
-const scoutPlaneCruiseAltitude = 16;
-const scoutPlaneMinAltitude = 8;
-const scoutPlaneMaxAltitude = 34;
+const scoutPlaneCruiseAltitude = 22;
+const scoutPlaneMinAltitude = 5;
+const scoutPlaneMaxAltitude = 80;
 const scoutPlaneCruiseSpeed = 14.5;
-const scoutPlaneMaxClimbRate = 5.2;
+const scoutPlaneMaxClimbRate = 8.5;
 const scoutPlaneMaxPitch = 0.22;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
@@ -714,6 +717,7 @@ scene.onBeforeRenderObservable.add(() => {
 
   const displayedSpeed = Math.abs(speed) < 0.08 ? 0 : Math.abs(speed);
   speedValue.textContent = displayedSpeed.toFixed(1);
+  updateAltimeter(scoutPlaneAltitude);
   engineValue.textContent = engineOrders[engineOrder].label;
   updateTelegraphSteps(telegraphSteps, engineOrder);
   updateMeasuredSpeed(boat.root.position, time);
@@ -1301,6 +1305,15 @@ function formatInputEvent(event) {
 
 function changeEngineOrder(direction) {
   engineOrder = clamp(engineOrder + direction, 0, engineOrders.length - 1);
+}
+
+function updateAltimeter(altitudeUnits) {
+  if (!altitudeValue || !altimeterHundredsHand || !altimeterThousandsHand) return;
+
+  const altitudeMeters = Math.max(0, Math.round(altitudeUnits * worldMetersPerUnit));
+  altitudeValue.textContent = String(altitudeMeters);
+  altimeterHundredsHand.style.transform = `translate(-50%, -100%) rotate(${(altitudeMeters % 1000) / 1000}turn)`;
+  altimeterThousandsHand.style.transform = `translate(-50%, -100%) rotate(${altitudeMeters / 10000}turn)`;
 }
 
 function stepRudderDegrees(currentDegrees, direction) {

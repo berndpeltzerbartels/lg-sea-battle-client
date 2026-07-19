@@ -898,6 +898,122 @@ body.big-map .map-meta span {
   color: #9be5df;
 }
 
+.altimeter {
+  display: none;
+  justify-items: center;
+  gap: 8px;
+}
+
+.altimeter-dial {
+  position: relative;
+  width: 86px;
+  aspect-ratio: 1;
+  border: 2px solid rgb(221 249 249 / 72%);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, rgb(217 244 245 / 18%) 0 5%, transparent 6%),
+    radial-gradient(circle at 50% 50%, rgb(5 27 40 / 88%) 0 62%, rgb(8 42 56 / 88%) 63% 100%);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 16%),
+    inset 0 -12px 22px rgb(0 0 0 / 22%);
+}
+
+.altimeter-dial::before,
+.altimeter-dial::after {
+  position: absolute;
+  inset: 8px;
+  border-top: 1px solid rgb(247 251 255 / 28%);
+  border-bottom: 1px solid rgb(247 251 255 / 28%);
+  border-radius: 50%;
+  content: "";
+}
+
+.altimeter-dial::after {
+  transform: rotate(90deg);
+}
+
+.altimeter-mark {
+  position: absolute;
+  min-width: 0;
+  color: rgb(247 251 255 / 86%);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.altimeter-mark-top {
+  top: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.altimeter-mark-right {
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+}
+
+.altimeter-mark-bottom {
+  bottom: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.altimeter-mark-left {
+  top: 50%;
+  left: 8px;
+  transform: translateY(-50%);
+}
+
+.altimeter-hand {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  transform-origin: 50% 100%;
+  border-radius: 999px;
+  background: #f7fbff;
+  box-shadow: 0 0 5px rgb(4 16 22 / 72%);
+}
+
+.altimeter-hand-hundreds {
+  height: 32px;
+}
+
+.altimeter-hand-thousands {
+  height: 23px;
+  width: 5px;
+  background: #9be5df;
+}
+
+.altimeter-dial b {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #f7fbff;
+  box-shadow: 0 0 0 2px rgb(8 35 48 / 92%);
+  transform: translate(-50%, -50%);
+}
+
+body[data-player-vehicle="scout-plane"] .speed {
+  min-width: 116px;
+  padding: 12px;
+}
+
+body[data-player-vehicle="scout-plane"] .boat-speed-readout,
+body[data-player-vehicle="scout-plane"] .torpedo-stock,
+body[data-player-vehicle="scout-plane"] .depth-gauge,
+body[data-player-vehicle="scout-plane"] .telegraph {
+  display: none;
+}
+
+body[data-player-vehicle="scout-plane"] .altimeter {
+  display: grid;
+}
+
 .torpedo-stock {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -1235,6 +1351,18 @@ body.big-map .map-meta span {
   .speed strong {
     margin-top: 4px;
     font-size: 9px;
+  }
+
+  .altimeter-dial {
+    width: 70px;
+  }
+
+  .altimeter-hand-hundreds {
+    height: 26px;
+  }
+
+  .altimeter-hand-thousands {
+    height: 19px;
   }
 
   .torpedo-stock {
