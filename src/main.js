@@ -6194,9 +6194,9 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   elevationRoot.position.y = 0.08 * scale;
   elevationRoot.position.z = 0.28 * scale;
 
-  const barrelLength = 1.34 * scale;
+  const barrelLength = 1.62 * scale;
   const barrelHalfLength = barrelLength * 0.5;
-  const barrelCenterZ = 0.48 * scale;
+  const barrelCenterZ = 0.22 * scale;
   const barrel = MeshBuilder.CreateCylinder(`${name}_flak_barrel`, {
     diameter: 0.038 * scale,
     height: barrelLength,
@@ -6208,13 +6208,12 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   barrel.material = metalMaterial;
 
   const jacket = MeshBuilder.CreateCylinder(`${name}_flak_jacket`, {
-    diameter: 0.085 * scale,
-    height: 0.38 * scale,
-    cap: Mesh.NO_CAP,
+    diameter: 0.07 * scale,
+    height: 0.28 * scale,
     tessellation: 12
   }, scene);
   jacket.parent = elevationRoot;
-  jacket.position.z = 0.1 * scale;
+  jacket.position.z = 0;
   jacket.rotation.x = Math.PI / 2;
   jacket.material = metalMaterial;
 
@@ -6227,21 +6226,21 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   muzzle.position.y = barrelHalfLength;
   muzzle.material = metalMaterial;
 
-  const sightYOffset = (isPlayer ? 0.08 : 0.08) * scale;
+  const sightYOffset = 0.06 * scale;
   const sight = MeshBuilder.CreateTorus(`${name}_flak_ring_sight`, {
-    diameter: 0.34 * scale,
-    thickness: 0.012 * scale,
+    diameter: 0.29 * scale,
+    thickness: 0.008 * scale,
     tessellation: 24
   }, scene);
   sight.parent = elevationRoot;
   sight.position.y = sightYOffset;
-  sight.position.z = 1.06 * scale;
+  sight.position.z = 0.9 * scale;
   sight.rotation.x = Math.PI / 2;
   sight.material = metalMaterial;
 
   const sightSpokes = [
-    { width: 0.31, height: 0.008 },
-    { width: 0.008, height: 0.31 }
+    { width: 0.265, height: 0.005 },
+    { width: 0.005, height: 0.265 }
   ];
   sightSpokes.forEach((spoke, index) => {
     const mesh = MeshBuilder.CreateBox(`${name}_flak_ring_sight_spoke_${index}`, {
@@ -6251,7 +6250,7 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
     }, scene);
     mesh.parent = elevationRoot;
     mesh.position.y = sightYOffset;
-    mesh.position.z = 1.06 * scale;
+    mesh.position.z = 0.9 * scale;
     mesh.material = metalMaterial;
   });
 
@@ -6262,7 +6261,7 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   }, scene);
   sightPost.parent = elevationRoot;
   sightPost.position.y = sightYOffset;
-  sightPost.position.z = (isPlayer ? 1.52 : 0.92) * scale;
+  sightPost.position.z = 0.78 * scale;
   sightPost.material = metalMaterial;
 
   return { mount, elevationRoot };
