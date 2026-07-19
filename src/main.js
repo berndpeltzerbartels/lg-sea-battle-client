@@ -123,7 +123,7 @@ const flakMinPitch = -0.12;
 const flakMaxPitch = 0.92;
 const flakPitchStepRadians = 0.05;
 const playerSternFlakScale = 0.54;
-const playerFlakSightYOffset = 0.2 * playerSternFlakScale;
+const playerFlakSightYOffset = 0.27 * playerSternFlakScale;
 const playerFlakEyeZ = 0.18 * playerSternFlakScale;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
@@ -6193,7 +6193,7 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   elevationRoot.parent = mount;
   elevationRoot.position.y = 0.08 * scale;
   elevationRoot.position.z = 0.28 * scale;
-  const sightYOffset = (isPlayer ? 0.2 : 0.08) * scale;
+  const sightYOffset = (isPlayer ? 0.27 : 0.08) * scale;
 
   if (isPlayer) {
     const barrel = MeshBuilder.CreateBox(`${name}_flak_barrel`, {
@@ -6238,8 +6238,8 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   }
 
   const sight = MeshBuilder.CreateTorus(`${name}_flak_ring_sight`, {
-    diameter: (isPlayer ? 0.26 : 0.34) * scale,
-    thickness: (isPlayer ? 0.009 : 0.012) * scale,
+    diameter: 0.34 * scale,
+    thickness: 0.012 * scale,
     tessellation: 24
   }, scene);
   sight.parent = elevationRoot;
@@ -6249,8 +6249,8 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   sight.material = metalMaterial;
 
   const sightSpokes = [
-    { width: isPlayer ? 0.23 : 0.31, height: isPlayer ? 0.006 : 0.008 },
-    { width: isPlayer ? 0.006 : 0.008, height: isPlayer ? 0.23 : 0.31 }
+    { width: 0.31, height: 0.008 },
+    { width: 0.008, height: 0.31 }
   ];
   sightSpokes.forEach((spoke, index) => {
     const mesh = MeshBuilder.CreateBox(`${name}_flak_ring_sight_spoke_${index}`, {
@@ -6264,17 +6264,15 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
     mesh.material = metalMaterial;
   });
 
-  if (!isPlayer) {
-    const sightPost = MeshBuilder.CreateBox(`${name}_flak_ring_sight_post`, {
-      width: 0.018 * scale,
-      height: 0.16 * scale,
-      depth: 0.012 * scale
-    }, scene);
-    sightPost.parent = elevationRoot;
-    sightPost.position.y = sightYOffset;
-    sightPost.position.z = 0.92 * scale;
-    sightPost.material = metalMaterial;
-  }
+  const sightPost = MeshBuilder.CreateBox(`${name}_flak_ring_sight_post`, {
+    width: 0.018 * scale,
+    height: 0.16 * scale,
+    depth: 0.012 * scale
+  }, scene);
+  sightPost.parent = elevationRoot;
+  sightPost.position.y = sightYOffset;
+  sightPost.position.z = (isPlayer ? 1.52 : 0.92) * scale;
+  sightPost.material = metalMaterial;
 
   return { mount, elevationRoot };
 }
