@@ -250,10 +250,7 @@ if (scoutPlaneMode) {
 
 // Until SSE arrives, backend ships seed the visual fleet and local motion keeps them inspectable.
 const enemyMotions = createEnemyFleet(scene, materials, getOtherServerShips(gameState.ships, playerServerShipId));
-const flakDemoBoat = scoutPlaneMode && scoutPlaneExperimentFlakDemo
-  ? createScoutPlaneExperimentFlakDemoBoat(scene, materials, world, initialPlayerSpawn.position, heading)
-  : null;
-document.body.dataset.flakDemo = flakDemoBoat ? "1" : "0";
+document.body.dataset.flakDemo = scoutPlaneMode && scoutPlaneExperimentFlakDemo ? "1" : "0";
 document.body.dataset.meshCount = String(scene.meshes.length);
 
 const camera = new FreeCamera("follow_camera", new Vector3(0, 7, -13), scene);
@@ -747,7 +744,7 @@ scene.onBeforeRenderObservable.add(() => {
   updateVolcanoPlumes(volcanoPlumes, time);
   updateNavigationLights(navigationLights, time, boat.root.position);
   enemyMotions.forEach((enemyMotion) => updateEnemyMotion(enemyMotion, dt, time, boat.root.position, blockedWaters));
-  updateScoutPlaneFlakDemo(flakDemoBoat, time);
+  updateScoutPlaneFlakDemo(enemyMotions, time);
   updateEnemyFireControl(torpedoSystem, enemyMotions, boat.root.position, blockedWaters, time);
   updateServerTorpedoVisuals(torpedoSystem, dt, time);
   updateServerBombVisuals(bombSystem, dt, time);
@@ -3731,35 +3728,31 @@ function indexShipsById(ships) {
   return new Map((ships ?? []).map((ship) => [ship.id, ship]));
 }
 
-function createScoutPlaneExperimentFlakDemoBoat(scene, materials, parent, playerPosition, playerHeading) {
-  const boat = createEnemyTorpedoBoat(scene, materials, "scout_plane_flak_demo_boat", "dark", "MG", true);
-  boat.root.parent = parent;
-  const forward = new Vector3(Math.sin(playerHeading), 0, Math.cos(playerHeading));
-  const right = new Vector3(Math.cos(playerHeading), 0, -Math.sin(playerHeading));
-  boat.root.position = playerPosition
-    .add(forward.scale(125))
-    .add(right.scale(28));
-  boat.root.position.y = remoteVehicleY({ vehicleType: "torpedo-boat" });
-  boat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, playerHeading, 0);
-  return boat;
-}
-
-function updateScoutPlaneFlakDemo(demoBoat, now) {
-  if (!demoBoat || playerDamageState !== "active") return;
+function updateScoutPlaneFlakDemo(motions, now) {
+  if (!scoutPlaneMode || !scoutPlaneExperimentFlakDemo || playerDamageState !== "active") return;
   if (now < (flakSystem.nextDemoFireTime ?? 0)) return;
+
+  const flakMotions = motions
+    .filter((motion) => motion.boat?.sternFlak?.elevationRoot)
+    .sort((a, b) => distance2D(a.root.position, boat.root.position) - distance2D(b.root.position, boat.root.position));
+  if (!flakMotions.length) return;
+
+  const motion = flakMotions[flakSystem.nextDemoMotionIndex % flakMotions.length];
+  flakSystem.nextDemoMotionIndex = (flakSystem.nextDemoMotionIndex + 1) % flakMotions.length;
 
   const target = boat.root.position
     .add(getForwardVector(heading).scale(Math.max(0, speed) * 0.25))
     .add(new Vector3(0, 0.7, 0));
-  aimDemoFlakAtTarget(demoBoat, target);
+  aimDemoFlakAtTarget(motion.boat, target);
 
-  const shot = getFlakShotFromElevationRoot(demoBoat.sternFlak?.elevationRoot, 0.75, target, Vector3.Zero());
+  const shot = getFlakShotFromElevationRoot(motion.boat.sternFlak?.elevationRoot, 0.75, target, getForwardVector(motion.heading).scale(motion.speed ?? 0));
   if (!shot) return;
 
   flakSystem.nextDemoFireTime = now + flakDemoFireIntervalSeconds;
   createFlakProjectile(flakSystem, shot.position, shot.velocity, shot.direction);
   createFlakMuzzleFlash(flakSystem, shot.position, shot.direction);
   document.body.dataset.flakDemoFire = "ok";
+  document.body.dataset.flakDemoBoats = String(flakMotions.length);
 }
 
 function aimDemoFlakAtTarget(demoBoat, target) {
@@ -4222,6 +4215,7 @@ function createFlakSystem(scene, materials, parent) {
     active: [],
     flashes: [],
     nextFireTime: 0,
+    nextDemoMotionIndex: 0,
     nextId: 1
   };
 }
@@ -6599,13 +6593,13 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = 
   mast.rotation.x = -0.16;
   mast.material = funnelMaterial;
 
-  if (hasFlak) {
-    createSternFlak(scene, materials, root, name, teamMaterials, remoteSternFlakZ, false);
-  }
+  const sternFlak = hasFlak
+    ? createSternFlak(scene, materials, root, name, teamMaterials, remoteSternFlakZ, false)
+    : null;
 
   const bowWake = createEnemyBowWake(scene, materials, root, name);
 
-  return { root, bowWake };
+  return { root, bowWake, sternFlak };
 }
 
 function createEnemyBowWake(scene, materials, parent, name) {
