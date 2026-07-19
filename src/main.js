@@ -123,11 +123,8 @@ const flakMinPitch = -0.12;
 const flakMaxPitch = 0.92;
 const flakPitchStepRadians = 0.05;
 const playerSternFlakScale = 0.54;
-const playerFlakElevationY = 0.91 + 0.44 * playerSternFlakScale + 0.08 * playerSternFlakScale;
-const playerFlakMountForwardOffset = playerSternFlakZ - 0.05 * playerSternFlakScale;
-const playerFlakElevationForwardOffset = 0.28 * playerSternFlakScale;
-const playerFlakSightEyeOffset = 0.04;
 const playerFlakSightYOffset = 0.08 * playerSternFlakScale;
+const playerFlakEyeZ = -0.16 * playerSternFlakScale;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = true;
@@ -866,28 +863,22 @@ function changeFlakPitch(direction) {
 
 function getPlayerCameraSetup(forward) {
   if (!scoutPlaneMode && flakViewActive) {
-    const shipForward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
-    const flakHorizontalDirection = new Vector3(
-      Math.sin(heading + flakYaw),
-      0,
-      Math.cos(heading + flakYaw)
+    const elevationRoot = boat.sternFlak?.elevationRoot;
+    if (!elevationRoot) {
+      return { position: camera.position.clone(), target: cameraTarget.clone() };
+    }
+    const worldMatrix = elevationRoot.computeWorldMatrix(true);
+    const position = Vector3.TransformCoordinates(
+      new Vector3(0, playerFlakSightYOffset, playerFlakEyeZ),
+      worldMatrix
     );
-    const flakDirection = flakHorizontalDirection
-      .scale(Math.cos(flakPitch))
-      .add(new Vector3(0, Math.sin(flakPitch), 0));
-    const flakUp = flakHorizontalDirection
-      .scale(-Math.sin(flakPitch))
-      .add(new Vector3(0, Math.cos(flakPitch), 0));
-    const elevationPivot = boat.root.position
-      .add(shipForward.scale(playerFlakMountForwardOffset))
-      .add(flakHorizontalDirection.scale(playerFlakElevationForwardOffset))
-      .add(new Vector3(0, playerFlakElevationY, 0));
-    const position = elevationPivot
-      .add(flakUp.scale(playerFlakSightYOffset))
-      .add(flakDirection.scale(playerFlakSightEyeOffset));
+    const target = Vector3.TransformCoordinates(
+      new Vector3(0, playerFlakSightYOffset, 72),
+      worldMatrix
+    );
     return {
       position,
-      target: position.add(flakDirection.scale(72))
+      target
     };
   }
 
