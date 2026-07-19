@@ -690,7 +690,7 @@ scene.onBeforeRenderObservable.add(() => {
   }
 
   // Fixed bridge camera for ships; oblique chase camera for the scout-plane perspective test.
-  const cameraDistance = scoutPlaneMode ? 24.0 : 0.65;
+  const cameraDistance = scoutPlaneMode ? 24.0 : -0.2;
   const cameraHeight = scoutPlaneMode ? 9.5 - scoutPlanePitch * 10 : 1.22;
   const desiredCameraPosition = boat.root.position
     .subtract(forward.scale(cameraDistance))
@@ -5967,7 +5967,7 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   const deckMaterial = teamMaterials.deck;
   const metalMaterial = teamMaterials.funnel ?? materials.funnel;
   const shieldMaterial = teamMaterials.hull;
-  const scale = isPlayer ? 0.72 : 1;
+  const scale = isPlayer ? 0.54 : 0.75;
 
   const platform = MeshBuilder.CreateCylinder(`${name}_flak_platform`, {
     diameter: 1.12 * scale,
@@ -5975,7 +5975,7 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
     tessellation: 24
   }, scene);
   platform.parent = parent;
-  platform.position.y = isPlayer ? 1.0 : 0.82;
+  platform.position.y = isPlayer ? 0.91 : 0.62;
   platform.position.z = sternZ;
   platform.material = deckMaterial;
 
