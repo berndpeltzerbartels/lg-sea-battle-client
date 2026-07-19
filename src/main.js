@@ -144,7 +144,8 @@ document.body.dataset.gameStateSource = "server";
 document.body.dataset.serverGameState = gameState.state;
 document.body.dataset.serverShips = String(gameState.ships.length);
 document.body.dataset.serverTorpedoes = String(gameState.torpedoes.length);
-const scoutPlaneMode = gameState.sessionId === scoutPlaneSetupId || urlParams.get("vehicle") === "scout-plane";
+const selectedVehicleType = urlParams.get("vehicle") ?? readStoredValue("vehicleType");
+const scoutPlaneMode = gameState.sessionId === scoutPlaneSetupId || selectedVehicleType === "scout-plane";
 if (scoutPlaneMode) {
   scene.fogStart = 180;
   scene.fogEnd = 1800;
