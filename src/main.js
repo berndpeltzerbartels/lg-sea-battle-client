@@ -820,13 +820,15 @@ function getPlayerCameraSetup(forward) {
       0,
       Math.cos(heading + flakYaw)
     );
+    const mountPosition = boat.root.position
+      .add(shipForward.scale(playerSternFlakZ - 0.05 * 0.54));
     const position = boat.root.position
-      .add(shipForward.scale(playerSternFlakZ))
-      .subtract(flakDirection.scale(0.42))
+      .add(shipForward.scale(playerSternFlakZ - 0.05 * 0.54))
+      .subtract(flakDirection.scale(0.18))
       .add(new Vector3(0, 1.2, 0));
     return {
       position,
-      target: position.add(flakDirection.scale(72)).add(new Vector3(0, 0.06, 0))
+      target: mountPosition.add(flakDirection.scale(72)).add(new Vector3(0, 1.2, 0))
     };
   }
 
@@ -6074,11 +6076,14 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   mount.position.z = sternZ - 0.05 * scale;
   mount.rotation.y = Math.PI;
 
-  const shield = MeshBuilder.CreateBox(`${name}_flak_shield`, { width: 0.42 * scale, height: 0.24 * scale, depth: 0.045 * scale }, scene);
-  shield.parent = mount;
-  shield.position.z = 0.18 * scale;
-  shield.position.y = -0.03 * scale;
-  shield.material = shieldMaterial;
+  for (let side = -1; side <= 1; side += 2) {
+    const shield = MeshBuilder.CreateBox(`${name}_flak_shield_${side}`, { width: 0.13 * scale, height: 0.18 * scale, depth: 0.04 * scale }, scene);
+    shield.parent = mount;
+    shield.position.x = side * 0.15 * scale;
+    shield.position.z = 0.16 * scale;
+    shield.position.y = -0.05 * scale;
+    shield.material = shieldMaterial;
+  }
 
   const receiver = MeshBuilder.CreateCylinder(`${name}_flak_receiver`, {
     diameter: 0.16 * scale,
