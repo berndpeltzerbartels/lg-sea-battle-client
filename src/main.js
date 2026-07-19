@@ -127,6 +127,7 @@ const flakFireCooldownSeconds = 0.18;
 const flakProjectileSpeed = 145;
 const flakProjectileGravity = 18;
 const flakProjectileLifetime = 2.2;
+const flakDemoFireIntervalSeconds = 0.25;
 const flakBarrelLength = 1.62;
 const flakBarrelCenterZ = 0.22;
 const playerSternFlakScale = 0.54;
@@ -746,6 +747,7 @@ scene.onBeforeRenderObservable.add(() => {
   updateVolcanoPlumes(volcanoPlumes, time);
   updateNavigationLights(navigationLights, time, boat.root.position);
   enemyMotions.forEach((enemyMotion) => updateEnemyMotion(enemyMotion, dt, time, boat.root.position, blockedWaters));
+  updateScoutPlaneFlakDemo(flakDemoBoat, time);
   updateEnemyFireControl(torpedoSystem, enemyMotions, boat.root.position, blockedWaters, time);
   updateServerTorpedoVisuals(torpedoSystem, dt, time);
   updateServerBombVisuals(bombSystem, dt, time);
@@ -3742,6 +3744,39 @@ function createScoutPlaneExperimentFlakDemoBoat(scene, materials, parent, player
   return boat;
 }
 
+function updateScoutPlaneFlakDemo(demoBoat, now) {
+  if (!demoBoat || playerDamageState !== "active") return;
+  if (now < (flakSystem.nextDemoFireTime ?? 0)) return;
+
+  const target = boat.root.position
+    .add(getForwardVector(heading).scale(Math.max(0, speed) * 0.25))
+    .add(new Vector3(0, 0.7, 0));
+  aimDemoFlakAtTarget(demoBoat, target);
+
+  const shot = getFlakShotFromElevationRoot(demoBoat.sternFlak?.elevationRoot, 0.75, target, Vector3.Zero());
+  if (!shot) return;
+
+  flakSystem.nextDemoFireTime = now + flakDemoFireIntervalSeconds;
+  createFlakProjectile(flakSystem, shot.position, shot.velocity, shot.direction);
+  createFlakMuzzleFlash(flakSystem, shot.position, shot.direction);
+  document.body.dataset.flakDemoFire = "ok";
+}
+
+function aimDemoFlakAtTarget(demoBoat, target) {
+  const mount = demoBoat.sternFlak?.mount;
+  const elevationRoot = demoBoat.sternFlak?.elevationRoot;
+  if (!mount || !elevationRoot || !mount.parent) return;
+
+  const parentMatrix = mount.parent.computeWorldMatrix(true).clone();
+  parentMatrix.invert();
+  const localTarget = Vector3.TransformCoordinates(target, parentMatrix).subtract(mount.position);
+  const yaw = Math.atan2(localTarget.x, localTarget.z);
+  const horizontalDistance = Math.hypot(localTarget.x, localTarget.z);
+  const pitch = clamp(Math.atan2(localTarget.y - elevationRoot.position.y, horizontalDistance), flakMinPitch, flakMaxPitch);
+  mount.rotation.y = yaw;
+  elevationRoot.rotation.x = -pitch;
+}
+
 function createEnemyFleet(scene, materials, serverShips) {
   return serverShips.map((ship, index) => {
     const enemyBoat = createRemoteVehicleModel(scene, materials, `server_ship_${ship.id}`, ship);
@@ -4204,23 +4239,29 @@ function firePlayerFlak() {
 }
 
 function getPlayerFlakShot() {
-  const elevationRoot = boat.sternFlak?.elevationRoot;
+  return getFlakShotFromElevationRoot(
+    boat.sternFlak?.elevationRoot,
+    playerSternFlakScale,
+    null,
+    getForwardVector(heading).scale(speed)
+  );
+}
+
+function getFlakShotFromElevationRoot(elevationRoot, scale, target, baseVelocity) {
   if (!elevationRoot) return null;
 
-  const scale = playerSternFlakScale;
   const worldMatrix = elevationRoot.computeWorldMatrix(true);
   const muzzleZ = (flakBarrelCenterZ + flakBarrelLength * 0.5) * scale;
   const barrelY = 0;
   const muzzle = Vector3.TransformCoordinates(new Vector3(0, barrelY, muzzleZ), worldMatrix);
-  const target = Vector3.TransformCoordinates(new Vector3(0, barrelY, 14), worldMatrix);
-  const direction = target.subtract(muzzle).normalize();
-  const shipVelocity = getForwardVector(heading).scale(speed);
+  const aimTarget = target ?? Vector3.TransformCoordinates(new Vector3(0, barrelY, 14), worldMatrix);
+  const direction = aimTarget.subtract(muzzle).normalize();
 
   return {
     position: muzzle.add(direction.scale(0.08)),
     muzzle,
     direction,
-    velocity: direction.scale(flakProjectileSpeed).add(shipVelocity)
+    velocity: direction.scale(flakProjectileSpeed).add(baseVelocity ?? Vector3.Zero())
   };
 }
 
