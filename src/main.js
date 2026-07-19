@@ -250,7 +250,11 @@ if (scoutPlaneMode) {
 
 // Until SSE arrives, backend ships seed the visual fleet and local motion keeps them inspectable.
 const enemyMotions = createEnemyFleet(scene, materials, getOtherServerShips(gameState.ships, playerServerShipId));
+const flakDemoMotions = scoutPlaneMode && scoutPlaneExperimentFlakDemo
+  ? createStaticFlakDemoFleet(scene, materials, world, boat.root.position, heading)
+  : [];
 document.body.dataset.flakDemo = scoutPlaneMode && scoutPlaneExperimentFlakDemo ? "1" : "0";
+document.body.dataset.flakDemoStaticBoats = String(flakDemoMotions.length);
 document.body.dataset.meshCount = String(scene.meshes.length);
 
 const camera = new FreeCamera("follow_camera", new Vector3(0, 7, -13), scene);
@@ -744,7 +748,7 @@ scene.onBeforeRenderObservable.add(() => {
   updateVolcanoPlumes(volcanoPlumes, time);
   updateNavigationLights(navigationLights, time, boat.root.position);
   enemyMotions.forEach((enemyMotion) => updateEnemyMotion(enemyMotion, dt, time, boat.root.position, blockedWaters));
-  updateScoutPlaneFlakDemo(enemyMotions, time);
+  updateScoutPlaneFlakDemo(enemyMotions.concat(flakDemoMotions), time);
   updateEnemyFireControl(torpedoSystem, enemyMotions, boat.root.position, blockedWaters, time);
   updateServerTorpedoVisuals(torpedoSystem, dt, time);
   updateServerBombVisuals(bombSystem, dt, time);
@@ -3755,6 +3759,41 @@ function updateScoutPlaneFlakDemo(motions, now) {
   document.body.dataset.flakDemoBoats = String(flakMotions.length);
 }
 
+function createStaticFlakDemoFleet(scene, materials, parent, playerPosition, playerHeading) {
+  const forward = getForwardVector(playerHeading);
+  const right = getRightVector(playerHeading);
+  const placements = [
+    { f: 145, r: -70 },
+    { f: 165, r: 55 },
+    { f: 230, r: -10 },
+    { f: 105, r: 95 }
+  ];
+
+  return placements.map((placement, index) => {
+    const demoBoat = createEnemyTorpedoBoat(scene, materials, `flak_demo_boat_${index + 1}`, "dark", `F${index + 1}`, true);
+    demoBoat.root.parent = parent;
+    demoBoat.root.position = playerPosition
+      .add(forward.scale(placement.f))
+      .add(right.scale(placement.r));
+    demoBoat.root.position.y = remoteVehicleY({ vehicleType: "torpedo-boat" });
+    const demoHeading = Math.atan2(playerPosition.x - demoBoat.root.position.x, playerPosition.z - demoBoat.root.position.z);
+    demoBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, demoHeading, 0);
+    return {
+      id: `flak-demo-${index + 1}`,
+      numericIndex: index + 1,
+      teamId: "demo",
+      controlledBy: "flak-demo",
+      vehicleType: "torpedo-boat",
+      serverState: "active",
+      root: demoBoat.root,
+      boat: demoBoat,
+      heading: demoHeading,
+      speed: 0,
+      state: "active"
+    };
+  });
+}
+
 function aimDemoFlakAtTarget(demoBoat, target) {
   const mount = demoBoat.sternFlak?.mount;
   const elevationRoot = demoBoat.sternFlak?.elevationRoot;
@@ -3832,6 +3871,7 @@ function createEnemyMotion(vehicle, heading, engineOrder, index = 0, serverShip 
     heading,
     speed: serverShip?.speed ?? 0,
     isServerControlled: Boolean(serverShip),
+    boat: vehicle,
     serverPosition: new Vector3(serverShip?.x ?? root.position.x, remoteVehicleY(serverShip), serverShip?.z ?? root.position.z),
     serverHeading: Number.isFinite(serverShip?.heading) ? serverShip.heading : heading,
     serverSpeed: Number.isFinite(serverShip?.speed) ? serverShip.speed : 0,
