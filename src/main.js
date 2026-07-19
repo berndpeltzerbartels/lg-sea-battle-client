@@ -3597,7 +3597,7 @@ function createEnemyFleet(scene, materials, serverShips) {
 function createRemoteVehicleModel(scene, materials, name, ship) {
   return isScoutPlaneShip(ship)
     ? createScoutPlane(scene, materials, name, ship.teamId, false)
-    : createEnemyTorpedoBoat(scene, materials, name, ship.teamId, createShipDesignation(ship));
+    : createEnemyTorpedoBoat(scene, materials, name, ship.teamId, createShipDesignation(ship), isHumanController(ship?.controlledBy));
 }
 
 function getShipVehicleType(ship) {
@@ -5754,6 +5754,8 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
   hatch.position.z = -0.36;
   hatch.material = teamMaterials.cabin;
 
+  createSternFlak(scene, materials, root, name, teamMaterials, -1.05, true);
+
   return { root };
 }
 
@@ -5935,8 +5937,75 @@ function createMeshFromData(name, scene, positions, indices) {
   return mesh;
 }
 
+function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ = -3.45, isPlayer = false) {
+  const deckMaterial = teamMaterials.deck;
+  const metalMaterial = teamMaterials.funnel ?? materials.funnel;
+  const shieldMaterial = teamMaterials.hull;
+  const scale = isPlayer ? 0.72 : 1;
+
+  const platform = MeshBuilder.CreateCylinder(`${name}_flak_platform`, {
+    diameter: 1.12 * scale,
+    height: 0.11 * scale,
+    tessellation: 24
+  }, scene);
+  platform.parent = parent;
+  platform.position.y = isPlayer ? 1.0 : 0.82;
+  platform.position.z = sternZ;
+  platform.material = deckMaterial;
+
+  const pedestal = MeshBuilder.CreateCylinder(`${name}_flak_pedestal`, {
+    diameter: 0.32 * scale,
+    height: 0.34 * scale,
+    tessellation: 12
+  }, scene);
+  pedestal.parent = parent;
+  pedestal.position.y = platform.position.y + 0.2 * scale;
+  pedestal.position.z = sternZ;
+  pedestal.material = metalMaterial;
+
+  const mount = new TransformNode(`${name}_flak_mount`, scene);
+  mount.parent = parent;
+  mount.position.y = platform.position.y + 0.44 * scale;
+  mount.position.z = sternZ - 0.05 * scale;
+
+  const cradle = MeshBuilder.CreateBox(`${name}_flak_cradle`, { width: 0.55 * scale, height: 0.22 * scale, depth: 0.32 * scale }, scene);
+  cradle.parent = mount;
+  cradle.material = metalMaterial;
+
+  const shield = MeshBuilder.CreateBox(`${name}_flak_shield`, { width: 0.88 * scale, height: 0.42 * scale, depth: 0.08 * scale }, scene);
+  shield.parent = mount;
+  shield.position.z = 0.24 * scale;
+  shield.position.y = 0.02 * scale;
+  shield.material = shieldMaterial;
+
+  for (let i = 0; i < 2; i += 1) {
+    const barrel = MeshBuilder.CreateCylinder(`${name}_flak_barrel_${i}`, {
+      diameter: 0.07 * scale,
+      height: 1.08 * scale,
+      tessellation: 10
+    }, scene);
+    barrel.parent = mount;
+    barrel.position.x = (i === 0 ? -0.13 : 0.13) * scale;
+    barrel.position.y = 0.08 * scale;
+    barrel.position.z = 0.62 * scale;
+    barrel.rotation.x = Math.PI / 2 - 0.18;
+    barrel.material = metalMaterial;
+
+    const muzzle = MeshBuilder.CreateCylinder(`${name}_flak_muzzle_${i}`, {
+      diameter: 0.095 * scale,
+      height: 0.08 * scale,
+      tessellation: 10
+    }, scene);
+    muzzle.parent = barrel;
+    muzzle.position.y = 0.52 * scale;
+    muzzle.material = metalMaterial;
+  }
+
+  return { mount };
+}
+
 // Low-poly external ship model for opponents. Keep it cheap: enemies may appear in groups later.
-function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = "dark") {
+function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = "dark", designation = "", hasFlak = false) {
   const root = new TransformNode(name, scene);
   const teamMaterials = getShipTeamMaterials(materials, teamId);
   const hullMaterial = teamMaterials.hull;
@@ -6005,6 +6074,10 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = 
   mast.position.z = 0.32;
   mast.rotation.x = -0.16;
   mast.material = funnelMaterial;
+
+  if (hasFlak) {
+    createSternFlak(scene, materials, root, name, teamMaterials, -3.34, false);
+  }
 
   const bowWake = createEnemyBowWake(scene, materials, root, name);
 
