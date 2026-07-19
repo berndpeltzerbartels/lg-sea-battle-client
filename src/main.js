@@ -4217,7 +4217,8 @@ function getPlayerFlakShot() {
   const shipVelocity = getForwardVector(heading).scale(speed);
 
   return {
-    position: muzzle.add(direction.scale(0.18)),
+    position: muzzle.add(direction.scale(0.08)),
+    muzzle,
     direction,
     velocity: direction.scale(flakProjectileSpeed).add(shipVelocity)
   };
@@ -4231,24 +4232,23 @@ function createFlakProjectile(system, position, velocity, direction) {
   root.parent = system.root;
   root.position.copyFrom(position);
 
-  const core = MeshBuilder.CreateBox(`${root.name}_core`, {
-    width: 0.07,
-    height: 0.07,
-    depth: 0.16
+  const core = MeshBuilder.CreateSphere(`${root.name}_core`, {
+    diameter: 0.075,
+    segments: 8
   }, system.scene);
   core.parent = root;
   core.material = system.materials.flakTracer;
 
   const trail = [];
-  for (let i = 0; i < 5; i += 1) {
+  for (let i = 0; i < 6; i += 1) {
     const segment = MeshBuilder.CreateBox(`${root.name}_trail_${i}`, {
-      width: 0.035 + i * 0.006,
+      width: 0.035 + i * 0.005,
       height: 0.035 + i * 0.004,
-      depth: 0.22 + i * 0.08
+      depth: 0.42 + i * 0.12
     }, system.scene);
-    segment.parent = root;
+    segment.parent = system.root;
     segment.material = system.materials.flakTracerTrail;
-    segment.position.copyFrom(direction.scale(-0.18 - i * 0.18));
+    segment.position.copyFrom(position.add(direction.scale(-0.1 - i * 0.22)));
     trail.push(segment);
   }
 
@@ -4264,11 +4264,12 @@ function createFlakProjectile(system, position, velocity, direction) {
     trail,
     light,
     position: position.clone(),
-    previousPosition: position.clone(),
+    previousPosition: position.subtract(direction.scale(0.55)),
     velocity,
     age: 0,
     lifetime: flakProjectileLifetime,
-    direction: direction.clone()
+    direction: direction.clone(),
+    samplePositions: Array.from({ length: 6 }, (_, index) => position.add(direction.scale(-0.12 - index * 0.24)))
   });
 }
 
@@ -4313,8 +4314,17 @@ function updateFlakSystem(system, dt, now) {
 
     const pulse = 0.72 + Math.sin(now * 80 + projectile.age * 13) * 0.18;
     projectile.core.visibility = pulse;
+    projectile.samplePositions.unshift(projectile.position.clone());
+    projectile.samplePositions = projectile.samplePositions.slice(0, projectile.trail.length + 1);
     projectile.trail.forEach((segment, index) => {
-      segment.position.copyFrom(projectile.direction.scale(-0.18 - index * 0.18));
+      const start = projectile.samplePositions[index + 1] ?? projectile.previousPosition;
+      const end = projectile.samplePositions[index] ?? projectile.position;
+      const midpoint = Vector3.Center(start, end);
+      const segmentDirection = end.subtract(start);
+      const segmentLength = Math.max(0.08, segmentDirection.length());
+      segment.position.copyFrom(midpoint);
+      segment.scaling.y = segmentLength / (0.42 + index * 0.12);
+      segment.rotationQuaternion = Quaternion.FromLookDirectionLH(segmentDirection.normalize(), Vector3.Up());
       segment.visibility = Math.max(0.18, pulse - index * 0.11);
     });
     projectile.light.position.copyFrom(projectile.position);
@@ -4335,7 +4345,7 @@ function updateFlakSystem(system, dt, now) {
     flash.mesh.scaling.setAll(1 + t * 1.6);
     flash.mesh.position.copyFrom(flash.origin.add(flash.direction.scale(t * 0.35)));
     flash.light.position.copyFrom(flash.mesh.position);
-    flash.light.intensity = 1.35 * fade;
+    flash.light.intensity = 0.85 * fade;
     return true;
   });
 
@@ -4344,6 +4354,7 @@ function updateFlakSystem(system, dt, now) {
 
 function disposeFlakProjectile(projectile) {
   projectile.light.dispose();
+  projectile.trail.forEach((segment) => segment.dispose());
   projectile.root.getChildMeshes().forEach((mesh) => mesh.dispose());
   projectile.root.dispose();
 }
