@@ -123,7 +123,7 @@ const flakMinPitch = -0.12;
 const flakMaxPitch = 0.92;
 const flakPitchStepRadians = 0.05;
 const playerSternFlakScale = 0.54;
-const playerFlakSightYOffset = 0.08 * playerSternFlakScale;
+const playerFlakSightYOffset = 0.14 * playerSternFlakScale;
 const playerFlakEyeZ = -0.34 * playerSternFlakScale;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
@@ -6226,21 +6226,22 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   muzzle.position.y = barrelHalfLength;
   muzzle.material = metalMaterial;
 
-  const sightYOffset = 0.06 * scale;
+  const sightYOffset = 0.14 * scale;
+  const sightZ = 0.9 * scale;
   const sight = MeshBuilder.CreateTorus(`${name}_flak_ring_sight`, {
-    diameter: 0.29 * scale,
-    thickness: 0.008 * scale,
-    tessellation: 24
+    diameter: 0.24 * scale,
+    thickness: 0.006 * scale,
+    tessellation: 32
   }, scene);
   sight.parent = elevationRoot;
   sight.position.y = sightYOffset;
-  sight.position.z = 0.9 * scale;
+  sight.position.z = sightZ;
   sight.rotation.x = Math.PI / 2;
   sight.material = metalMaterial;
 
   const sightSpokes = [
-    { width: 0.265, height: 0.005 },
-    { width: 0.005, height: 0.265 }
+    { width: 0.22, height: 0.004 },
+    { width: 0.004, height: 0.22 }
   ];
   sightSpokes.forEach((spoke, index) => {
     const mesh = MeshBuilder.CreateBox(`${name}_flak_ring_sight_spoke_${index}`, {
@@ -6250,14 +6251,24 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
     }, scene);
     mesh.parent = elevationRoot;
     mesh.position.y = sightYOffset;
-    mesh.position.z = 0.9 * scale;
+    mesh.position.z = sightZ;
     mesh.material = metalMaterial;
   });
 
-  const sightPost = MeshBuilder.CreateBox(`${name}_flak_ring_sight_post`, {
+  const sightBracket = MeshBuilder.CreateBox(`${name}_flak_ring_sight_bracket`, {
     width: 0.018 * scale,
-    height: 0.16 * scale,
-    depth: 0.012 * scale
+    height: 0.1 * scale,
+    depth: 0.018 * scale
+  }, scene);
+  sightBracket.parent = elevationRoot;
+  sightBracket.position.y = 0.075 * scale;
+  sightBracket.position.z = sightZ;
+  sightBracket.material = metalMaterial;
+
+  const sightPost = MeshBuilder.CreateBox(`${name}_flak_ring_sight_post`, {
+    width: 0.014 * scale,
+    height: 0.12 * scale,
+    depth: 0.01 * scale
   }, scene);
   sightPost.parent = elevationRoot;
   sightPost.position.y = sightYOffset;
