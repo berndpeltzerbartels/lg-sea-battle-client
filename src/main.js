@@ -122,6 +122,12 @@ const remoteSternFlakZ = -2.92;
 const flakMinPitch = -0.12;
 const flakMaxPitch = 0.92;
 const flakPitchStepRadians = 0.05;
+const playerSternFlakScale = 0.54;
+const playerFlakElevationY = 0.91 + 0.44 * playerSternFlakScale + 0.08 * playerSternFlakScale;
+const playerFlakMountForwardOffset = playerSternFlakZ - 0.05 * playerSternFlakScale;
+const playerFlakElevationForwardOffset = 0.28 * playerSternFlakScale;
+const playerFlakSightEyeOffset = 0.04;
+const playerFlakSightYOffset = 0.16 * playerSternFlakScale;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = true;
@@ -869,15 +875,19 @@ function getPlayerCameraSetup(forward) {
     const flakDirection = flakHorizontalDirection
       .scale(Math.cos(flakPitch))
       .add(new Vector3(0, Math.sin(flakPitch), 0));
-    const mountPosition = boat.root.position
-      .add(shipForward.scale(playerSternFlakZ - 0.05 * 0.54));
-    const position = boat.root.position
-      .add(shipForward.scale(playerSternFlakZ - 0.05 * 0.54))
-      .subtract(flakHorizontalDirection.scale(0.32))
-      .add(new Vector3(0, 1.2, 0));
+    const flakUp = flakHorizontalDirection
+      .scale(-Math.sin(flakPitch))
+      .add(new Vector3(0, Math.cos(flakPitch), 0));
+    const elevationPivot = boat.root.position
+      .add(shipForward.scale(playerFlakMountForwardOffset))
+      .add(flakHorizontalDirection.scale(playerFlakElevationForwardOffset))
+      .add(new Vector3(0, playerFlakElevationY, 0));
+    const position = elevationPivot
+      .add(flakUp.scale(playerFlakSightYOffset))
+      .add(flakDirection.scale(playerFlakSightEyeOffset));
     return {
       position,
-      target: mountPosition.add(flakDirection.scale(72)).add(new Vector3(0, 1.2, 0))
+      target: position.add(flakDirection.scale(72))
     };
   }
 
@@ -6098,7 +6108,7 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   const deckMaterial = teamMaterials.deck;
   const metalMaterial = teamMaterials.funnel ?? materials.funnel;
   const shieldMaterial = teamMaterials.hull;
-  const scale = isPlayer ? 0.54 : 0.75;
+  const scale = isPlayer ? playerSternFlakScale : 0.75;
 
   const platform = MeshBuilder.CreateCylinder(`${name}_flak_platform`, {
     diameter: 1.12 * scale,
@@ -6127,17 +6137,21 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   mount.rotation.y = Math.PI;
 
   for (let side = -1; side <= 1; side += 2) {
-    const shield = MeshBuilder.CreateBox(`${name}_flak_shield_${side}`, { width: 0.13 * scale, height: 0.18 * scale, depth: 0.04 * scale }, scene);
+    const shield = MeshBuilder.CreateBox(`${name}_flak_shield_${side}`, {
+      width: (isPlayer ? 0.08 : 0.13) * scale,
+      height: (isPlayer ? 0.11 : 0.18) * scale,
+      depth: 0.035 * scale
+    }, scene);
     shield.parent = mount;
-    shield.position.x = side * 0.15 * scale;
-    shield.position.z = 0.16 * scale;
-    shield.position.y = -0.05 * scale;
+    shield.position.x = side * (isPlayer ? 0.11 : 0.15) * scale;
+    shield.position.z = (isPlayer ? 0.1 : 0.16) * scale;
+    shield.position.y = (isPlayer ? -0.09 : -0.05) * scale;
     shield.material = shieldMaterial;
   }
 
   const receiver = MeshBuilder.CreateCylinder(`${name}_flak_receiver`, {
-    diameter: 0.16 * scale,
-    height: 0.28 * scale,
+    diameter: (isPlayer ? 0.11 : 0.16) * scale,
+    height: (isPlayer ? 0.2 : 0.28) * scale,
     tessellation: 10
   }, scene);
   receiver.parent = mount;
@@ -6170,12 +6184,14 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   muzzle.position.y = 0.57 * scale;
   muzzle.material = metalMaterial;
 
+  const sightYOffset = (isPlayer ? 0.16 : 0.08) * scale;
   const sight = MeshBuilder.CreateTorus(`${name}_flak_ring_sight`, {
     diameter: 0.34 * scale,
     thickness: 0.012 * scale,
     tessellation: 24
   }, scene);
   sight.parent = elevationRoot;
+  sight.position.y = sightYOffset;
   sight.position.z = 1.06 * scale;
   sight.rotation.x = Math.PI / 2;
   sight.material = metalMaterial;
@@ -6191,6 +6207,7 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
       depth: 0.008 * scale
     }, scene);
     mesh.parent = elevationRoot;
+    mesh.position.y = sightYOffset;
     mesh.position.z = 1.06 * scale;
     mesh.material = metalMaterial;
   });
@@ -6201,7 +6218,7 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
     depth: 0.012 * scale
   }, scene);
   sightPost.parent = elevationRoot;
-  sightPost.position.y = -0.04 * scale;
+  sightPost.position.y = sightYOffset - 0.12 * scale;
   sightPost.position.z = 0.92 * scale;
   sightPost.material = metalMaterial;
 
