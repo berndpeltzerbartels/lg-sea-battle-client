@@ -495,6 +495,7 @@ let remoteCorrectionTotal = 0;
 let remoteCorrectionMax = 0;
 let playerServerSnapshotReceived = false;
 const clientRadarRange = 945;
+const scoutPlaneRadarRangeFactor = 1.5;
 let serverShipsById = indexShipsById(gameState.ships);
 let serverClockOffset = Number.isFinite(gameState.t) ? -gameState.t : null;
 let gameEventSource = null;
@@ -2417,7 +2418,10 @@ function updateRudderGauge(indicator, valueElement, degrees) {
 
 function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading) {
   drawMapInstrument(mapCanvas, playerPosition, landZones, mapZoom, heading);
-  drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading, clientRadarRange);
+  const radarRange = scoutPlaneMode ? clientRadarRange * scoutPlaneRadarRangeFactor : clientRadarRange;
+  drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading, radarRange, {
+    ignoreLandShadows: scoutPlaneMode
+  });
 }
 
 function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, heading) {
@@ -2612,7 +2616,7 @@ function drawMapSectorGrid(ctx, bounds, width, height, scale) {
   ctx.restore();
 }
 
-function drawRadarInstrument(canvas, statusElement, playerPosition, radarContacts, landZones, heading, range = 360) {
+function drawRadarInstrument(canvas, statusElement, playerPosition, radarContacts, landZones, heading, range = 360, options = {}) {
   if (!canvas) return;
 
   const ctx = prepareInstrumentCanvas(canvas);
@@ -2623,6 +2627,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   const centerY = height * 0.5;
   const radius = Math.max(1, Math.min(width, height) * 0.46);
   const radarRange = range;
+  const ignoreLandShadows = options.ignoreLandShadows === true;
   const scale = radius / radarRange;
 
   ctx.clearRect(0, 0, width, height);
@@ -2634,7 +2639,9 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   ctx.fillRect(0, 0, width, height);
 
   drawRadarRangeRings(ctx, centerX, centerY, radius);
-  landZones.forEach((zone) => drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, radius, radarRange));
+  if (!ignoreLandShadows) {
+    landZones.forEach((zone) => drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, radius, radarRange));
+  }
 
   drawRadarLandUnion(ctx, landZones, playerPosition, centerX, centerY, scale, heading, width, height);
 
@@ -2642,7 +2649,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
     .map((contact) => ({
       ...contact,
       distance: Number.isFinite(contact.distance) ? contact.distance : distance2D(playerPosition, contact.position),
-      blocked: contact.serverVisible ? false : isLineBlockedByLand(playerPosition, contact.position, landZones)
+      blocked: ignoreLandShadows || contact.serverVisible ? false : isLineBlockedByLand(playerPosition, contact.position, landZones)
     }))
     .filter((contact) => contact.distance <= radarRange);
   const visibleContacts = contacts.filter((contact) => !contact.blocked);
