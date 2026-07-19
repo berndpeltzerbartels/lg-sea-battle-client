@@ -119,6 +119,9 @@ const scoutPlaneExperimentShowAllFlak = true;
 const scoutPlaneExperimentFlakDemo = urlParams.get("flak-demo") === "1";
 const playerSternFlakZ = -0.62;
 const remoteSternFlakZ = -2.92;
+const flakMinPitch = -0.12;
+const flakMaxPitch = 0.92;
+const flakPitchStepRadians = 0.05;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = true;
@@ -259,6 +262,14 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (playerActive && isInputKey(event, "up")) {
+    if (flakViewActive) {
+      heldFlakPitchDirection = 1;
+      if (!event.repeat) {
+        changeFlakPitch(1);
+      }
+      event.preventDefault();
+      return;
+    }
     if (scoutPlaneMode) {
       heldElevatorDirection = 1;
     } else {
@@ -271,6 +282,14 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
   }
   if (playerActive && isInputKey(event, "down")) {
+    if (flakViewActive) {
+      heldFlakPitchDirection = -1;
+      if (!event.repeat) {
+        changeFlakPitch(-1);
+      }
+      event.preventDefault();
+      return;
+    }
     if (scoutPlaneMode) {
       heldElevatorDirection = -1;
     } else {
@@ -329,12 +348,20 @@ window.addEventListener("keyup", (event) => {
     heldEngineDirection = 0;
     event.preventDefault();
   }
+  if (isInputKey(event, "up") && heldFlakPitchDirection > 0) {
+    heldFlakPitchDirection = 0;
+    event.preventDefault();
+  }
   if (isInputKey(event, "up") && heldElevatorDirection > 0) {
     heldElevatorDirection = 0;
     event.preventDefault();
   }
   if (isInputKey(event, "down") && heldEngineDirection < 0) {
     heldEngineDirection = 0;
+    event.preventDefault();
+  }
+  if (isInputKey(event, "down") && heldFlakPitchDirection < 0) {
+    heldFlakPitchDirection = 0;
     event.preventDefault();
   }
   if (isInputKey(event, "down") && heldElevatorDirection < 0) {
@@ -500,7 +527,9 @@ let heldRudderDirection = 0;
 let nextRudderHoldChangeTime = 0;
 let flakViewActive = false;
 let flakYaw = Math.PI;
+let flakPitch = 0;
 let heldFlakDirection = 0;
+let heldFlakPitchDirection = 0;
 let mouseButtonMask = 0;
 let mouseWheelEngineAccumulator = 0;
 let measuredSpeedSample = {
@@ -590,6 +619,9 @@ scene.onBeforeRenderObservable.add(() => {
   if (playerActive && flakViewActive && heldFlakDirection !== 0) {
     flakYaw = normalizeAngle(flakYaw + heldFlakDirection * 1.35 * dt);
   }
+  if (playerActive && flakViewActive && heldFlakPitchDirection !== 0) {
+    flakPitch = clamp(flakPitch + heldFlakPitchDirection * 0.72 * dt, flakMinPitch, flakMaxPitch);
+  }
   updatePlayerFlakMount();
 
   if (!scoutPlaneMode && playerActive && heldEngineDirection !== 0 && time >= nextEngineHoldChangeTime) {
@@ -666,6 +698,8 @@ scene.onBeforeRenderObservable.add(() => {
   } else {
     heldRudderDirection = 0;
     heldElevatorDirection = 0;
+    heldFlakDirection = 0;
+    heldFlakPitchDirection = 0;
     engineOrder = 2;
     speed *= Math.max(0, 1 - dt * 1.7);
     turnVelocity *= Math.max(0, 1 - dt * 2.0);
@@ -802,7 +836,10 @@ function isFlakViewToggleKey(event) {
 function toggleFlakView() {
   flakViewActive = !flakViewActive;
   heldFlakDirection = 0;
+  heldFlakPitchDirection = 0;
   heldRudderDirection = 0;
+  heldEngineDirection = 0;
+  heldElevatorDirection = 0;
   rightMouseRudderActive = false;
   document.body.dataset.flakView = flakViewActive ? "active" : "bridge";
 }
@@ -810,22 +847,33 @@ function toggleFlakView() {
 function updatePlayerFlakMount() {
   if (!boat.sternFlak?.mount) return;
   boat.sternFlak.mount.rotation.y = flakYaw;
+  if (boat.sternFlak.elevationRoot) {
+    boat.sternFlak.elevationRoot.rotation.x = -flakPitch;
+  }
   document.body.dataset.flakYaw = String(Math.round(normalizeAngle(flakYaw) * 180 / Math.PI));
+  document.body.dataset.flakPitch = String(Math.round(flakPitch * 180 / Math.PI));
+}
+
+function changeFlakPitch(direction) {
+  flakPitch = clamp(flakPitch + direction * flakPitchStepRadians, flakMinPitch, flakMaxPitch);
 }
 
 function getPlayerCameraSetup(forward) {
   if (!scoutPlaneMode && flakViewActive) {
     const shipForward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
-    const flakDirection = new Vector3(
+    const flakHorizontalDirection = new Vector3(
       Math.sin(heading + flakYaw),
       0,
       Math.cos(heading + flakYaw)
     );
+    const flakDirection = flakHorizontalDirection
+      .scale(Math.cos(flakPitch))
+      .add(new Vector3(0, Math.sin(flakPitch), 0));
     const mountPosition = boat.root.position
       .add(shipForward.scale(playerSternFlakZ - 0.05 * 0.54));
     const position = boat.root.position
       .add(shipForward.scale(playerSternFlakZ - 0.05 * 0.54))
-      .subtract(flakDirection.scale(0.32))
+      .subtract(flakHorizontalDirection.scale(0.32))
       .add(new Vector3(0, 1.2, 0));
     return {
       position,
@@ -6098,14 +6146,18 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   receiver.rotation.x = Math.PI / 2;
   receiver.material = metalMaterial;
 
+  const elevationRoot = new TransformNode(`${name}_flak_elevation`, scene);
+  elevationRoot.parent = mount;
+  elevationRoot.position.y = 0.08 * scale;
+  elevationRoot.position.z = 0.28 * scale;
+
   const barrel = MeshBuilder.CreateCylinder(`${name}_flak_barrel`, {
     diameter: 0.045 * scale,
     height: 1.18 * scale,
     tessellation: 10
   }, scene);
-  barrel.parent = mount;
-  barrel.position.y = 0.08 * scale;
-  barrel.position.z = 0.68 * scale;
+  barrel.parent = elevationRoot;
+  barrel.position.z = 0.4 * scale;
   barrel.rotation.x = Math.PI / 2;
   barrel.material = metalMaterial;
 
@@ -6123,9 +6175,8 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
     thickness: 0.012 * scale,
     tessellation: 24
   }, scene);
-  sight.parent = mount;
-  sight.position.y = 0.08 * scale;
-  sight.position.z = 1.34 * scale;
+  sight.parent = elevationRoot;
+  sight.position.z = 1.06 * scale;
   sight.rotation.x = Math.PI / 2;
   sight.material = metalMaterial;
 
@@ -6139,9 +6190,8 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
       height: spoke.height * scale,
       depth: 0.008 * scale
     }, scene);
-    mesh.parent = mount;
-    mesh.position.y = 0.08 * scale;
-    mesh.position.z = 1.34 * scale;
+    mesh.parent = elevationRoot;
+    mesh.position.z = 1.06 * scale;
     mesh.material = metalMaterial;
   });
 
@@ -6150,12 +6200,12 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
     height: 0.16 * scale,
     depth: 0.012 * scale
   }, scene);
-  sightPost.parent = mount;
+  sightPost.parent = elevationRoot;
   sightPost.position.y = -0.04 * scale;
-  sightPost.position.z = 1.2 * scale;
+  sightPost.position.z = 0.92 * scale;
   sightPost.material = metalMaterial;
 
-  return { mount };
+  return { mount, elevationRoot };
 }
 
 // Low-poly external ship model for opponents. Keep it cheap: enemies may appear in groups later.
