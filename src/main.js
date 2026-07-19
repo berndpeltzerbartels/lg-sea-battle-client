@@ -117,7 +117,7 @@ const scoutPlaneMaxClimbRate = 8.5;
 const scoutPlaneMaxPitch = 0.22;
 const scoutPlaneExperimentShowAllFlak = true;
 const scoutPlaneExperimentFlakDemo = urlParams.get("flak-demo") === "1";
-const playerSternFlakZ = -0.62;
+const playerSternFlakZ = -2.92;
 const remoteSternFlakZ = -2.92;
 const flakMinPitch = -0.12;
 const flakMaxPitch = 0.92;
@@ -529,7 +529,7 @@ let nextEngineHoldChangeTime = 0;
 let heldRudderDirection = 0;
 let nextRudderHoldChangeTime = 0;
 let flakViewActive = false;
-let flakYaw = Math.PI;
+let flakYaw = 0;
 let flakPitch = 0;
 let heldFlakDirection = 0;
 let heldFlakPitchDirection = 0;
@@ -777,6 +777,7 @@ scene.onBeforeRenderObservable.add(() => {
   if (!scoutPlaneMode && !flakViewActive) {
     camera.rotation.x = -Math.abs(camera.rotation.x);
   }
+  boat.flakDeckView?.setEnabled(flakViewActive);
   document.body.dataset.camera = `${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)}`;
   document.body.dataset.frameMs = (rawFrameSeconds * 1000).toFixed(1);
   document.body.dataset.simulationMs = (dt * 1000).toFixed(1);
@@ -5842,6 +5843,8 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
   const tubeMaterial = teamMaterials.hull;
 
   const hull = createTaperedHull(`${name}_hull`, scene, [
+    { z: -4.05, width: 0.88, top: 0.66, bottom: 0.08 },
+    { z: -2.3, width: 1.56, top: 0.76, bottom: 0.08 },
     { z: -1.35, width: 1.7, top: 0.72, bottom: 0.12 },
     { z: 1.95, width: 1.08, top: 0.68, bottom: 0.02 },
     { z: 3.65, width: 0.18, top: 0.62, bottom: 0.0 }
@@ -5850,6 +5853,8 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
   hull.material = hullMaterial;
 
   const deck = createTaperedDeck(`${name}_foredeck`, scene, [
+    { z: -3.72, width: 0.74, y: 0.78 },
+    { z: -2.3, width: 1.24, y: 0.82 },
     { z: -1.08, width: 1.35, y: 0.78 },
     { z: 1.95, width: 0.88, y: 0.76 },
     { z: 3.32, width: 0.26, y: 0.72 }
@@ -5857,11 +5862,43 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
   deck.parent = root;
   deck.material = deckMaterial;
 
-  const rearDeck = MeshBuilder.CreateBox(`${name}_rear_deck`, { width: 1.42, height: 0.12, depth: 0.72 }, scene);
+  const rearDeck = MeshBuilder.CreateBox(`${name}_rear_deck`, { width: 1.22, height: 0.12, depth: 2.24 }, scene);
   rearDeck.parent = root;
   rearDeck.position.y = 0.82;
-  rearDeck.position.z = -1.02;
+  rearDeck.position.z = -2.42;
   rearDeck.material = deckMaterial;
+
+  const flakDeckView = new TransformNode(`${name}_flak_deck_view`, scene);
+  flakDeckView.parent = root;
+  flakDeckView.setEnabled(false);
+
+  const bridgeBase = MeshBuilder.CreateBox(`${name}_flak_view_bridge_base`, { width: 0.96, height: 0.28, depth: 1.05 }, scene);
+  bridgeBase.parent = flakDeckView;
+  bridgeBase.position.y = 0.75;
+  bridgeBase.position.z = 0.55;
+  bridgeBase.material = teamMaterials.cabin;
+
+  const bridge = MeshBuilder.CreateBox(`${name}_flak_view_bridge`, { width: 0.74, height: 0.48, depth: 0.72 }, scene);
+  bridge.parent = flakDeckView;
+  bridge.position.y = 1.06;
+  bridge.position.z = 0.76;
+  bridge.material = teamMaterials.cabin;
+
+  const funnelBase = MeshBuilder.CreateBox(`${name}_flak_view_funnel_base`, { width: 0.72, height: 0.22, depth: 0.58 }, scene);
+  funnelBase.parent = flakDeckView;
+  funnelBase.position.y = 0.76;
+  funnelBase.position.z = 0.0;
+  funnelBase.material = teamMaterials.cabin;
+
+  const funnel = MeshBuilder.CreateCylinder(`${name}_flak_view_funnel`, {
+    diameter: 0.36,
+    height: 0.98,
+    tessellation: 10
+  }, scene);
+  funnel.parent = flakDeckView;
+  funnel.position.y = 1.33;
+  funnel.position.z = 0.0;
+  funnel.material = teamMaterials.funnel;
 
   for (let i = 0; i < 2; i += 1) {
     const tube = MeshBuilder.CreateCylinder(`${name}_torpedo_tube_${i}`, {
@@ -5914,7 +5951,7 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
 
   const sternFlak = createSternFlak(scene, materials, root, name, teamMaterials, playerSternFlakZ, true);
 
-  return { root, sternFlak };
+  return { root, sternFlak, flakDeckView };
 }
 
 function createScoutPlane(scene, materials, name = "scout_plane", teamId = "light", isPlayer = false) {
@@ -6112,8 +6149,8 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   platform.material = deckMaterial;
 
   const pedestal = MeshBuilder.CreateCylinder(`${name}_flak_pedestal`, {
-    diameter: 0.32 * scale,
-    height: 0.34 * scale,
+    diameter: 0.24 * scale,
+    height: 0.3 * scale,
     tessellation: 12
   }, scene);
   pedestal.parent = parent;
@@ -6129,28 +6166,28 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
 
   for (let side = -1; side <= 1; side += 2) {
     const shield = MeshBuilder.CreateBox(`${name}_flak_shield_${side}`, {
-      width: (isPlayer ? 0.11 : 0.13) * scale,
-      height: (isPlayer ? 0.14 : 0.18) * scale,
+      width: (isPlayer ? 0.08 : 0.11) * scale,
+      height: (isPlayer ? 0.1 : 0.15) * scale,
       depth: 0.035 * scale
     }, scene);
     shield.parent = mount;
-    shield.position.x = side * (isPlayer ? 0.2 : 0.15) * scale;
-    shield.position.z = (isPlayer ? 0.03 : 0.16) * scale;
-    shield.position.y = (isPlayer ? -0.08 : -0.05) * scale;
+    shield.position.x = side * (isPlayer ? 0.34 : 0.18) * scale;
+    shield.position.z = (isPlayer ? 0.06 : 0.14) * scale;
+    shield.position.y = (isPlayer ? -0.28 : -0.06) * scale;
     shield.material = shieldMaterial;
   }
 
-  const receiver = MeshBuilder.CreateCylinder(`${name}_flak_receiver`, {
-    diameter: (isPlayer ? 0.11 : 0.16) * scale,
-    height: (isPlayer ? 0.2 : 0.28) * scale,
-    cap: isPlayer ? Mesh.NO_CAP : Mesh.CAP_ALL,
-    tessellation: 10
-  }, scene);
-  receiver.parent = mount;
-  receiver.position.y = 0.02 * scale;
-  receiver.position.z = 0.22 * scale;
-  receiver.rotation.x = Math.PI / 2;
-  receiver.material = metalMaterial;
+  if (!isPlayer) {
+    const cradle = MeshBuilder.CreateBox(`${name}_flak_cradle`, {
+      width: 0.16 * scale,
+      height: 0.08 * scale,
+      depth: 0.18 * scale
+    }, scene);
+    cradle.parent = mount;
+    cradle.position.y = -0.02 * scale;
+    cradle.position.z = 0.14 * scale;
+    cradle.material = metalMaterial;
+  }
 
   const elevationRoot = new TransformNode(`${name}_flak_elevation`, scene);
   elevationRoot.parent = mount;
@@ -6158,23 +6195,36 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   elevationRoot.position.z = 0.28 * scale;
 
   const barrel = MeshBuilder.CreateCylinder(`${name}_flak_barrel`, {
-    diameter: 0.045 * scale,
-    height: (isPlayer ? 2.0 : 1.18) * scale,
+    diameter: (isPlayer ? 0.052 : 0.038) * scale,
+    height: (isPlayer ? 3.35 : 1.18) * scale,
     cap: isPlayer ? Mesh.NO_CAP : Mesh.CAP_ALL,
-    tessellation: 10
+    tessellation: 12
   }, scene);
   barrel.parent = elevationRoot;
   barrel.position.z = (isPlayer ? 0.7 : 0.4) * scale;
   barrel.rotation.x = Math.PI / 2;
   barrel.material = metalMaterial;
 
+  if (!isPlayer) {
+    const jacket = MeshBuilder.CreateCylinder(`${name}_flak_jacket`, {
+      diameter: 0.085 * scale,
+      height: 0.38 * scale,
+      cap: Mesh.NO_CAP,
+      tessellation: 12
+    }, scene);
+    jacket.parent = elevationRoot;
+    jacket.position.z = 0.1 * scale;
+    jacket.rotation.x = Math.PI / 2;
+    jacket.material = metalMaterial;
+  }
+
   const muzzle = MeshBuilder.CreateCylinder(`${name}_flak_muzzle`, {
-    diameter: 0.058 * scale,
-    height: 0.07 * scale,
+    diameter: 0.048 * scale,
+    height: 0.08 * scale,
     tessellation: 10
   }, scene);
   muzzle.parent = barrel;
-  muzzle.position.y = (isPlayer ? 0.98 : 0.57) * scale;
+  muzzle.position.y = (isPlayer ? 1.66 : 0.57) * scale;
   muzzle.material = metalMaterial;
 
   const sightYOffset = (isPlayer ? 0.08 : 0.08) * scale;
