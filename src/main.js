@@ -115,6 +115,8 @@ const scoutPlaneMaxAltitude = 80;
 const scoutPlaneCruiseSpeed = 14.5;
 const scoutPlaneMaxClimbRate = 8.5;
 const scoutPlaneMaxPitch = 0.22;
+const scoutPlaneExperimentShowAllFlak = true;
+const scoutPlaneExperimentFlakDemo = urlParams.get("flak-demo") === "1";
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = true;
@@ -231,6 +233,10 @@ if (scoutPlaneMode) {
 
 // Until SSE arrives, backend ships seed the visual fleet and local motion keeps them inspectable.
 const enemyMotions = createEnemyFleet(scene, materials, getOtherServerShips(gameState.ships, playerServerShipId));
+const flakDemoBoat = scoutPlaneMode && scoutPlaneExperimentFlakDemo
+  ? createScoutPlaneExperimentFlakDemoBoat(scene, materials, world, initialPlayerSpawn.position, heading)
+  : null;
+document.body.dataset.flakDemo = flakDemoBoat ? "1" : "0";
 document.body.dataset.meshCount = String(scene.meshes.length);
 
 const camera = new FreeCamera("follow_camera", new Vector3(0, 7, -13), scene);
@@ -3577,6 +3583,19 @@ function indexShipsById(ships) {
   return new Map((ships ?? []).map((ship) => [ship.id, ship]));
 }
 
+function createScoutPlaneExperimentFlakDemoBoat(scene, materials, parent, playerPosition, playerHeading) {
+  const boat = createEnemyTorpedoBoat(scene, materials, "scout_plane_flak_demo_boat", "dark", "MG", true);
+  boat.root.parent = parent;
+  const forward = new Vector3(Math.sin(playerHeading), 0, Math.cos(playerHeading));
+  const right = new Vector3(Math.cos(playerHeading), 0, -Math.sin(playerHeading));
+  boat.root.position = playerPosition
+    .add(forward.scale(125))
+    .add(right.scale(28));
+  boat.root.position.y = remoteVehicleY({ vehicleType: "torpedo-boat" });
+  boat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, playerHeading, 0);
+  return boat;
+}
+
 function createEnemyFleet(scene, materials, serverShips) {
   return serverShips.map((ship, index) => {
     const enemyBoat = createRemoteVehicleModel(scene, materials, `server_ship_${ship.id}`, ship);
@@ -3597,7 +3616,14 @@ function createEnemyFleet(scene, materials, serverShips) {
 function createRemoteVehicleModel(scene, materials, name, ship) {
   return isScoutPlaneShip(ship)
     ? createScoutPlane(scene, materials, name, ship.teamId, false)
-    : createEnemyTorpedoBoat(scene, materials, name, ship.teamId, createShipDesignation(ship), isHumanController(ship?.controlledBy));
+    : createEnemyTorpedoBoat(
+      scene,
+      materials,
+      name,
+      ship.teamId,
+      createShipDesignation(ship),
+      scoutPlaneExperimentShowAllFlak || isHumanController(ship?.controlledBy)
+    );
 }
 
 function getShipVehicleType(ship) {
