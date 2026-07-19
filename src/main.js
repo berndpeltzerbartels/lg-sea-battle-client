@@ -144,6 +144,7 @@ document.body.dataset.gameStateSource = "server";
 document.body.dataset.serverGameState = gameState.state;
 document.body.dataset.serverShips = String(gameState.ships.length);
 document.body.dataset.serverTorpedoes = String(gameState.torpedoes.length);
+document.body.dataset.serverBombs = String(Array.isArray(gameState.bombs) ? gameState.bombs.length : 0);
 const selectedVehicleType = urlParams.get("vehicle") ?? readStoredValue("vehicleType");
 const scoutPlaneMode = gameState.sessionId === scoutPlaneSetupId || selectedVehicleType === "scout-plane";
 if (scoutPlaneMode) {
@@ -288,7 +289,7 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
   }
   if (playerActive && isTorpedoFireKey(event) && !event.repeat) {
-    requestPlayerTorpedoFire();
+    requestPlayerWeaponFire();
     event.preventDefault();
   }
 });
@@ -504,6 +505,7 @@ let gameEventSourceReady = false;
 let lastGameStreamMessageAt = 0;
 let debugTeleportPending = false;
 let fireTorpedoRequestInFlight = false;
+let dropBombRequestInFlight = false;
 const maxRudderDegrees = 35;
 const rudderStepDegrees = 3;
 const rudderHoldInitialDelaySeconds = 0.22;
@@ -517,6 +519,7 @@ const torpedoLaunchDefaults = {
   startY: 0.6
 };
 const torpedoSystem = createTorpedoSystem(scene, materials, world);
+const bombSystem = createBombSystem(scene, materials, world);
 connectGameEventStream();
 
 const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
@@ -656,6 +659,7 @@ scene.onBeforeRenderObservable.add(() => {
   enemyMotions.forEach((enemyMotion) => updateEnemyMotion(enemyMotion, dt, time, boat.root.position, blockedWaters));
   updateEnemyFireControl(torpedoSystem, enemyMotions, boat.root.position, blockedWaters, time);
   updateServerTorpedoVisuals(torpedoSystem, dt, time);
+  updateServerBombVisuals(bombSystem, dt, time);
   syncMultiplayerState(time);
   const torpedoResult = updateTorpedoSystem(torpedoSystem, dt, time, enemyMotions, blockedWaters, boat.root.position);
   if (torpedoResult.playerHit && playerDamageState === "active") {
@@ -997,7 +1001,7 @@ function setupMobileFireButton(button) {
 
   button.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
-    requestPlayerTorpedoFire();
+    requestPlayerWeaponFire();
     event.stopPropagation();
     event.preventDefault();
   });
@@ -1039,6 +1043,9 @@ function createPerformanceTelemetry() {
     fireTorpedoHttpRequests: 0,
     fireTorpedoHttpTotalMs: 0,
     fireTorpedoHttpMaxMs: 0,
+    dropBombHttpRequests: 0,
+    dropBombHttpTotalMs: 0,
+    dropBombHttpMaxMs: 0,
     performanceHttpRequests: 0,
     performanceHttpTotalMs: 0,
     performanceHttpMaxMs: 0
@@ -1076,9 +1083,11 @@ function finishHttpRequest(kind, startedAt) {
     ? "playerStateHttp"
     : kind === "fireTorpedo"
       ? "fireTorpedoHttp"
-      : kind === "performance"
-        ? "performanceHttp"
-        : "";
+      : kind === "dropBomb"
+        ? "dropBombHttp"
+        : kind === "performance"
+          ? "performanceHttp"
+          : "";
   if (!keyPrefix) return;
   performanceTelemetry[`${keyPrefix}Requests`] += 1;
   performanceTelemetry[`${keyPrefix}TotalMs`] += elapsedMs;
@@ -1142,8 +1151,12 @@ function flushPerformanceTelemetry(now) {
     localTorpedoCount: torpedoSystem.active.length,
     serverTorpedoes: readDatasetInt("serverTorpedoes"),
     serverTorpedoVisuals: readDatasetInt("serverTorpedoVisuals"),
+    serverBombs: readDatasetInt("serverBombs"),
+    serverBombVisuals: readDatasetInt("serverBombVisuals"),
     fireTorpedoSync: document.body.dataset.fireTorpedoSync ?? "",
     fireTorpedoSyncError: document.body.dataset.fireTorpedoSyncError ?? "",
+    dropBombSync: document.body.dataset.dropBombSync ?? "",
+    dropBombSyncError: document.body.dataset.dropBombSyncError ?? "",
     playerStateSync: document.body.dataset.playerStateSync ?? "",
     playerStateSyncError: document.body.dataset.playerStateSyncError ?? "",
     gameEventSource: document.body.dataset.gameEventSource ?? "",
@@ -1168,6 +1181,9 @@ function flushPerformanceTelemetry(now) {
     fireTorpedoHttpRequests: performanceTelemetry.fireTorpedoHttpRequests,
     avgFireTorpedoHttpMs: averageMs(performanceTelemetry.fireTorpedoHttpTotalMs, performanceTelemetry.fireTorpedoHttpRequests),
     maxFireTorpedoHttpMs: Number(performanceTelemetry.fireTorpedoHttpMaxMs.toFixed(2)),
+    dropBombHttpRequests: performanceTelemetry.dropBombHttpRequests,
+    avgDropBombHttpMs: averageMs(performanceTelemetry.dropBombHttpTotalMs, performanceTelemetry.dropBombHttpRequests),
+    maxDropBombHttpMs: Number(performanceTelemetry.dropBombHttpMaxMs.toFixed(2)),
     performanceHttpRequests: performanceTelemetry.performanceHttpRequests,
     avgPerformanceHttpMs: averageMs(performanceTelemetry.performanceHttpTotalMs, performanceTelemetry.performanceHttpRequests),
     maxPerformanceHttpMs: Number(performanceTelemetry.performanceHttpMaxMs.toFixed(2))
@@ -1347,7 +1363,7 @@ function stopGlobalMouseRudder(button) {
 
 function fireMouseTorpedo(button) {
   if (!isMouseTorpedoButton(button) || playerDamageState !== "active") return false;
-  requestPlayerTorpedoFire();
+  requestPlayerWeaponFire();
   return true;
 }
 
@@ -1516,6 +1532,14 @@ function getFireTorpedoEndpoint() {
   }
 
   return gameEndpoint("/game/fire-torpedo");
+}
+
+function getDropBombEndpoint() {
+  if (location.port === "5173" || location.port === "4173") {
+    return `${location.protocol}//${location.hostname}/game/drop-bomb`;
+  }
+
+  return gameEndpoint("/game/drop-bomb");
 }
 
 function getGameEventsEndpoint() {
@@ -2012,6 +2036,10 @@ async function sendPlayerState() {
   }
 }
 
+function requestPlayerWeaponFire() {
+  return scoutPlaneMode ? requestPlayerBombDrop() : requestPlayerTorpedoFire();
+}
+
 async function requestPlayerTorpedoFire() {
   if (fireTorpedoRequestInFlight || playerDamageState !== "active") return;
   if (scoutPlaneMode) {
@@ -2046,6 +2074,45 @@ async function requestPlayerTorpedoFire() {
   } finally {
     finishHttpRequest("fireTorpedo", requestStartedAt);
     fireTorpedoRequestInFlight = false;
+  }
+}
+
+async function requestPlayerBombDrop() {
+  if (dropBombRequestInFlight || playerDamageState !== "active") return;
+  if (!scoutPlaneMode) return;
+
+  dropBombRequestInFlight = true;
+  const requestStartedAt = beginHttpRequest();
+  try {
+    const response = await fetch(getDropBombEndpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        playerId,
+        teamId: playerTeamId,
+        x: boat.root.position.x,
+        y: boat.root.position.y,
+        z: boat.root.position.z,
+        heading,
+        speed,
+        vehicleType: "scout-plane"
+      })
+    });
+    if (!response.ok) {
+      if (response.status === 403) {
+        expireActiveLogin("drop-bomb-403");
+        return;
+      }
+      throw new Error(`Drop bomb request failed with ${response.status}`);
+    }
+    applyServerGameSnapshot(await response.json());
+    document.body.dataset.dropBombSync = "ok";
+  } catch (error) {
+    document.body.dataset.dropBombSync = "error";
+    document.body.dataset.dropBombSyncError = error.message;
+  } finally {
+    finishHttpRequest("dropBomb", requestStartedAt);
+    dropBombRequestInFlight = false;
   }
 }
 
@@ -2111,8 +2178,14 @@ function applyServerGameSnapshot(snapshot) {
     Array.isArray(snapshot.torpedoImpacts) ? snapshot.torpedoImpacts : [],
     snapshotClientTime
   );
+  syncServerBombs(
+    Array.isArray(snapshot.bombs) ? snapshot.bombs : [],
+    Array.isArray(snapshot.bombImpacts) ? snapshot.bombImpacts : [],
+    snapshotClientTime
+  );
   document.body.dataset.remoteShips = String(snapshot.ships.length);
   document.body.dataset.serverTorpedoes = String(Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes.length : 0);
+  document.body.dataset.serverBombs = String(Array.isArray(snapshot.bombs) ? snapshot.bombs.length : 0);
   document.body.dataset.playerStateSync = "ok";
 }
 
@@ -3917,6 +3990,20 @@ function createTorpedoSystem(scene, materials, parent) {
   };
 }
 
+function createBombSystem(scene, materials, parent) {
+  const root = new TransformNode("bombs", scene);
+  root.parent = parent;
+
+  return {
+    root,
+    scene,
+    materials,
+    serverVisuals: new Map(),
+    serverImpactIds: new Set(),
+    hits: 0
+  };
+}
+
 // A fired torpedo starts as a visible tube ejection, then becomes a simple straight-running weapon.
 function firePlayerTorpedo(system, shipRoot, heading, turnVelocity, shipSpeed, now) {
   if (now < system.nextFireTime) return false;
@@ -4285,6 +4372,118 @@ function updateServerTorpedoVisuals(system, dt, now) {
     visual.runDistance += step;
     updateTorpedoWake(visual, true, now);
   });
+}
+
+function syncServerBombs(bombs, impacts = [], snapshotClientTime = time) {
+  const activeIds = new Set();
+
+  bombs.forEach((snapshot) => {
+    activeIds.add(snapshot.id);
+    const visual = bombSystem.serverVisuals.get(snapshot.id) ?? createServerBombVisual(bombSystem, snapshot, snapshotClientTime);
+    applyServerBombSnapshot(visual, snapshot, snapshotClientTime);
+  });
+
+  renderServerBombImpacts(impacts);
+
+  bombSystem.serverVisuals.forEach((visual, id) => {
+    if (activeIds.has(id)) return;
+
+    disposeServerBombVisual(visual);
+    bombSystem.serverVisuals.delete(id);
+  });
+  document.body.dataset.serverBombVisuals = String(bombSystem.serverVisuals.size);
+}
+
+function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
+  const root = new TransformNode(`server_bomb_${snapshot.id}`, system.scene);
+  root.parent = system.root;
+  root.position = new Vector3(
+    Number.isFinite(snapshot.x) ? snapshot.x : 0,
+    Number.isFinite(snapshot.y) ? snapshot.y : 0,
+    Number.isFinite(snapshot.z) ? snapshot.z : 0
+  );
+  root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2, Number.isFinite(snapshot.heading) ? snapshot.heading : 0, 0);
+
+  const body = MeshBuilder.CreateCylinder(`${root.name}_body`, {
+    diameter: 0.34,
+    height: 1.35,
+    tessellation: 12
+  }, system.scene);
+  body.parent = root;
+  body.rotation.x = Math.PI / 2;
+  body.material = system.materials.funnel;
+
+  const fin = MeshBuilder.CreateBox(`${root.name}_fin`, { width: 0.58, height: 0.08, depth: 0.22 }, system.scene);
+  fin.parent = root;
+  fin.position.z = -0.72;
+  fin.material = system.materials.funnel;
+
+  const visual = {
+    id: snapshot.id,
+    root,
+    body,
+    fin,
+    heading: Number.isFinite(snapshot.heading) ? snapshot.heading : 0,
+    speed: Number.isFinite(snapshot.speed) ? snapshot.speed : 0,
+    serverPosition: root.position.clone(),
+    serverSnapshotTime: snapshotClientTime
+  };
+  system.serverVisuals.set(snapshot.id, visual);
+  return visual;
+}
+
+function applyServerBombSnapshot(visual, snapshot, snapshotClientTime = time) {
+  visual.serverPosition = new Vector3(
+    Number.isFinite(snapshot.x) ? snapshot.x : visual.serverPosition.x,
+    Number.isFinite(snapshot.y) ? snapshot.y : visual.serverPosition.y,
+    Number.isFinite(snapshot.z) ? snapshot.z : visual.serverPosition.z
+  );
+  visual.serverSnapshotTime = snapshotClientTime;
+  visual.heading = Number.isFinite(snapshot.heading) ? snapshot.heading : visual.heading;
+  visual.speed = Number.isFinite(snapshot.speed) ? snapshot.speed : visual.speed;
+  if (!visual.root.rotationQuaternion) {
+    visual.root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2, visual.heading, 0);
+  }
+}
+
+function updateServerBombVisuals(system, dt, now) {
+  system.serverVisuals.forEach((visual) => {
+    const forward = getForwardVector(visual.heading);
+    const snapshotAge = Math.max(0, now - (visual.serverSnapshotTime ?? now));
+    const projected = visual.serverPosition.add(forward.scale(visual.speed * snapshotAge));
+
+    visual.root.position.addInPlace(forward.scale(visual.speed * dt));
+    visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 4.5);
+    visual.root.position.y += (visual.serverPosition.y - visual.root.position.y) * Math.min(1, dt * 6.5);
+    visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 4.5);
+    visual.root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2 + Math.sin(now * 5) * 0.08, visual.heading, 0);
+  });
+}
+
+function renderServerBombImpacts(impacts) {
+  impacts.forEach((impact) => {
+    const key = `${impact.id}:${impact.reason}:${impact.t}`;
+    if (bombSystem.serverImpactIds.has(key)) return;
+    bombSystem.serverImpactIds.add(key);
+
+    const position = new Vector3(
+      Number.isFinite(impact.x) ? impact.x : 0,
+      0.05,
+      Number.isFinite(impact.z) ? impact.z : 0
+    );
+    bombSystem.hits += 1;
+    torpedoSystem.hits += 1;
+    createHitChurn(torpedoSystem, position, heading);
+  });
+
+  if (bombSystem.serverImpactIds.size > 120) {
+    bombSystem.serverImpactIds = new Set(Array.from(bombSystem.serverImpactIds).slice(-80));
+  }
+}
+
+function disposeServerBombVisual(visual) {
+  visual.root.getChildMeshes().forEach((mesh) => mesh.dispose());
+  visual.root.dispose();
 }
 
 function disposeServerTorpedoVisual(visual) {
