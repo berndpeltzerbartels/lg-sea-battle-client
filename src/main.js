@@ -169,6 +169,7 @@ document.body.dataset.playerTeam = playerTeamId;
 document.body.dataset.playerId = playerId;
 document.body.dataset.playerInitials = playerInitials;
 document.body.dataset.playerVehicle = scoutPlaneMode ? "scout-plane" : "torpedo-boat";
+document.body.dataset.flakView = "bridge";
 document.body.dataset.playerShipId = playerServerShipId ?? "pending";
 document.body.dataset.serverOwnShips = String(playerShips.length);
 document.body.dataset.serverEnemyShips = String(enemyShips.length);
@@ -250,6 +251,11 @@ window.addEventListener("keydown", (event) => {
   document.body.dataset.lastKey = formatInputEvent(event);
   const playerActive = playerDamageState === "active";
 
+  if (playerActive && isFlakViewToggleKey(event) && !event.repeat) {
+    toggleFlakView();
+    event.preventDefault();
+    return;
+  }
   if (playerActive && isInputKey(event, "up")) {
     if (scoutPlaneMode) {
       heldElevatorDirection = 1;
@@ -275,6 +281,11 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
   }
   if (playerActive && isInputKey(event, "left")) {
+    if (flakViewActive) {
+      heldFlakDirection = -1;
+      event.preventDefault();
+      return;
+    }
     heldRudderDirection = -1;
     if (!event.repeat) {
       rudderDegrees = stepRudderDegrees(rudderDegrees, -1);
@@ -285,6 +296,11 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
   }
   if (playerActive && isInputKey(event, "right")) {
+    if (flakViewActive) {
+      heldFlakDirection = 1;
+      event.preventDefault();
+      return;
+    }
     heldRudderDirection = 1;
     if (!event.repeat) {
       rudderDegrees = stepRudderDegrees(rudderDegrees, 1);
@@ -295,6 +311,11 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
   }
   if (playerActive && isTorpedoFireKey(event) && !event.repeat) {
+    if (flakViewActive) {
+      document.body.dataset.flakFire = "not-implemented";
+      event.preventDefault();
+      return;
+    }
     requestPlayerWeaponFire();
     event.preventDefault();
   }
@@ -322,8 +343,16 @@ window.addEventListener("keyup", (event) => {
     heldRudderDirection = 0;
     event.preventDefault();
   }
+  if (isInputKey(event, "left") && heldFlakDirection < 0) {
+    heldFlakDirection = 0;
+    event.preventDefault();
+  }
   if (isInputKey(event, "right") && heldRudderDirection > 0) {
     heldRudderDirection = 0;
+    event.preventDefault();
+  }
+  if (isInputKey(event, "right") && heldFlakDirection > 0) {
+    heldFlakDirection = 0;
     event.preventDefault();
   }
 });
@@ -467,6 +496,9 @@ let scoutPlanePitch = 0;
 let nextEngineHoldChangeTime = 0;
 let heldRudderDirection = 0;
 let nextRudderHoldChangeTime = 0;
+let flakViewActive = false;
+let flakYaw = Math.PI;
+let heldFlakDirection = 0;
 let mouseButtonMask = 0;
 let mouseWheelEngineAccumulator = 0;
 let measuredSpeedSample = {
@@ -553,6 +585,10 @@ scene.onBeforeRenderObservable.add(() => {
       maxRudderDegrees
     );
   }
+  if (playerActive && flakViewActive && heldFlakDirection !== 0) {
+    flakYaw = normalizeAngle(flakYaw + heldFlakDirection * 1.35 * dt);
+  }
+  updatePlayerFlakMount();
 
   if (!scoutPlaneMode && playerActive && heldEngineDirection !== 0 && time >= nextEngineHoldChangeTime) {
     changeEngineOrder(heldEngineDirection);
@@ -689,16 +725,9 @@ scene.onBeforeRenderObservable.add(() => {
     turnVelocity *= 0.25;
   }
 
-  // Fixed bridge camera for ships; oblique chase camera for the scout-plane perspective test.
-  const cameraDistance = scoutPlaneMode ? 24.0 : -0.2;
-  const cameraHeight = scoutPlaneMode ? 9.5 - scoutPlanePitch * 10 : 1.22;
-  const desiredCameraPosition = boat.root.position
-    .subtract(forward.scale(cameraDistance))
-    .add(new Vector3(0, cameraHeight, 0));
-  const planeLookDown = scoutPlaneMode ? -8.0 - scoutPlanePitch * 42 : 0.78;
-  const desiredTarget = boat.root.position
-    .add(forward.scale(scoutPlaneMode ? 90.0 : 24.0))
-    .add(new Vector3(0, planeLookDown, 0));
+  const cameraSetup = getPlayerCameraSetup(forward);
+  const desiredCameraPosition = cameraSetup.position;
+  const desiredTarget = cameraSetup.target;
   const shakeOffset = getRamShakeOffset(heading, ramShake, time);
   ramShake = Math.max(0, ramShake - dt * 2.6);
 
@@ -706,7 +735,7 @@ scene.onBeforeRenderObservable.add(() => {
   cameraTarget.copyFrom(desiredTarget);
   camera.position.copyFrom(cameraPosition);
   camera.setTarget(desiredTarget);
-  if (!scoutPlaneMode) {
+  if (!scoutPlaneMode && !flakViewActive) {
     camera.rotation.x = -Math.abs(camera.rotation.x);
   }
   document.body.dataset.camera = `${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)}`;
@@ -761,6 +790,55 @@ function isInputKey(event, name) {
     left: code === "ArrowLeft" || keyCode === 37,
     right: code === "ArrowRight" || keyCode === 39
   }[name];
+}
+
+function isFlakViewToggleKey(event) {
+  return !scoutPlaneMode && (event.code === "KeyF" || event.key === "f" || event.key === "F");
+}
+
+function toggleFlakView() {
+  flakViewActive = !flakViewActive;
+  heldFlakDirection = 0;
+  heldRudderDirection = 0;
+  rightMouseRudderActive = false;
+  document.body.dataset.flakView = flakViewActive ? "active" : "bridge";
+}
+
+function updatePlayerFlakMount() {
+  if (!boat.sternFlak?.mount) return;
+  boat.sternFlak.mount.rotation.y = flakYaw;
+  document.body.dataset.flakYaw = String(Math.round(normalizeAngle(flakYaw) * 180 / Math.PI));
+}
+
+function getPlayerCameraSetup(forward) {
+  if (!scoutPlaneMode && flakViewActive) {
+    const shipForward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
+    const flakDirection = new Vector3(
+      Math.sin(heading + flakYaw),
+      0,
+      Math.cos(heading + flakYaw)
+    );
+    const position = boat.root.position
+      .add(shipForward.scale(-1.75))
+      .subtract(flakDirection.scale(0.62))
+      .add(new Vector3(0, 1.34, 0));
+    return {
+      position,
+      target: position.add(flakDirection.scale(72)).add(new Vector3(0, 0.18, 0))
+    };
+  }
+
+  // Fixed bridge camera for ships; oblique chase camera for the scout-plane perspective test.
+  const cameraDistance = scoutPlaneMode ? 24.0 : -0.2;
+  const cameraHeight = scoutPlaneMode ? 9.5 - scoutPlanePitch * 10 : 1.22;
+  const position = boat.root.position
+    .subtract(forward.scale(cameraDistance))
+    .add(new Vector3(0, cameraHeight, 0));
+  const planeLookDown = scoutPlaneMode ? -8.0 - scoutPlanePitch * 42 : 0.78;
+  const target = boat.root.position
+    .add(forward.scale(scoutPlaneMode ? 90.0 : 24.0))
+    .add(new Vector3(0, planeLookDown, 0));
+  return { position, target };
 }
 
 function isHudControlEvent(event) {
@@ -1303,7 +1381,6 @@ function isTorpedoFireKey(event) {
 
   return (
     code === "Space" ||
-    code === "KeyF" ||
     code === "Enter" ||
     code === "NumpadEnter" ||
     key === "Enter" ||
@@ -1353,7 +1430,7 @@ function stepRudderDegrees(currentDegrees, direction) {
 }
 
 function startGlobalMouseRudder(event) {
-  if (playerDamageState !== "active" || event.button !== 2) return false;
+  if (playerDamageState !== "active" || flakViewActive || event.button !== 2) return false;
   rightMouseRudderActive = true;
   rightMouseRudderStartX = event.clientX;
   rightMouseRudderStartDegrees = rudderDegrees;
@@ -1368,7 +1445,7 @@ function stopGlobalMouseRudder(button) {
 }
 
 function fireMouseTorpedo(button) {
-  if (!isMouseTorpedoButton(button) || playerDamageState !== "active") return false;
+  if (!isMouseTorpedoButton(button) || playerDamageState !== "active" || flakViewActive) return false;
   requestPlayerWeaponFire();
   return true;
 }
@@ -5780,9 +5857,9 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
   hatch.position.z = -0.36;
   hatch.material = teamMaterials.cabin;
 
-  createSternFlak(scene, materials, root, name, teamMaterials, -1.05, true);
+  const sternFlak = createSternFlak(scene, materials, root, name, teamMaterials, -1.05, true);
 
-  return { root };
+  return { root, sternFlak };
 }
 
 function createScoutPlane(scene, materials, name = "scout_plane", teamId = "light", isPlayer = false) {
@@ -5993,6 +6070,7 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   mount.parent = parent;
   mount.position.y = platform.position.y + 0.44 * scale;
   mount.position.z = sternZ - 0.05 * scale;
+  mount.rotation.y = Math.PI;
 
   const cradle = MeshBuilder.CreateBox(`${name}_flak_cradle`, { width: 0.55 * scale, height: 0.22 * scale, depth: 0.32 * scale }, scene);
   cradle.parent = mount;
