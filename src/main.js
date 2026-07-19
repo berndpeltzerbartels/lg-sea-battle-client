@@ -6229,8 +6229,8 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   const sightYOffset = 0.14 * scale;
   const sightZ = 0.9 * scale;
   const sight = MeshBuilder.CreateTorus(`${name}_flak_ring_sight`, {
-    diameter: 0.24 * scale,
-    thickness: 0.006 * scale,
+    diameter: 0.2 * scale,
+    thickness: 0.005 * scale,
     tessellation: 32
   }, scene);
   sight.parent = elevationRoot;
@@ -6240,14 +6240,14 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   sight.material = metalMaterial;
 
   const sightSpokes = [
-    { width: 0.22, height: 0.004 },
-    { width: 0.004, height: 0.22 }
+    { width: 0.14, height: 0.003 },
+    { width: 0.003, height: 0.14 }
   ];
   sightSpokes.forEach((spoke, index) => {
     const mesh = MeshBuilder.CreateBox(`${name}_flak_ring_sight_spoke_${index}`, {
       width: spoke.width * scale,
       height: spoke.height * scale,
-      depth: 0.008 * scale
+      depth: 0.006 * scale
     }, scene);
     mesh.parent = elevationRoot;
     mesh.position.y = sightYOffset;
@@ -6264,16 +6264,6 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   sightBracket.position.y = 0.075 * scale;
   sightBracket.position.z = sightZ;
   sightBracket.material = metalMaterial;
-
-  const sightPost = MeshBuilder.CreateBox(`${name}_flak_ring_sight_post`, {
-    width: 0.014 * scale,
-    height: 0.12 * scale,
-    depth: 0.01 * scale
-  }, scene);
-  sightPost.parent = elevationRoot;
-  sightPost.position.y = sightYOffset;
-  sightPost.position.z = 0.78 * scale;
-  sightPost.material = metalMaterial;
 
   return { mount, elevationRoot };
 }
