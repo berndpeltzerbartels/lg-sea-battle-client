@@ -770,7 +770,8 @@ scene.onBeforeRenderObservable.add(() => {
   compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
   if (compassHeading) compassHeading.textContent = `HDG ${formatHeadingDegrees(heading)}`;
   updateRudderGauge(rudderIndicator, rudderValue, rudderDegrees);
-  updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, getRadarContacts(enemyMotions), blockedWaters, heading);
+  const radarHeading = flakViewActive ? normalizeAngle(heading + flakYaw) : heading;
+  updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, getRadarContacts(enemyMotions), blockedWaters, heading, radarHeading);
   flushPerformanceTelemetry(time);
 });
 
@@ -824,7 +825,7 @@ function getPlayerCameraSetup(forward) {
       .add(shipForward.scale(playerSternFlakZ - 0.05 * 0.54));
     const position = boat.root.position
       .add(shipForward.scale(playerSternFlakZ - 0.05 * 0.54))
-      .subtract(flakDirection.scale(0.18))
+      .subtract(flakDirection.scale(0.32))
       .add(new Vector3(0, 1.2, 0));
     return {
       position,
@@ -2577,12 +2578,13 @@ function updateRudderGauge(indicator, valueElement, degrees) {
   }
 }
 
-function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading) {
+function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading, radarHeading = heading) {
   drawMapInstrument(mapCanvas, playerPosition, landZones, mapZoom, heading);
-  const radarRange = scoutPlaneMode ? clientRadarRange * scoutPlaneRadarRangeFactor : clientRadarRange;
-  drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading, radarRange, {
-    ignoreLandShadows: scoutPlaneMode
+  const radarRange = scoutPlaneMode || flakViewActive ? clientRadarRange * scoutPlaneRadarRangeFactor : clientRadarRange;
+  drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, radarHeading, radarRange, {
+    ignoreLandShadows: scoutPlaneMode || flakViewActive
   });
+  document.body.dataset.radarHeading = String(Math.round(normalizeAngle(radarHeading) * 180 / Math.PI));
 }
 
 function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, heading) {
@@ -6104,7 +6106,7 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   barrel.parent = mount;
   barrel.position.y = 0.08 * scale;
   barrel.position.z = 0.68 * scale;
-  barrel.rotation.x = Math.PI / 2 - 0.12;
+  barrel.rotation.x = Math.PI / 2;
   barrel.material = metalMaterial;
 
   const muzzle = MeshBuilder.CreateCylinder(`${name}_flak_muzzle`, {
@@ -6115,6 +6117,43 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   muzzle.parent = barrel;
   muzzle.position.y = 0.57 * scale;
   muzzle.material = metalMaterial;
+
+  const sight = MeshBuilder.CreateTorus(`${name}_flak_ring_sight`, {
+    diameter: 0.34 * scale,
+    thickness: 0.012 * scale,
+    tessellation: 24
+  }, scene);
+  sight.parent = mount;
+  sight.position.y = 0.08 * scale;
+  sight.position.z = 1.34 * scale;
+  sight.rotation.x = Math.PI / 2;
+  sight.material = metalMaterial;
+
+  const sightSpokes = [
+    { width: 0.31, height: 0.008 },
+    { width: 0.008, height: 0.31 }
+  ];
+  sightSpokes.forEach((spoke, index) => {
+    const mesh = MeshBuilder.CreateBox(`${name}_flak_ring_sight_spoke_${index}`, {
+      width: spoke.width * scale,
+      height: spoke.height * scale,
+      depth: 0.008 * scale
+    }, scene);
+    mesh.parent = mount;
+    mesh.position.y = 0.08 * scale;
+    mesh.position.z = 1.34 * scale;
+    mesh.material = metalMaterial;
+  });
+
+  const sightPost = MeshBuilder.CreateBox(`${name}_flak_ring_sight_post`, {
+    width: 0.018 * scale,
+    height: 0.16 * scale,
+    depth: 0.012 * scale
+  }, scene);
+  sightPost.parent = mount;
+  sightPost.position.y = -0.04 * scale;
+  sightPost.position.z = 1.2 * scale;
+  sightPost.material = metalMaterial;
 
   return { mount };
 }
