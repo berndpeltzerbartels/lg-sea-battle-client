@@ -6074,38 +6074,42 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   mount.position.z = sternZ - 0.05 * scale;
   mount.rotation.y = Math.PI;
 
-  const cradle = MeshBuilder.CreateBox(`${name}_flak_cradle`, { width: 0.55 * scale, height: 0.22 * scale, depth: 0.32 * scale }, scene);
-  cradle.parent = mount;
-  cradle.material = metalMaterial;
-
-  const shield = MeshBuilder.CreateBox(`${name}_flak_shield`, { width: 0.88 * scale, height: 0.42 * scale, depth: 0.08 * scale }, scene);
+  const shield = MeshBuilder.CreateBox(`${name}_flak_shield`, { width: 0.42 * scale, height: 0.24 * scale, depth: 0.045 * scale }, scene);
   shield.parent = mount;
-  shield.position.z = 0.24 * scale;
-  shield.position.y = 0.02 * scale;
+  shield.position.z = 0.18 * scale;
+  shield.position.y = -0.03 * scale;
   shield.material = shieldMaterial;
 
-  for (let i = 0; i < 2; i += 1) {
-    const barrel = MeshBuilder.CreateCylinder(`${name}_flak_barrel_${i}`, {
-      diameter: 0.07 * scale,
-      height: 1.08 * scale,
-      tessellation: 10
-    }, scene);
-    barrel.parent = mount;
-    barrel.position.x = (i === 0 ? -0.13 : 0.13) * scale;
-    barrel.position.y = 0.08 * scale;
-    barrel.position.z = 0.62 * scale;
-    barrel.rotation.x = Math.PI / 2 - 0.18;
-    barrel.material = metalMaterial;
+  const receiver = MeshBuilder.CreateCylinder(`${name}_flak_receiver`, {
+    diameter: 0.16 * scale,
+    height: 0.28 * scale,
+    tessellation: 10
+  }, scene);
+  receiver.parent = mount;
+  receiver.position.y = 0.02 * scale;
+  receiver.position.z = 0.22 * scale;
+  receiver.rotation.x = Math.PI / 2;
+  receiver.material = metalMaterial;
 
-    const muzzle = MeshBuilder.CreateCylinder(`${name}_flak_muzzle_${i}`, {
-      diameter: 0.095 * scale,
-      height: 0.08 * scale,
-      tessellation: 10
-    }, scene);
-    muzzle.parent = barrel;
-    muzzle.position.y = 0.52 * scale;
-    muzzle.material = metalMaterial;
-  }
+  const barrel = MeshBuilder.CreateCylinder(`${name}_flak_barrel`, {
+    diameter: 0.045 * scale,
+    height: 1.18 * scale,
+    tessellation: 10
+  }, scene);
+  barrel.parent = mount;
+  barrel.position.y = 0.08 * scale;
+  barrel.position.z = 0.68 * scale;
+  barrel.rotation.x = Math.PI / 2 - 0.12;
+  barrel.material = metalMaterial;
+
+  const muzzle = MeshBuilder.CreateCylinder(`${name}_flak_muzzle`, {
+    diameter: 0.058 * scale,
+    height: 0.07 * scale,
+    tessellation: 10
+  }, scene);
+  muzzle.parent = barrel;
+  muzzle.position.y = 0.57 * scale;
+  muzzle.material = metalMaterial;
 
   return { mount };
 }
