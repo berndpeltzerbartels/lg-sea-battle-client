@@ -107,6 +107,11 @@ const engineHoldRepeatSeconds = 0.1;
 const mouseWheelEngineStep = 100;
 const scoutPlaneSetupId = "scout-plane";
 const scoutPlaneCruiseAltitude = 16;
+const scoutPlaneMinAltitude = 8;
+const scoutPlaneMaxAltitude = 34;
+const scoutPlaneCruiseSpeed = 14.5;
+const scoutPlaneMaxClimbRate = 5.2;
+const scoutPlaneMaxPitch = 0.22;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = true;
@@ -235,18 +240,26 @@ window.addEventListener("keydown", (event) => {
   const playerActive = playerDamageState === "active";
 
   if (playerActive && isInputKey(event, "up")) {
-    heldEngineDirection = 1;
-    if (!event.repeat) {
-      changeEngineOrder(1);
-      nextEngineHoldChangeTime = time + engineHoldInitialDelaySeconds;
+    if (scoutPlaneMode) {
+      heldElevatorDirection = 1;
+    } else {
+      heldEngineDirection = 1;
+      if (!event.repeat) {
+        changeEngineOrder(1);
+        nextEngineHoldChangeTime = time + engineHoldInitialDelaySeconds;
+      }
     }
     event.preventDefault();
   }
   if (playerActive && isInputKey(event, "down")) {
-    heldEngineDirection = -1;
-    if (!event.repeat) {
-      changeEngineOrder(-1);
-      nextEngineHoldChangeTime = time + engineHoldInitialDelaySeconds;
+    if (scoutPlaneMode) {
+      heldElevatorDirection = -1;
+    } else {
+      heldEngineDirection = -1;
+      if (!event.repeat) {
+        changeEngineOrder(-1);
+        nextEngineHoldChangeTime = time + engineHoldInitialDelaySeconds;
+      }
     }
     event.preventDefault();
   }
@@ -282,8 +295,16 @@ window.addEventListener("keyup", (event) => {
     heldEngineDirection = 0;
     event.preventDefault();
   }
+  if (isInputKey(event, "up") && heldElevatorDirection > 0) {
+    heldElevatorDirection = 0;
+    event.preventDefault();
+  }
   if (isInputKey(event, "down") && heldEngineDirection < 0) {
     heldEngineDirection = 0;
+    event.preventDefault();
+  }
+  if (isInputKey(event, "down") && heldElevatorDirection < 0) {
+    heldElevatorDirection = 0;
     event.preventDefault();
   }
   if (isInputKey(event, "left") && heldRudderDirection < 0) {
@@ -339,11 +360,13 @@ window.addEventListener("pointermove", (event) => {
 window.addEventListener("pointercancel", () => {
   mouseButtonMask = 0;
   rightMouseRudderActive = false;
+  heldElevatorDirection = 0;
 });
 
 window.addEventListener("blur", () => {
   mouseButtonMask = 0;
   rightMouseRudderActive = false;
+  heldElevatorDirection = 0;
 });
 
 window.addEventListener("contextmenu", (event) => {
@@ -360,6 +383,10 @@ window.addEventListener("auxclick", (event) => {
 
 window.addEventListener("wheel", (event) => {
   if (playerDamageState !== "active") return;
+  if (scoutPlaneMode) {
+    event.preventDefault();
+    return;
+  }
 
   mouseWheelEngineAccumulator -= event.deltaY;
   while (mouseWheelEngineAccumulator <= -mouseWheelEngineStep) {
@@ -417,11 +444,15 @@ const engineOrders = [
 
 // Keep propulsion as discrete ship orders, not held-key throttle.
 // Later multiplayer can send this order index plus heading/speed instead of raw input.
-let speed = 0;
-let engineOrder = 2;
+let speed = scoutPlaneMode ? scoutPlaneCruiseSpeed : 0;
+let engineOrder = scoutPlaneMode ? 7 : 2;
 let turnVelocity = 0;
 let rudderDegrees = 0;
 let heldEngineDirection = 0;
+let heldElevatorDirection = 0;
+let scoutPlaneAltitude = scoutPlaneCruiseAltitude;
+let scoutPlaneVerticalSpeed = 0;
+let scoutPlanePitch = 0;
 let nextEngineHoldChangeTime = 0;
 let heldRudderDirection = 0;
 let nextRudderHoldChangeTime = 0;
@@ -509,7 +540,7 @@ scene.onBeforeRenderObservable.add(() => {
     );
   }
 
-  if (playerActive && heldEngineDirection !== 0 && time >= nextEngineHoldChangeTime) {
+  if (!scoutPlaneMode && playerActive && heldEngineDirection !== 0 && time >= nextEngineHoldChangeTime) {
     changeEngineOrder(heldEngineDirection);
     nextEngineHoldChangeTime = time + engineHoldRepeatSeconds;
   }
@@ -520,12 +551,17 @@ scene.onBeforeRenderObservable.add(() => {
   let nextWaterSafety = waterSafety;
 
   if (playerActive) {
-    const maxForwardSpeed = scoutPlaneMode ? 18.0 : 12.4;
+    if (scoutPlaneMode) {
+      engineOrder = 7;
+    }
+    const maxForwardSpeed = scoutPlaneMode ? scoutPlaneCruiseSpeed : 12.4;
     const engineTargetSpeed = engineOrders[engineOrder].speed;
-    const targetSpeed = engineTargetSpeed > 0
-      ? Math.min(engineTargetSpeed * (scoutPlaneMode ? 1.2 : 1), maxForwardSpeed)
-      : (scoutPlaneMode ? Math.max(engineTargetSpeed, -1.2) : engineTargetSpeed);
-    const response = scoutPlaneMode ? 0.32 : (Math.abs(targetSpeed) > Math.abs(speed) ? 0.45 : 0.75);
+    const targetSpeed = scoutPlaneMode
+      ? scoutPlaneCruiseSpeed
+      : engineTargetSpeed > 0
+      ? Math.min(engineTargetSpeed, maxForwardSpeed)
+      : engineTargetSpeed;
+    const response = scoutPlaneMode ? 1.1 : (Math.abs(targetSpeed) > Math.abs(speed) ? 0.45 : 0.75);
     speed += (targetSpeed - speed) * Math.min(1, dt * response);
 
     const turnStrength = scoutPlaneMode ? 0.18 : (speed >= 0 ? 0.24 : -0.16);
@@ -557,21 +593,42 @@ scene.onBeforeRenderObservable.add(() => {
       speed = engineOrders[engineOrder].speed < 0 ? Math.min(speed, -1.2) : 0;
       turnVelocity *= 0.4;
     }
+
+    if (scoutPlaneMode) {
+      const targetPitch = -heldElevatorDirection * scoutPlaneMaxPitch;
+      scoutPlanePitch += (targetPitch - scoutPlanePitch) * Math.min(1, dt * 2.4);
+      const targetVerticalSpeed = heldElevatorDirection * scoutPlaneMaxClimbRate;
+      scoutPlaneVerticalSpeed += (targetVerticalSpeed - scoutPlaneVerticalSpeed) * Math.min(1, dt * 1.35);
+      scoutPlaneAltitude = clamp(
+        scoutPlaneAltitude + scoutPlaneVerticalSpeed * dt,
+        scoutPlaneMinAltitude,
+        scoutPlaneMaxAltitude
+      );
+      if (
+        (scoutPlaneAltitude <= scoutPlaneMinAltitude && scoutPlaneVerticalSpeed < 0) ||
+        (scoutPlaneAltitude >= scoutPlaneMaxAltitude && scoutPlaneVerticalSpeed > 0)
+      ) {
+        scoutPlaneVerticalSpeed = 0;
+      }
+    }
   } else {
     heldRudderDirection = 0;
+    heldElevatorDirection = 0;
     engineOrder = 2;
     speed *= Math.max(0, 1 - dt * 1.7);
     turnVelocity *= Math.max(0, 1 - dt * 2.0);
     rudderDegrees += (0 - rudderDegrees) * Math.min(1, dt * 1.8);
+    scoutPlaneVerticalSpeed *= Math.max(0, 1 - dt * 2.0);
+    scoutPlanePitch += (0 - scoutPlanePitch) * Math.min(1, dt * 2.2);
   }
 
   const bob = Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035;
   if (playerActive) {
     boat.root.position.y = scoutPlaneMode
-      ? scoutPlaneCruiseAltitude + Math.sin(time * 1.1) * 0.35
+      ? scoutPlaneAltitude + Math.sin(time * 1.1) * 0.22
       : torpedoBoatWaterlineY + bob;
     boat.root.rotationQuaternion = Quaternion.FromEulerAngles(
-      scoutPlaneMode ? clamp(speed / 18, 0, 1) * 0.035 : Math.sin(time * 2.6) * 0.025,
+      scoutPlaneMode ? scoutPlanePitch + Math.sin(time * 1.15) * 0.018 : Math.sin(time * 2.6) * 0.025,
       heading,
       scoutPlaneMode ? -turnVelocity * 2.8 : -turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018
     );
@@ -619,13 +676,14 @@ scene.onBeforeRenderObservable.add(() => {
 
   // Fixed bridge camera for ships; oblique chase camera for the scout-plane perspective test.
   const cameraDistance = scoutPlaneMode ? 24.0 : 0.65;
-  const cameraHeight = scoutPlaneMode ? 9.5 : 1.22;
+  const cameraHeight = scoutPlaneMode ? 9.5 - scoutPlanePitch * 10 : 1.22;
   const desiredCameraPosition = boat.root.position
     .subtract(forward.scale(cameraDistance))
     .add(new Vector3(0, cameraHeight, 0));
+  const planeLookDown = scoutPlaneMode ? -8.0 - scoutPlanePitch * 42 : 0.78;
   const desiredTarget = boat.root.position
     .add(forward.scale(scoutPlaneMode ? 90.0 : 24.0))
-    .add(new Vector3(0, scoutPlaneMode ? -8.0 : 0.78, 0));
+    .add(new Vector3(0, planeLookDown, 0));
   const shakeOffset = getRamShakeOffset(heading, ramShake, time);
   ramShake = Math.max(0, ramShake - dt * 2.6);
 
@@ -642,6 +700,9 @@ scene.onBeforeRenderObservable.add(() => {
   document.body.dataset.cameraRotation = `${camera.rotation.x.toFixed(2)},${camera.rotation.y.toFixed(2)},${camera.rotation.z.toFixed(2)}`;
   document.body.dataset.activeCamera = scene.activeCamera?.name ?? "none";
   document.body.dataset.boat = `${boat.root.position.x.toFixed(1)},${boat.root.position.y.toFixed(1)},${boat.root.position.z.toFixed(1)}`;
+  document.body.dataset.scoutPlaneAltitude = scoutPlaneMode ? scoutPlaneAltitude.toFixed(1) : "";
+  document.body.dataset.scoutPlanePitch = scoutPlaneMode ? scoutPlanePitch.toFixed(3) : "";
+  document.body.dataset.scoutPlaneVerticalSpeed = scoutPlaneMode ? scoutPlaneVerticalSpeed.toFixed(2) : "";
   document.body.dataset.engineOrder = engineOrders[engineOrder].label;
   document.body.dataset.rudderDegrees = String(Math.round(rudderDegrees));
   document.body.dataset.torpedoes = String(torpedoSystem.active.length);
