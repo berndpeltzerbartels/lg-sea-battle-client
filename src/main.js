@@ -1911,7 +1911,8 @@ async function sendPlayerState() {
         engineOrder,
         rudderDegrees: Math.round(rudderDegrees),
         clientTime: performance.now() / 1000,
-        debugTeleport
+        debugTeleport,
+        vehicleType: scoutPlaneMode ? "scout-plane" : "torpedo-boat"
       })
     });
     if (!response.ok) {
@@ -1937,6 +1938,10 @@ async function sendPlayerState() {
 
 async function requestPlayerTorpedoFire() {
   if (fireTorpedoRequestInFlight || playerDamageState !== "active") return;
+  if (scoutPlaneMode) {
+    document.body.dataset.fireTorpedoSync = "ignored-scout-plane";
+    return;
+  }
 
   fireTorpedoRequestInFlight = true;
   const requestStartedAt = beginHttpRequest();
@@ -1946,7 +1951,8 @@ async function requestPlayerTorpedoFire() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         playerId,
-        teamId: playerTeamId
+        teamId: playerTeamId,
+        vehicleType: scoutPlaneMode ? "scout-plane" : "torpedo-boat"
       })
     });
     if (!response.ok) {
@@ -2214,22 +2220,33 @@ function applyGameStreamMessage(data) {
 function updateOrCreateRemoteShip(ship) {
   const existing = enemyMotions.find((motion) => motion.id === ship.id);
   if (existing) {
-    applyServerShipSnapshot(existing, ship);
-    return existing;
+    if (existing.vehicleType === getShipVehicleType(ship)) {
+      applyServerShipSnapshot(existing, ship);
+      return existing;
+    }
+    disposeRemoteMotion(existing);
+    enemyMotions.splice(enemyMotions.indexOf(existing), 1);
   }
 
-  const boatModel = createEnemyTorpedoBoat(scene, materials, `server_ship_${ship.id}`, ship.teamId, createShipDesignation(ship));
+  const boatModel = createRemoteVehicleModel(scene, materials, `server_ship_${ship.id}`, ship);
   const headingValue = Number.isFinite(ship.heading) ? ship.heading : 0;
-  boatModel.root.position = new Vector3(ship.x, 0.26, ship.z);
+  boatModel.root.position = new Vector3(ship.x, remoteVehicleY(ship), ship.z);
   boatModel.root.rotationQuaternion = Quaternion.FromEulerAngles(0, headingValue, 0);
   boatModel.root.metadata = {
     serverShipId: ship.id,
     teamId: ship.teamId,
-    controlledBy: ship.controlledBy
+    controlledBy: ship.controlledBy,
+    vehicleType: getShipVehicleType(ship)
   };
   const motion = createEnemyMotion(boatModel.root, boatModel.bowWake, headingValue, ship.engineOrder ?? 2, enemyMotions.length, ship);
   enemyMotions.push(motion);
   return motion;
+}
+
+function disposeRemoteMotion(motion) {
+  motion.timers?.forEach((timer) => window.clearTimeout(timer));
+  motion.root?.getChildMeshes?.().forEach((mesh) => mesh.dispose());
+  motion.root?.dispose?.();
 }
 
 function applyServerShipSnapshot(motion, ship) {
@@ -2259,8 +2276,10 @@ function applyServerShipSnapshot(motion, ship) {
 
   motion.teamId = ship.teamId;
   motion.controlledBy = ship.controlledBy;
+  motion.vehicleType = getShipVehicleType(ship);
   motion.serverState = ship.state;
   motion.serverPosition.x = Number.isFinite(ship.x) ? ship.x : motion.serverPosition.x;
+  motion.serverPosition.y = remoteVehicleY(ship);
   motion.serverPosition.z = Number.isFinite(ship.z) ? ship.z : motion.serverPosition.z;
   motion.serverHeading = Number.isFinite(ship.heading) ? ship.heading : motion.serverHeading;
   motion.serverSpeed = Number.isFinite(ship.speed) ? ship.speed : motion.serverSpeed;
@@ -2278,7 +2297,8 @@ function applyServerShipSnapshot(motion, ship) {
   motion.root.metadata = {
     ...motion.root.metadata,
     teamId: ship.teamId,
-    controlledBy: ship.controlledBy
+    controlledBy: ship.controlledBy,
+    vehicleType: motion.vehicleType
   };
 }
 
@@ -3404,18 +3424,41 @@ function indexShipsById(ships) {
 
 function createEnemyFleet(scene, materials, serverShips) {
   return serverShips.map((ship, index) => {
-    const enemyBoat = createEnemyTorpedoBoat(scene, materials, `server_ship_${ship.id}`, ship.teamId, createShipDesignation(ship));
+    const enemyBoat = createRemoteVehicleModel(scene, materials, `server_ship_${ship.id}`, ship);
     const heading = Number.isFinite(ship.heading) ? ship.heading : 0;
     const engineOrder = Number.isInteger(ship.engineOrder) ? ship.engineOrder : 2;
-    enemyBoat.root.position = new Vector3(ship.x, 0.26, ship.z);
+    enemyBoat.root.position = new Vector3(ship.x, remoteVehicleY(ship), ship.z);
     enemyBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
     enemyBoat.root.metadata = {
       serverShipId: ship.id,
       teamId: ship.teamId,
-      controlledBy: ship.controlledBy
+      controlledBy: ship.controlledBy,
+      vehicleType: getShipVehicleType(ship)
     };
     return createEnemyMotion(enemyBoat.root, enemyBoat.bowWake, heading, engineOrder, index, ship);
   });
+}
+
+function createRemoteVehicleModel(scene, materials, name, ship) {
+  return isScoutPlaneShip(ship)
+    ? createScoutPlane(scene, materials, name, ship.teamId, false)
+    : createEnemyTorpedoBoat(scene, materials, name, ship.teamId, createShipDesignation(ship));
+}
+
+function getShipVehicleType(ship) {
+  return ship?.vehicleType === "scout-plane" ? "scout-plane" : "torpedo-boat";
+}
+
+function isScoutPlaneShip(ship) {
+  return getShipVehicleType(ship) === "scout-plane";
+}
+
+function isScoutPlaneMotion(motion) {
+  return motion?.vehicleType === "scout-plane";
+}
+
+function remoteVehicleY(ship) {
+  return isScoutPlaneShip(ship) ? scoutPlaneCruiseAltitude : 0.26;
 }
 
 function createEnemyMotion(root, bowWake, heading, engineOrder, index = 0, serverShip = null) {
@@ -3424,13 +3467,14 @@ function createEnemyMotion(root, bowWake, heading, engineOrder, index = 0, serve
     numericIndex: index + 1,
     teamId: serverShip?.teamId ?? "unknown",
     controlledBy: serverShip?.controlledBy ?? "local",
+    vehicleType: getShipVehicleType(serverShip),
     serverState: serverShip?.state ?? "active",
     root,
     bowWake,
     heading,
     speed: serverShip?.speed ?? 0,
     isServerControlled: Boolean(serverShip),
-    serverPosition: new Vector3(serverShip?.x ?? root.position.x, 0.28, serverShip?.z ?? root.position.z),
+    serverPosition: new Vector3(serverShip?.x ?? root.position.x, remoteVehicleY(serverShip), serverShip?.z ?? root.position.z),
     serverHeading: Number.isFinite(serverShip?.heading) ? serverShip.heading : heading,
     serverSpeed: Number.isFinite(serverShip?.speed) ? serverShip.speed : 0,
     serverSnapshotTime: 0,
@@ -3538,13 +3582,23 @@ function updateServerEnemyMotion(motion, dt, time) {
   const correctionStrength = correctionDistance > 18 ? 4.2 : 1.8;
   motion.root.position.x += (projectedServerPosition.x - motion.root.position.x) * Math.min(1, dt * correctionStrength);
   motion.root.position.z += (projectedServerPosition.z - motion.root.position.z) * Math.min(1, dt * correctionStrength);
-  motion.root.position.y = torpedoBoatWaterlineY + Math.sin(time * 1.6 + 1.9) * enemyTorpedoBoatBobAmplitude;
-  motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
-    Math.sin(time * 1.9 + 0.8) * 0.015,
-    motion.heading,
-    Math.sin(time * 1.4) * 0.01
-  );
-  updateEnemyBowWake(motion.bowWake, motion.speed, time);
+  if (isScoutPlaneMotion(motion)) {
+    motion.root.position.y = scoutPlaneCruiseAltitude + Math.sin(time * 0.85 + motion.numericIndex) * 0.35;
+    motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
+      Math.sin(time * 0.7 + motion.numericIndex) * 0.025,
+      motion.heading,
+      -motion.turnVelocity * 0.55 + Math.sin(time * 0.9 + motion.numericIndex) * 0.045
+    );
+    updateScoutPlaneVisual(motion, Math.max(6, Math.abs(motion.speed)), time);
+  } else {
+    motion.root.position.y = torpedoBoatWaterlineY + Math.sin(time * 1.6 + 1.9) * enemyTorpedoBoatBobAmplitude;
+    motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
+      Math.sin(time * 1.9 + 0.8) * 0.015,
+      motion.heading,
+      Math.sin(time * 1.4) * 0.01
+    );
+    updateEnemyBowWake(motion.bowWake, motion.speed, time);
+  }
 
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
   document.body.dataset.enemyEngineOrder = engineOrders[motion.engineOrder].label;
@@ -3944,9 +3998,11 @@ function fireEnemyTorpedo(system, motion, targetPosition, now) {
 }
 
 function updateEnemyFireControl(system, enemyMotions, playerPosition, landZones, time) {
+  if (scoutPlaneMode) return;
   enemyMotions.forEach((motion) => {
     if (motion.state !== "active") return;
     if (motion.isServerControlled) return;
+    if (isScoutPlaneMotion(motion)) return;
     if (motion.teamId === playerTeamId) return;
 
     const distance = distance2D(playerPosition, motion.root.position);
@@ -4500,6 +4556,7 @@ function summarizeVector(vector) {
 }
 
 function getPlayerRamHit(playerPosition, playerHeading, playerSpeed, enemyMotions, time) {
+  if (scoutPlaneMode) return null;
   if (time < nextRamHitTime || playerSpeed < 2.2) return null;
 
   const forward = getForwardVector(playerHeading);
@@ -4513,6 +4570,7 @@ function getPlayerRamHit(playerPosition, playerHeading, playerSpeed, enemyMotion
 
   for (const enemyMotion of enemyMotions) {
     if (enemyMotion.teamId === playerTeamId) continue;
+    if (isScoutPlaneMotion(enemyMotion)) continue;
     const hitPoint = bowProbePoints.find((point) => pointHitsEnemyHull(point, enemyMotion, 0.16));
     if (!hitPoint) continue;
 
@@ -4538,11 +4596,13 @@ function getRamShakeOffset(heading, strength, time) {
 function getTorpedoEnemyHit(torpedoPosition, enemyMotions) {
   return enemyMotions.find((enemyMotion) => (
     enemyMotion.teamId !== playerTeamId &&
+    !isScoutPlaneMotion(enemyMotion) &&
     pointHitsEnemyHull(torpedoPosition, enemyMotion, 0.22)
   )) ?? null;
 }
 
 function torpedoHitsPlayer(torpedoPosition, playerPosition) {
+  if (scoutPlaneMode) return false;
   const dx = torpedoPosition.x - playerPosition.x;
   const dz = torpedoPosition.z - playerPosition.z;
   return dx * dx + dz * dz <= 1.9 * 1.9;
@@ -5415,7 +5475,7 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
 
 function createScoutPlane(scene, materials, name = "scout_plane", teamId = "light", isPlayer = false) {
   const root = new TransformNode(name, scene);
-  const teamMaterials = getPlayerShipTeamMaterials(materials, teamId);
+  const teamMaterials = isPlayer ? getPlayerShipTeamMaterials(materials, teamId) : getShipTeamMaterials(materials, teamId);
   const bodyMaterial = createScoutPlaneMaterial(scene, `${name}_body_material`, teamMaterials.cabin.diffuseColor, 0.92);
   const wingMaterial = createScoutPlaneMaterial(scene, `${name}_wing_material`, teamMaterials.hull.diffuseColor, 0.9);
   const glassMaterial = createScoutPlaneMaterial(scene, `${name}_glass_material`, new Color3(0.26, 0.58, 0.72), 0.72);
