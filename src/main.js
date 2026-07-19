@@ -117,6 +117,8 @@ const scoutPlaneMaxClimbRate = 8.5;
 const scoutPlaneMaxPitch = 0.22;
 const scoutPlaneExperimentShowAllFlak = true;
 const scoutPlaneExperimentFlakDemo = urlParams.get("flak-demo") === "1";
+const playerSternFlakZ = -0.62;
+const remoteSternFlakZ = -2.92;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = true;
@@ -819,12 +821,12 @@ function getPlayerCameraSetup(forward) {
       Math.cos(heading + flakYaw)
     );
     const position = boat.root.position
-      .add(shipForward.scale(-1.75))
-      .subtract(flakDirection.scale(0.62))
-      .add(new Vector3(0, 1.34, 0));
+      .add(shipForward.scale(playerSternFlakZ))
+      .subtract(flakDirection.scale(0.42))
+      .add(new Vector3(0, 1.2, 0));
     return {
       position,
-      target: position.add(flakDirection.scale(72)).add(new Vector3(0, 0.18, 0))
+      target: position.add(flakDirection.scale(72)).add(new Vector3(0, 0.06, 0))
     };
   }
 
@@ -5857,7 +5859,7 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
   hatch.position.z = -0.36;
   hatch.material = teamMaterials.cabin;
 
-  const sternFlak = createSternFlak(scene, materials, root, name, teamMaterials, -1.05, true);
+  const sternFlak = createSternFlak(scene, materials, root, name, teamMaterials, playerSternFlakZ, true);
 
   return { root, sternFlak };
 }
@@ -6180,7 +6182,7 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = 
   mast.material = funnelMaterial;
 
   if (hasFlak) {
-    createSternFlak(scene, materials, root, name, teamMaterials, -3.34, false);
+    createSternFlak(scene, materials, root, name, teamMaterials, remoteSternFlakZ, false);
   }
 
   const bowWake = createEnemyBowWake(scene, materials, root, name);
