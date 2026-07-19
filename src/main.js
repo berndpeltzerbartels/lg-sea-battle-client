@@ -2314,7 +2314,7 @@ function updateOrCreateRemoteShip(ship) {
     controlledBy: ship.controlledBy,
     vehicleType: getShipVehicleType(ship)
   };
-  const motion = createEnemyMotion(boatModel.root, boatModel.bowWake, headingValue, ship.engineOrder ?? 2, enemyMotions.length, ship);
+  const motion = createEnemyMotion(boatModel, headingValue, ship.engineOrder ?? 2, enemyMotions.length, ship);
   enemyMotions.push(motion);
   return motion;
 }
@@ -3517,7 +3517,7 @@ function createEnemyFleet(scene, materials, serverShips) {
       controlledBy: ship.controlledBy,
       vehicleType: getShipVehicleType(ship)
     };
-    return createEnemyMotion(enemyBoat.root, enemyBoat.bowWake, heading, engineOrder, index, ship);
+    return createEnemyMotion(enemyBoat, heading, engineOrder, index, ship);
   });
 }
 
@@ -3543,7 +3543,8 @@ function remoteVehicleY(ship) {
   return isScoutPlaneShip(ship) ? scoutPlaneCruiseAltitude : 0.26;
 }
 
-function createEnemyMotion(root, bowWake, heading, engineOrder, index = 0, serverShip = null) {
+function createEnemyMotion(vehicle, heading, engineOrder, index = 0, serverShip = null) {
+  const root = vehicle.root;
   return {
     id: serverShip?.id ?? `local-${index + 1}`,
     numericIndex: index + 1,
@@ -3552,7 +3553,9 @@ function createEnemyMotion(root, bowWake, heading, engineOrder, index = 0, serve
     vehicleType: getShipVehicleType(serverShip),
     serverState: serverShip?.state ?? "active",
     root,
-    bowWake,
+    bowWake: vehicle.bowWake,
+    propellerRoot: vehicle.propellerRoot,
+    shadow: vehicle.shadow,
     heading,
     speed: serverShip?.speed ?? 0,
     isServerControlled: Boolean(serverShip),
