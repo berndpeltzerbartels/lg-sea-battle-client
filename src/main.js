@@ -15,6 +15,7 @@ import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import "@babylonjs/core/Meshes/Builders/boxBuilder";
 import "@babylonjs/core/Meshes/Builders/cylinderBuilder";
 import "@babylonjs/core/Meshes/Builders/groundBuilder";
+import "@babylonjs/core/Meshes/Builders/sphereBuilder";
 import "@babylonjs/core/Meshes/Builders/torusBuilder";
 import "@babylonjs/core/Shaders/default.fragment";
 import "@babylonjs/core/Shaders/default.vertex";
@@ -126,6 +127,8 @@ const flakFireCooldownSeconds = 0.18;
 const flakProjectileSpeed = 145;
 const flakProjectileGravity = 18;
 const flakProjectileLifetime = 2.2;
+const flakBarrelLength = 1.62;
+const flakBarrelCenterZ = 0.22;
 const playerSternFlakScale = 0.54;
 const playerFlakSightYOffset = 0.14 * playerSternFlakScale;
 const playerFlakEyeZ = -0.34 * playerSternFlakScale;
@@ -4206,8 +4209,10 @@ function getPlayerFlakShot() {
 
   const scale = playerSternFlakScale;
   const worldMatrix = elevationRoot.computeWorldMatrix(true);
-  const muzzle = Vector3.TransformCoordinates(new Vector3(0, 0.018 * scale, 1.08 * scale), worldMatrix);
-  const target = Vector3.TransformCoordinates(new Vector3(0, 0.018 * scale, 14), worldMatrix);
+  const muzzleZ = (flakBarrelCenterZ + flakBarrelLength * 0.5) * scale;
+  const barrelY = 0;
+  const muzzle = Vector3.TransformCoordinates(new Vector3(0, barrelY, muzzleZ), worldMatrix);
+  const target = Vector3.TransformCoordinates(new Vector3(0, barrelY, 14), worldMatrix);
   const direction = target.subtract(muzzle).normalize();
   const shipVelocity = getForwardVector(heading).scale(speed);
 
@@ -4268,20 +4273,19 @@ function createFlakProjectile(system, position, velocity, direction) {
 }
 
 function createFlakMuzzleFlash(system, position, direction) {
-  const flash = MeshBuilder.CreateBox(`flak_muzzle_flash_${system.nextId}`, {
-    width: 0.22,
-    height: 0.22,
-    depth: 0.34
+  const flash = MeshBuilder.CreateSphere(`flak_muzzle_flash_${system.nextId}`, {
+    diameter: 0.14,
+    segments: 10
   }, system.scene);
   flash.parent = system.root;
   flash.material = system.materials.flakFlash;
-  flash.position.copyFrom(position.add(direction.scale(0.16)));
+  flash.position.copyFrom(position.add(direction.scale(0.08)));
 
   const light = new PointLight(`${flash.name}_light`, flash.position.clone(), system.scene);
   light.diffuse = new Color3(1.0, 0.76, 0.42);
   light.specular = new Color3(1.0, 0.78, 0.5);
-  light.intensity = 1.35;
-  light.range = 22;
+  light.intensity = 0.85;
+  light.range = 14;
 
   system.flashes.push({
     mesh: flash,
@@ -6398,9 +6402,9 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   elevationRoot.position.y = 0.08 * scale;
   elevationRoot.position.z = 0.28 * scale;
 
-  const barrelLength = 1.62 * scale;
+  const barrelLength = flakBarrelLength * scale;
   const barrelHalfLength = barrelLength * 0.5;
-  const barrelCenterZ = 0.22 * scale;
+  const barrelCenterZ = flakBarrelCenterZ * scale;
   const barrel = MeshBuilder.CreateCylinder(`${name}_flak_barrel`, {
     diameter: 0.038 * scale,
     height: barrelLength,
