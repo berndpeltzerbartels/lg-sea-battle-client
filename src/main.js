@@ -4966,6 +4966,7 @@ function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
     fin,
     heading: Number.isFinite(snapshot.heading) ? snapshot.heading : 0,
     speed: Number.isFinite(snapshot.speed) ? snapshot.speed : 0,
+    verticalSpeed: 0,
     serverPosition: root.position.clone(),
     serverSnapshotTime: snapshotClientTime
   };
@@ -4974,11 +4975,23 @@ function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
 }
 
 function applyServerBombSnapshot(visual, snapshot, snapshotClientTime = time) {
-  visual.serverPosition = new Vector3(
+  const previousPosition = visual.serverPosition;
+  const previousSnapshotTime = visual.serverSnapshotTime ?? snapshotClientTime;
+  const nextServerPosition = new Vector3(
     Number.isFinite(snapshot.x) ? snapshot.x : visual.serverPosition.x,
     Number.isFinite(snapshot.y) ? snapshot.y : visual.serverPosition.y,
     Number.isFinite(snapshot.z) ? snapshot.z : visual.serverPosition.z
   );
+  const snapshotDelta = snapshotClientTime - previousSnapshotTime;
+  if (snapshotDelta > 0.001 && previousPosition && Number.isFinite(nextServerPosition.y) && Number.isFinite(previousPosition.y)) {
+    const measuredVerticalSpeed = (nextServerPosition.y - previousPosition.y) / snapshotDelta;
+    if (Number.isFinite(measuredVerticalSpeed)) {
+      visual.verticalSpeed = Number.isFinite(visual.verticalSpeed)
+        ? visual.verticalSpeed + (measuredVerticalSpeed - visual.verticalSpeed) * 0.45
+        : measuredVerticalSpeed;
+    }
+  }
+  visual.serverPosition = nextServerPosition;
   visual.serverSnapshotTime = snapshotClientTime;
   visual.heading = Number.isFinite(snapshot.heading) ? snapshot.heading : visual.heading;
   visual.speed = Number.isFinite(snapshot.speed) ? snapshot.speed : visual.speed;
@@ -4992,12 +5005,17 @@ function updateServerBombVisuals(system, dt, now) {
     const forward = getForwardVector(visual.heading);
     const snapshotAge = Math.max(0, now - (visual.serverSnapshotTime ?? now));
     const projected = visual.serverPosition.add(forward.scale(visual.speed * snapshotAge));
+    const projectedY = visual.serverPosition.y + (Number.isFinite(visual.verticalSpeed) ? visual.verticalSpeed * snapshotAge : 0);
 
     visual.root.position.addInPlace(forward.scale(visual.speed * dt));
+    if (Number.isFinite(visual.verticalSpeed)) {
+      visual.root.position.y += visual.verticalSpeed * dt;
+    }
     visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 4.5);
-    visual.root.position.y += (visual.serverPosition.y - visual.root.position.y) * Math.min(1, dt * 6.5);
+    visual.root.position.y += (projectedY - visual.root.position.y) * Math.min(1, dt * 2);
     visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 4.5);
-    visual.root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2 + Math.sin(now * 5) * 0.08, visual.heading, 0);
+    visual.root.position.y = Math.max(0, visual.root.position.y);
+    visual.root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2, visual.heading, 0);
   });
 }
 
