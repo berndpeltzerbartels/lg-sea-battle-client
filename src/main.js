@@ -38,9 +38,11 @@ const urlParams = new URLSearchParams(location.search);
 let debugMapEnabled = urlParams.get("debug") === "1";
 let debugMarkerMapEnabled = debugMapEnabled && urlParams.get("markers") === "1";
 let bigMapEnabled = debugMapEnabled && urlParams.get("bigMap") !== "0";
+const hideBeachDebug = urlParams.get("hide-beach") === "1";
 document.body.classList.toggle("big-map", bigMapEnabled);
 document.body.dataset.bigMap = String(bigMapEnabled);
 document.body.classList.toggle("debug-marker-map", debugMarkerMapEnabled);
+document.body.dataset.hideBeach = String(hideBeachDebug);
 const torpedoBoatWaterlineY = -0.2;
 const enemyTorpedoBoatBobAmplitude = 0.025;
 const enemyBowWakeSurfaceY = -torpedoBoatWaterlineY + 0.018;
@@ -7517,10 +7519,12 @@ function createCoastline(land, position, scene, materials, parent) {
   const heightScale = land.heightScale ?? 1;
   const peakBoost = land.peakBoost ?? 0;
 
-  const beach = createCoastlineBeachMesh(`${name}_beach`, land, rx, rz, scene);
-  beach.parent = parent;
-  beach.position = position;
-  beach.material = materials.sand;
+  if (!hideBeachDebug) {
+    const beach = createCoastlineBeachMesh(`${name}_beach`, land, rx, rz, scene);
+    beach.parent = parent;
+    beach.position = position;
+    beach.material = materials.sand;
+  }
 
   const terrain = createCoastlineTerrainMesh(`${name}_terrain`, land, rx, rz, heightScale, peakBoost, scene);
   terrain.parent = parent;
@@ -7723,16 +7727,18 @@ function createIsland(land, position, scene, materials, parent) {
 }
 
 function createSmallIslandSurface(land, rx, rz, heightScale, scene, materials, parent) {
-  const beach = MeshBuilder.CreateCylinder(`${land.name}_island_beach`, {
-    diameter: 2,
-    height: 0.05,
-    tessellation: 64
-  }, scene);
-  beach.parent = parent;
-  beach.position.y = 0.045;
-  beach.scaling.x = rx * 1.02;
-  beach.scaling.z = rz * 1.02;
-  beach.material = materials.sand;
+  if (!hideBeachDebug) {
+    const beach = MeshBuilder.CreateCylinder(`${land.name}_island_beach`, {
+      diameter: 2,
+      height: 0.05,
+      tessellation: 64
+    }, scene);
+    beach.parent = parent;
+    beach.position.y = 0.045;
+    beach.scaling.x = rx * 1.02;
+    beach.scaling.z = rz * 1.02;
+    beach.material = materials.sand;
+  }
 
   const terrain = MeshBuilder.CreateCylinder(`${land.name}_island_terrain`, {
     diameterTop: 1.55,
