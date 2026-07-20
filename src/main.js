@@ -7572,7 +7572,7 @@ function createCoastlineTerrainMesh(name, land, rx, rz, heightScale, peakBoost, 
   const positions = [];
   const indices = [];
   const normals = [];
-  const rings = [0, 0.22, 0.42, 0.6, 0.72, 0.82];
+  const rings = [0, 0.22, 0.42, 0.6, 0.74, 0.86, 0.98];
   const samples = 112;
 
   rings.forEach((ring) => {
@@ -7633,7 +7633,7 @@ function createCoastlineBeachMesh(name, land, rx, rz, scene) {
   const positions = [];
   const indices = [];
   const normals = [];
-  const rings = [0.8, 0.93, 1.06];
+  const rings = [0.86, 0.96, 1.06];
   const samples = 112;
   const mask = [];
 
@@ -7648,7 +7648,7 @@ function createCoastlineBeachMesh(name, land, rx, rz, scene) {
       const sandBand = 1 - smoothstep(0.78, 1.08, ring);
       const isSand = fjord <= 0.58 && !landWater;
 
-      positions.push(localX, isSand ? 0.22 + sandBand * 0.07 : 0.16, localZ);
+      positions.push(localX, isSand ? 0.24 + sandBand * 0.08 : 0.16, localZ);
       mask.push(isSand);
     }
   });
@@ -7741,8 +7741,8 @@ function createSmallIslandSurface(land, rx, rz, heightScale, scene, materials, p
   }, scene);
   terrain.parent = parent;
   terrain.position.y = 0.22;
-  terrain.scaling.x = rx * 0.84;
-  terrain.scaling.z = rz * 0.84;
+  terrain.scaling.x = rx * 0.92;
+  terrain.scaling.z = rz * 0.92;
   terrain.material = materials.terrain;
   terrain.receiveShadows = true;
 
