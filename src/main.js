@@ -7730,8 +7730,8 @@ function createSmallIslandSurface(land, rx, rz, heightScale, scene, materials, p
   }, scene);
   beach.parent = parent;
   beach.position.y = 0.045;
-  beach.scaling.x = rx * 0.98;
-  beach.scaling.z = rz * 0.98;
+  beach.scaling.x = rx * 1.02;
+  beach.scaling.z = rz * 1.02;
   beach.material = materials.sand;
 
   const terrain = MeshBuilder.CreateCylinder(`${land.name}_island_terrain`, {
@@ -7742,8 +7742,8 @@ function createSmallIslandSurface(land, rx, rz, heightScale, scene, materials, p
   }, scene);
   terrain.parent = parent;
   terrain.position.y = 0.22;
-  terrain.scaling.x = rx * 0.96;
-  terrain.scaling.z = rz * 0.96;
+  terrain.scaling.x = rx * 0.92;
+  terrain.scaling.z = rz * 0.92;
   terrain.material = materials.terrain;
   terrain.receiveShadows = true;
 
