@@ -188,6 +188,7 @@ document.body.dataset.playerId = playerId;
 document.body.dataset.playerInitials = playerInitials;
 document.body.dataset.playerVehicle = scoutPlaneMode ? "scout-plane" : "torpedo-boat";
 document.body.dataset.flakView = "bridge";
+document.body.dataset.bombBayView = "off";
 document.body.dataset.playerShipId = playerServerShipId ?? "pending";
 document.body.dataset.serverOwnShips = String(playerShips.length);
 document.body.dataset.serverEnemyShips = String(enemyShips.length);
@@ -272,6 +273,11 @@ window.addEventListener("keydown", (event) => {
 
   if (playerActive && isFlakViewToggleKey(event) && !event.repeat) {
     toggleFlakView();
+    event.preventDefault();
+    return;
+  }
+  if (playerActive && isBombBayViewToggleKey(event) && !event.repeat) {
+    toggleBombBayView();
     event.preventDefault();
     return;
   }
@@ -540,6 +546,7 @@ let nextEngineHoldChangeTime = 0;
 let heldRudderDirection = 0;
 let nextRudderHoldChangeTime = 0;
 let flakViewActive = false;
+let bombBayViewActive = false;
 let flakYaw = 0;
 let flakPitch = 0;
 let heldFlakDirection = 0;
@@ -784,7 +791,8 @@ scene.onBeforeRenderObservable.add(() => {
   const shakeOffset = getRamShakeOffset(heading, ramShake, time);
   ramShake = Math.max(0, ramShake - dt * 2.6);
 
-  camera.minZ = flakViewActive ? 0.03 : (scoutPlaneMode ? 1.5 : 0.2);
+  camera.minZ = flakViewActive ? 0.03 : (bombBayViewActive ? 0.2 : (scoutPlaneMode ? 1.5 : 0.2));
+  camera.fov = bombBayViewActive ? 0.86 : (scoutPlaneMode ? 1.02 : 0.78);
   cameraPosition.copyFrom(desiredCameraPosition.add(shakeOffset));
   cameraTarget.copyFrom(desiredTarget);
   camera.position.copyFrom(cameraPosition);
@@ -852,6 +860,10 @@ function isFlakViewToggleKey(event) {
   return !scoutPlaneMode && (event.code === "KeyF" || event.key === "f" || event.key === "F");
 }
 
+function isBombBayViewToggleKey(event) {
+  return scoutPlaneMode && (event.code === "KeyB" || event.key === "b" || event.key === "B");
+}
+
 function toggleFlakView() {
   flakViewActive = !flakViewActive;
   heldFlakDirection = 0;
@@ -861,6 +873,13 @@ function toggleFlakView() {
   heldElevatorDirection = 0;
   rightMouseRudderActive = false;
   document.body.dataset.flakView = flakViewActive ? "active" : "bridge";
+}
+
+function toggleBombBayView() {
+  bombBayViewActive = !bombBayViewActive;
+  heldElevatorDirection = 0;
+  rightMouseRudderActive = false;
+  document.body.dataset.bombBayView = bombBayViewActive ? "active" : "off";
 }
 
 function updatePlayerFlakMount() {
@@ -878,6 +897,13 @@ function changeFlakPitch(direction) {
 }
 
 function getPlayerCameraSetup(forward) {
+  if (scoutPlaneMode && bombBayViewActive) {
+    const worldMatrix = boat.root.computeWorldMatrix(true);
+    const position = Vector3.TransformCoordinates(new Vector3(0, -0.42, 0.55), worldMatrix);
+    const target = Vector3.TransformCoordinates(new Vector3(0, -90, 32), worldMatrix);
+    return { position, target };
+  }
+
   if (!scoutPlaneMode && flakViewActive) {
     const elevationRoot = boat.sternFlak?.elevationRoot;
     if (!elevationRoot) {
@@ -4848,7 +4874,7 @@ function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
 
   const fin = MeshBuilder.CreateBox(`${root.name}_fin`, { width: 0.58, height: 0.08, depth: 0.22 }, system.scene);
   fin.parent = root;
-  fin.position.z = -0.72;
+  fin.position.z = 0.72;
   fin.material = system.materials.funnel;
 
   const visual = {
