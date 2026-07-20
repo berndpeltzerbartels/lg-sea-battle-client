@@ -5690,6 +5690,7 @@ function createMaterials(scene) {
   const sand = new StandardMaterial("sand_material", scene);
   sand.diffuseColor = new Color3(0.58, 0.58, 0.5);
   sand.specularColor = new Color3(0.035, 0.038, 0.035);
+  sand.zOffset = -2;
 
   const grass = new StandardMaterial("grass_material", scene);
   grass.diffuseColor = new Color3(0.19, 0.38, 0.29);
