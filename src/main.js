@@ -5688,7 +5688,7 @@ function createMaterials(scene) {
   water.diffuseTexture.vScale = 34;
 
   const sand = new StandardMaterial("sand_material", scene);
-  sand.diffuseColor = new Color3(0.58, 0.58, 0.5);
+  sand.diffuseColor = new Color3(0.46, 0.52, 0.46);
   sand.specularColor = new Color3(0.035, 0.038, 0.035);
   sand.zOffset = -2;
 
@@ -7890,11 +7890,11 @@ function getPeakLift(nx, nz, ring, peakBoost, land) {
 }
 
 function getCoastRadiusFactor(angle, land) {
-  const roughness = land.coastRoughness ?? 0.16;
+  const roughness = (land.coastRoughness ?? 0.16) * 0.72;
   const seed = getNameSeed(land.name) * 0.013;
   const broad = Math.sin(angle * 2 + seed) * 0.62;
   const bays = Math.sin(angle * 4 - seed * 0.7) * 0.42;
-  const small = Math.sin(angle * 7 + seed * 1.4) * 0.2;
+  const small = Math.sin(angle * 7 + seed * 1.4) * 0.07;
   let fjordBite = 0;
 
   (land.fjords ?? []).forEach((fjord) => {
