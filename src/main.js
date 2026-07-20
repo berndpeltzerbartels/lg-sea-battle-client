@@ -4930,8 +4930,8 @@ function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
   root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2, Number.isFinite(snapshot.heading) ? snapshot.heading : 0, 0);
 
   const body = MeshBuilder.CreateCylinder(`${root.name}_body`, {
-    diameter: 0.34,
-    height: 1.35,
+    diameter: 0.24,
+    height: 0.95,
     tessellation: 12
   }, system.scene);
   body.parent = root;
@@ -4940,18 +4940,18 @@ function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
 
   const nose = MeshBuilder.CreateCylinder(`${root.name}_nose`, {
     diameterTop: 0,
-    diameterBottom: 0.34,
-    height: 0.34,
+    diameterBottom: 0.24,
+    height: 0.24,
     tessellation: 12
   }, system.scene);
   nose.parent = root;
   nose.rotation.x = Math.PI / 2;
-  nose.position.z = 0.84;
+  nose.position.z = 0.6;
   nose.material = system.materials.funnel;
 
-  const fin = MeshBuilder.CreateBox(`${root.name}_fin`, { width: 0.58, height: 0.08, depth: 0.22 }, system.scene);
+  const fin = MeshBuilder.CreateBox(`${root.name}_fin`, { width: 0.4, height: 0.06, depth: 0.16 }, system.scene);
   fin.parent = root;
-  fin.position.z = -0.72;
+  fin.position.z = -0.52;
   fin.material = system.materials.funnel;
 
   const visual = {
