@@ -116,6 +116,9 @@ const scoutPlaneCruiseAltitude = 22;
 const scoutPlaneMinAltitude = 5;
 const scoutPlaneMaxAltitude = 80;
 const scoutPlaneCruiseSpeed = 14.5;
+const scoutPlaneMinSpeed = 7.5;
+const scoutPlaneMaxSpeed = 16.5;
+const scoutPlaneSpeedStep = 1.5;
 const scoutPlaneMaxClimbRate = 8.5;
 const scoutPlaneMaxPitch = 0.22;
 const bombGravity = 14.0;
@@ -293,7 +296,13 @@ window.addEventListener("keydown", (event) => {
       return;
     }
     if (scoutPlaneMode) {
-      heldElevatorDirection = 1;
+      if (event.shiftKey) {
+        if (!event.repeat) {
+          changeScoutPlaneTargetSpeed(1);
+        }
+      } else {
+        heldElevatorDirection = 1;
+      }
     } else {
       heldEngineDirection = 1;
       if (!event.repeat) {
@@ -313,7 +322,13 @@ window.addEventListener("keydown", (event) => {
       return;
     }
     if (scoutPlaneMode) {
-      heldElevatorDirection = -1;
+      if (event.shiftKey) {
+        if (!event.repeat) {
+          changeScoutPlaneTargetSpeed(-1);
+        }
+      } else {
+        heldElevatorDirection = -1;
+      }
     } else {
       heldEngineDirection = -1;
       if (!event.repeat) {
@@ -536,6 +551,7 @@ const engineOrders = [
 // Keep propulsion as discrete ship orders, not held-key throttle.
 // Later multiplayer can send this order index plus heading/speed instead of raw input.
 let speed = scoutPlaneMode ? scoutPlaneCruiseSpeed : 0;
+let scoutPlaneTargetSpeed = scoutPlaneCruiseSpeed;
 let engineOrder = scoutPlaneMode ? 7 : 2;
 let turnVelocity = 0;
 let rudderDegrees = 0;
@@ -662,10 +678,10 @@ scene.onBeforeRenderObservable.add(() => {
     if (scoutPlaneMode) {
       engineOrder = 7;
     }
-    const maxForwardSpeed = scoutPlaneMode ? scoutPlaneCruiseSpeed : 12.4;
+    const maxForwardSpeed = scoutPlaneMode ? scoutPlaneMaxSpeed : 12.4;
     const engineTargetSpeed = engineOrders[engineOrder].speed;
     const targetSpeed = scoutPlaneMode
-      ? scoutPlaneCruiseSpeed
+      ? scoutPlaneTargetSpeed
       : engineTargetSpeed > 0
       ? Math.min(engineTargetSpeed, maxForwardSpeed)
       : engineTargetSpeed;
@@ -795,7 +811,7 @@ scene.onBeforeRenderObservable.add(() => {
   ramShake = Math.max(0, ramShake - dt * 2.6);
 
   camera.minZ = flakViewActive ? 0.03 : (bombBayViewActive ? 0.2 : (scoutPlaneMode ? 1.5 : 0.2));
-  camera.fov = bombBayViewActive ? 0.86 : (scoutPlaneMode ? 1.02 : 0.78);
+  camera.fov = bombBayViewActive ? 1.32 : (scoutPlaneMode ? 1.02 : 0.78);
   cameraPosition.copyFrom(desiredCameraPosition.add(shakeOffset));
   cameraTarget.copyFrom(desiredTarget);
   camera.position.copyFrom(cameraPosition);
@@ -811,6 +827,7 @@ scene.onBeforeRenderObservable.add(() => {
   document.body.dataset.activeCamera = scene.activeCamera?.name ?? "none";
   document.body.dataset.boat = `${boat.root.position.x.toFixed(1)},${boat.root.position.y.toFixed(1)},${boat.root.position.z.toFixed(1)}`;
   document.body.dataset.scoutPlaneAltitude = scoutPlaneMode ? scoutPlaneAltitude.toFixed(1) : "";
+  document.body.dataset.scoutPlaneTargetSpeed = scoutPlaneMode ? scoutPlaneTargetSpeed.toFixed(1) : "";
   document.body.dataset.scoutPlanePitch = scoutPlaneMode ? scoutPlanePitch.toFixed(3) : "";
   document.body.dataset.scoutPlaneVerticalSpeed = scoutPlaneMode ? scoutPlaneVerticalSpeed.toFixed(2) : "";
   document.body.dataset.engineOrder = engineOrders[engineOrder].label;
@@ -883,6 +900,15 @@ function toggleBombBayView() {
   heldElevatorDirection = 0;
   rightMouseRudderActive = false;
   document.body.dataset.bombBayView = bombBayViewActive ? "active" : "off";
+}
+
+function changeScoutPlaneTargetSpeed(direction) {
+  scoutPlaneTargetSpeed = clamp(
+    scoutPlaneTargetSpeed + direction * scoutPlaneSpeedStep,
+    scoutPlaneMinSpeed,
+    scoutPlaneMaxSpeed
+  );
+  document.body.dataset.scoutPlaneTargetSpeed = scoutPlaneTargetSpeed.toFixed(1);
 }
 
 function updatePlayerFlakMount() {
