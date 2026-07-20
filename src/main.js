@@ -260,7 +260,7 @@ document.body.dataset.flakDemoStaticBoats = String(flakDemoMotions.length);
 document.body.dataset.meshCount = String(scene.meshes.length);
 
 const camera = new FreeCamera("follow_camera", new Vector3(0, 7, -13), scene);
-camera.minZ = 0.03;
+camera.minZ = 0.2;
 camera.maxZ = 4200;
 camera.fov = scoutPlaneMode ? 1.02 : 0.78;
 scene.activeCamera = camera;
@@ -784,6 +784,7 @@ scene.onBeforeRenderObservable.add(() => {
   const shakeOffset = getRamShakeOffset(heading, ramShake, time);
   ramShake = Math.max(0, ramShake - dt * 2.6);
 
+  camera.minZ = flakViewActive ? 0.03 : (scoutPlaneMode ? 1.5 : 0.2);
   cameraPosition.copyFrom(desiredCameraPosition.add(shakeOffset));
   cameraTarget.copyFrom(desiredTarget);
   camera.position.copyFrom(cameraPosition);
@@ -5690,7 +5691,7 @@ function createMaterials(scene) {
   water.diffuseTexture.vScale = 34;
 
   const sand = new StandardMaterial("sand_material", scene);
-  sand.diffuseColor = new Color3(0.46, 0.52, 0.46);
+  sand.diffuseColor = new Color3(0.58, 0.58, 0.5);
   sand.specularColor = new Color3(0.035, 0.038, 0.035);
   sand.zOffset = -2;
 
