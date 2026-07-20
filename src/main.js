@@ -118,6 +118,8 @@ const scoutPlaneMaxAltitude = 80;
 const scoutPlaneCruiseSpeed = 14.5;
 const scoutPlaneMaxClimbRate = 8.5;
 const scoutPlaneMaxPitch = 0.22;
+const bombGravity = 14.0;
+const bombDropForwardOffset = 2.6;
 const scoutPlaneExperimentShowAllFlak = true;
 const scoutPlaneExperimentFlakDemo = urlParams.get("flak-demo") === "1";
 const playerSternFlakZ = -2.92;
@@ -761,6 +763,7 @@ scene.onBeforeRenderObservable.add(() => {
   updateEnemyFireControl(torpedoSystem, enemyMotions, boat.root.position, blockedWaters, time);
   updateServerTorpedoVisuals(torpedoSystem, dt, time);
   updateServerBombVisuals(bombSystem, dt, time);
+  updateBombSightMarker(bombSystem, forward);
   updateFlakSystem(flakSystem, dt, time);
   syncMultiplayerState(time);
   const torpedoResult = updateTorpedoSystem(torpedoSystem, dt, time, enemyMotions, blockedWaters, boat.root.position);
@@ -898,9 +901,12 @@ function changeFlakPitch(direction) {
 
 function getPlayerCameraSetup(forward) {
   if (scoutPlaneMode && bombBayViewActive) {
-    const worldMatrix = boat.root.computeWorldMatrix(true);
-    const position = Vector3.TransformCoordinates(new Vector3(0, -0.42, 0.55), worldMatrix);
-    const target = Vector3.TransformCoordinates(new Vector3(0, -90, 32), worldMatrix);
+    const position = boat.root.position
+      .add(forward.scale(0.7))
+      .add(new Vector3(0, -0.55 - Math.sin(time * 1.1) * 0.22, 0));
+    const target = position
+      .add(forward.scale(26 + Math.max(0, speed) * 0.9))
+      .add(new Vector3(0, -90, 0));
     return { position, target };
   }
 
@@ -4262,15 +4268,49 @@ function createTorpedoSystem(scene, materials, parent) {
 function createBombSystem(scene, materials, parent) {
   const root = new TransformNode("bombs", scene);
   root.parent = parent;
+  const sightMarker = createBombSightMarker(scene, materials, root);
 
   return {
     root,
     scene,
     materials,
+    sightMarker,
     serverVisuals: new Map(),
     serverImpactIds: new Set(),
     hits: 0
   };
+}
+
+function createBombSightMarker(scene, materials, parent) {
+  const root = new TransformNode("bomb_sight_marker", scene);
+  root.parent = parent;
+  root.setEnabled(false);
+
+  const longBar = MeshBuilder.CreateBox("bomb_sight_marker_long", {
+    width: 6.2,
+    height: 0.035,
+    depth: 0.12
+  }, scene);
+  longBar.parent = root;
+  longBar.material = materials.beaconGlow;
+
+  const crossBar = MeshBuilder.CreateBox("bomb_sight_marker_cross", {
+    width: 0.12,
+    height: 0.035,
+    depth: 6.2
+  }, scene);
+  crossBar.parent = root;
+  crossBar.material = materials.beaconGlow;
+
+  const center = MeshBuilder.CreateCylinder("bomb_sight_marker_center", {
+    diameter: 0.46,
+    height: 0.045,
+    tessellation: 18
+  }, scene);
+  center.parent = root;
+  center.material = materials.explosionCore;
+
+  return root;
 }
 
 function createFlakSystem(scene, materials, parent) {
@@ -4872,15 +4912,27 @@ function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
   body.rotation.x = Math.PI / 2;
   body.material = system.materials.funnel;
 
+  const nose = MeshBuilder.CreateCylinder(`${root.name}_nose`, {
+    diameterTop: 0,
+    diameterBottom: 0.34,
+    height: 0.34,
+    tessellation: 12
+  }, system.scene);
+  nose.parent = root;
+  nose.rotation.x = Math.PI / 2;
+  nose.position.z = 0.84;
+  nose.material = system.materials.funnel;
+
   const fin = MeshBuilder.CreateBox(`${root.name}_fin`, { width: 0.58, height: 0.08, depth: 0.22 }, system.scene);
   fin.parent = root;
-  fin.position.z = 0.72;
+  fin.position.z = -0.72;
   fin.material = system.materials.funnel;
 
   const visual = {
     id: snapshot.id,
     root,
     body,
+    nose,
     fin,
     heading: Number.isFinite(snapshot.heading) ? snapshot.heading : 0,
     speed: Number.isFinite(snapshot.speed) ? snapshot.speed : 0,
@@ -4917,6 +4969,25 @@ function updateServerBombVisuals(system, dt, now) {
     visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 4.5);
     visual.root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2 + Math.sin(now * 5) * 0.08, visual.heading, 0);
   });
+}
+
+function updateBombSightMarker(system, forward) {
+  if (!system.sightMarker) return;
+  if (!scoutPlaneMode || !bombBayViewActive || playerDamageState !== "active") {
+    system.sightMarker.setEnabled(false);
+    document.body.dataset.bombSight = "off";
+    return;
+  }
+
+  const dropAltitude = clamp(boat.root.position.y, 1, 120);
+  const fallSeconds = Math.sqrt((2 * dropAltitude) / bombGravity);
+  const horizontalSpeed = clamp(speed * 0.92, 4, 22);
+  const lead = bombDropForwardOffset + horizontalSpeed * fallSeconds;
+  const impact = boat.root.position.add(forward.scale(lead));
+  system.sightMarker.position.set(impact.x, 0.12, impact.z);
+  system.sightMarker.rotation.y = heading;
+  system.sightMarker.setEnabled(true);
+  document.body.dataset.bombSight = `${impact.x.toFixed(1)},${impact.z.toFixed(1)}`;
 }
 
 function renderServerBombImpacts(impacts) {
