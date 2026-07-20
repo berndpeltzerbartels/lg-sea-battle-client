@@ -1016,11 +1016,14 @@ body[data-player-vehicle="scout-plane"] .speed {
   padding: 12px;
 }
 
-body[data-player-vehicle="scout-plane"] .boat-speed-readout,
 body[data-player-vehicle="scout-plane"] .torpedo-stock,
 body[data-player-vehicle="scout-plane"] .depth-gauge,
 body[data-player-vehicle="scout-plane"] .telegraph {
   display: none;
+}
+
+body[data-player-vehicle="scout-plane"] .boat-speed-readout {
+  margin-bottom: 10px;
 }
 
 body[data-player-vehicle="scout-plane"] .altimeter {
