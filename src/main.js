@@ -142,7 +142,7 @@ const playerFlakSightYOffset = 0.14 * playerSternFlakScale;
 const playerFlakEyeZ = -0.34 * playerSternFlakScale;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
-const performanceLoggingEnabled = true;
+const performanceLoggingEnabled = urlParams.get("perf-log") === "1";
 const centerPeakLighthouseLandNames = new Set(["far_east_bank", "north_watch_bank", "south_watch_bank", "eastern_delta_coast", "blackwater_basin"]);
 const lighthouseHeightOffsets = new Map([
   ["blackwater_basin", -1.2],
