@@ -2219,6 +2219,7 @@ async function sendPlayerState() {
         playerId,
         teamId: playerTeamId,
         x: boat.root.position.x,
+        y: scoutPlaneMode ? boat.root.position.y : 0,
         z: boat.root.position.z,
         heading,
         speed,
@@ -2654,6 +2655,7 @@ function applyServerShipSnapshot(motion, ship) {
   motion.rudder = Number.isFinite(ship.rudderDegrees) ? clamp(ship.rudderDegrees / maxRudderDegrees, -1, 1) : motion.rudder;
   if (wasInactive && correctionDistance > 55) {
     motion.root.position.x = motion.serverPosition.x;
+    motion.root.position.y = motion.serverPosition.y;
     motion.root.position.z = motion.serverPosition.z;
   }
   motion.root.setEnabled(true);
@@ -3913,7 +3915,8 @@ function isScoutPlaneMotion(motion) {
 }
 
 function remoteVehicleY(ship) {
-  return isScoutPlaneShip(ship) ? scoutPlaneCruiseAltitude : 0.26;
+  if (!isScoutPlaneShip(ship)) return 0.26;
+  return Number.isFinite(ship?.y) ? ship.y : scoutPlaneCruiseAltitude;
 }
 
 function createEnemyMotion(vehicle, heading, engineOrder, index = 0, serverShip = null) {
@@ -4040,9 +4043,10 @@ function updateServerEnemyMotion(motion, dt, time) {
 
   const correctionStrength = correctionDistance > 18 ? 4.2 : 1.8;
   motion.root.position.x += (projectedServerPosition.x - motion.root.position.x) * Math.min(1, dt * correctionStrength);
+  motion.root.position.y += (motion.serverPosition.y - motion.root.position.y) * Math.min(1, dt * 2.6);
   motion.root.position.z += (projectedServerPosition.z - motion.root.position.z) * Math.min(1, dt * correctionStrength);
   if (isScoutPlaneMotion(motion)) {
-    motion.root.position.y = scoutPlaneCruiseAltitude + Math.sin(time * 0.85 + motion.numericIndex) * 0.35;
+    motion.root.position.y += Math.sin(time * 0.85 + motion.numericIndex) * 0.018;
     motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
       Math.sin(time * 0.7 + motion.numericIndex) * 0.025,
       motion.heading,
@@ -4930,8 +4934,8 @@ function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
   root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2, Number.isFinite(snapshot.heading) ? snapshot.heading : 0, 0);
 
   const body = MeshBuilder.CreateCylinder(`${root.name}_body`, {
-    diameter: 0.24,
-    height: 0.95,
+    diameter: 0.3,
+    height: 1.15,
     tessellation: 12
   }, system.scene);
   body.parent = root;
@@ -4940,18 +4944,18 @@ function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
 
   const nose = MeshBuilder.CreateCylinder(`${root.name}_nose`, {
     diameterTop: 0,
-    diameterBottom: 0.24,
-    height: 0.24,
+    diameterBottom: 0.3,
+    height: 0.3,
     tessellation: 12
   }, system.scene);
   nose.parent = root;
   nose.rotation.x = Math.PI / 2;
-  nose.position.z = 0.6;
+  nose.position.z = 0.72;
   nose.material = system.materials.funnel;
 
-  const fin = MeshBuilder.CreateBox(`${root.name}_fin`, { width: 0.4, height: 0.06, depth: 0.16 }, system.scene);
+  const fin = MeshBuilder.CreateBox(`${root.name}_fin`, { width: 0.5, height: 0.07, depth: 0.19 }, system.scene);
   fin.parent = root;
-  fin.position.z = -0.52;
+  fin.position.z = -0.62;
   fin.material = system.materials.funnel;
 
   const visual = {
