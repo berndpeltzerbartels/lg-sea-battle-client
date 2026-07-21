@@ -17,7 +17,6 @@ import "@babylonjs/core/Meshes/Builders/cylinderBuilder";
 import "@babylonjs/core/Meshes/Builders/groundBuilder";
 import "@babylonjs/core/Meshes/Builders/sphereBuilder";
 import "@babylonjs/core/Meshes/Builders/torusBuilder";
-import "@babylonjs/core/Rendering/edgesRenderer";
 import "@babylonjs/core/Shaders/default.fragment";
 import "@babylonjs/core/Shaders/default.vertex";
 import "@babylonjs/core/Shaders/depthBoxBlur.fragment";
@@ -132,9 +131,9 @@ const playerSternFlakZ = -2.92;
 const remoteSternFlakZ = -2.92;
 const flakMinPitch = -0.12;
 const flakMaxPitch = 0.92;
-const flakPitchStepRadians = 0.05;
+const flakPitchStepRadians = 0.04;
 const flakFireCooldownSeconds = 0.22;
-const flakProjectileSpeed = 205;
+const flakProjectileSpeed = 195;
 const flakProjectileGravity = 9;
 const flakProjectileLifetime = 8.0;
 const flakDemoFireIntervalSeconds = 0.25;
@@ -667,10 +666,10 @@ scene.onBeforeRenderObservable.add(() => {
     );
   }
   if (playerActive && flakViewActive && heldFlakDirection !== 0) {
-    flakYaw = normalizeAngle(flakYaw + heldFlakDirection * 1.35 * dt);
+    flakYaw = normalizeAngle(flakYaw + heldFlakDirection * 0.92 * dt);
   }
   if (playerActive && flakViewActive && heldFlakPitchDirection !== 0) {
-    flakPitch = clamp(flakPitch + heldFlakPitchDirection * 0.72 * dt, flakMinPitch, flakMaxPitch);
+    flakPitch = clamp(flakPitch + heldFlakPitchDirection * 0.48 * dt, flakMinPitch, flakMaxPitch);
   }
   if (playerActive && flakViewActive && heldFlakFire) {
     firePlayerFlak();
@@ -4473,28 +4472,21 @@ function createFlakProjectile(system, position, velocity, direction) {
   root.position.copyFrom(position);
 
   const core = MeshBuilder.CreateSphere(`${root.name}_core`, {
-    diameter: 0.17,
-    segments: 12
+    diameter: 0.2,
+    segments: 10
   }, system.scene);
   core.parent = root;
   core.material = system.materials.flakTracer;
-  core.enableEdgesRendering();
-  core.edgesWidth = 2.4;
-  core.edgesColor = new Color4(0.34, 0.42, 0.48, 1.0);
 
   const trail = [];
-  for (let i = 0; i < 6; i += 1) {
-    const segment = MeshBuilder.CreateBox(`${root.name}_trail_${i}`, {
-      width: 0.075 + i * 0.009,
-      height: 0.075 + i * 0.008,
-      depth: 0.7 + i * 0.17
+  for (let i = 0; i < 4; i += 1) {
+    const segment = MeshBuilder.CreateSphere(`${root.name}_trail_${i}`, {
+      diameter: 0.16 - i * 0.018,
+      segments: 8
     }, system.scene);
     segment.parent = system.root;
     segment.material = system.materials.flakTracerTrail;
-    segment.enableEdgesRendering();
-    segment.edgesWidth = 1.2;
-    segment.edgesColor = new Color4(0.18, 0.25, 0.3, 0.8);
-    segment.position.copyFrom(position.add(direction.scale(-0.1 - i * 0.22)));
+    segment.position.copyFrom(position.add(direction.scale(-0.18 - i * 0.28)));
     trail.push(segment);
   }
 
@@ -4515,7 +4507,7 @@ function createFlakProjectile(system, position, velocity, direction) {
     age: 0,
     lifetime: flakProjectileLifetime,
     direction: direction.clone(),
-    samplePositions: Array.from({ length: 6 }, (_, index) => position.add(direction.scale(-0.12 - index * 0.24)))
+    samplePositions: Array.from({ length: 5 }, (_, index) => position.add(direction.scale(-0.18 - index * 0.28)))
   });
   return system.active[system.active.length - 1];
 }
@@ -4564,15 +4556,11 @@ function updateFlakSystem(system, dt, now) {
     projectile.samplePositions.unshift(projectile.position.clone());
     projectile.samplePositions = projectile.samplePositions.slice(0, projectile.trail.length + 1);
     projectile.trail.forEach((segment, index) => {
-      const start = projectile.samplePositions[index + 1] ?? projectile.previousPosition;
-      const end = projectile.samplePositions[index] ?? projectile.position;
-      const midpoint = Vector3.Center(start, end);
-      const segmentDirection = end.subtract(start);
-      const segmentLength = Math.max(0.08, segmentDirection.length());
-      segment.position.copyFrom(midpoint);
-      segment.scaling.y = segmentLength / (0.42 + index * 0.12);
-      segment.rotationQuaternion = Quaternion.FromLookDirectionLH(segmentDirection.normalize(), Vector3.Up());
-      segment.visibility = Math.max(0.18, pulse - index * 0.11);
+      const sample = projectile.samplePositions[index + 1] ?? projectile.previousPosition;
+      segment.position.copyFrom(sample);
+      const fade = Math.max(0.16, pulse - index * 0.16);
+      segment.scaling.setAll(1 - index * 0.1);
+      segment.visibility = fade;
     });
     projectile.light.position.copyFrom(projectile.position);
     projectile.light.intensity = 0.45 + pulse * 0.45;
