@@ -125,6 +125,9 @@ const bombGravity = 14.0;
 const bombDropForwardOffset = 2.6;
 const bombsPerDrop = 8;
 const bombReleaseIntervalSeconds = 0.28;
+const bombBayWideFov = 0.92;
+const bombBayZoomFov = 0.62;
+const bombBayImpactFocusExtraSeconds = 1.5;
 const scoutPlaneExperimentShowAllFlak = true;
 const scoutPlaneExperimentFlakDemo = urlParams.get("flak-demo") === "1";
 const playerSternFlakZ = -2.92;
@@ -572,6 +575,7 @@ let heldRudderDirection = 0;
 let nextRudderHoldChangeTime = 0;
 let flakViewActive = false;
 let bombBayViewActive = false;
+let bombBayImpactFocus = null;
 let flakYaw = 0;
 let flakPitch = 0;
 let heldFlakDirection = 0;
@@ -823,7 +827,7 @@ scene.onBeforeRenderObservable.add(() => {
   ramShake = Math.max(0, ramShake - dt * 2.6);
 
   camera.minZ = flakViewActive ? 0.03 : (bombBayViewActive ? 0.2 : (scoutPlaneMode ? 1.5 : 0.2));
-  camera.fov = bombBayViewActive ? 0.92 : (scoutPlaneMode ? 1.02 : 0.78);
+  camera.fov = bombBayViewActive ? getBombBayFov() : (scoutPlaneMode ? 1.02 : 0.78);
   cameraPosition.copyFrom(desiredCameraPosition.add(shakeOffset));
   cameraTarget.copyFrom(desiredTarget);
   camera.position.copyFrom(cameraPosition);
@@ -940,12 +944,15 @@ function changeFlakPitch(direction) {
 
 function getPlayerCameraSetup(forward) {
   if (scoutPlaneMode && bombBayViewActive) {
+    const preview = getBombDropPreview();
+    if (bombBayImpactFocus && time >= bombBayImpactFocus.expiresAt) {
+      bombBayImpactFocus = null;
+    }
+    const focus = bombBayImpactFocus?.position ?? preview.centerImpact;
     const position = boat.root.position
       .add(forward.scale(0.7))
       .add(new Vector3(0, -0.55 - Math.sin(time * 1.1) * 0.22, 0));
-    const target = position
-      .add(forward.scale(26 + Math.max(0, speed) * 0.9))
-      .add(new Vector3(0, -90, 0));
+    const target = new Vector3(focus.x, 0.2, focus.z);
     return { position, target };
   }
 
@@ -980,6 +987,33 @@ function getPlayerCameraSetup(forward) {
     .add(forward.scale(scoutPlaneMode ? 90.0 : 24.0))
     .add(new Vector3(0, planeLookDown, 0));
   return { position, target };
+}
+
+function getBombBayFov() {
+  const altitudeFactor = clamp((boat.root.position.y - 20) / 55, 0, 1);
+  return bombBayWideFov + (bombBayZoomFov - bombBayWideFov) * altitudeFactor;
+}
+
+function getBombDropPreview() {
+  const forward = getForwardVector(heading);
+  const dropAltitude = clamp(boat.root.position.y, 1, 120);
+  const fallSeconds = Math.sqrt((2 * dropAltitude) / bombGravity);
+  const horizontalSpeed = clamp(speed * 0.92, 4, 22);
+  const lead = bombDropForwardOffset + horizontalSpeed * fallSeconds;
+  const impactSpacing = horizontalSpeed * bombReleaseIntervalSeconds;
+  const patternLength = impactSpacing * (bombsPerDrop - 1);
+  const firstImpact = boat.root.position.add(forward.scale(lead));
+  const centerImpact = boat.root.position.add(forward.scale(lead + patternLength * 0.5));
+  firstImpact.y = 0.2;
+  centerImpact.y = 0.2;
+
+  return {
+    firstImpact,
+    centerImpact,
+    impactSpacing,
+    patternLength,
+    fallSeconds
+  };
 }
 
 function isHudControlEvent(event) {
@@ -2317,6 +2351,12 @@ async function requestPlayerTorpedoFire() {
 async function requestPlayerBombDrop() {
   if (dropBombRequestInFlight || playerDamageState !== "active") return;
   if (!scoutPlaneMode) return;
+
+  const preview = getBombDropPreview();
+  bombBayImpactFocus = {
+    position: preview.centerImpact.clone(),
+    expiresAt: time + preview.fallSeconds + bombReleaseIntervalSeconds * (bombsPerDrop - 1) + bombBayImpactFocusExtraSeconds
+  };
 
   dropBombRequestInFlight = true;
   const requestStartedAt = beginHttpRequest();
@@ -5150,18 +5190,12 @@ function updateBombSightMarker(system, forward) {
     return;
   }
 
-  const dropAltitude = clamp(boat.root.position.y, 1, 120);
-  const fallSeconds = Math.sqrt((2 * dropAltitude) / bombGravity);
-  const horizontalSpeed = clamp(speed * 0.92, 4, 22);
-  const lead = bombDropForwardOffset + horizontalSpeed * fallSeconds;
-  const impactSpacing = horizontalSpeed * bombReleaseIntervalSeconds;
-  const patternLength = impactSpacing * (bombsPerDrop - 1);
-  const impact = boat.root.position.add(forward.scale(lead));
-  system.sightMarker.position.set(impact.x, 0.2, impact.z);
+  const preview = getBombDropPreview();
+  system.sightMarker.position.set(preview.firstImpact.x, 0.2, preview.firstImpact.z);
   system.sightMarker.rotation.y = heading;
-  updateBombSightPattern(system.sightMarker, patternLength, impactSpacing);
+  updateBombSightPattern(system.sightMarker, preview.patternLength, preview.impactSpacing);
   system.sightMarker.setEnabled(true);
-  document.body.dataset.bombSight = `${impact.x.toFixed(1)},${impact.z.toFixed(1)}`;
+  document.body.dataset.bombSight = `${preview.firstImpact.x.toFixed(1)},${preview.firstImpact.z.toFixed(1)}`;
 }
 
 function updateBombSightPattern(marker, patternLength, impactSpacing) {
