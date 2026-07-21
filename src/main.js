@@ -123,6 +123,8 @@ const scoutPlaneMaxClimbRate = 8.5;
 const scoutPlaneMaxPitch = 0.22;
 const bombGravity = 14.0;
 const bombDropForwardOffset = 2.6;
+const bombsPerDrop = 8;
+const bombReleaseIntervalSeconds = 0.28;
 const scoutPlaneExperimentShowAllFlak = true;
 const scoutPlaneExperimentFlakDemo = urlParams.get("flak-demo") === "1";
 const playerSternFlakZ = -2.92;
@@ -4316,29 +4318,38 @@ function createBombSightMarker(scene, materials, parent) {
   root.parent = parent;
   root.setEnabled(false);
 
-  const longBar = MeshBuilder.CreateBox("bomb_sight_marker_long", {
-    width: 6.2,
-    height: 0.035,
-    depth: 0.12
-  }, scene);
-  longBar.parent = root;
-  longBar.material = materials.beaconGlow;
+  const laneHalfWidth = 2.2;
+  const laneLines = [-laneHalfWidth, laneHalfWidth].map((xOffset, index) => {
+    const line = MeshBuilder.CreateBox(`bomb_sight_marker_lane_${index}`, {
+      width: 0.11,
+      height: 0.045,
+      depth: 1
+    }, scene);
+    line.parent = root;
+    line.position.x = xOffset;
+    line.material = materials.beaconGlow;
+    return line;
+  });
 
-  const crossBar = MeshBuilder.CreateBox("bomb_sight_marker_cross", {
-    width: 0.12,
-    height: 0.035,
-    depth: 6.2
-  }, scene);
-  crossBar.parent = root;
-  crossBar.material = materials.beaconGlow;
+  const impactTicks = [];
+  for (let index = 0; index < bombsPerDrop; index += 1) {
+    [-1, 1].forEach((side) => {
+      const tick = MeshBuilder.CreateBox(`bomb_sight_marker_tick_${index}_${side}`, {
+        width: 0.85,
+        height: 0.05,
+        depth: 0.09
+      }, scene);
+      tick.parent = root;
+      tick.position.x = side * (laneHalfWidth + 0.62);
+      tick.material = materials.beaconGlow;
+      impactTicks.push({ mesh: tick, index });
+    });
+  }
 
-  const center = MeshBuilder.CreateCylinder("bomb_sight_marker_center", {
-    diameter: 0.46,
-    height: 0.045,
-    tessellation: 18
-  }, scene);
-  center.parent = root;
-  center.material = materials.explosionCore;
+  root.metadata = {
+    laneLines,
+    impactTicks
+  };
 
   return root;
 }
@@ -5031,11 +5042,26 @@ function updateBombSightMarker(system, forward) {
   const fallSeconds = Math.sqrt((2 * dropAltitude) / bombGravity);
   const horizontalSpeed = clamp(speed * 0.92, 4, 22);
   const lead = bombDropForwardOffset + horizontalSpeed * fallSeconds;
+  const impactSpacing = horizontalSpeed * bombReleaseIntervalSeconds;
+  const patternLength = impactSpacing * (bombsPerDrop - 1);
   const impact = boat.root.position.add(forward.scale(lead));
-  system.sightMarker.position.set(impact.x, 0.12, impact.z);
+  system.sightMarker.position.set(impact.x, 0.2, impact.z);
   system.sightMarker.rotation.y = heading;
+  updateBombSightPattern(system.sightMarker, patternLength, impactSpacing);
   system.sightMarker.setEnabled(true);
   document.body.dataset.bombSight = `${impact.x.toFixed(1)},${impact.z.toFixed(1)}`;
+}
+
+function updateBombSightPattern(marker, patternLength, impactSpacing) {
+  const parts = marker.metadata ?? {};
+  const visualLength = Math.max(5.5, patternLength + 2.0);
+  (parts.laneLines ?? []).forEach((line) => {
+    line.scaling.z = visualLength;
+    line.position.z = patternLength / 2;
+  });
+  (parts.impactTicks ?? []).forEach(({ mesh, index }) => {
+    mesh.position.z = index * impactSpacing;
+  });
 }
 
 function renderServerBombImpacts(impacts) {
