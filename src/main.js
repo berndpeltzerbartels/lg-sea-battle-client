@@ -132,7 +132,7 @@ const remoteSternFlakZ = -2.92;
 const flakMinPitch = -0.12;
 const flakMaxPitch = 0.92;
 const flakPitchStepRadians = 0.05;
-const flakFireCooldownSeconds = 0.18;
+const flakFireCooldownSeconds = 0.22;
 const flakProjectileSpeed = 115;
 const flakProjectileGravity = 18;
 const flakProjectileLifetime = 2.2;
@@ -614,6 +614,7 @@ let remoteCorrectionMax = 0;
 let playerServerSnapshotReceived = false;
 const clientRadarRange = 945;
 const scoutPlaneRadarRangeFactor = 1.5;
+const bombBayRadarRangeFactor = 0.58;
 let serverShipsById = indexShipsById(gameState.ships);
 let serverClockOffset = Number.isFinite(gameState.t) ? -gameState.t : null;
 let gameEventSource = null;
@@ -2734,7 +2735,9 @@ function updateRudderGauge(indicator, valueElement, degrees) {
 
 function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading, radarHeading = heading) {
   drawMapInstrument(mapCanvas, playerPosition, landZones, mapZoom, heading);
-  const radarRange = scoutPlaneMode || flakViewActive ? clientRadarRange * scoutPlaneRadarRangeFactor : clientRadarRange;
+  const radarRange = bombBayViewActive
+    ? clientRadarRange * bombBayRadarRangeFactor
+    : (scoutPlaneMode || flakViewActive ? clientRadarRange * scoutPlaneRadarRangeFactor : clientRadarRange);
   drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, radarHeading, radarRange, {
     ignoreLandShadows: scoutPlaneMode || flakViewActive
   });
@@ -4469,8 +4472,8 @@ function createFlakProjectile(system, position, velocity, direction) {
   root.position.copyFrom(position);
 
   const core = MeshBuilder.CreateSphere(`${root.name}_core`, {
-    diameter: 0.075,
-    segments: 8
+    diameter: 0.13,
+    segments: 10
   }, system.scene);
   core.parent = root;
   core.material = system.materials.flakTracer;
@@ -4478,9 +4481,9 @@ function createFlakProjectile(system, position, velocity, direction) {
   const trail = [];
   for (let i = 0; i < 6; i += 1) {
     const segment = MeshBuilder.CreateBox(`${root.name}_trail_${i}`, {
-      width: 0.035 + i * 0.005,
-      height: 0.035 + i * 0.004,
-      depth: 0.42 + i * 0.12
+      width: 0.055 + i * 0.007,
+      height: 0.055 + i * 0.006,
+      depth: 0.5 + i * 0.14
     }, system.scene);
     segment.parent = system.root;
     segment.material = system.materials.flakTracerTrail;
@@ -4489,10 +4492,10 @@ function createFlakProjectile(system, position, velocity, direction) {
   }
 
   const light = new PointLight(`${root.name}_light`, position, system.scene);
-  light.diffuse = new Color3(1.0, 0.76, 0.38);
-  light.specular = new Color3(1.0, 0.72, 0.36);
-  light.intensity = 0.75;
-  light.range = 18;
+  light.diffuse = new Color3(0.96, 0.98, 1.0);
+  light.specular = new Color3(0.9, 0.96, 1.0);
+  light.intensity = 0.95;
+  light.range = 24;
 
   system.active.push({
     root,
@@ -6175,23 +6178,23 @@ function createMaterials(scene) {
   explosionCore.disableLighting = true;
 
   const flakTracer = new StandardMaterial("flak_tracer_material", scene);
-  flakTracer.diffuseColor = new Color3(1.0, 0.82, 0.62);
-  flakTracer.emissiveColor = new Color3(1.08, 0.58, 0.34);
-  flakTracer.specularColor = new Color3(1.0, 0.86, 0.72);
+  flakTracer.diffuseColor = new Color3(0.96, 0.98, 1.0);
+  flakTracer.emissiveColor = new Color3(0.86, 0.96, 1.08);
+  flakTracer.specularColor = new Color3(0.95, 0.98, 1.0);
   flakTracer.disableLighting = true;
 
   const flakTracerTrail = new StandardMaterial("flak_tracer_trail_material", scene);
-  flakTracerTrail.diffuseColor = new Color3(1.0, 0.48, 0.24);
-  flakTracerTrail.emissiveColor = new Color3(0.82, 0.24, 0.08);
-  flakTracerTrail.specularColor = Color3.Black();
-  flakTracerTrail.alpha = 0.58;
+  flakTracerTrail.diffuseColor = new Color3(0.86, 0.94, 1.0);
+  flakTracerTrail.emissiveColor = new Color3(0.52, 0.7, 0.9);
+  flakTracerTrail.specularColor = new Color3(0.65, 0.75, 0.9);
+  flakTracerTrail.alpha = 0.68;
   flakTracerTrail.disableLighting = true;
 
   const flakFlash = new StandardMaterial("flak_flash_material", scene);
-  flakFlash.diffuseColor = new Color3(1.0, 0.76, 0.52);
-  flakFlash.emissiveColor = new Color3(1.08, 0.48, 0.22);
-  flakFlash.specularColor = new Color3(1.0, 0.84, 0.68);
-  flakFlash.alpha = 0.68;
+  flakFlash.diffuseColor = new Color3(0.96, 0.98, 1.0);
+  flakFlash.emissiveColor = new Color3(0.92, 0.96, 1.08);
+  flakFlash.specularColor = new Color3(0.95, 0.98, 1.0);
+  flakFlash.alpha = 0.72;
   flakFlash.disableLighting = true;
 
   const beaconGlow = new StandardMaterial("beacon_glow_material", scene);
