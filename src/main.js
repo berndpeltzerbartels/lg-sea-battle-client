@@ -133,9 +133,9 @@ const flakMinPitch = -0.12;
 const flakMaxPitch = 0.92;
 const flakPitchStepRadians = 0.05;
 const flakFireCooldownSeconds = 0.22;
-const flakProjectileSpeed = 115;
-const flakProjectileGravity = 18;
-const flakProjectileLifetime = 2.2;
+const flakProjectileSpeed = 170;
+const flakProjectileGravity = 9;
+const flakProjectileLifetime = 4.2;
 const flakDemoFireIntervalSeconds = 0.25;
 const flakBarrelLength = 1.62;
 const flakBarrelCenterZ = 0.22;
@@ -4472,21 +4472,27 @@ function createFlakProjectile(system, position, velocity, direction) {
   root.position.copyFrom(position);
 
   const core = MeshBuilder.CreateSphere(`${root.name}_core`, {
-    diameter: 0.13,
-    segments: 10
+    diameter: 0.17,
+    segments: 12
   }, system.scene);
   core.parent = root;
   core.material = system.materials.flakTracer;
+  core.enableEdgesRendering();
+  core.edgesWidth = 2.4;
+  core.edgesColor = new Color4(0.34, 0.42, 0.48, 1.0);
 
   const trail = [];
   for (let i = 0; i < 6; i += 1) {
     const segment = MeshBuilder.CreateBox(`${root.name}_trail_${i}`, {
-      width: 0.055 + i * 0.007,
-      height: 0.055 + i * 0.006,
-      depth: 0.5 + i * 0.14
+      width: 0.075 + i * 0.009,
+      height: 0.075 + i * 0.008,
+      depth: 0.7 + i * 0.17
     }, system.scene);
     segment.parent = system.root;
     segment.material = system.materials.flakTracerTrail;
+    segment.enableEdgesRendering();
+    segment.edgesWidth = 1.2;
+    segment.edgesColor = new Color4(0.18, 0.25, 0.3, 0.8);
     segment.position.copyFrom(position.add(direction.scale(-0.1 - i * 0.22)));
     trail.push(segment);
   }
@@ -4494,8 +4500,8 @@ function createFlakProjectile(system, position, velocity, direction) {
   const light = new PointLight(`${root.name}_light`, position, system.scene);
   light.diffuse = new Color3(0.96, 0.98, 1.0);
   light.specular = new Color3(0.9, 0.96, 1.0);
-  light.intensity = 0.95;
-  light.range = 24;
+  light.intensity = 1.25;
+  light.range = 32;
 
   system.active.push({
     root,
