@@ -134,7 +134,7 @@ const playerSternFlakZ = -2.92;
 const remoteSternFlakZ = -2.92;
 const flakMinPitch = -0.12;
 const flakMaxPitch = 0.92;
-const flakPitchStepRadians = 0.04;
+const flakPitchStepRadians = 0.025;
 const flakFireCooldownSeconds = 0.22;
 const flakProjectileSpeed = 195;
 const flakProjectileGravity = 9;
@@ -670,10 +670,10 @@ scene.onBeforeRenderObservable.add(() => {
     );
   }
   if (playerActive && flakViewActive && heldFlakDirection !== 0) {
-    flakYaw = normalizeAngle(flakYaw + heldFlakDirection * 0.92 * dt);
+    flakYaw = normalizeAngle(flakYaw + heldFlakDirection * 0.58 * dt);
   }
   if (playerActive && flakViewActive && heldFlakPitchDirection !== 0) {
-    flakPitch = clamp(flakPitch + heldFlakPitchDirection * 0.48 * dt, flakMinPitch, flakMaxPitch);
+    flakPitch = clamp(flakPitch + heldFlakPitchDirection * 0.32 * dt, flakMinPitch, flakMaxPitch);
   }
   if (playerActive && flakViewActive && heldFlakFire) {
     firePlayerFlak();
