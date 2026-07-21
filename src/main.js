@@ -372,6 +372,7 @@ window.addEventListener("keydown", (event) => {
   }
   if (playerActive && isTorpedoFireKey(event) && !event.repeat) {
     if (flakViewActive) {
+      heldFlakFire = true;
       firePlayerFlak();
       event.preventDefault();
       return;
@@ -421,6 +422,10 @@ window.addEventListener("keyup", (event) => {
   }
   if (isInputKey(event, "right") && heldFlakDirection > 0) {
     heldFlakDirection = 0;
+    event.preventDefault();
+  }
+  if (isTorpedoFireKey(event) && heldFlakFire) {
+    heldFlakFire = false;
     event.preventDefault();
   }
 });
@@ -571,6 +576,7 @@ let flakYaw = 0;
 let flakPitch = 0;
 let heldFlakDirection = 0;
 let heldFlakPitchDirection = 0;
+let heldFlakFire = false;
 let mouseButtonMask = 0;
 let mouseWheelEngineAccumulator = 0;
 let measuredSpeedSample = {
@@ -663,6 +669,9 @@ scene.onBeforeRenderObservable.add(() => {
   }
   if (playerActive && flakViewActive && heldFlakPitchDirection !== 0) {
     flakPitch = clamp(flakPitch + heldFlakPitchDirection * 0.72 * dt, flakMinPitch, flakMaxPitch);
+  }
+  if (playerActive && flakViewActive && heldFlakFire) {
+    firePlayerFlak();
   }
   updatePlayerFlakMount();
 
@@ -890,6 +899,7 @@ function toggleFlakView() {
   flakViewActive = !flakViewActive;
   heldFlakDirection = 0;
   heldFlakPitchDirection = 0;
+  heldFlakFire = false;
   heldRudderDirection = 0;
   heldEngineDirection = 0;
   heldElevatorDirection = 0;
@@ -1759,6 +1769,14 @@ function getDropBombEndpoint() {
   return gameEndpoint("/game/drop-bomb");
 }
 
+function getFireFlakEndpoint() {
+  if (location.port === "5173" || location.port === "4173") {
+    return `${location.protocol}//${location.hostname}/game/fire-flak`;
+  }
+
+  return gameEndpoint("/game/fire-flak");
+}
+
 function getGameEventsEndpoint() {
   const safePlayerId = encodeURIComponent(playerId);
   if (location.port === "5173" || location.port === "4173") {
@@ -2401,9 +2419,14 @@ function applyServerGameSnapshot(snapshot) {
     Array.isArray(snapshot.bombImpacts) ? snapshot.bombImpacts : [],
     snapshotClientTime
   );
+  syncServerFlakProjectiles(
+    Array.isArray(snapshot.flakProjectiles) ? snapshot.flakProjectiles : [],
+    snapshotClientTime
+  );
   document.body.dataset.remoteShips = String(snapshot.ships.length);
   document.body.dataset.serverTorpedoes = String(Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes.length : 0);
   document.body.dataset.serverBombs = String(Array.isArray(snapshot.bombs) ? snapshot.bombs.length : 0);
+  document.body.dataset.serverFlakProjectiles = String(Array.isArray(snapshot.flakProjectiles) ? snapshot.flakProjectiles.length : 0);
   document.body.dataset.playerStateSync = "ok";
 }
 
@@ -4361,6 +4384,7 @@ function createFlakSystem(scene, materials, parent) {
     materials,
     active: [],
     flashes: [],
+    serverVisuals: new Map(),
     nextFireTime: 0,
     nextDemoMotionIndex: 0,
     nextId: 1
@@ -4375,8 +4399,38 @@ function firePlayerFlak() {
   flakSystem.nextFireTime = time + flakFireCooldownSeconds;
   createFlakProjectile(flakSystem, shot.position, shot.velocity, shot.direction);
   createFlakMuzzleFlash(flakSystem, shot.position, shot.direction);
+  reportPlayerFlakShot(shot);
   document.body.dataset.flakFire = "ok";
   document.body.dataset.flakShots = String(flakSystem.nextId - 1);
+}
+
+async function reportPlayerFlakShot(shot) {
+  if (!playerServerShipId || !playerId || !playerTeamId || !shot) return;
+  try {
+    const response = await fetch(getFireFlakEndpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        playerId,
+        teamId: playerTeamId,
+        shipId: playerServerShipId,
+        x: shot.position.x,
+        y: shot.position.y,
+        z: shot.position.z,
+        vx: shot.velocity.x,
+        vy: shot.velocity.y,
+        vz: shot.velocity.z
+      })
+    });
+    if (response.status === 403) {
+      expireActiveLogin("fire-flak-403");
+      return;
+    }
+    document.body.dataset.flakFireSync = response.ok ? "ok" : `http-${response.status}`;
+  } catch (error) {
+    document.body.dataset.flakFireSync = "error";
+    document.body.dataset.flakFireSyncError = error.message;
+  }
 }
 
 function getPlayerFlakShot() {
@@ -4453,6 +4507,7 @@ function createFlakProjectile(system, position, velocity, direction) {
     direction: direction.clone(),
     samplePositions: Array.from({ length: 6 }, (_, index) => position.add(direction.scale(-0.12 - index * 0.24)))
   });
+  return system.active[system.active.length - 1];
 }
 
 function createFlakMuzzleFlash(system, position, direction) {
@@ -4513,6 +4568,11 @@ function updateFlakSystem(system, dt, now) {
     projectile.light.intensity = 0.45 + pulse * 0.45;
     return true;
   });
+  system.serverVisuals.forEach((projectile, id) => {
+    if (projectile.disposed) {
+      system.serverVisuals.delete(id);
+    }
+  });
 
   system.flashes = system.flashes.filter((flash) => {
     flash.age += dt;
@@ -4535,10 +4595,67 @@ function updateFlakSystem(system, dt, now) {
 }
 
 function disposeFlakProjectile(projectile) {
+  projectile.disposed = true;
   projectile.light.dispose();
   projectile.trail.forEach((segment) => segment.dispose());
   projectile.root.getChildMeshes().forEach((mesh) => mesh.dispose());
   projectile.root.dispose();
+}
+
+function syncServerFlakProjectiles(projectiles, snapshotClientTime = time) {
+  const activeIds = new Set();
+  projectiles
+    .filter((snapshot) => snapshot.shipId !== playerServerShipId)
+    .forEach((snapshot) => {
+      activeIds.add(snapshot.id);
+      const visual = flakSystem.serverVisuals.get(snapshot.id) ?? createServerFlakProjectile(flakSystem, snapshot, snapshotClientTime);
+      applyServerFlakProjectileSnapshot(visual, snapshot, snapshotClientTime);
+    });
+
+  flakSystem.serverVisuals.forEach((visual, id) => {
+    if (!activeIds.has(id)) {
+      disposeFlakProjectile(visual);
+      flakSystem.serverVisuals.delete(id);
+    }
+  });
+}
+
+function createServerFlakProjectile(system, snapshot, snapshotClientTime = time) {
+  const position = new Vector3(
+    Number.isFinite(snapshot.x) ? snapshot.x : 0,
+    Number.isFinite(snapshot.y) ? snapshot.y : 0,
+    Number.isFinite(snapshot.z) ? snapshot.z : 0
+  );
+  const velocity = new Vector3(
+    Number.isFinite(snapshot.vx) ? snapshot.vx : 0,
+    Number.isFinite(snapshot.vy) ? snapshot.vy : 0,
+    Number.isFinite(snapshot.vz) ? snapshot.vz : 1
+  );
+  const direction = velocity.lengthSquared() > 0.0001 ? velocity.normalizeToNew() : Vector3.Forward();
+  const visual = createFlakProjectile(system, position, velocity, direction);
+  visual.serverId = snapshot.id;
+  visual.age = Math.max(0, snapshotClientTime - (Number.isFinite(snapshot.firedAt) ? snapshot.firedAt : snapshotClientTime));
+  system.serverVisuals.set(snapshot.id, visual);
+  return visual;
+}
+
+function applyServerFlakProjectileSnapshot(visual, snapshot, snapshotClientTime = time) {
+  if (!visual || visual.disposed) return;
+  visual.position.set(
+    Number.isFinite(snapshot.x) ? snapshot.x : visual.position.x,
+    Number.isFinite(snapshot.y) ? snapshot.y : visual.position.y,
+    Number.isFinite(snapshot.z) ? snapshot.z : visual.position.z
+  );
+  visual.previousPosition.copyFrom(visual.position);
+  visual.velocity.set(
+    Number.isFinite(snapshot.vx) ? snapshot.vx : visual.velocity.x,
+    Number.isFinite(snapshot.vy) ? snapshot.vy : visual.velocity.y,
+    Number.isFinite(snapshot.vz) ? snapshot.vz : visual.velocity.z
+  );
+  if (visual.velocity.lengthSquared() > 0.0001) {
+    visual.direction = visual.velocity.normalizeToNew();
+  }
+  visual.age = Math.max(0, snapshotClientTime - (Number.isFinite(snapshot.firedAt) ? snapshot.firedAt : snapshotClientTime));
 }
 
 // A fired torpedo starts as a visible tube ejection, then becomes a simple straight-running weapon.
