@@ -813,7 +813,7 @@ scene.onBeforeRenderObservable.add(() => {
   ramShake = Math.max(0, ramShake - dt * 2.6);
 
   camera.minZ = flakViewActive ? 0.03 : (bombBayViewActive ? 0.2 : (scoutPlaneMode ? 1.5 : 0.2));
-  camera.fov = bombBayViewActive ? 1.32 : (scoutPlaneMode ? 1.02 : 0.78);
+  camera.fov = bombBayViewActive ? 0.92 : (scoutPlaneMode ? 1.02 : 0.78);
   cameraPosition.copyFrom(desiredCameraPosition.add(shakeOffset));
   cameraTarget.copyFrom(desiredTarget);
   camera.position.copyFrom(cameraPosition);
@@ -4318,36 +4318,33 @@ function createBombSightMarker(scene, materials, parent) {
   root.parent = parent;
   root.setEnabled(false);
 
-  const laneHalfWidth = 2.2;
-  const laneLines = [-laneHalfWidth, laneHalfWidth].map((xOffset, index) => {
-    const line = MeshBuilder.CreateBox(`bomb_sight_marker_lane_${index}`, {
-      width: 0.11,
+  const lineParts = [];
+  ["upper", "lower"].forEach((part) => {
+    const line = MeshBuilder.CreateBox(`bomb_sight_marker_center_${part}`, {
+      width: 0.13,
       height: 0.045,
       depth: 1
     }, scene);
     line.parent = root;
-    line.position.x = xOffset;
     line.material = materials.beaconGlow;
-    return line;
+    lineParts.push({ mesh: line, part });
   });
 
   const impactTicks = [];
   for (let index = 0; index < bombsPerDrop; index += 1) {
-    [-1, 1].forEach((side) => {
-      const tick = MeshBuilder.CreateBox(`bomb_sight_marker_tick_${index}_${side}`, {
-        width: 0.85,
-        height: 0.05,
-        depth: 0.09
-      }, scene);
-      tick.parent = root;
-      tick.position.x = side * (laneHalfWidth + 0.62);
-      tick.material = materials.beaconGlow;
-      impactTicks.push({ mesh: tick, index });
-    });
+    const tick = MeshBuilder.CreateBox(`bomb_sight_marker_tick_${index}`, {
+      width: 0.95,
+      height: 0.05,
+      depth: 0.09
+    }, scene);
+    tick.parent = root;
+    tick.position.x = -1.35;
+    tick.material = materials.beaconGlow;
+    impactTicks.push({ mesh: tick, index });
   }
 
   root.metadata = {
-    laneLines,
+    lineParts,
     impactTicks
   };
 
@@ -5054,12 +5051,17 @@ function updateBombSightMarker(system, forward) {
 
 function updateBombSightPattern(marker, patternLength, impactSpacing) {
   const parts = marker.metadata ?? {};
-  const visualLength = Math.max(5.5, patternLength + 2.0);
-  (parts.laneLines ?? []).forEach((line) => {
-    line.scaling.z = visualLength;
-    line.position.z = patternLength / 2;
+  const visualLength = Math.max(4.2, patternLength * 0.72);
+  const gap = Math.max(2.1, Math.min(5.2, patternLength * 0.36));
+  const lowerCenter = -gap * 0.5 - visualLength * 0.5;
+  const upperCenter = patternLength + gap * 0.5 + visualLength * 0.5;
+  (parts.lineParts ?? []).forEach(({ mesh, part }) => {
+    mesh.scaling.z = visualLength;
+    mesh.position.x = 0;
+    mesh.position.z = part === "upper" ? upperCenter : lowerCenter;
   });
   (parts.impactTicks ?? []).forEach(({ mesh, index }) => {
+    mesh.position.x = -1.35;
     mesh.position.z = index * impactSpacing;
   });
 }
