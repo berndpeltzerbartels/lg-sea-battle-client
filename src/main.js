@@ -630,6 +630,7 @@ let playerSinkStartY = 0;
 let playerSinkSide = -1;
 let lastFlakHitId = "";
 let flakHitAlertUntil = 0;
+let damageNotificationIds = new Set();
 let scoutPlaneFlakHitStartTime = 0;
 let scoutPlaneFlakHitExploded = false;
 let nextScoutPlaneFlakSmokeTime = 0;
@@ -845,7 +846,7 @@ scene.onBeforeRenderObservable.add(() => {
     if (testPlayerInvulnerable) {
       document.body.dataset.playerDamageState = "invulnerable-hit";
     } else {
-      beginPlayerSinking(torpedoResult.playerHitPosition, time);
+      beginPlayerSinking(torpedoResult.playerHitPosition, time, "Abgeschossen durch Torpedo");
     }
   }
 
@@ -2245,6 +2246,39 @@ function getPlayerInitialsFromId(controller) {
   if (!isHumanController(controller)) return "BOT";
   const match = controller.match(/^player-([A-Z0-9]{1,5})-/i);
   return (match?.[1] ?? controller.slice(0, maxPlayerInitialsLength)).toUpperCase();
+}
+
+function getWeaponSourceLabel(shipId) {
+  const ship = serverShipsById.get(shipId) ?? enemyMotions.find((motion) => motion.id === shipId);
+  if (ship?.controlledBy) {
+    return getPlayerInitialsFromId(ship.controlledBy);
+  }
+  if (ship?.label) return ship.label;
+  if (shipId) return createShipDesignation({ id: shipId, teamId: ship?.teamId });
+  return "unbekannt";
+}
+
+function createDestroyedByText(weaponLabel, shipId) {
+  return `Abgeschossen durch ${weaponLabel} von ${getWeaponSourceLabel(shipId)}`;
+}
+
+function showDamageMessage(text, now = time, duration = 2.2) {
+  flakHitAlertUntil = now + duration;
+  if (flakHitAlert) {
+    flakHitAlert.textContent = text;
+  }
+}
+
+function notifyOwnWeaponImpact(impact, weaponLabel, notificationPrefix) {
+  const ownShipId = playerServerShipId ?? pendingPlayerServerShip?.id;
+  if (!impact?.id || !ownShipId || impact.targetShipId !== ownShipId) return;
+  const key = `${notificationPrefix}:${impact.id}:${impact.t}`;
+  if (damageNotificationIds.has(key)) return;
+  damageNotificationIds.add(key);
+  if (damageNotificationIds.size > 80) {
+    damageNotificationIds = new Set(Array.from(damageNotificationIds).slice(-48));
+  }
+  showDamageMessage(createDestroyedByText(weaponLabel, impact.shipId), time, 2.6);
 }
 
 function getRelativeBearingToShip(ship) {
@@ -4393,7 +4427,7 @@ function getSnapshotRadarContacts() {
   return contacts;
 }
 
-function beginPlayerSinking(hitPosition, now) {
+function beginPlayerSinking(hitPosition, now, damageMessage = null) {
   if (playerDamageState !== "active") return;
 
   playerDamageState = "sinking";
@@ -4405,6 +4439,9 @@ function beginPlayerSinking(hitPosition, now) {
   rudderDegrees = 0;
   turnVelocity *= 0.25;
   speed *= 0.18;
+  if (damageMessage) {
+    showDamageMessage(damageMessage, now, 2.6);
+  }
   updateSinkingWaterOverlay(0);
 }
 
@@ -4449,9 +4486,7 @@ function beginScoutPlaneFlakHit(hit, now) {
   planeHitFlashUntil = now + 0.82;
   document.body.dataset.playerDamageState = "air-hit";
   document.body.dataset.scoutPlaneFlakHit = hit?.id ?? "";
-  if (flakHitAlert) {
-    flakHitAlert.textContent = "Flak Treffer";
-  }
+  showDamageMessage(createDestroyedByText("Flakgeschosse", hit?.shipId), now, scoutPlaneFlakRespawnSeconds);
 }
 
 function updateScoutPlaneFlakHitSequence(playerPlane, now) {
@@ -4467,9 +4502,6 @@ function updateScoutPlaneFlakHitSequence(playerPlane, now) {
     createScoutPlaneAirExplosion(flakSystem, position);
     playerPlane.root.setEnabled(false);
     ramShake = 1;
-    if (flakHitAlert) {
-      flakHitAlert.textContent = "Abgeschossen";
-    }
   }
 
   if (age >= scoutPlaneFlakRespawnSeconds) {
@@ -4926,6 +4958,7 @@ function updateFlakSystem(system, dt, now) {
 function createScoutPlaneHitSequence(system, position) {
   createScoutPlaneSmokeBurst(system, position);
   createAirHitSpark(system, position);
+  createAirHitFire(system, position);
   system.scheduledHitEffects.push({
     age: 0,
     delay: 0.62,
@@ -4971,6 +5004,37 @@ function updateScheduledHitEffect(system, effect, dt) {
   return false;
 }
 
+function createAirHitFire(system, position) {
+  for (let index = 0; index < 4; index += 1) {
+    const flame = MeshBuilder.CreateSphere(`scout_plane_hit_flame_${system.nextId}_${index}`, {
+      diameter: 0.62 + index * 0.08,
+      segments: 10
+    }, system.scene);
+    flame.parent = system.root;
+    flame.material = system.materials.volcanicSmokeWarm;
+    flame.position.copyFrom(position.add(new Vector3(
+      (stableUnitNoise(system.nextId + index * 23) - 0.5) * 0.9,
+      (stableUnitNoise(system.nextId + index * 29) - 0.5) * 0.5,
+      (stableUnitNoise(system.nextId + index * 31) - 0.5) * 0.9
+    )));
+    flame.isPickable = false;
+    system.airHitEffects.push({
+      mesh: flame,
+      age: 0,
+      lifetime: 0.82 + index * 0.06,
+      origin: flame.position.clone(),
+      velocity: new Vector3(
+        (stableUnitNoise(system.nextId + index * 37) - 0.5) * 1.1,
+        0.8 + stableUnitNoise(system.nextId + index * 41) * 0.7,
+        (stableUnitNoise(system.nextId + index * 43) - 0.5) * 1.1
+      ),
+      baseScale: new Vector3(0.5, 0.5, 0.5),
+      grow: new Vector3(1.25, 1.05, 1.25),
+      alpha: 0.7
+    });
+  }
+}
+
 function createScoutPlaneSmokePuff(system, position) {
   const id = `${system.nextId}_${system.airHitEffects.length}`;
   const puff = MeshBuilder.CreateSphere(`scout_plane_hit_smoke_${id}`, {
@@ -5005,6 +5069,7 @@ function createScoutPlaneAirExplosion(system, position) {
   const center = position.add(new Vector3(0, 0.15, 0));
   createAirExplosionCore(system, center);
   createAirExplosionLight(system, center);
+  createAirExplosionDebris(system, center);
   for (let i = 0; i < 8; i += 1) {
     const puff = MeshBuilder.CreateSphere(`scout_plane_explosion_smoke_${system.nextId}_${i}`, {
       diameter: 1.0,
@@ -5025,6 +5090,36 @@ function createScoutPlaneAirExplosion(system, position) {
       baseScale: new Vector3(0.55, 0.55, 0.55),
       grow: new Vector3(2.2, 1.8, 2.2),
       alpha: i % 3 === 0 ? 0.48 : 0.42
+    });
+  }
+}
+
+function createAirExplosionDebris(system, position) {
+  for (let i = 0; i < 14; i += 1) {
+    const glowing = i < 6;
+    const fragment = MeshBuilder.CreateBox(`scout_plane_explosion_fragment_${system.nextId}_${i}`, {
+      width: glowing ? 0.22 : 0.34,
+      height: glowing ? 0.08 : 0.11,
+      depth: glowing ? 0.34 : 0.52
+    }, system.scene);
+    fragment.parent = system.root;
+    fragment.material = glowing ? system.materials.explosionCore : system.materials.funnel;
+    fragment.position.copyFrom(position);
+    fragment.isPickable = false;
+    const angle = i * 2.399;
+    const speedOut = glowing ? 8.4 + stableUnitNoise(system.nextId + i * 5) * 5.5 : 5.6 + stableUnitNoise(system.nextId + i * 7) * 4.8;
+    const lift = glowing ? 3.4 + stableUnitNoise(system.nextId + i * 11) * 2.0 : 1.5 + stableUnitNoise(system.nextId + i * 13) * 2.6;
+    system.airHitEffects.push({
+      mesh: fragment,
+      age: 0,
+      lifetime: glowing ? 0.9 : 1.45,
+      origin: position.clone(),
+      velocity: new Vector3(Math.cos(angle) * speedOut, lift, Math.sin(angle) * speedOut),
+      gravity: glowing ? 3.8 : 5.4,
+      baseScale: new Vector3(1, 1, 1),
+      grow: glowing ? new Vector3(0.35, 0.35, 0.35) : new Vector3(0.1, 0.1, 0.1),
+      alpha: glowing ? 0.92 : 0.72,
+      spin: new Vector3(3.4 + i * 0.17, 4.2 + i * 0.11, 2.8 + i * 0.13)
     });
   }
 }
@@ -5076,12 +5171,20 @@ function updateAirHitEffect(effect, dt) {
   const fade = 1 - t;
   if (effect.mesh) {
     effect.mesh.position.copyFrom(effect.origin.add(effect.velocity.scale(effect.age)));
+    if (Number.isFinite(effect.gravity)) {
+      effect.mesh.position.y -= effect.gravity * effect.age * effect.age * 0.5;
+    }
     effect.mesh.scaling.set(
       effect.baseScale.x + effect.grow.x * t,
       effect.baseScale.y + effect.grow.y * t,
       effect.baseScale.z + effect.grow.z * t
     );
     effect.mesh.visibility = (effect.alpha ?? 0.5) * fade;
+    if (effect.spin) {
+      effect.mesh.rotation.x += effect.spin.x * dt;
+      effect.mesh.rotation.y += effect.spin.y * dt;
+      effect.mesh.rotation.z += effect.spin.z * dt;
+    }
   }
   if (effect.light) {
     effect.light.intensity = effect.intensity * fade;
@@ -5374,6 +5477,7 @@ function renderServerTorpedoImpacts(impacts) {
     const key = `${impact.id}:${impact.reason}:${impact.t}`;
     if (torpedoSystem.serverImpactIds.has(key)) return;
     torpedoSystem.serverImpactIds.add(key);
+    notifyOwnWeaponImpact(impact, "Torpedo", "torpedo");
 
     const position = new Vector3(
       Number.isFinite(impact.x) ? impact.x : 0,
@@ -5683,6 +5787,7 @@ function renderServerBombImpacts(impacts) {
     const key = `${impact.id}:${impact.reason}:${impact.t}`;
     if (bombSystem.serverImpactIds.has(key)) return;
     bombSystem.serverImpactIds.add(key);
+    notifyOwnWeaponImpact(impact, "Bomben", "bomb");
 
     const position = new Vector3(
       Number.isFinite(impact.x) ? impact.x : 0,
