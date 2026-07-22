@@ -140,6 +140,11 @@ const flakFireCooldownSeconds = 0.22;
 const flakProjectileSpeed = 195;
 const flakProjectileGravity = 9;
 const flakProjectileLifetime = 8.0;
+const flakVolleySpread = [
+  [0, 0],
+  [0.012, 0.005],
+  [-0.012, -0.003]
+];
 const flakDemoFireIntervalSeconds = 0.25;
 const flakBarrelLength = 1.62;
 const flakBarrelCenterZ = 0.22;
@@ -2744,6 +2749,7 @@ function applyServerShipSnapshot(motion, ship) {
   motion.serverPosition.z = Number.isFinite(ship.z) ? ship.z : motion.serverPosition.z;
   motion.serverHeading = Number.isFinite(ship.heading) ? ship.heading : motion.serverHeading;
   motion.serverSpeed = Number.isFinite(ship.speed) ? ship.speed : motion.serverSpeed;
+  motion.serverTurnVelocity = Number.isFinite(ship.turnVelocity) ? ship.turnVelocity : motion.serverTurnVelocity;
   motion.serverSnapshotTime = time;
   motion.heading = Number.isFinite(ship.heading) ? blendAngle(motion.heading, ship.heading, 0.18) : motion.heading;
   motion.speed = Number.isFinite(ship.speed) ? motion.speed + (ship.speed - motion.speed) * 0.18 : motion.speed;
@@ -3963,7 +3969,7 @@ function updateScoutPlaneFlakDemo(motions, now) {
   if (!shot) return;
 
   flakSystem.nextDemoFireTime = now + flakDemoFireIntervalSeconds;
-  createFlakProjectile(flakSystem, shot.position, shot.velocity, shot.direction);
+  createFlakVolley(flakSystem, shot);
   createFlakMuzzleFlash(flakSystem, shot.position, shot.direction);
   document.body.dataset.flakDemoFire = "ok";
   document.body.dataset.flakDemoBoats = String(flakMotions.length);
@@ -4086,8 +4092,10 @@ function createEnemyMotion(vehicle, heading, engineOrder, index = 0, serverShip 
     serverPosition: new Vector3(serverShip?.x ?? root.position.x, remoteVehicleY(serverShip), serverShip?.z ?? root.position.z),
     serverHeading: Number.isFinite(serverShip?.heading) ? serverShip.heading : heading,
     serverSpeed: Number.isFinite(serverShip?.speed) ? serverShip.speed : 0,
+    serverTurnVelocity: Number.isFinite(serverShip?.turnVelocity) ? serverShip.turnVelocity : 0,
     serverSnapshotTime: 0,
     turnVelocity: 0,
+    visualBank: 0,
     rollImpulse: 0,
     engineOrder,
     rudder: 0,
@@ -4183,10 +4191,8 @@ function updateServerEnemyMotion(motion, dt, time) {
   const correctionDistance = distance2D(motion.root.position, projectedServerPosition);
 
   motion.speed += (motion.serverSpeed - motion.speed) * Math.min(1, dt * 3.5);
-  const previousHeading = motion.heading;
   motion.heading = blendAngle(motion.heading, motion.serverHeading, Math.min(1, dt * 3.2));
-  const observedTurnVelocity = getSignedAngularDistance(motion.heading, previousHeading) / Math.max(0.001, dt);
-  motion.turnVelocity += (observedTurnVelocity - motion.turnVelocity) * Math.min(1, dt * 3.6);
+  motion.turnVelocity += ((motion.serverTurnVelocity ?? 0) - motion.turnVelocity) * Math.min(1, dt * 3.6);
 
   const forward = new Vector3(Math.sin(motion.heading), 0, Math.cos(motion.heading));
   motion.root.position.addInPlace(forward.scale(motion.speed * dt));
@@ -4197,11 +4203,12 @@ function updateServerEnemyMotion(motion, dt, time) {
   motion.root.position.z += (projectedServerPosition.z - motion.root.position.z) * Math.min(1, dt * correctionStrength);
   if (isScoutPlaneMotion(motion)) {
     motion.root.position.y += Math.sin(time * 0.85 + motion.numericIndex) * 0.018;
-    const bank = clamp(-motion.turnVelocity * 2.8, -0.72, 0.72);
+    const targetBank = clamp(-motion.turnVelocity * 2.35, -0.72, 0.72);
+    motion.visualBank += (targetBank - motion.visualBank) * Math.min(1, dt * 4.2);
     motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
       Math.sin(time * 0.7 + motion.numericIndex) * 0.025,
       motion.heading,
-      bank + Math.sin(time * 0.9 + motion.numericIndex) * 0.025
+      motion.visualBank + Math.sin(time * 0.9 + motion.numericIndex) * 0.018
     );
     updateScoutPlaneVisual(motion, Math.max(6, Math.abs(motion.speed)), time);
   } else {
@@ -4524,7 +4531,7 @@ function firePlayerFlak() {
   if (!shot) return;
 
   flakSystem.nextFireTime = time + flakFireCooldownSeconds;
-  createFlakProjectile(flakSystem, shot.position, shot.velocity, shot.direction);
+  createFlakVolley(flakSystem, shot);
   createFlakMuzzleFlash(flakSystem, shot.position, shot.direction);
   reportPlayerFlakShot(shot);
   document.body.dataset.flakFire = "ok";
@@ -4585,6 +4592,45 @@ function getFlakShotFromElevationRoot(elevationRoot, scale, target, baseVelocity
     direction,
     velocity: direction.scale(flakProjectileSpeed).add(baseVelocity ?? Vector3.Zero())
   };
+}
+
+function createFlakVolley(system, shot) {
+  createFlakVolleyShots(shot).forEach((volleyShot) => {
+    createFlakProjectile(system, volleyShot.position, volleyShot.velocity, volleyShot.direction);
+  });
+}
+
+function createFlakVolleyShots(shot) {
+  return flakVolleySpread.map(([sideSpread, verticalSpread]) => {
+    const velocity = spreadFlakVelocity(shot.velocity, sideSpread, verticalSpread);
+    const direction = velocity.lengthSquared() > 0.0001 ? velocity.normalizeToNew() : shot.direction.clone();
+    return {
+      ...shot,
+      direction,
+      velocity
+    };
+  });
+}
+
+function spreadFlakVelocity(velocity, sideSpread, verticalSpread) {
+  const speed = velocity.length();
+  if (speed <= 0.001 || (sideSpread === 0 && verticalSpread === 0)) {
+    return velocity.clone();
+  }
+
+  const direction = velocity.scale(1 / speed);
+  let right = new Vector3(direction.z, 0, -direction.x);
+  if (right.lengthSquared() <= 0.0001) {
+    right = new Vector3(1, 0, 0);
+  } else {
+    right.normalize();
+  }
+
+  return direction
+    .add(right.scale(sideSpread))
+    .add(new Vector3(0, verticalSpread, 0))
+    .normalize()
+    .scale(speed);
 }
 
 function createFlakProjectile(system, position, velocity, direction) {
