@@ -132,6 +132,7 @@ const scoutPlaneFlakRespawnSeconds = 3.35;
 const scoutPlaneFlakSmokeIntervalSeconds = 0.12;
 const bombGravity = 14.0;
 const bombDropForwardOffset = 0.6;
+const bombDropVerticalOffset = 0.65;
 const bombsPerDrop = 8;
 const bombReleaseIntervalSeconds = 0.16;
 const bombBayWideFov = 0.92;
@@ -1064,7 +1065,7 @@ function getBombBayFov() {
 
 function getBombDropPreview() {
   const forward = getForwardVector(heading);
-  const dropAltitude = clamp(boat.root.position.y, scoutPlaneMinAltitude, scoutPlaneMaxAltitude);
+  const dropAltitude = Math.max(0, clamp(boat.root.position.y, scoutPlaneMinAltitude, scoutPlaneMaxAltitude) - bombDropVerticalOffset);
   const initialDownSpeed = -scoutPlaneVerticalSpeed;
   const fallSeconds = Math.max(0, (-initialDownSpeed + Math.sqrt(initialDownSpeed * initialDownSpeed + 2 * bombGravity * dropAltitude)) / bombGravity);
   const horizontalSpeed = clamp(speed * 0.92, 4, 28);
