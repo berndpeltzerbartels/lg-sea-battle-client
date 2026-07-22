@@ -4403,7 +4403,7 @@ function createBombSightMarker(scene, materials, parent) {
   const impactTicks = [];
   for (let index = 0; index < bombsPerDrop; index += 1) {
     const tick = MeshBuilder.CreateBox(`bomb_sight_marker_tick_${index}`, {
-      width: 0.62,
+      width: 0.95,
       height: 0.05,
       depth: 0.09
     }, scene);
