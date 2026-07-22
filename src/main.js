@@ -135,7 +135,12 @@ const playerSternFlakZ = -2.92;
 const remoteSternFlakZ = -2.92;
 const flakMinPitch = -0.12;
 const flakMaxPitch = 0.92;
-const flakPitchStepRadians = 0.025;
+const flakPitchStepRadians = 0.012;
+const flakHoldAccelerationDelaySeconds = 0.7;
+const flakYawFineSpeed = 0.22;
+const flakYawFastSpeed = 0.48;
+const flakPitchFineSpeed = 0.12;
+const flakPitchFastSpeed = 0.26;
 const flakFireCooldownSeconds = 0.14;
 const flakProjectileSpeed = 195;
 const flakProjectileGravity = 9;
@@ -294,6 +299,9 @@ window.addEventListener("keydown", (event) => {
   }
   if (playerActive && isInputKey(event, "up")) {
     if (flakViewActive) {
+      if (!event.repeat || heldFlakPitchDirection !== 1) {
+        heldFlakPitchStartTime = time;
+      }
       heldFlakPitchDirection = 1;
       if (!event.repeat) {
         changeFlakPitch(1);
@@ -320,6 +328,9 @@ window.addEventListener("keydown", (event) => {
   }
   if (playerActive && isInputKey(event, "down")) {
     if (flakViewActive) {
+      if (!event.repeat || heldFlakPitchDirection !== -1) {
+        heldFlakPitchStartTime = time;
+      }
       heldFlakPitchDirection = -1;
       if (!event.repeat) {
         changeFlakPitch(-1);
@@ -346,6 +357,9 @@ window.addEventListener("keydown", (event) => {
   }
   if (playerActive && isInputKey(event, "left")) {
     if (flakViewActive) {
+      if (!event.repeat || heldFlakDirection !== -1) {
+        heldFlakStartTime = time;
+      }
       heldFlakDirection = -1;
       event.preventDefault();
       return;
@@ -361,6 +375,9 @@ window.addEventListener("keydown", (event) => {
   }
   if (playerActive && isInputKey(event, "right")) {
     if (flakViewActive) {
+      if (!event.repeat || heldFlakDirection !== 1) {
+        heldFlakStartTime = time;
+      }
       heldFlakDirection = 1;
       event.preventDefault();
       return;
@@ -581,6 +598,8 @@ let flakYaw = 0;
 let flakPitch = 0;
 let heldFlakDirection = 0;
 let heldFlakPitchDirection = 0;
+let heldFlakStartTime = 0;
+let heldFlakPitchStartTime = 0;
 let heldFlakFire = false;
 let mouseButtonMask = 0;
 let mouseWheelEngineAccumulator = 0;
@@ -673,10 +692,14 @@ scene.onBeforeRenderObservable.add(() => {
     );
   }
   if (playerActive && flakViewActive && heldFlakDirection !== 0) {
-    flakYaw = normalizeAngle(flakYaw + heldFlakDirection * 0.58 * dt);
+    flakYaw = normalizeAngle(flakYaw + heldFlakDirection * getHeldFlakSpeed(heldFlakStartTime, flakYawFineSpeed, flakYawFastSpeed) * dt);
   }
   if (playerActive && flakViewActive && heldFlakPitchDirection !== 0) {
-    flakPitch = clamp(flakPitch + heldFlakPitchDirection * 0.32 * dt, flakMinPitch, flakMaxPitch);
+    flakPitch = clamp(
+      flakPitch + heldFlakPitchDirection * getHeldFlakSpeed(heldFlakPitchStartTime, flakPitchFineSpeed, flakPitchFastSpeed) * dt,
+      flakMinPitch,
+      flakMaxPitch
+    );
   }
   if (playerActive && flakViewActive && heldFlakFire) {
     firePlayerFlak();
@@ -908,6 +931,8 @@ function toggleFlakView() {
   flakViewActive = !flakViewActive;
   heldFlakDirection = 0;
   heldFlakPitchDirection = 0;
+  heldFlakStartTime = time;
+  heldFlakPitchStartTime = time;
   heldFlakFire = false;
   heldRudderDirection = 0;
   heldEngineDirection = 0;
@@ -944,6 +969,10 @@ function updatePlayerFlakMount() {
 
 function changeFlakPitch(direction) {
   flakPitch = clamp(flakPitch + direction * flakPitchStepRadians, flakMinPitch, flakMaxPitch);
+}
+
+function getHeldFlakSpeed(startTime, fineSpeed, fastSpeed) {
+  return time - startTime >= flakHoldAccelerationDelaySeconds ? fastSpeed : fineSpeed;
 }
 
 function getPlayerCameraSetup(forward) {
