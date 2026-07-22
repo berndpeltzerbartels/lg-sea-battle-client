@@ -79,6 +79,7 @@ const flakHitAlert = document.getElementById("flakHitAlert");
 const rudderIndicator = document.getElementById("rudderIndicator");
 const rudderValue = document.getElementById("rudderValue");
 const sinkingWaterOverlay = document.getElementById("sinkingWaterOverlay");
+const planeHitFlash = document.getElementById("planeHitFlash");
 const fleetStatusRows = document.getElementById("fleetStatusRows");
 const torpedoStockValue = document.getElementById("torpedoStockValue");
 const playerListRows = document.getElementById("playerListRows");
@@ -632,6 +633,8 @@ let flakHitAlertUntil = 0;
 let scoutPlaneFlakHitStartTime = 0;
 let scoutPlaneFlakHitExploded = false;
 let nextScoutPlaneFlakSmokeTime = 0;
+let planeHitFlashUntil = 0;
+let planeHitFlashStart = 0;
 let playerRespawnIndex = 0;
 let pendingPlayerServerShip = null;
 let playerServerTarget = null;
@@ -832,6 +835,7 @@ scene.onBeforeRenderObservable.add(() => {
   updateBombSightMarker(bombSystem, forward);
   updateFlakSystem(flakSystem, dt, time);
   updateFlakHitAlert(time);
+  updatePlaneHitFlash(time);
   syncMultiplayerState(time);
   const torpedoResult = updateTorpedoSystem(torpedoSystem, dt, time, enemyMotions, blockedWaters, boat.root.position);
   if (torpedoResult.playerHit && playerDamageState === "active") {
@@ -2509,7 +2513,8 @@ function applyServerGameSnapshot(snapshot) {
     Array.isArray(snapshot.flakProjectiles) ? snapshot.flakProjectiles : [],
     snapshotClientTime
   );
-  syncServerFlakHits(Array.isArray(snapshot.flakHits) ? snapshot.flakHits : [], ownShip);
+  syncServerFlakHitEffects(Array.isArray(snapshot.flakHits) ? snapshot.flakHits : [], ownShip);
+  syncServerOwnFlakHits(Array.isArray(snapshot.flakHits) ? snapshot.flakHits : [], ownShip);
   document.body.dataset.remoteShips = String(snapshot.ships.length);
   document.body.dataset.serverTorpedoes = String(Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes.length : 0);
   document.body.dataset.serverBombs = String(Array.isArray(snapshot.bombs) ? snapshot.bombs.length : 0);
@@ -2517,7 +2522,29 @@ function applyServerGameSnapshot(snapshot) {
   document.body.dataset.playerStateSync = "ok";
 }
 
-function syncServerFlakHits(hits, ownShip = null) {
+function syncServerFlakHitEffects(hits, ownShip = null) {
+  if (!Array.isArray(hits)) return;
+  const ownShipId = ownShip?.id ?? playerServerShipId ?? pendingPlayerServerShip?.id;
+  hits.forEach((hit) => {
+    if (!hit?.id || flakSystem.hitEffectIds.has(hit.id)) return;
+    if (scoutPlaneMode && ownShipId && hit.targetShipId === ownShipId) return;
+    flakSystem.hitEffectIds.add(hit.id);
+    if (flakSystem.hitEffectIds.size > 80) {
+      flakSystem.hitEffectIds = new Set(Array.from(flakSystem.hitEffectIds).slice(-48));
+    }
+    createScoutPlaneHitSequence(flakSystem, getFlakHitPosition(hit));
+  });
+}
+
+function getFlakHitPosition(hit) {
+  return new Vector3(
+    Number.isFinite(hit?.x) ? hit.x : boat.root.position.x,
+    Number.isFinite(hit?.y) ? hit.y : boat.root.position.y,
+    Number.isFinite(hit?.z) ? hit.z : boat.root.position.z
+  );
+}
+
+function syncServerOwnFlakHits(hits, ownShip = null) {
   if (!scoutPlaneMode || !Array.isArray(hits)) return;
   const ownShipId = ownShip?.id ?? playerServerShipId ?? pendingPlayerServerShip?.id;
   if (!ownShipId) return;
@@ -2538,6 +2565,18 @@ function syncServerFlakHits(hits, ownShip = null) {
 function updateFlakHitAlert(now) {
   if (!flakHitAlert) return;
   flakHitAlert.classList.toggle("is-visible", now < flakHitAlertUntil);
+}
+
+function updatePlaneHitFlash(now) {
+  if (!planeHitFlash) return;
+  if (now >= planeHitFlashUntil) {
+    planeHitFlash.style.setProperty("--plane-hit-flash-opacity", "0");
+    return;
+  }
+  const duration = Math.max(0.001, planeHitFlashUntil - planeHitFlashStart);
+  const t = clamp((now - planeHitFlashStart) / duration, 0, 1);
+  const pulse = t < 0.18 ? 1 : Math.max(0, 1 - (t - 0.18) / 0.82);
+  planeHitFlash.style.setProperty("--plane-hit-flash-opacity", (0.82 * pulse).toFixed(3));
 }
 
 function getSnapshotClientTime(snapshot) {
@@ -4406,6 +4445,8 @@ function beginScoutPlaneFlakHit(hit, now) {
   turnVelocity *= 0.15;
   ramShake = 0.85;
   flakHitAlertUntil = now + scoutPlaneFlakRespawnSeconds;
+  planeHitFlashStart = now;
+  planeHitFlashUntil = now + 0.82;
   document.body.dataset.playerDamageState = "air-hit";
   document.body.dataset.scoutPlaneFlakHit = hit?.id ?? "";
   if (flakHitAlert) {
@@ -4633,6 +4674,8 @@ function createFlakSystem(scene, materials, parent) {
     active: [],
     flashes: [],
     airHitEffects: [],
+    scheduledHitEffects: [],
+    hitEffectIds: new Set(),
     serverVisuals: new Map(),
     nextFireTime: 0,
     nextDemoMotionIndex: 0,
@@ -4875,8 +4918,57 @@ function updateFlakSystem(system, dt, now) {
   });
 
   system.airHitEffects = system.airHitEffects.filter((effect) => updateAirHitEffect(effect, dt));
+  system.scheduledHitEffects = system.scheduledHitEffects.filter((effect) => updateScheduledHitEffect(system, effect, dt));
 
   document.body.dataset.flakProjectiles = String(system.active.length);
+}
+
+function createScoutPlaneHitSequence(system, position) {
+  createScoutPlaneSmokeBurst(system, position);
+  createAirHitSpark(system, position);
+  system.scheduledHitEffects.push({
+    age: 0,
+    delay: 0.62,
+    position: position.clone()
+  });
+}
+
+function createScoutPlaneSmokeBurst(system, position) {
+  for (let index = 0; index < 5; index += 1) {
+    createScoutPlaneSmokePuff(system, position.add(new Vector3(
+      (stableUnitNoise(system.nextId + index * 13) - 0.5) * 1.1,
+      (stableUnitNoise(system.nextId + index * 17) - 0.5) * 0.7,
+      (stableUnitNoise(system.nextId + index * 19) - 0.5) * 1.1
+    )));
+  }
+}
+
+function createAirHitSpark(system, position) {
+  const spark = MeshBuilder.CreateSphere(`scout_plane_hit_spark_${system.nextId}_${system.airHitEffects.length}`, {
+    diameter: 1.1,
+    segments: 10
+  }, system.scene);
+  spark.parent = system.root;
+  spark.material = system.materials.flakFlash;
+  spark.position.copyFrom(position);
+  spark.isPickable = false;
+  system.airHitEffects.push({
+    mesh: spark,
+    age: 0,
+    lifetime: 0.24,
+    origin: position.clone(),
+    velocity: Vector3.Zero(),
+    baseScale: new Vector3(0.8, 0.8, 0.8),
+    grow: new Vector3(1.2, 1.2, 1.2),
+    alpha: 0.9
+  });
+}
+
+function updateScheduledHitEffect(system, effect, dt) {
+  effect.age += dt;
+  if (effect.age < effect.delay) return true;
+  createScoutPlaneAirExplosion(system, effect.position);
+  return false;
 }
 
 function createScoutPlaneSmokePuff(system, position) {
