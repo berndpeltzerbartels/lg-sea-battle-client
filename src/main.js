@@ -122,6 +122,9 @@ const scoutPlaneMaxSpeed = 19.5;
 const scoutPlaneSpeedStep = 1.5;
 const scoutPlaneMaxClimbRate = 8.5;
 const scoutPlaneMaxPitch = 0.22;
+const scoutPlaneFlakSmokeSeconds = 1.55;
+const scoutPlaneFlakRespawnSeconds = 2.45;
+const scoutPlaneFlakSmokeIntervalSeconds = 0.12;
 const bombGravity = 14.0;
 const bombDropForwardOffset = 0.6;
 const bombsPerDrop = 8;
@@ -626,6 +629,9 @@ let playerSinkStartY = 0;
 let playerSinkSide = -1;
 let lastFlakHitId = "";
 let flakHitAlertUntil = 0;
+let scoutPlaneFlakHitStartTime = 0;
+let scoutPlaneFlakHitExploded = false;
+let nextScoutPlaneFlakSmokeTime = 0;
 let playerRespawnIndex = 0;
 let pendingPlayerServerShip = null;
 let playerServerTarget = null;
@@ -803,8 +809,10 @@ scene.onBeforeRenderObservable.add(() => {
     if (scoutPlaneMode) {
       updateScoutPlaneVisual(boat, speed, time);
     }
-  } else {
+  } else if (playerDamageState === "sinking") {
     updatePlayerSinking(boat, time);
+  } else if (playerDamageState === "air-hit") {
+    updateScoutPlaneFlakHitSequence(boat, time);
   }
   ocean.position.x = boat.root.position.x;
   ocean.position.z = boat.root.position.z;
@@ -2509,6 +2517,7 @@ function syncServerFlakHits(hits, ownShip = null) {
   if (!scoutPlaneMode || !Array.isArray(hits)) return;
   const ownShipId = ownShip?.id ?? playerServerShipId ?? pendingPlayerServerShip?.id;
   if (!ownShipId) return;
+  if (playerDamageState !== "active") return;
 
   const ownHit = hits
     .filter((hit) => hit?.targetShipId === ownShipId)
@@ -2516,13 +2525,10 @@ function syncServerFlakHits(hits, ownShip = null) {
   if (!ownHit || ownHit.id === lastFlakHitId) return;
 
   lastFlakHitId = ownHit.id;
-  flakHitAlertUntil = time + 1.6;
   playerHits += 1;
   document.body.dataset.playerFlakHit = ownHit.id;
   document.body.dataset.playerFlakHitAt = String(ownHit.t ?? "");
-  if (flakHitAlert) {
-    flakHitAlert.textContent = "Flak Treffer";
-  }
+  beginScoutPlaneFlakHit(ownHit, time);
 }
 
 function updateFlakHitAlert(now) {
@@ -4378,7 +4384,60 @@ function updatePlayerSinking(playerBoat, now) {
   }
 }
 
+function beginScoutPlaneFlakHit(hit, now) {
+  if (!scoutPlaneMode || playerDamageState !== "active") return;
+
+  playerDamageState = "air-hit";
+  scoutPlaneFlakHitStartTime = now;
+  scoutPlaneFlakHitExploded = false;
+  nextScoutPlaneFlakSmokeTime = now;
+  heldElevatorDirection = 0;
+  heldRudderDirection = 0;
+  heldFlakDirection = 0;
+  heldFlakPitchDirection = 0;
+  heldFlakFire = false;
+  speed *= 0.18;
+  scoutPlaneTargetSpeed = scoutPlaneMinSpeed;
+  scoutPlaneVerticalSpeed = 0;
+  turnVelocity *= 0.15;
+  ramShake = 0.85;
+  flakHitAlertUntil = now + scoutPlaneFlakRespawnSeconds;
+  document.body.dataset.playerDamageState = "air-hit";
+  document.body.dataset.scoutPlaneFlakHit = hit?.id ?? "";
+  if (flakHitAlert) {
+    flakHitAlert.textContent = "Flak Treffer";
+  }
+}
+
+function updateScoutPlaneFlakHitSequence(playerPlane, now) {
+  const age = now - scoutPlaneFlakHitStartTime;
+  const position = playerPlane.root.position.clone();
+  if (age <= scoutPlaneFlakSmokeSeconds && now >= nextScoutPlaneFlakSmokeTime) {
+    createScoutPlaneSmokePuff(flakSystem, position);
+    nextScoutPlaneFlakSmokeTime = now + scoutPlaneFlakSmokeIntervalSeconds;
+  }
+
+  if (!scoutPlaneFlakHitExploded && age >= scoutPlaneFlakSmokeSeconds) {
+    scoutPlaneFlakHitExploded = true;
+    createScoutPlaneAirExplosion(flakSystem, position);
+    playerPlane.root.setEnabled(false);
+    ramShake = 1;
+    if (flakHitAlert) {
+      flakHitAlert.textContent = "Abgeschossen";
+    }
+  }
+
+  if (age >= scoutPlaneFlakRespawnSeconds) {
+    respawnPlayerBoat(playerPlane);
+  }
+}
+
 function respawnPlayerBoat(playerBoat) {
+  if (scoutPlaneMode) {
+    respawnPlayerScoutPlane(playerBoat);
+    return;
+  }
+
   if (pendingPlayerServerShip) {
     const nextShip = pendingPlayerServerShip;
     pendingPlayerServerShip = null;
@@ -4406,6 +4465,31 @@ function respawnPlayerBoat(playerBoat) {
   playerServerShipId = null;
   document.body.dataset.playerShipId = "pending";
   playerBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
+  updateSinkingWaterOverlay(0);
+}
+
+function respawnPlayerScoutPlane(playerPlane) {
+  playerRespawnIndex = (playerRespawnIndex + 1) % playerRespawnPoints.length;
+  const spawn = playerRespawnPoints[playerRespawnIndex];
+
+  playerPlane.root.setEnabled(true);
+  playerPlane.root.position.set(spawn.position.x, scoutPlaneCruiseAltitude, spawn.position.z);
+  heading = spawn.heading;
+  speed = scoutPlaneCruiseSpeed;
+  scoutPlaneTargetSpeed = scoutPlaneCruiseSpeed;
+  scoutPlaneAltitude = scoutPlaneCruiseAltitude;
+  scoutPlaneVerticalSpeed = 0;
+  scoutPlanePitch = 0;
+  turnVelocity = 0;
+  rudderDegrees = 0;
+  engineOrder = 7;
+  ramShake = 0.72;
+  playerDamageState = "active";
+  playerServerShipId = null;
+  document.body.dataset.playerShipId = "pending";
+  document.body.dataset.playerDamageState = "active";
+  document.body.dataset.scoutPlaneFlakHit = "";
+  playerPlane.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
   updateSinkingWaterOverlay(0);
 }
 
@@ -4543,6 +4627,7 @@ function createFlakSystem(scene, materials, parent) {
     materials,
     active: [],
     flashes: [],
+    airHitEffects: [],
     serverVisuals: new Map(),
     nextFireTime: 0,
     nextDemoMotionIndex: 0,
@@ -4784,7 +4869,133 @@ function updateFlakSystem(system, dt, now) {
     return true;
   });
 
+  system.airHitEffects = system.airHitEffects.filter((effect) => updateAirHitEffect(effect, dt));
+
   document.body.dataset.flakProjectiles = String(system.active.length);
+}
+
+function createScoutPlaneSmokePuff(system, position) {
+  const id = `${system.nextId}_${system.airHitEffects.length}`;
+  const puff = MeshBuilder.CreateSphere(`scout_plane_hit_smoke_${id}`, {
+    diameter: 1.0,
+    segments: 10
+  }, system.scene);
+  puff.parent = system.root;
+  puff.material = system.materials.volcanicSmoke;
+  puff.position.copyFrom(position.add(new Vector3(
+    (stableUnitNoise(system.nextId + 17) - 0.5) * 1.2,
+    -0.2 + stableUnitNoise(system.nextId + 23) * 0.5,
+    (stableUnitNoise(system.nextId + 31) - 0.5) * 1.2
+  )));
+  puff.isPickable = false;
+  system.airHitEffects.push({
+    mesh: puff,
+    age: 0,
+    lifetime: 1.55,
+    origin: puff.position.clone(),
+    velocity: new Vector3(
+      (stableUnitNoise(system.nextId + 41) - 0.5) * 0.7,
+      1.15 + stableUnitNoise(system.nextId + 47) * 0.55,
+      (stableUnitNoise(system.nextId + 53) - 0.5) * 0.7
+    ),
+    baseScale: new Vector3(0.7, 0.55, 0.7),
+    grow: new Vector3(2.4, 1.8, 2.4),
+    alpha: 0.56
+  });
+}
+
+function createScoutPlaneAirExplosion(system, position) {
+  const center = position.add(new Vector3(0, 0.15, 0));
+  createAirExplosionCore(system, center);
+  createAirExplosionLight(system, center);
+  for (let i = 0; i < 8; i += 1) {
+    const puff = MeshBuilder.CreateSphere(`scout_plane_explosion_smoke_${system.nextId}_${i}`, {
+      diameter: 1.0,
+      segments: 10
+    }, system.scene);
+    puff.parent = system.root;
+    puff.material = i % 3 === 0 ? system.materials.volcanicSmokeWarm : system.materials.volcanicSmoke;
+    puff.position.copyFrom(center);
+    puff.isPickable = false;
+    const angle = i * Math.PI * 0.25;
+    const lateral = 2.2 + stableUnitNoise(system.nextId + i * 7) * 1.2;
+    system.airHitEffects.push({
+      mesh: puff,
+      age: 0,
+      lifetime: 1.35 + i * 0.035,
+      origin: center.clone(),
+      velocity: new Vector3(Math.cos(angle) * lateral, 0.9 + i * 0.08, Math.sin(angle) * lateral),
+      baseScale: new Vector3(0.55, 0.55, 0.55),
+      grow: new Vector3(2.2, 1.8, 2.2),
+      alpha: i % 3 === 0 ? 0.48 : 0.42
+    });
+  }
+}
+
+function createAirExplosionCore(system, position) {
+  const core = MeshBuilder.CreateSphere(`scout_plane_explosion_core_${system.nextId}`, {
+    diameter: 2.2,
+    segments: 12
+  }, system.scene);
+  core.parent = system.root;
+  core.material = system.materials.explosionCore;
+  core.position.copyFrom(position);
+  core.isPickable = false;
+  system.airHitEffects.push({
+    mesh: core,
+    age: 0,
+    lifetime: 0.32,
+    origin: position.clone(),
+    velocity: Vector3.Zero(),
+    baseScale: new Vector3(0.65, 0.65, 0.65),
+    grow: new Vector3(2.1, 2.1, 2.1),
+    alpha: 0.95
+  });
+}
+
+function createAirExplosionLight(system, position) {
+  const light = new PointLight(`scout_plane_explosion_light_${system.nextId}`, position.clone(), system.scene);
+  light.diffuse = new Color3(1.0, 0.72, 0.36);
+  light.specular = new Color3(1.0, 0.82, 0.52);
+  light.intensity = 4.2;
+  light.range = 105;
+  system.airHitEffects.push({
+    light,
+    age: 0,
+    lifetime: 0.62,
+    intensity: 4.2,
+    range: 105
+  });
+}
+
+function updateAirHitEffect(effect, dt) {
+  effect.age += dt;
+  const t = effect.age / effect.lifetime;
+  if (t >= 1) {
+    disposeAirHitEffect(effect);
+    return false;
+  }
+
+  const fade = 1 - t;
+  if (effect.mesh) {
+    effect.mesh.position.copyFrom(effect.origin.add(effect.velocity.scale(effect.age)));
+    effect.mesh.scaling.set(
+      effect.baseScale.x + effect.grow.x * t,
+      effect.baseScale.y + effect.grow.y * t,
+      effect.baseScale.z + effect.grow.z * t
+    );
+    effect.mesh.visibility = (effect.alpha ?? 0.5) * fade;
+  }
+  if (effect.light) {
+    effect.light.intensity = effect.intensity * fade;
+    effect.light.range = effect.range * (0.65 + t * 0.35);
+  }
+  return true;
+}
+
+function disposeAirHitEffect(effect) {
+  effect.mesh?.dispose();
+  effect.light?.dispose();
 }
 
 function disposeFlakProjectile(projectile) {
