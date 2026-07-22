@@ -136,15 +136,10 @@ const remoteSternFlakZ = -2.92;
 const flakMinPitch = -0.12;
 const flakMaxPitch = 0.92;
 const flakPitchStepRadians = 0.025;
-const flakFireCooldownSeconds = 0.22;
+const flakFireCooldownSeconds = 0.14;
 const flakProjectileSpeed = 195;
 const flakProjectileGravity = 9;
 const flakProjectileLifetime = 8.0;
-const flakVolleySpread = [
-  [0, 0],
-  [0.012, 0.005],
-  [-0.012, -0.003]
-];
 const flakDemoFireIntervalSeconds = 0.25;
 const flakBarrelLength = 1.62;
 const flakBarrelCenterZ = 0.22;
@@ -3969,7 +3964,8 @@ function updateScoutPlaneFlakDemo(motions, now) {
   if (!shot) return;
 
   flakSystem.nextDemoFireTime = now + flakDemoFireIntervalSeconds;
-  createFlakVolley(flakSystem, shot);
+  const spreadShot = createSpreadFlakShot(shot, flakSystem.nextId);
+  createFlakProjectile(flakSystem, spreadShot.position, spreadShot.velocity, spreadShot.direction);
   createFlakMuzzleFlash(flakSystem, shot.position, shot.direction);
   document.body.dataset.flakDemoFire = "ok";
   document.body.dataset.flakDemoBoats = String(flakMotions.length);
@@ -4531,9 +4527,10 @@ function firePlayerFlak() {
   if (!shot) return;
 
   flakSystem.nextFireTime = time + flakFireCooldownSeconds;
-  createFlakVolley(flakSystem, shot);
+  const spreadShot = createSpreadFlakShot(shot, flakSystem.nextId);
+  createFlakProjectile(flakSystem, spreadShot.position, spreadShot.velocity, spreadShot.direction);
   createFlakMuzzleFlash(flakSystem, shot.position, shot.direction);
-  reportPlayerFlakShot(shot);
+  reportPlayerFlakShot(spreadShot);
   document.body.dataset.flakFire = "ok";
   document.body.dataset.flakShots = String(flakSystem.nextId - 1);
 }
@@ -4594,22 +4591,21 @@ function getFlakShotFromElevationRoot(elevationRoot, scale, target, baseVelocity
   };
 }
 
-function createFlakVolley(system, shot) {
-  createFlakVolleyShots(shot).forEach((volleyShot) => {
-    createFlakProjectile(system, volleyShot.position, volleyShot.velocity, volleyShot.direction);
-  });
+function createSpreadFlakShot(shot, seed) {
+  const sideSpread = (stableUnitNoise(seed * 2 + 11) - 0.5) * 0.022;
+  const verticalSpread = (stableUnitNoise(seed * 2 + 37) - 0.5) * 0.012;
+  const velocity = spreadFlakVelocity(shot.velocity, sideSpread, verticalSpread);
+  const direction = velocity.lengthSquared() > 0.0001 ? velocity.normalizeToNew() : shot.direction.clone();
+  return {
+    ...shot,
+    direction,
+    velocity
+  };
 }
 
-function createFlakVolleyShots(shot) {
-  return flakVolleySpread.map(([sideSpread, verticalSpread]) => {
-    const velocity = spreadFlakVelocity(shot.velocity, sideSpread, verticalSpread);
-    const direction = velocity.lengthSquared() > 0.0001 ? velocity.normalizeToNew() : shot.direction.clone();
-    return {
-      ...shot,
-      direction,
-      velocity
-    };
-  });
+function stableUnitNoise(seed) {
+  const value = Math.sin(seed * 12.9898) * 43758.5453;
+  return value - Math.floor(value);
 }
 
 function spreadFlakVelocity(velocity, sideSpread, verticalSpread) {
