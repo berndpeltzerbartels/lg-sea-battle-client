@@ -655,6 +655,7 @@ const scoutPlaneRadarRangeFactor = 1.5;
 const bombBayRadarRangeFactor = 0.58;
 let serverShipsById = indexShipsById(gameState.ships);
 let serverClockOffset = Number.isFinite(gameState.t) ? -gameState.t : null;
+let lastServerSnapshotTime = Number.isFinite(gameState.t) ? gameState.t : null;
 let gameEventSource = null;
 let gameEventSourceReady = false;
 let lastGameStreamMessageAt = 0;
@@ -2624,10 +2625,13 @@ function getSnapshotClientTime(snapshot) {
   if (!Number.isFinite(snapshot?.t)) return time;
 
   const observedOffset = time - snapshot.t;
-  serverClockOffset = serverClockOffset === null
+  const serverTimeReset = Number.isFinite(lastServerSnapshotTime) && snapshot.t + 2 < lastServerSnapshotTime;
+  serverClockOffset = serverClockOffset === null || serverTimeReset
     ? observedOffset
     : Math.min(serverClockOffset, observedOffset);
+  lastServerSnapshotTime = snapshot.t;
   document.body.dataset.serverClockOffset = serverClockOffset.toFixed(3);
+  document.body.dataset.serverClockReset = serverTimeReset ? "1" : "0";
   return snapshot.t + serverClockOffset;
 }
 
@@ -2834,6 +2838,12 @@ function applyServerShipSnapshot(motion, ship) {
   if (motion.state === "sinking") return;
 
   if (ship.state === "sunk") {
+    if (isScoutPlaneMotion(motion)) {
+      motion.serverState = "sunk";
+      motion.root.setEnabled(false);
+      motion.state = "sunk";
+      return;
+    }
     motion.serverState = "sunk";
     motion.serverPosition.x = Number.isFinite(ship.x) ? ship.x : motion.serverPosition.x;
     motion.serverPosition.z = Number.isFinite(ship.z) ? ship.z : motion.serverPosition.z;
@@ -5170,6 +5180,7 @@ function createScoutPlaneAirExplosion(system, position) {
   createAirExplosionCore(system, center);
   createAirExplosionLight(system, center);
   createAirExplosionDebris(system, center);
+  createAirExplosionFireBloom(system, center);
   for (let i = 0; i < 10; i += 1) {
     const puff = MeshBuilder.CreateSphere(`scout_plane_explosion_smoke_${system.nextId}_${i}`, {
       diameter: 1.0,
@@ -5190,6 +5201,30 @@ function createScoutPlaneAirExplosion(system, position) {
       baseScale: new Vector3(0.65, 0.65, 0.65),
       grow: new Vector3(2.8, 2.15, 2.8),
       alpha: i % 3 === 0 ? 0.5 : 0.44
+    });
+  }
+}
+
+function createAirExplosionFireBloom(system, position) {
+  for (let i = 0; i < 5; i += 1) {
+    const flame = MeshBuilder.CreateSphere(`scout_plane_explosion_fire_${system.nextId}_${i}`, {
+      diameter: 1.0,
+      segments: 10
+    }, system.scene);
+    flame.parent = system.root;
+    flame.material = system.materials.volcanicSmokeWarm;
+    flame.position.copyFrom(position);
+    flame.isPickable = false;
+    const angle = i * Math.PI * 0.4;
+    system.airHitEffects.push({
+      mesh: flame,
+      age: 0,
+      lifetime: 0.86 + i * 0.05,
+      origin: position.clone(),
+      velocity: new Vector3(Math.cos(angle) * 2.7, 1.0 + i * 0.08, Math.sin(angle) * 2.7),
+      baseScale: new Vector3(0.75, 0.75, 0.75),
+      grow: new Vector3(1.8, 1.45, 1.8),
+      alpha: 0.66
     });
   }
 }
@@ -5249,14 +5284,14 @@ function createAirExplosionLight(system, position) {
   const light = new PointLight(`scout_plane_explosion_light_${system.nextId}`, position.clone(), system.scene);
   light.diffuse = new Color3(1.0, 0.72, 0.36);
   light.specular = new Color3(1.0, 0.82, 0.52);
-  light.intensity = 4.2;
-  light.range = 105;
+  light.intensity = 6.4;
+  light.range = 145;
   system.airHitEffects.push({
     light,
     age: 0,
-    lifetime: 0.62,
-    intensity: 4.2,
-    range: 105
+    lifetime: 0.72,
+    intensity: 6.4,
+    range: 145
   });
 }
 
