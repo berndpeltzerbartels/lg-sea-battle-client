@@ -122,11 +122,9 @@ const scoutPlaneSpeedStep = 1.5;
 const scoutPlaneMaxClimbRate = 8.5;
 const scoutPlaneMaxPitch = 0.22;
 const bombGravity = 14.0;
-const bombDropForwardOffset = 2.6;
+const bombDropForwardOffset = 0.6;
 const bombsPerDrop = 8;
 const bombReleaseIntervalSeconds = 0.28;
-const bombRowOffset = 0.1;
-const bombSightRowOffset = 0.32;
 const bombBayWideFov = 0.92;
 const bombBayZoomFov = 0.62;
 const bombBayImpactFocusExtraSeconds = 1.5;
@@ -998,16 +996,13 @@ function getBombBayFov() {
 
 function getBombDropPreview() {
   const forward = getForwardVector(heading);
-  const right = getRightVector(heading);
   const dropAltitude = clamp(boat.root.position.y, 1, 120);
   const fallSeconds = Math.sqrt((2 * dropAltitude) / bombGravity);
   const horizontalSpeed = clamp(speed * 0.92, 4, 22);
   const lead = bombDropForwardOffset + horizontalSpeed * fallSeconds;
   const impactSpacing = horizontalSpeed * bombReleaseIntervalSeconds;
   const patternLength = impactSpacing * (bombsPerDrop - 1);
-  const firstImpact = boat.root.position
-    .add(forward.scale(lead))
-    .add(right.scale(getBombRowOffsetForIndex(0)));
+  const firstImpact = boat.root.position.add(forward.scale(lead));
   const centerImpact = boat.root.position.add(forward.scale(lead + patternLength * 0.5));
   firstImpact.y = 0.2;
   centerImpact.y = 0.2;
@@ -1019,14 +1014,6 @@ function getBombDropPreview() {
     patternLength,
     fallSeconds
   };
-}
-
-function getBombRowOffsetForIndex(index) {
-  return (index % 2 === 0 ? -0.5 : 0.5) * bombRowOffset;
-}
-
-function getBombSightRowOffsetForIndex(index) {
-  return (index % 2 === 0 ? -0.5 : 0.5) * bombSightRowOffset;
 }
 
 function isHudControlEvent(event) {
@@ -5227,7 +5214,7 @@ function updateBombSightPattern(marker, patternLength, impactSpacing) {
     mesh.position.z = part === "upper" ? upperCenter : lowerCenter;
   });
   (parts.impactTicks ?? []).forEach(({ mesh, index }) => {
-    mesh.position.x = -1.35 + getBombSightRowOffsetForIndex(index);
+    mesh.position.x = -1.35;
     mesh.position.z = index * impactSpacing;
   });
 }
