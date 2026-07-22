@@ -125,6 +125,8 @@ const scoutPlaneSpeedStep = 1.5;
 const scoutPlaneMaxClimbRate = 20.0;
 const scoutPlaneMaxDiveRate = 34.0;
 const scoutPlaneMaxPitch = 0.55;
+const scoutPlanePulloutAltitude = 3.0;
+const scoutPlanePulloutStartAltitude = 8.0;
 const scoutPlaneFlakSmokeSeconds = 1.65;
 const scoutPlaneFlakRespawnSeconds = 3.35;
 const scoutPlaneFlakSmokeIntervalSeconds = 0.12;
@@ -779,11 +781,17 @@ scene.onBeforeRenderObservable.add(() => {
     }
 
     if (scoutPlaneMode) {
-      const targetPitch = -heldElevatorDirection * scoutPlaneMaxPitch;
+      const pulloutRatio = heldElevatorDirection < 0
+        ? smoothstep(scoutPlanePulloutAltitude, scoutPlanePulloutStartAltitude, scoutPlaneAltitude)
+        : 1;
+      const effectiveElevatorDirection = heldElevatorDirection < 0
+        ? heldElevatorDirection * pulloutRatio
+        : heldElevatorDirection;
+      const targetPitch = -effectiveElevatorDirection * scoutPlaneMaxPitch;
       scoutPlanePitch += (targetPitch - scoutPlanePitch) * Math.min(1, dt * 2.4);
-      const targetVerticalSpeed = heldElevatorDirection < 0
-        ? heldElevatorDirection * scoutPlaneMaxDiveRate
-        : heldElevatorDirection * scoutPlaneMaxClimbRate;
+      const targetVerticalSpeed = effectiveElevatorDirection < 0
+        ? effectiveElevatorDirection * scoutPlaneMaxDiveRate
+        : effectiveElevatorDirection * scoutPlaneMaxClimbRate;
       scoutPlaneVerticalSpeed += (targetVerticalSpeed - scoutPlaneVerticalSpeed) * Math.min(1, dt * 1.35);
       scoutPlaneAltitude = clamp(
         scoutPlaneAltitude + scoutPlaneVerticalSpeed * dt,
@@ -1057,7 +1065,8 @@ function getBombBayFov() {
 function getBombDropPreview() {
   const forward = getForwardVector(heading);
   const dropAltitude = clamp(boat.root.position.y, scoutPlaneMinAltitude, scoutPlaneMaxAltitude);
-  const fallSeconds = Math.sqrt((2 * dropAltitude) / bombGravity);
+  const initialDownSpeed = -scoutPlaneVerticalSpeed;
+  const fallSeconds = Math.max(0, (-initialDownSpeed + Math.sqrt(initialDownSpeed * initialDownSpeed + 2 * bombGravity * dropAltitude)) / bombGravity);
   const horizontalSpeed = clamp(speed * 0.92, 4, 28);
   const lead = bombDropForwardOffset + horizontalSpeed * fallSeconds;
   const impactSpacing = horizontalSpeed * bombReleaseIntervalSeconds;
@@ -2465,6 +2474,7 @@ async function requestPlayerBombDrop() {
         z: boat.root.position.z,
         heading,
         speed,
+        verticalSpeed: scoutPlaneVerticalSpeed,
         vehicleType: "scout-plane"
       })
     });
