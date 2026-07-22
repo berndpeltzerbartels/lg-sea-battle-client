@@ -3621,11 +3621,11 @@ function drawRadarShipMarker(ctx, x, y, color, relativeHeading) {
   ctx.lineWidth = 1.3;
   ctx.beginPath();
   moveToRadarMarkerPoint(ctx, toPoint, 0, 7.2);
-  lineToRadarMarkerPoint(ctx, toPoint, 3.1, 2.2);
-  lineToRadarMarkerPoint(ctx, toPoint, 2.9, -5.0);
+  lineToRadarMarkerPoint(ctx, toPoint, 2.5, 2.2);
+  lineToRadarMarkerPoint(ctx, toPoint, 2.3, -5.0);
   lineToRadarMarkerPoint(ctx, toPoint, 0, -4.2);
-  lineToRadarMarkerPoint(ctx, toPoint, -2.9, -5.0);
-  lineToRadarMarkerPoint(ctx, toPoint, -3.1, 2.2);
+  lineToRadarMarkerPoint(ctx, toPoint, -2.3, -5.0);
+  lineToRadarMarkerPoint(ctx, toPoint, -2.5, 2.2);
   ctx.closePath();
   ctx.stroke();
   ctx.fill();
