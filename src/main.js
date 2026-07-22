@@ -113,9 +113,9 @@ const engineHoldInitialDelaySeconds = 0.22;
 const engineHoldRepeatSeconds = 0.1;
 const mouseWheelEngineStep = 100;
 const scoutPlaneSetupId = "scout-plane";
-const scoutPlaneCruiseAltitude = 22;
-const scoutPlaneMinAltitude = 5;
-const scoutPlaneMaxAltitude = 80;
+const scoutPlaneCruiseAltitude = 20;
+const scoutPlaneMinAltitude = 3;
+const scoutPlaneMaxAltitude = 100;
 const scoutPlaneCruiseSpeed = 14.5;
 const scoutPlaneMinSpeed = 7.5;
 const scoutPlaneMaxSpeed = 19.5;
@@ -138,12 +138,12 @@ const playerSternFlakZ = -2.92;
 const remoteSternFlakZ = -2.92;
 const flakMinPitch = -0.12;
 const flakMaxPitch = 0.92;
-const flakPitchStepRadians = 0.012;
+const flakPitchStepRadians = 0.008;
 const flakHoldAccelerationDelaySeconds = 0.7;
-const flakYawFineSpeed = 0.22;
-const flakYawFastSpeed = 0.48;
-const flakPitchFineSpeed = 0.12;
-const flakPitchFastSpeed = 0.26;
+const flakYawFineSpeed = 0.16;
+const flakYawFastSpeed = 0.34;
+const flakPitchFineSpeed = 0.085;
+const flakPitchFastSpeed = 0.19;
 const flakFireCooldownSeconds = 0.14;
 const flakProjectileSpeed = 195;
 const flakProjectileGravity = 9;
@@ -1031,13 +1031,17 @@ function getPlayerCameraSetup(forward) {
 }
 
 function getBombBayFov() {
-  const altitudeFactor = clamp((boat.root.position.y - 20) / 55, 0, 1);
+  const altitudeFactor = clamp(
+    (boat.root.position.y - scoutPlaneCruiseAltitude) / (scoutPlaneMaxAltitude - scoutPlaneCruiseAltitude),
+    0,
+    1
+  );
   return bombBayWideFov + (bombBayZoomFov - bombBayWideFov) * altitudeFactor;
 }
 
 function getBombDropPreview() {
   const forward = getForwardVector(heading);
-  const dropAltitude = clamp(boat.root.position.y, 1, 120);
+  const dropAltitude = clamp(boat.root.position.y, scoutPlaneMinAltitude, scoutPlaneMaxAltitude);
   const fallSeconds = Math.sqrt((2 * dropAltitude) / bombGravity);
   const horizontalSpeed = clamp(speed * 0.92, 4, 22);
   const lead = bombDropForwardOffset + horizontalSpeed * fallSeconds;
@@ -4486,6 +4490,7 @@ function respawnPlayerScoutPlane(playerPlane) {
   ramShake = 0.72;
   playerDamageState = "active";
   playerServerShipId = null;
+  debugTeleportPending = true;
   document.body.dataset.playerShipId = "pending";
   document.body.dataset.playerDamageState = "active";
   document.body.dataset.scoutPlaneFlakHit = "";
