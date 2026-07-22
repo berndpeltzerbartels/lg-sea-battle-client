@@ -75,6 +75,7 @@ const undoDebugMapMarkerButton = document.getElementById("undoDebugMapMarkerButt
 const clearDebugMapMarkersButton = document.getElementById("clearDebugMapMarkersButton");
 const radarCanvas = document.getElementById("radarCanvas");
 const radarStatus = document.getElementById("radarStatus");
+const flakHitAlert = document.getElementById("flakHitAlert");
 const rudderIndicator = document.getElementById("rudderIndicator");
 const rudderValue = document.getElementById("rudderValue");
 const sinkingWaterOverlay = document.getElementById("sinkingWaterOverlay");
@@ -604,6 +605,8 @@ let playerDamageState = "active";
 let playerSinkStartTime = 0;
 let playerSinkStartY = 0;
 let playerSinkSide = -1;
+let lastFlakHitId = "";
+let flakHitAlertUntil = 0;
 let playerRespawnIndex = 0;
 let pendingPlayerServerShip = null;
 let playerServerTarget = null;
@@ -797,6 +800,7 @@ scene.onBeforeRenderObservable.add(() => {
   updateServerBombVisuals(bombSystem, dt, time);
   updateBombSightMarker(bombSystem, forward);
   updateFlakSystem(flakSystem, dt, time);
+  updateFlakHitAlert(time);
   syncMultiplayerState(time);
   const torpedoResult = updateTorpedoSystem(torpedoSystem, dt, time, enemyMotions, blockedWaters, boat.root.position);
   if (torpedoResult.playerHit && playerDamageState === "active") {
@@ -2464,11 +2468,37 @@ function applyServerGameSnapshot(snapshot) {
     Array.isArray(snapshot.flakProjectiles) ? snapshot.flakProjectiles : [],
     snapshotClientTime
   );
+  syncServerFlakHits(Array.isArray(snapshot.flakHits) ? snapshot.flakHits : [], ownShip);
   document.body.dataset.remoteShips = String(snapshot.ships.length);
   document.body.dataset.serverTorpedoes = String(Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes.length : 0);
   document.body.dataset.serverBombs = String(Array.isArray(snapshot.bombs) ? snapshot.bombs.length : 0);
   document.body.dataset.serverFlakProjectiles = String(Array.isArray(snapshot.flakProjectiles) ? snapshot.flakProjectiles.length : 0);
   document.body.dataset.playerStateSync = "ok";
+}
+
+function syncServerFlakHits(hits, ownShip = null) {
+  if (!scoutPlaneMode || !Array.isArray(hits)) return;
+  const ownShipId = ownShip?.id ?? playerServerShipId ?? pendingPlayerServerShip?.id;
+  if (!ownShipId) return;
+
+  const ownHit = hits
+    .filter((hit) => hit?.targetShipId === ownShipId)
+    .sort((left, right) => (Number(right.t) || 0) - (Number(left.t) || 0))[0];
+  if (!ownHit || ownHit.id === lastFlakHitId) return;
+
+  lastFlakHitId = ownHit.id;
+  flakHitAlertUntil = time + 1.6;
+  playerHits += 1;
+  document.body.dataset.playerFlakHit = ownHit.id;
+  document.body.dataset.playerFlakHitAt = String(ownHit.t ?? "");
+  if (flakHitAlert) {
+    flakHitAlert.textContent = "Flak Treffer";
+  }
+}
+
+function updateFlakHitAlert(now) {
+  if (!flakHitAlert) return;
+  flakHitAlert.classList.toggle("is-visible", now < flakHitAlertUntil);
 }
 
 function getSnapshotClientTime(snapshot) {
@@ -4167,7 +4197,7 @@ function updateServerEnemyMotion(motion, dt, time) {
   motion.root.position.z += (projectedServerPosition.z - motion.root.position.z) * Math.min(1, dt * correctionStrength);
   if (isScoutPlaneMotion(motion)) {
     motion.root.position.y += Math.sin(time * 0.85 + motion.numericIndex) * 0.018;
-    const bank = clamp(-motion.turnVelocity * 2.35, -0.72, 0.72);
+    const bank = clamp(-motion.turnVelocity * 2.8, -0.72, 0.72);
     motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
       Math.sin(time * 0.7 + motion.numericIndex) * 0.025,
       motion.heading,

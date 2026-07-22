@@ -171,6 +171,32 @@ body.debug-marker-map {
   pointer-events: none;
 }
 
+.flak-hit-alert {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  min-width: 128px;
+  padding: 8px 12px;
+  border: 1px solid rgb(255 244 190 / 72%);
+  border-radius: 6px;
+  background: rgb(61 26 10 / 72%);
+  box-shadow: 0 12px 30px rgb(20 8 2 / 28%);
+  color: #fff4be;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.flak-hit-alert.is-visible {
+  opacity: 1;
+}
+
 .mobile-orientation-hint {
   position: fixed;
   inset: 0;
