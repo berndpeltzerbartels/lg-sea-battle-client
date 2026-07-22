@@ -123,8 +123,8 @@ const scoutPlaneMaxSpeed = 19.5;
 const scoutPlaneSpeedStep = 1.5;
 const scoutPlaneMaxClimbRate = 8.5;
 const scoutPlaneMaxPitch = 0.22;
-const scoutPlaneFlakSmokeSeconds = 1.55;
-const scoutPlaneFlakRespawnSeconds = 2.45;
+const scoutPlaneFlakSmokeSeconds = 1.65;
+const scoutPlaneFlakRespawnSeconds = 3.35;
 const scoutPlaneFlakSmokeIntervalSeconds = 0.12;
 const bombGravity = 14.0;
 const bombDropForwardOffset = 0.6;
@@ -146,7 +146,7 @@ const flakYawFastSpeed = 0.34;
 const flakPitchFineSpeed = 0.085;
 const flakPitchFastSpeed = 0.19;
 const flakFireCooldownSeconds = 0.14;
-const flakProjectileSpeed = 240;
+const flakProjectileSpeed = 285;
 const flakProjectileGravity = 9;
 const flakProjectileLifetime = 8.0;
 const flakDemoFireIntervalSeconds = 0.25;
@@ -634,6 +634,8 @@ let damageNotificationIds = new Set();
 let scoutPlaneFlakHitStartTime = 0;
 let scoutPlaneFlakHitExploded = false;
 let nextScoutPlaneFlakSmokeTime = 0;
+let scoutPlaneFlakHitHeading = 0;
+let scoutPlaneFlakHitSpeed = scoutPlaneMinSpeed;
 let planeHitFlashUntil = 0;
 let planeHitFlashStart = 0;
 let playerRespawnIndex = 0;
@@ -816,7 +818,7 @@ scene.onBeforeRenderObservable.add(() => {
   } else if (playerDamageState === "sinking") {
     updatePlayerSinking(boat, time);
   } else if (playerDamageState === "air-hit") {
-    updateScoutPlaneFlakHitSequence(boat, time);
+    updateScoutPlaneFlakHitSequence(boat, time, dt);
   }
   ocean.position.x = boat.root.position.x;
   ocean.position.z = boat.root.position.z;
@@ -2566,6 +2568,11 @@ function syncServerFlakHitEffects(hits, ownShip = null) {
     if (flakSystem.hitEffectIds.size > 80) {
       flakSystem.hitEffectIds = new Set(Array.from(flakSystem.hitEffectIds).slice(-48));
     }
+    const targetMotion = enemyMotions.find((motion) => motion.id === hit.targetShipId);
+    if (isScoutPlaneMotion(targetMotion)) {
+      beginEnemyScoutPlaneAirHit(targetMotion, hit, time);
+      return;
+    }
     createScoutPlaneHitSequence(flakSystem, getFlakHitPosition(hit));
   });
 }
@@ -2823,6 +2830,7 @@ function disposeRemoteMotion(motion) {
 }
 
 function applyServerShipSnapshot(motion, ship) {
+  if (motion.state === "air-hit") return;
   if (motion.state === "sinking") return;
 
   if (ship.state === "sunk") {
@@ -4253,6 +4261,11 @@ function applyEnemyMotionEvent(motion, event) {
 function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
   if (motion.state === "sunk") return;
 
+  if (motion.state === "air-hit") {
+    updateEnemyScoutPlaneAirHit(motion, dt, time);
+    return;
+  }
+
   if (motion.state === "sinking") {
     updateEnemySinking(motion, dt, time);
     return;
@@ -4332,6 +4345,46 @@ function updateServerEnemyMotion(motion, dt, time) {
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
   document.body.dataset.enemyEngineOrder = engineOrders[motion.engineOrder].label;
   document.body.dataset.enemySpeed = motion.speed.toFixed(1);
+}
+
+function beginEnemyScoutPlaneAirHit(motion, hit, now) {
+  motion.state = "air-hit";
+  motion.airHitStartTime = now;
+  motion.airHitExploded = false;
+  motion.nextAirHitSmokeTime = now;
+  motion.airHitHeading = motion.heading;
+  motion.airHitSpeed = Math.max(7.5, Math.abs(motion.speed) || motion.serverSpeed || scoutPlaneCruiseSpeed);
+  motion.root.setEnabled(true);
+  createScoutPlaneHitSequence(flakSystem, getFlakHitPosition(hit));
+}
+
+function updateEnemyScoutPlaneAirHit(motion, dt, now) {
+  const age = now - (motion.airHitStartTime ?? now);
+  const forward = new Vector3(Math.sin(motion.airHitHeading ?? motion.heading), 0, Math.cos(motion.airHitHeading ?? motion.heading));
+  const speedFactor = clamp(1 - age / scoutPlaneFlakSmokeSeconds, 0.35, 1);
+  motion.root.position.addInPlace(forward.scale((motion.airHitSpeed ?? scoutPlaneCruiseSpeed) * speedFactor * dt));
+  motion.root.position.y -= dt * (0.55 + age * 0.8);
+  motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
+    -0.08 - age * 0.08,
+    motion.airHitHeading ?? motion.heading,
+    (motion.visualBank ?? 0) + Math.sin(now * 5.5) * 0.08 + age * 0.16
+  );
+  updateScoutPlaneVisual(motion, Math.max(4, (motion.airHitSpeed ?? scoutPlaneCruiseSpeed) * speedFactor), now);
+
+  if (!motion.airHitExploded && now >= (motion.nextAirHitSmokeTime ?? now)) {
+    createBurningScoutPlaneTrail(flakSystem, motion.root.position, forward.scale(-1.8));
+    motion.nextAirHitSmokeTime = now + scoutPlaneFlakSmokeIntervalSeconds;
+  }
+
+  if (!motion.airHitExploded && age >= scoutPlaneFlakSmokeSeconds) {
+    motion.airHitExploded = true;
+    createScoutPlaneAirExplosion(flakSystem, motion.root.position.clone());
+    motion.root.setEnabled(false);
+  }
+
+  if (age >= scoutPlaneFlakRespawnSeconds) {
+    motion.state = "sunk";
+  }
 }
 
 function updateEnemyHelmTowardTarget(motion, playerPosition, landZones, time) {
@@ -4471,6 +4524,8 @@ function beginScoutPlaneFlakHit(hit, now) {
   scoutPlaneFlakHitStartTime = now;
   scoutPlaneFlakHitExploded = false;
   nextScoutPlaneFlakSmokeTime = now;
+  scoutPlaneFlakHitHeading = heading;
+  scoutPlaneFlakHitSpeed = Math.max(scoutPlaneMinSpeed, Math.abs(speed) || scoutPlaneCruiseSpeed);
   heldElevatorDirection = 0;
   heldRudderDirection = 0;
   heldFlakDirection = 0;
@@ -4489,17 +4544,30 @@ function beginScoutPlaneFlakHit(hit, now) {
   showDamageMessage(createDestroyedByText("Flakgeschosse", hit?.shipId), now, scoutPlaneFlakRespawnSeconds);
 }
 
-function updateScoutPlaneFlakHitSequence(playerPlane, now) {
+function updateScoutPlaneFlakHitSequence(playerPlane, now, dt) {
   const age = now - scoutPlaneFlakHitStartTime;
+  const forward = new Vector3(Math.sin(scoutPlaneFlakHitHeading), 0, Math.cos(scoutPlaneFlakHitHeading));
   const position = playerPlane.root.position.clone();
-  if (age <= scoutPlaneFlakSmokeSeconds && now >= nextScoutPlaneFlakSmokeTime) {
-    createScoutPlaneSmokePuff(flakSystem, position);
+  if (!scoutPlaneFlakHitExploded) {
+    const speedFactor = clamp(1 - age / scoutPlaneFlakSmokeSeconds, 0.35, 1);
+    playerPlane.root.position.addInPlace(forward.scale(scoutPlaneFlakHitSpeed * speedFactor * dt));
+    playerPlane.root.position.y -= dt * (0.5 + age * 0.75);
+    playerPlane.root.rotationQuaternion = Quaternion.FromEulerAngles(
+      -0.08 - age * 0.08,
+      scoutPlaneFlakHitHeading,
+      -turnVelocity * 2.8 + Math.sin(now * 5.4) * 0.08 + age * 0.16
+    );
+    updateScoutPlaneVisual(playerPlane, Math.max(4, scoutPlaneFlakHitSpeed * speedFactor), now);
+  }
+
+  if (!scoutPlaneFlakHitExploded && age <= scoutPlaneFlakSmokeSeconds && now >= nextScoutPlaneFlakSmokeTime) {
+    createBurningScoutPlaneTrail(flakSystem, playerPlane.root.position, forward.scale(-1.8));
     nextScoutPlaneFlakSmokeTime = now + scoutPlaneFlakSmokeIntervalSeconds;
   }
 
   if (!scoutPlaneFlakHitExploded && age >= scoutPlaneFlakSmokeSeconds) {
     scoutPlaneFlakHitExploded = true;
-    createScoutPlaneAirExplosion(flakSystem, position);
+    createScoutPlaneAirExplosion(flakSystem, playerPlane.root.position.clone());
     playerPlane.root.setEnabled(false);
     ramShake = 1;
   }
@@ -5035,6 +5103,38 @@ function createAirHitFire(system, position) {
   }
 }
 
+function createBurningScoutPlaneTrail(system, position, drift = Vector3.Zero()) {
+  createScoutPlaneSmokePuff(system, position.add(drift));
+  for (let index = 0; index < 2; index += 1) {
+    const flame = MeshBuilder.CreateSphere(`scout_plane_burning_flame_${system.nextId}_${system.airHitEffects.length}_${index}`, {
+      diameter: 0.48 + stableUnitNoise(system.nextId + index * 19) * 0.28,
+      segments: 10
+    }, system.scene);
+    flame.parent = system.root;
+    flame.material = system.materials.volcanicSmokeWarm;
+    flame.position.copyFrom(position.add(drift).add(new Vector3(
+      (stableUnitNoise(system.nextId + index * 23) - 0.5) * 0.8,
+      (stableUnitNoise(system.nextId + index * 29) - 0.5) * 0.35,
+      (stableUnitNoise(system.nextId + index * 31) - 0.5) * 0.8
+    )));
+    flame.isPickable = false;
+    system.airHitEffects.push({
+      mesh: flame,
+      age: 0,
+      lifetime: 0.72,
+      origin: flame.position.clone(),
+      velocity: new Vector3(
+        (stableUnitNoise(system.nextId + index * 37) - 0.5) * 0.8,
+        0.55 + stableUnitNoise(system.nextId + index * 41) * 0.35,
+        (stableUnitNoise(system.nextId + index * 43) - 0.5) * 0.8
+      ),
+      baseScale: new Vector3(0.45, 0.45, 0.45),
+      grow: new Vector3(0.75, 0.65, 0.75),
+      alpha: 0.74
+    });
+  }
+}
+
 function createScoutPlaneSmokePuff(system, position) {
   const id = `${system.nextId}_${system.airHitEffects.length}`;
   const puff = MeshBuilder.CreateSphere(`scout_plane_hit_smoke_${id}`, {
@@ -5070,7 +5170,7 @@ function createScoutPlaneAirExplosion(system, position) {
   createAirExplosionCore(system, center);
   createAirExplosionLight(system, center);
   createAirExplosionDebris(system, center);
-  for (let i = 0; i < 8; i += 1) {
+  for (let i = 0; i < 10; i += 1) {
     const puff = MeshBuilder.CreateSphere(`scout_plane_explosion_smoke_${system.nextId}_${i}`, {
       diameter: 1.0,
       segments: 10
@@ -5084,18 +5184,18 @@ function createScoutPlaneAirExplosion(system, position) {
     system.airHitEffects.push({
       mesh: puff,
       age: 0,
-      lifetime: 1.35 + i * 0.035,
+      lifetime: 1.7 + i * 0.045,
       origin: center.clone(),
-      velocity: new Vector3(Math.cos(angle) * lateral, 0.9 + i * 0.08, Math.sin(angle) * lateral),
-      baseScale: new Vector3(0.55, 0.55, 0.55),
-      grow: new Vector3(2.2, 1.8, 2.2),
-      alpha: i % 3 === 0 ? 0.48 : 0.42
+      velocity: new Vector3(Math.cos(angle) * lateral, 0.75 + i * 0.07, Math.sin(angle) * lateral),
+      baseScale: new Vector3(0.65, 0.65, 0.65),
+      grow: new Vector3(2.8, 2.15, 2.8),
+      alpha: i % 3 === 0 ? 0.5 : 0.44
     });
   }
 }
 
 function createAirExplosionDebris(system, position) {
-  for (let i = 0; i < 14; i += 1) {
+  for (let i = 0; i < 16; i += 1) {
     const glowing = i < 6;
     const fragment = MeshBuilder.CreateBox(`scout_plane_explosion_fragment_${system.nextId}_${i}`, {
       width: glowing ? 0.22 : 0.34,
@@ -5107,18 +5207,18 @@ function createAirExplosionDebris(system, position) {
     fragment.position.copyFrom(position);
     fragment.isPickable = false;
     const angle = i * 2.399;
-    const speedOut = glowing ? 8.4 + stableUnitNoise(system.nextId + i * 5) * 5.5 : 5.6 + stableUnitNoise(system.nextId + i * 7) * 4.8;
-    const lift = glowing ? 3.4 + stableUnitNoise(system.nextId + i * 11) * 2.0 : 1.5 + stableUnitNoise(system.nextId + i * 13) * 2.6;
+    const speedOut = glowing ? 7.4 + stableUnitNoise(system.nextId + i * 5) * 4.6 : 4.8 + stableUnitNoise(system.nextId + i * 7) * 3.8;
+    const lift = glowing ? 2.9 + stableUnitNoise(system.nextId + i * 11) * 1.7 : 1.2 + stableUnitNoise(system.nextId + i * 13) * 2.1;
     system.airHitEffects.push({
       mesh: fragment,
       age: 0,
-      lifetime: glowing ? 0.9 : 1.45,
+      lifetime: glowing ? 1.75 : 2.85,
       origin: position.clone(),
       velocity: new Vector3(Math.cos(angle) * speedOut, lift, Math.sin(angle) * speedOut),
-      gravity: glowing ? 3.8 : 5.4,
+      gravity: glowing ? 4.1 : 5.2,
       baseScale: new Vector3(1, 1, 1),
-      grow: glowing ? new Vector3(0.35, 0.35, 0.35) : new Vector3(0.1, 0.1, 0.1),
-      alpha: glowing ? 0.92 : 0.72,
+      grow: glowing ? new Vector3(-0.45, -0.45, -0.45) : new Vector3(-0.2, -0.2, -0.2),
+      alpha: glowing ? 0.92 : 0.66,
       spin: new Vector3(3.4 + i * 0.17, 4.2 + i * 0.11, 2.8 + i * 0.13)
     });
   }
@@ -5126,7 +5226,7 @@ function createAirExplosionDebris(system, position) {
 
 function createAirExplosionCore(system, position) {
   const core = MeshBuilder.CreateSphere(`scout_plane_explosion_core_${system.nextId}`, {
-    diameter: 2.2,
+    diameter: 3.0,
     segments: 12
   }, system.scene);
   core.parent = system.root;
@@ -5136,11 +5236,11 @@ function createAirExplosionCore(system, position) {
   system.airHitEffects.push({
     mesh: core,
     age: 0,
-    lifetime: 0.32,
+    lifetime: 0.42,
     origin: position.clone(),
     velocity: Vector3.Zero(),
     baseScale: new Vector3(0.65, 0.65, 0.65),
-    grow: new Vector3(2.1, 2.1, 2.1),
+    grow: new Vector3(2.7, 2.7, 2.7),
     alpha: 0.95
   });
 }
