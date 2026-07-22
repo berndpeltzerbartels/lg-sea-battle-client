@@ -123,9 +123,10 @@ const scoutPlaneMaxClimbRate = 8.5;
 const scoutPlaneMaxPitch = 0.22;
 const bombGravity = 14.0;
 const bombDropForwardOffset = 2.6;
-const bombsPerDrop = 16;
-const bombReleaseIntervalSeconds = 0.14;
+const bombsPerDrop = 8;
+const bombReleaseIntervalSeconds = 0.28;
 const bombRowOffset = 0.1;
+const bombSightRowOffset = 0.32;
 const bombBayWideFov = 0.92;
 const bombBayZoomFov = 0.62;
 const bombBayImpactFocusExtraSeconds = 1.5;
@@ -1022,6 +1023,10 @@ function getBombDropPreview() {
 
 function getBombRowOffsetForIndex(index) {
   return (index % 2 === 0 ? -0.5 : 0.5) * bombRowOffset;
+}
+
+function getBombSightRowOffsetForIndex(index) {
+  return (index % 2 === 0 ? -0.5 : 0.5) * bombSightRowOffset;
 }
 
 function isHudControlEvent(event) {
@@ -5222,7 +5227,7 @@ function updateBombSightPattern(marker, patternLength, impactSpacing) {
     mesh.position.z = part === "upper" ? upperCenter : lowerCenter;
   });
   (parts.impactTicks ?? []).forEach(({ mesh, index }) => {
-    mesh.position.x = -1.35 + getBombRowOffsetForIndex(index);
+    mesh.position.x = -1.35 + getBombSightRowOffsetForIndex(index);
     mesh.position.z = index * impactSpacing;
   });
 }
