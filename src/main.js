@@ -121,8 +121,8 @@ const scoutPlaneCruiseSpeed = 14.5;
 const scoutPlaneMinSpeed = 7.5;
 const scoutPlaneMaxSpeed = 19.5;
 const scoutPlaneSpeedStep = 1.5;
-const scoutPlaneMaxClimbRate = 8.5;
-const scoutPlaneMaxPitch = 0.22;
+const scoutPlaneMaxClimbRate = 17.0;
+const scoutPlaneMaxPitch = 0.42;
 const scoutPlaneFlakSmokeSeconds = 1.65;
 const scoutPlaneFlakRespawnSeconds = 3.35;
 const scoutPlaneFlakSmokeIntervalSeconds = 0.12;
@@ -315,11 +315,11 @@ window.addEventListener("keydown", (event) => {
     }
     if (scoutPlaneMode) {
       if (event.shiftKey) {
+        heldElevatorDirection = -1;
+      } else {
         if (!event.repeat) {
           changeScoutPlaneTargetSpeed(1);
         }
-      } else {
-        heldElevatorDirection = 1;
       }
     } else {
       heldEngineDirection = 1;
@@ -344,11 +344,11 @@ window.addEventListener("keydown", (event) => {
     }
     if (scoutPlaneMode) {
       if (event.shiftKey) {
+        heldElevatorDirection = 1;
+      } else {
         if (!event.repeat) {
           changeScoutPlaneTargetSpeed(-1);
         }
-      } else {
-        heldElevatorDirection = -1;
       }
     } else {
       heldEngineDirection = -1;
@@ -417,7 +417,7 @@ window.addEventListener("keyup", (event) => {
     heldFlakPitchDirection = 0;
     event.preventDefault();
   }
-  if (isInputKey(event, "up") && heldElevatorDirection > 0) {
+  if (isInputKey(event, "up") && heldElevatorDirection < 0) {
     heldElevatorDirection = 0;
     event.preventDefault();
   }
@@ -429,7 +429,7 @@ window.addEventListener("keyup", (event) => {
     heldFlakPitchDirection = 0;
     event.preventDefault();
   }
-  if (isInputKey(event, "down") && heldElevatorDirection < 0) {
+  if (isInputKey(event, "down") && heldElevatorDirection > 0) {
     heldElevatorDirection = 0;
     event.preventDefault();
   }
