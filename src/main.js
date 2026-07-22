@@ -736,11 +736,11 @@ scene.onBeforeRenderObservable.add(() => {
     const response = scoutPlaneMode ? 1.1 : (Math.abs(targetSpeed) > Math.abs(speed) ? 0.45 : 0.75);
     speed += (targetSpeed - speed) * Math.min(1, dt * response);
 
-    const turnStrength = scoutPlaneMode ? 0.18 : (speed >= 0 ? 0.24 : -0.16);
-    const rudderGrip = scoutPlaneMode ? clamp(Math.abs(speed) / 8.5, 0.18, 1) : clamp(Math.abs(speed) / 4.2, 0, 1);
+    const turnStrength = scoutPlaneMode ? 0.26 : (speed >= 0 ? 0.24 : -0.16);
+    const rudderGrip = scoutPlaneMode ? clamp(Math.abs(speed) / 7.2, 0.24, 1) : clamp(Math.abs(speed) / 4.2, 0, 1);
     const steer = rudderDegrees / maxRudderDegrees;
     const targetTurnVelocity = steer * turnStrength * rudderGrip;
-    turnVelocity += (targetTurnVelocity - turnVelocity) * Math.min(1, dt * (scoutPlaneMode ? 1.35 : 2.0));
+    turnVelocity += (targetTurnVelocity - turnVelocity) * Math.min(1, dt * (scoutPlaneMode ? 1.75 : 2.0));
     heading += turnVelocity * dt;
     forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
 
