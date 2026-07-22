@@ -3015,7 +3015,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   const visibleContacts = contacts.filter((contact) => !contact.blocked);
   visibleContacts.forEach((contact) => {
     const contactPoint = worldToRadarPoint(contact.position, playerPosition, centerX, centerY, scale, heading);
-    drawRadarContactMarker(ctx, contactPoint.x, contactPoint.y, contact.team, false, contact.heading, heading, contact.label);
+    drawRadarContactMarker(ctx, contactPoint.x, contactPoint.y, contact.team, false, contact.heading, heading, contact.label, contact.vehicleType);
   });
 
   const nearestVisible = visibleContacts.reduce((nearest, contact) => (
@@ -3554,13 +3554,18 @@ function mapShipColor(ship) {
   return "#ff6b4a";
 }
 
-function drawRadarContactMarker(ctx, x, y, team, isPlayer = false, contactHeading = null, radarHeading = 0, label = "") {
+function drawRadarContactMarker(ctx, x, y, team, isPlayer = false, contactHeading = null, radarHeading = 0, label = "", vehicleType = "torpedo-boat") {
   const color = team === "light" ? "#7fd7ff" : "#ff6b4a";
   const ring = team === "light" ? "rgba(127, 215, 255, 0.42)" : "rgba(255, 107, 74, 0.48)";
   const radius = isPlayer ? 4.2 : 4;
 
   if (!isPlayer && Number.isFinite(contactHeading)) {
-    drawRadarShipMarker(ctx, x, y, color, contactHeading - radarHeading);
+    const relativeHeading = contactHeading - radarHeading;
+    if (vehicleType === "scout-plane") {
+      drawRadarPlaneMarker(ctx, x, y, color, relativeHeading);
+    } else {
+      drawRadarShipMarker(ctx, x, y, color, relativeHeading);
+    }
   } else {
     drawInstrumentMarker(ctx, x, y, color, radius);
   }
@@ -3610,20 +3615,64 @@ function drawRadarCompassRing(ctx, centerX, centerY, radius, radarHeading) {
 }
 
 function drawRadarShipMarker(ctx, x, y, color, relativeHeading) {
-  const noseX = Math.sin(relativeHeading) * 7;
-  const noseY = -Math.cos(relativeHeading) * 7;
-  const sideX = Math.cos(relativeHeading) * 3.4;
-  const sideY = Math.sin(relativeHeading) * 3.4;
-  const sternX = -Math.sin(relativeHeading) * 4.4;
-  const sternY = Math.cos(relativeHeading) * 4.4;
-
+  const toPoint = createRadarMarkerPointMapper(x, y, relativeHeading);
   ctx.fillStyle = color;
+  ctx.strokeStyle = "rgba(2, 16, 21, 0.86)";
+  ctx.lineWidth = 1.3;
   ctx.beginPath();
-  ctx.moveTo(x + noseX, y + noseY);
-  ctx.lineTo(x + sternX + sideX, y + sternY + sideY);
-  ctx.lineTo(x + sternX - sideX, y + sternY - sideY);
+  moveToRadarMarkerPoint(ctx, toPoint, 0, 7.2);
+  lineToRadarMarkerPoint(ctx, toPoint, 3.1, 2.2);
+  lineToRadarMarkerPoint(ctx, toPoint, 2.9, -5.0);
+  lineToRadarMarkerPoint(ctx, toPoint, 0, -4.2);
+  lineToRadarMarkerPoint(ctx, toPoint, -2.9, -5.0);
+  lineToRadarMarkerPoint(ctx, toPoint, -3.1, 2.2);
   ctx.closePath();
+  ctx.stroke();
   ctx.fill();
+}
+
+function drawRadarPlaneMarker(ctx, x, y, color, relativeHeading) {
+  const toPoint = createRadarMarkerPointMapper(x, y, relativeHeading);
+  ctx.fillStyle = color;
+  ctx.strokeStyle = "rgba(2, 16, 21, 0.86)";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  moveToRadarMarkerPoint(ctx, toPoint, 0, 7.5);
+  lineToRadarMarkerPoint(ctx, toPoint, 1.3, 1.2);
+  lineToRadarMarkerPoint(ctx, toPoint, 6.3, -0.7);
+  lineToRadarMarkerPoint(ctx, toPoint, 1.1, -1.9);
+  lineToRadarMarkerPoint(ctx, toPoint, 0.9, -5.0);
+  lineToRadarMarkerPoint(ctx, toPoint, 3.0, -6.1);
+  lineToRadarMarkerPoint(ctx, toPoint, 0, -5.7);
+  lineToRadarMarkerPoint(ctx, toPoint, -3.0, -6.1);
+  lineToRadarMarkerPoint(ctx, toPoint, -0.9, -5.0);
+  lineToRadarMarkerPoint(ctx, toPoint, -1.1, -1.9);
+  lineToRadarMarkerPoint(ctx, toPoint, -6.3, -0.7);
+  lineToRadarMarkerPoint(ctx, toPoint, -1.3, 1.2);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fill();
+}
+
+function createRadarMarkerPointMapper(x, y, relativeHeading) {
+  const forwardX = Math.sin(relativeHeading);
+  const forwardY = -Math.cos(relativeHeading);
+  const rightX = Math.cos(relativeHeading);
+  const rightY = Math.sin(relativeHeading);
+  return (side, forward) => ({
+    x: x + rightX * side + forwardX * forward,
+    y: y + rightY * side + forwardY * forward
+  });
+}
+
+function moveToRadarMarkerPoint(ctx, toPoint, side, forward) {
+  const point = toPoint(side, forward);
+  ctx.moveTo(point.x, point.y);
+}
+
+function lineToRadarMarkerPoint(ctx, toPoint, side, forward) {
+  const point = toPoint(side, forward);
+  ctx.lineTo(point.x, point.y);
 }
 
 function clampInstrumentPoint(point, width, height, padding) {
@@ -4222,6 +4271,7 @@ function getSnapshotRadarContacts() {
       teamId: ship.teamId,
       controlledBy: ship.controlledBy ?? "bot",
       label: createRadarContactLabel(ship),
+      vehicleType: getShipVehicleType(ship),
       position: new Vector3(ship.x, 0.28, ship.z),
       heading: Number.isFinite(ship.heading) ? ship.heading : 0,
       serverVisible: false
