@@ -123,8 +123,9 @@ const scoutPlaneMaxClimbRate = 8.5;
 const scoutPlaneMaxPitch = 0.22;
 const bombGravity = 14.0;
 const bombDropForwardOffset = 2.6;
-const bombsPerDrop = 8;
-const bombReleaseIntervalSeconds = 0.28;
+const bombsPerDrop = 16;
+const bombReleaseIntervalSeconds = 0.14;
+const bombRowOffset = 0.1;
 const bombBayWideFov = 0.92;
 const bombBayZoomFov = 0.62;
 const bombBayImpactFocusExtraSeconds = 1.5;
@@ -996,13 +997,16 @@ function getBombBayFov() {
 
 function getBombDropPreview() {
   const forward = getForwardVector(heading);
+  const right = getRightVector(heading);
   const dropAltitude = clamp(boat.root.position.y, 1, 120);
   const fallSeconds = Math.sqrt((2 * dropAltitude) / bombGravity);
   const horizontalSpeed = clamp(speed * 0.92, 4, 22);
   const lead = bombDropForwardOffset + horizontalSpeed * fallSeconds;
   const impactSpacing = horizontalSpeed * bombReleaseIntervalSeconds;
   const patternLength = impactSpacing * (bombsPerDrop - 1);
-  const firstImpact = boat.root.position.add(forward.scale(lead));
+  const firstImpact = boat.root.position
+    .add(forward.scale(lead))
+    .add(right.scale(getBombRowOffsetForIndex(0)));
   const centerImpact = boat.root.position.add(forward.scale(lead + patternLength * 0.5));
   firstImpact.y = 0.2;
   centerImpact.y = 0.2;
@@ -1014,6 +1018,10 @@ function getBombDropPreview() {
     patternLength,
     fallSeconds
   };
+}
+
+function getBombRowOffsetForIndex(index) {
+  return (index % 2 === 0 ? -0.5 : 0.5) * bombRowOffset;
 }
 
 function isHudControlEvent(event) {
@@ -4104,7 +4112,10 @@ function updateServerEnemyMotion(motion, dt, time) {
   const correctionDistance = distance2D(motion.root.position, projectedServerPosition);
 
   motion.speed += (motion.serverSpeed - motion.speed) * Math.min(1, dt * 3.5);
+  const previousHeading = motion.heading;
   motion.heading = blendAngle(motion.heading, motion.serverHeading, Math.min(1, dt * 3.2));
+  const observedTurnVelocity = getSignedAngularDistance(motion.heading, previousHeading) / Math.max(0.001, dt);
+  motion.turnVelocity += (observedTurnVelocity - motion.turnVelocity) * Math.min(1, dt * 3.6);
 
   const forward = new Vector3(Math.sin(motion.heading), 0, Math.cos(motion.heading));
   motion.root.position.addInPlace(forward.scale(motion.speed * dt));
@@ -4115,10 +4126,11 @@ function updateServerEnemyMotion(motion, dt, time) {
   motion.root.position.z += (projectedServerPosition.z - motion.root.position.z) * Math.min(1, dt * correctionStrength);
   if (isScoutPlaneMotion(motion)) {
     motion.root.position.y += Math.sin(time * 0.85 + motion.numericIndex) * 0.018;
+    const bank = clamp(-motion.turnVelocity * 2.35, -0.72, 0.72);
     motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
       Math.sin(time * 0.7 + motion.numericIndex) * 0.025,
       motion.heading,
-      -motion.turnVelocity * 0.55 + Math.sin(time * 0.9 + motion.numericIndex) * 0.045
+      bank + Math.sin(time * 0.9 + motion.numericIndex) * 0.025
     );
     updateScoutPlaneVisual(motion, Math.max(6, Math.abs(motion.speed)), time);
   } else {
@@ -4399,7 +4411,7 @@ function createBombSightMarker(scene, materials, parent) {
   const impactTicks = [];
   for (let index = 0; index < bombsPerDrop; index += 1) {
     const tick = MeshBuilder.CreateBox(`bomb_sight_marker_tick_${index}`, {
-      width: 0.95,
+      width: 0.62,
       height: 0.05,
       depth: 0.09
     }, scene);
@@ -5097,8 +5109,8 @@ function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
   root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2, Number.isFinite(snapshot.heading) ? snapshot.heading : 0, 0);
 
   const body = MeshBuilder.CreateCylinder(`${root.name}_body`, {
-    diameter: 0.3,
-    height: 1.15,
+    diameter: 0.22,
+    height: 0.88,
     tessellation: 12
   }, system.scene);
   body.parent = root;
@@ -5107,18 +5119,18 @@ function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
 
   const nose = MeshBuilder.CreateCylinder(`${root.name}_nose`, {
     diameterTop: 0,
-    diameterBottom: 0.3,
-    height: 0.3,
+    diameterBottom: 0.22,
+    height: 0.22,
     tessellation: 12
   }, system.scene);
   nose.parent = root;
   nose.rotation.x = Math.PI / 2;
-  nose.position.z = 0.72;
+  nose.position.z = 0.55;
   nose.material = system.materials.funnel;
 
-  const fin = MeshBuilder.CreateBox(`${root.name}_fin`, { width: 0.5, height: 0.07, depth: 0.19 }, system.scene);
+  const fin = MeshBuilder.CreateBox(`${root.name}_fin`, { width: 0.34, height: 0.05, depth: 0.14 }, system.scene);
   fin.parent = root;
-  fin.position.z = -0.62;
+  fin.position.z = -0.48;
   fin.material = system.materials.funnel;
 
   const visual = {
@@ -5210,7 +5222,7 @@ function updateBombSightPattern(marker, patternLength, impactSpacing) {
     mesh.position.z = part === "upper" ? upperCenter : lowerCenter;
   });
   (parts.impactTicks ?? []).forEach(({ mesh, index }) => {
-    mesh.position.x = -1.35;
+    mesh.position.x = -1.35 + getBombRowOffsetForIndex(index);
     mesh.position.z = index * impactSpacing;
   });
 }
