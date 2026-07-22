@@ -116,13 +116,15 @@ const mouseWheelEngineStep = 100;
 const scoutPlaneSetupId = "scout-plane";
 const scoutPlaneCruiseAltitude = 20;
 const scoutPlaneMinAltitude = 3;
-const scoutPlaneMaxAltitude = 100;
+const scoutPlaneMaxAltitude = 150;
 const scoutPlaneCruiseSpeed = 14.5;
 const scoutPlaneMinSpeed = 7.5;
 const scoutPlaneMaxSpeed = 19.5;
+const scoutPlaneMaxDiveSpeed = 29.0;
 const scoutPlaneSpeedStep = 1.5;
-const scoutPlaneMaxClimbRate = 17.0;
-const scoutPlaneMaxPitch = 0.42;
+const scoutPlaneMaxClimbRate = 20.0;
+const scoutPlaneMaxDiveRate = 34.0;
+const scoutPlaneMaxPitch = 0.55;
 const scoutPlaneFlakSmokeSeconds = 1.65;
 const scoutPlaneFlakRespawnSeconds = 3.35;
 const scoutPlaneFlakSmokeIntervalSeconds = 0.12;
@@ -733,10 +735,13 @@ scene.onBeforeRenderObservable.add(() => {
     if (scoutPlaneMode) {
       engineOrder = 7;
     }
-    const maxForwardSpeed = scoutPlaneMode ? scoutPlaneMaxSpeed : 12.4;
+    const diveRatio = scoutPlaneMode ? clamp(-heldElevatorDirection, 0, 1) : 0;
+    const maxForwardSpeed = scoutPlaneMode
+      ? scoutPlaneMaxSpeed + (scoutPlaneMaxDiveSpeed - scoutPlaneMaxSpeed) * diveRatio
+      : 12.4;
     const engineTargetSpeed = engineOrders[engineOrder].speed;
     const targetSpeed = scoutPlaneMode
-      ? scoutPlaneTargetSpeed
+      ? scoutPlaneTargetSpeed + (scoutPlaneMaxDiveSpeed - scoutPlaneTargetSpeed) * diveRatio
       : engineTargetSpeed > 0
       ? Math.min(engineTargetSpeed, maxForwardSpeed)
       : engineTargetSpeed;
@@ -776,7 +781,9 @@ scene.onBeforeRenderObservable.add(() => {
     if (scoutPlaneMode) {
       const targetPitch = -heldElevatorDirection * scoutPlaneMaxPitch;
       scoutPlanePitch += (targetPitch - scoutPlanePitch) * Math.min(1, dt * 2.4);
-      const targetVerticalSpeed = heldElevatorDirection * scoutPlaneMaxClimbRate;
+      const targetVerticalSpeed = heldElevatorDirection < 0
+        ? heldElevatorDirection * scoutPlaneMaxDiveRate
+        : heldElevatorDirection * scoutPlaneMaxClimbRate;
       scoutPlaneVerticalSpeed += (targetVerticalSpeed - scoutPlaneVerticalSpeed) * Math.min(1, dt * 1.35);
       scoutPlaneAltitude = clamp(
         scoutPlaneAltitude + scoutPlaneVerticalSpeed * dt,
@@ -1051,7 +1058,7 @@ function getBombDropPreview() {
   const forward = getForwardVector(heading);
   const dropAltitude = clamp(boat.root.position.y, scoutPlaneMinAltitude, scoutPlaneMaxAltitude);
   const fallSeconds = Math.sqrt((2 * dropAltitude) / bombGravity);
-  const horizontalSpeed = clamp(speed * 0.92, 4, 22);
+  const horizontalSpeed = clamp(speed * 0.92, 4, 28);
   const lead = bombDropForwardOffset + horizontalSpeed * fallSeconds;
   const impactSpacing = horizontalSpeed * bombReleaseIntervalSeconds;
   const patternLength = impactSpacing * (bombsPerDrop - 1);
