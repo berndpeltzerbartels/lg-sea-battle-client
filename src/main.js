@@ -116,7 +116,7 @@ const mouseWheelEngineStep = 100;
 const scoutPlaneSetupId = "scout-plane";
 const scoutPlaneCruiseAltitude = 20;
 const scoutPlaneMinAltitude = 3;
-const scoutPlaneMaxAltitude = 150;
+const scoutPlaneMaxAltitude = 200;
 const scoutPlaneCruiseSpeed = 14.5;
 const scoutPlaneMinSpeed = 7.5;
 const scoutPlaneMaxSpeed = 19.5;
@@ -133,8 +133,11 @@ const scoutPlaneFlakSmokeIntervalSeconds = 0.12;
 const bombGravity = 14.0;
 const bombDropForwardOffset = 0.6;
 const bombDropVerticalOffset = 0.65;
-const bombsPerDrop = 8;
+const bombsPerDrop = 10;
 const bombReleaseIntervalSeconds = 0.16;
+const bombPatternLateralSpacing = 0.85;
+const bombPatternHeadingJitter = 0.038;
+const bombPatternSpeedJitter = 1.4;
 const bombBayWideFov = 0.92;
 const bombBayZoomFov = 0.62;
 const bombBayImpactFocusExtraSeconds = 1.5;
@@ -151,7 +154,7 @@ const flakYawFastSpeed = 0.34;
 const flakPitchFineSpeed = 0.085;
 const flakPitchFastSpeed = 0.19;
 const flakFireCooldownSeconds = 0.14;
-const flakProjectileSpeed = 285;
+const flakProjectileSpeed = 228;
 const flakProjectileGravity = 9;
 const flakProjectileLifetime = 8.0;
 const flakDemoFireIntervalSeconds = 0.25;
@@ -1082,8 +1085,24 @@ function getBombDropPreview() {
     centerImpact,
     impactSpacing,
     patternLength,
-    fallSeconds
+    fallSeconds,
+    horizontalSpeed
   };
+}
+
+function getBombPatternOffset(index) {
+  const side = index % 2 === 0 ? -1 : 1;
+  const lane = Math.floor(index / 2) % 3;
+  return side * (0.45 + lane * 0.28) * bombPatternLateralSpacing;
+}
+
+function getBombPatternHeadingJitter(index) {
+  const centered = stableUnitNoise(index * 97 + 31) - 0.5;
+  return centered * bombPatternHeadingJitter;
+}
+
+function getBombPatternSpeedJitter(index) {
+  return (stableUnitNoise(index * 83 + 47) - 0.5) * bombPatternSpeedJitter;
 }
 
 function isHudControlEvent(event) {
@@ -5913,13 +5932,14 @@ function updateBombSightMarker(system, forward) {
   const preview = getBombDropPreview();
   system.sightMarker.position.set(preview.firstImpact.x, 0.2, preview.firstImpact.z);
   system.sightMarker.rotation.y = heading;
-  updateBombSightPattern(system.sightMarker, preview.patternLength, preview.impactSpacing);
+  updateBombSightPattern(system.sightMarker, preview);
   system.sightMarker.setEnabled(true);
   document.body.dataset.bombSight = `${preview.firstImpact.x.toFixed(1)},${preview.firstImpact.z.toFixed(1)}`;
 }
 
-function updateBombSightPattern(marker, patternLength, impactSpacing) {
+function updateBombSightPattern(marker, preview) {
   const parts = marker.metadata ?? {};
+  const { patternLength, impactSpacing, fallSeconds, horizontalSpeed } = preview;
   const visualLength = Math.max(4.2, patternLength * 0.72);
   const gap = Math.max(2.1, Math.min(5.2, patternLength * 0.36));
   const lowerCenter = -gap * 0.5 - visualLength * 0.5;
@@ -5930,8 +5950,10 @@ function updateBombSightPattern(marker, patternLength, impactSpacing) {
     mesh.position.z = part === "upper" ? upperCenter : lowerCenter;
   });
   (parts.impactTicks ?? []).forEach(({ mesh, index }) => {
-    mesh.position.x = -1.35;
-    mesh.position.z = index * impactSpacing;
+    const releaseDelay = index * bombReleaseIntervalSeconds;
+    const headingDrift = Math.sin(getBombPatternHeadingJitter(index)) * horizontalSpeed * Math.max(0, fallSeconds - releaseDelay * 0.5);
+    mesh.position.x = -1.35 + getBombPatternOffset(index) + headingDrift;
+    mesh.position.z = index * impactSpacing + getBombPatternSpeedJitter(index) * Math.max(0.1, fallSeconds * 0.55);
   });
 }
 
