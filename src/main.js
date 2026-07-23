@@ -133,11 +133,11 @@ const scoutPlaneFlakSmokeIntervalSeconds = 0.12;
 const bombGravity = 14.0;
 const bombDropForwardOffset = 0.6;
 const bombDropVerticalOffset = 0.65;
-const bombsPerDrop = 10;
+const bombsPerDrop = 12;
 const bombReleaseIntervalSeconds = 0.16;
-const bombPatternLateralSpacing = 0.85;
-const bombPatternHeadingJitter = 0.038;
-const bombPatternSpeedJitter = 1.4;
+const bombPatternLateralSpacing = 1.35;
+const bombPatternHeadingJitter = 0.018;
+const bombPatternSpeedJitter = 2.1;
 const bombBayWideFov = 0.92;
 const bombBayZoomFov = 0.62;
 const bombBayImpactFocusExtraSeconds = 1.5;
@@ -2400,6 +2400,7 @@ async function sendPlayerState() {
         z: boat.root.position.z,
         heading,
         speed,
+        verticalSpeed: scoutPlaneMode ? scoutPlaneVerticalSpeed : 0,
         turnVelocity,
         engineOrder,
         rudderDegrees: Math.round(rudderDegrees),
@@ -5946,7 +5947,9 @@ function updateBombSightPattern(marker, preview) {
   const maxZ = Math.max(...zs);
   const centerX = (minX + maxX) * 0.5;
   const centerZ = (minZ + maxZ) * 0.5;
-  const impactWidth = Math.max(2.8, maxX - minX + 1.7);
+  const fixedSpreadXs = Array.from({ length: bombsPerDrop }, (_, index) => getBombPatternOffset(index));
+  const fixedImpactWidth = Math.max(...fixedSpreadXs) - Math.min(...fixedSpreadXs);
+  const impactWidth = Math.max(5.2, fixedImpactWidth + 3.2);
   const impactLength = Math.max(4.4, maxZ - minZ + 2.2);
   const armLength = Math.max(3.2, Math.min(7.4, Math.max(patternLength * 0.32, 3.2)));
   const gapX = impactWidth * 0.5;
