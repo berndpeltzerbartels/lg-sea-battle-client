@@ -4777,34 +4777,24 @@ function createBombSightMarker(scene, materials, parent) {
   root.parent = parent;
   root.setEnabled(false);
 
-  const lineParts = [];
-  ["upper", "lower"].forEach((part) => {
-    const line = MeshBuilder.CreateBox(`bomb_sight_marker_center_${part}`, {
-      width: 0.13,
+  const crossParts = [
+    { part: "upper", width: 0.11, depth: 1 },
+    { part: "lower", width: 0.11, depth: 1 },
+    { part: "left", width: 1, depth: 0.11 },
+    { part: "right", width: 1, depth: 0.11 }
+  ].map((definition) => {
+    const line = MeshBuilder.CreateBox(`bomb_sight_marker_${definition.part}`, {
+      width: definition.width,
       height: 0.045,
-      depth: 1
+      depth: definition.depth
     }, scene);
     line.parent = root;
     line.material = materials.beaconGlow;
-    lineParts.push({ mesh: line, part });
+    return { mesh: line, part: definition.part };
   });
 
-  const impactTicks = [];
-  for (let index = 0; index < bombsPerDrop; index += 1) {
-    const tick = MeshBuilder.CreateBox(`bomb_sight_marker_tick_${index}`, {
-      width: 0.95,
-      height: 0.05,
-      depth: 0.09
-    }, scene);
-    tick.parent = root;
-    tick.position.x = -1.35;
-    tick.material = materials.beaconGlow;
-    impactTicks.push({ mesh: tick, index });
-  }
-
   root.metadata = {
-    lineParts,
-    impactTicks
+    crossParts
   };
 
   return root;
@@ -5940,20 +5930,40 @@ function updateBombSightMarker(system, forward) {
 function updateBombSightPattern(marker, preview) {
   const parts = marker.metadata ?? {};
   const { patternLength, impactSpacing, fallSeconds, horizontalSpeed } = preview;
-  const visualLength = Math.max(4.2, patternLength * 0.72);
-  const gap = Math.max(2.1, Math.min(5.2, patternLength * 0.36));
-  const lowerCenter = -gap * 0.5 - visualLength * 0.5;
-  const upperCenter = patternLength + gap * 0.5 + visualLength * 0.5;
-  (parts.lineParts ?? []).forEach(({ mesh, part }) => {
-    mesh.scaling.z = visualLength;
-    mesh.position.x = 0;
-    mesh.position.z = part === "upper" ? upperCenter : lowerCenter;
-  });
-  (parts.impactTicks ?? []).forEach(({ mesh, index }) => {
+  const impactPoints = Array.from({ length: bombsPerDrop }, (_, index) => {
     const releaseDelay = index * bombReleaseIntervalSeconds;
     const headingDrift = Math.sin(getBombPatternHeadingJitter(index)) * horizontalSpeed * Math.max(0, fallSeconds - releaseDelay * 0.5);
-    mesh.position.x = -1.35 + getBombPatternOffset(index) + headingDrift;
-    mesh.position.z = index * impactSpacing + getBombPatternSpeedJitter(index) * Math.max(0.1, fallSeconds * 0.55);
+    return {
+      x: getBombPatternOffset(index) + headingDrift,
+      z: index * impactSpacing + getBombPatternSpeedJitter(index) * Math.max(0.1, fallSeconds * 0.55)
+    };
+  });
+  const xs = impactPoints.map((point) => point.x);
+  const zs = impactPoints.map((point) => point.z);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minZ = Math.min(...zs);
+  const maxZ = Math.max(...zs);
+  const centerX = (minX + maxX) * 0.5;
+  const centerZ = (minZ + maxZ) * 0.5;
+  const impactWidth = Math.max(2.8, maxX - minX + 1.7);
+  const impactLength = Math.max(4.4, maxZ - minZ + 2.2);
+  const armLength = Math.max(3.2, Math.min(7.4, Math.max(patternLength * 0.32, 3.2)));
+  const gapX = impactWidth * 0.5;
+  const gapZ = impactLength * 0.5;
+
+  (parts.crossParts ?? []).forEach(({ mesh, part }) => {
+    if (part === "upper" || part === "lower") {
+      mesh.scaling.x = 1;
+      mesh.scaling.z = armLength;
+      mesh.position.x = centerX;
+      mesh.position.z = centerZ + (part === "upper" ? gapZ + armLength * 0.5 : -gapZ - armLength * 0.5);
+      return;
+    }
+    mesh.scaling.x = armLength;
+    mesh.scaling.z = 1;
+    mesh.position.x = centerX + (part === "right" ? gapX + armLength * 0.5 : -gapX - armLength * 0.5);
+    mesh.position.z = centerZ;
   });
 }
 
