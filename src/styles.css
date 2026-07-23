@@ -430,6 +430,11 @@ body.debug-marker-map {
   aspect-ratio: 1;
 }
 
+body[data-flak-view="active"] .nav-instrument-map,
+body[data-bomb-bay-view="active"] .nav-instrument-map {
+  display: none;
+}
+
 .map-control {
   display: grid;
   grid-template-columns: 18px var(--map-canvas-width) var(--map-meta-width);

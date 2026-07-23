@@ -155,7 +155,7 @@ const flakYawFastSpeed = 0.34;
 const flakPitchFineSpeed = 0.085;
 const flakPitchFastSpeed = 0.19;
 const flakFireCooldownSeconds = 0.14;
-const flakProjectileSpeed = 228;
+const flakProjectileSpeed = 182.4;
 const flakProjectileGravity = 9;
 const flakProjectileLifetime = 8.0;
 const flakDemoFireIntervalSeconds = 0.25;
@@ -1068,21 +1068,16 @@ function getBombBayFov() {
 }
 
 function getBombDropPreview() {
-  const dropAltitude = Math.max(0, clamp(boat.root.position.y, scoutPlaneMinAltitude, scoutPlaneMaxAltitude) - bombDropVerticalOffset);
-  const initialDownSpeed = -scoutPlaneVerticalSpeed;
-  const fallSeconds = Math.max(0, (-initialDownSpeed + Math.sqrt(initialDownSpeed * initialDownSpeed + 2 * bombGravity * dropAltitude)) / bombGravity);
   const horizontalSpeed = clamp(speed * 0.92, 4, 28);
-  const impactPoints = getBombImpactPreviewPoints(fallSeconds, horizontalSpeed);
-  const xs = impactPoints.map((point) => point.x);
-  const zs = impactPoints.map((point) => point.z);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minZ = Math.min(...zs);
-  const maxZ = Math.max(...zs);
+  const bombPreviewPoints = getBombImpactPreviewPoints(horizontalSpeed);
+  const impactPoints = bombPreviewPoints.map((point) => ({ x: point.x, z: point.z }));
+  const centerlinePoints = bombPreviewPoints.map((point) => ({ x: point.centerX, z: point.centerZ }));
   const impactSpacing = horizontalSpeed * bombReleaseIntervalSeconds;
-  const patternLength = maxZ - minZ;
+  const sightHeading = getBombSightHeading(centerlinePoints);
+  const bounds = getBombSightBounds(impactPoints, sightHeading);
+  const patternLength = bounds.length;
   const firstImpact = new Vector3(impactPoints[0].x, 0.2, impactPoints[0].z);
-  const centerImpact = new Vector3((minX + maxX) * 0.5, 0.2, (minZ + maxZ) * 0.5);
+  const centerImpact = new Vector3(bounds.center.x, 0.2, bounds.center.z);
   firstImpact.y = 0.2;
   centerImpact.y = 0.2;
 
@@ -1091,13 +1086,66 @@ function getBombDropPreview() {
     centerImpact,
     impactSpacing,
     patternLength,
-    fallSeconds,
+    fallSeconds: bombPreviewPoints[bombPreviewPoints.length - 1]?.impactAtSeconds ?? 0,
     horizontalSpeed,
-    impactPoints
+    impactPoints,
+    centerlinePoints,
+    bounds,
+    sightHeading
   };
 }
 
-function getBombImpactPreviewPoints(fallSeconds, horizontalSpeed) {
+function getBombSightHeading(impactPoints) {
+  const first = impactPoints[0];
+  const last = impactPoints[impactPoints.length - 1] ?? first;
+  const dx = last.x - first.x;
+  const dz = last.z - first.z;
+  if (Math.hypot(dx, dz) <= 0.001) return heading;
+  return Math.atan2(dx, dz);
+}
+
+function getBombSightBounds(impactPoints, sightHeading) {
+  const origin = impactPoints[0] ?? { x: 0, z: 0 };
+  const localPoints = impactPoints.map((point) => worldPointToBombSightLocal(point, origin, sightHeading));
+  const xs = localPoints.map((point) => point.x);
+  const zs = localPoints.map((point) => point.z);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const firstLocal = localPoints[0] ?? { x: 0, z: 0 };
+  const lastLocal = localPoints[localPoints.length - 1] ?? firstLocal;
+  const length = Math.hypot(lastLocal.x - firstLocal.x, lastLocal.z - firstLocal.z);
+  const centerLocal = {
+    x: (minX + maxX) * 0.5,
+    z: (firstLocal.z + lastLocal.z) * 0.5
+  };
+  return {
+    center: bombSightLocalToWorldPoint(centerLocal, origin, sightHeading),
+    width: maxX - minX,
+    length
+  };
+}
+
+function worldPointToBombSightLocal(point, origin, sightHeading) {
+  const dx = point.x - origin.x;
+  const dz = point.z - origin.z;
+  const sin = Math.sin(sightHeading);
+  const cos = Math.cos(sightHeading);
+  return {
+    x: dx * cos - dz * sin,
+    z: dx * sin + dz * cos
+  };
+}
+
+function bombSightLocalToWorldPoint(point, origin, sightHeading) {
+  const sin = Math.sin(sightHeading);
+  const cos = Math.cos(sightHeading);
+  return {
+    x: origin.x + point.x * cos + point.z * sin,
+    z: origin.z - point.x * sin + point.z * cos
+  };
+}
+
+function getBombImpactPreviewPoints(horizontalSpeed) {
   return Array.from({ length: bombsPerDrop }, (_, index) => {
     const releaseDelay = index * bombReleaseIntervalSeconds;
     const planeState = predictScoutPlaneBombReleaseState(releaseDelay);
@@ -1106,13 +1154,27 @@ function getBombImpactPreviewPoints(fallSeconds, horizontalSpeed) {
     const releaseForward = getForwardVector(planeState.heading);
     const releaseRight = getRightVector(planeState.heading);
     const bombForward = getForwardVector(bombHeading);
-    const remainingFallSeconds = Math.max(0, fallSeconds - releaseDelay * 0.5);
-    const impact = planeState.position
+    const dropAltitude = Math.max(0, planeState.y - bombDropVerticalOffset);
+    const fallSeconds = getBombFallSeconds(dropAltitude, scoutPlaneVerticalSpeed);
+    const releasePosition = planeState.position
       .add(releaseForward.scale(bombDropForwardOffset))
-      .add(releaseRight.scale(getBombPatternOffset(index)))
-      .add(bombForward.scale(bombSpeed * remainingFallSeconds));
-    return { x: impact.x, z: impact.z };
+      .add(releaseRight.scale(getBombPatternOffset(index)));
+    const centerlineRelease = planeState.position.add(releaseForward.scale(bombDropForwardOffset));
+    const impact = releasePosition.add(bombForward.scale(bombSpeed * fallSeconds));
+    const centerlineImpact = centerlineRelease.add(releaseForward.scale(horizontalSpeed * fallSeconds));
+    return {
+      x: impact.x,
+      z: impact.z,
+      centerX: centerlineImpact.x,
+      centerZ: centerlineImpact.z,
+      impactAtSeconds: releaseDelay + fallSeconds
+    };
   });
+}
+
+function getBombFallSeconds(dropAltitude, verticalSpeed) {
+  const initialDownSpeed = -verticalSpeed;
+  return Math.max(0, (-initialDownSpeed + Math.sqrt(initialDownSpeed * initialDownSpeed + 2 * bombGravity * dropAltitude)) / bombGravity);
 }
 
 function predictScoutPlaneBombReleaseState(delaySeconds) {
@@ -1124,7 +1186,11 @@ function predictScoutPlaneBombReleaseState(delaySeconds) {
     predictedHeading = normalizeAngle(predictedHeading + turnVelocity * dt);
     predictedPosition.addInPlace(getForwardVector(predictedHeading).scale(speed * dt));
   }
-  return { position: predictedPosition, heading: predictedHeading };
+  return {
+    position: predictedPosition,
+    heading: predictedHeading,
+    y: clamp(boat.root.position.y + scoutPlaneVerticalSpeed * delaySeconds, scoutPlaneMinAltitude, scoutPlaneMaxAltitude)
+  };
 }
 
 function getBombPatternOffset(index) {
@@ -2326,7 +2392,7 @@ function getPlayerInitialsFromId(controller) {
 
 function getWeaponSourceLabel(shipId) {
   const ship = serverShipsById.get(shipId) ?? enemyMotions.find((motion) => motion.id === shipId);
-  if (ship?.controlledBy) {
+  if (isHumanController(ship?.controlledBy)) {
     return getPlayerInitialsFromId(ship.controlledBy);
   }
   if (ship?.label) return ship.label;
@@ -3011,7 +3077,9 @@ function updateRudderGauge(indicator, valueElement, degrees) {
 }
 
 function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading, radarHeading = heading) {
-  drawMapInstrument(mapCanvas, playerPosition, landZones, mapZoom, heading);
+  if (!flakViewActive && !bombBayViewActive) {
+    drawMapInstrument(mapCanvas, playerPosition, landZones, mapZoom, heading);
+  }
   const radarRange = bombBayViewActive
     ? clientRadarRange * bombBayRadarRangeFactor
     : (scoutPlaneMode || flakViewActive ? clientRadarRange * scoutPlaneRadarRangeFactor : clientRadarRange);
@@ -5959,37 +6027,27 @@ function updateBombSightMarker(system, forward) {
   }
 
   const preview = getBombDropPreview();
-  system.sightMarker.position.set(preview.firstImpact.x, 0.2, preview.firstImpact.z);
-  system.sightMarker.rotation.y = heading;
+  system.sightMarker.position.set(preview.centerImpact.x, 0.2, preview.centerImpact.z);
+  system.sightMarker.rotation.y = preview.sightHeading;
   updateBombSightPattern(system.sightMarker, preview);
   system.sightMarker.setEnabled(true);
-  document.body.dataset.bombSight = `${preview.firstImpact.x.toFixed(1)},${preview.firstImpact.z.toFixed(1)}`;
+  document.body.dataset.bombSight = `${preview.centerImpact.x.toFixed(1)},${preview.centerImpact.z.toFixed(1)}`;
 }
 
 function updateBombSightPattern(marker, preview) {
   const parts = marker.metadata ?? {};
-  const sinHeading = Math.sin(heading);
-  const cosHeading = Math.cos(heading);
   const impactPoints = preview.impactPoints.map((point) => {
-    const dx = point.x - marker.position.x;
-    const dz = point.z - marker.position.z;
-    return {
-      x: dx * cosHeading - dz * sinHeading,
-      z: dx * sinHeading + dz * cosHeading
-    };
+    return worldPointToBombSightLocal(point, { x: marker.position.x, z: marker.position.z }, marker.rotation.y);
   });
   const xs = impactPoints.map((point) => point.x);
-  const zs = impactPoints.map((point) => point.z);
   const minX = Math.min(...xs);
   const maxX = Math.max(...xs);
-  const minZ = Math.min(...zs);
-  const maxZ = Math.max(...zs);
-  const centerX = (minX + maxX) * 0.5;
-  const centerZ = (minZ + maxZ) * 0.5;
+  const centerX = 0;
+  const centerZ = 0;
   const fixedSpreadXs = Array.from({ length: bombsPerDrop }, (_, index) => getBombPatternOffset(index));
   const fixedImpactWidth = Math.max(...fixedSpreadXs) - Math.min(...fixedSpreadXs);
-  const impactWidth = Math.max(6.8, fixedImpactWidth + 3.8);
-  const impactLength = Math.max(4.4, maxZ - minZ + 2.2);
+  const impactWidth = Math.max(6.8, preview.bounds.width + 3.8, fixedImpactWidth + 2.4);
+  const impactLength = Math.max(4.4, preview.bounds.length + 4.0);
   const armLength = bombSightArmLength;
   const gapX = impactWidth * 0.5;
   const gapZ = impactLength * 0.5;
