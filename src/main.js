@@ -2714,7 +2714,7 @@ function syncServerFlakImpacts(impacts) {
       Number.isFinite(impact.y) ? impact.y : 0,
       Number.isFinite(impact.z) ? impact.z : 0
     );
-    if (impact.reason === "land-hit") {
+    if (impact.reason === "land-hit" || impact.reason === "ship-hit" || impact.reason === "ship-critical-hit") {
       createFlakLandImpactEffect(flakSystem, position);
     } else {
       createFlakWaterImpactEffect(flakSystem, position);
