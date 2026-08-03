@@ -5278,7 +5278,26 @@ function createFlakWaterImpactEffect(system, position) {
 
 function createFlakLandImpactEffect(system, position) {
   const effectId = system.nextId++;
-  createFlakImpactFlash(system, effectId, position.add(new Vector3(0, 0.26, 0)), 0.34, 16, 0.95);
+  createFlakImpactFlash(system, effectId, position.add(new Vector3(0, 0.34, 0)), 0.46, 24, 1.6);
+
+  const core = MeshBuilder.CreateSphere(`flak_land_impact_core_${effectId}`, {
+    diameter: 0.38,
+    segments: 10
+  }, system.scene);
+  core.parent = system.root;
+  core.material = system.materials.explosionCore;
+  core.position.copyFrom(position.add(new Vector3(0, 0.16, 0)));
+  core.isPickable = false;
+  system.airHitEffects.push({
+    mesh: core,
+    age: 0,
+    lifetime: 0.22,
+    origin: core.position.clone(),
+    velocity: new Vector3(0, 0.16, 0),
+    baseScale: new Vector3(0.52, 0.52, 0.52),
+    grow: new Vector3(1.4, 1.1, 1.4),
+    alpha: 0.96
+  });
 
   const spark = MeshBuilder.CreateSphere(`flak_land_impact_spark_${effectId}`, {
     diameter: 0.48,
@@ -5304,8 +5323,8 @@ function createFlakLandImpactEffect(system, position) {
     segments: 8
   }, system.scene);
   dust.parent = system.root;
-  dust.material = system.materials.volcanicSmoke;
-  dust.position.copyFrom(position.add(new Vector3(0, 0.12, 0)));
+  dust.material = system.materials.volcanicSmokeWarm;
+  dust.position.copyFrom(position.add(new Vector3(0, 0.18, 0)));
   dust.isPickable = false;
   system.airHitEffects.push({
     mesh: dust,
@@ -5316,7 +5335,7 @@ function createFlakLandImpactEffect(system, position) {
     gravity: 0.18,
     baseScale: new Vector3(0.42, 0.3, 0.42),
     grow: new Vector3(1.45, 0.9, 1.45),
-    alpha: 0.52
+    alpha: 0.46
   });
 }
 
@@ -6044,14 +6063,15 @@ function applyServerTorpedoSnapshot(visual, snapshot, snapshotClientTime = time)
 
 function updateServerTorpedoVisuals(system, dt, now) {
   system.serverVisuals.forEach((visual) => {
-    const snapshotAge = Math.max(0, now - (visual.serverSnapshotTime ?? now));
+    const frameDt = Math.min(dt, 0.05);
+    const snapshotAge = Math.min(0.18, Math.max(0, now - (visual.serverSnapshotTime ?? now)));
     const forward = visual.forward;
     const projected = visual.serverPosition.add(forward.scale(visual.speed * snapshotAge));
-    const step = visual.speed * dt;
+    const step = visual.speed * frameDt;
 
     visual.root.position.addInPlace(forward.scale(step));
-    visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 4.5);
-    visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 4.5);
+    visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, frameDt * 4.5);
+    visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, frameDt * 4.5);
     visual.root.position.y = 0.05;
     visual.root.rotationQuaternion = Quaternion.FromEulerAngles(0, visual.heading, 0);
     visual.runDistance += step;
