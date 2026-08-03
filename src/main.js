@@ -311,7 +311,7 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (playerActive && isInputKey(event, "up")) {
-    if (flakViewActive && event.shiftKey) {
+    if (flakViewActive && !event.shiftKey) {
       if (!event.repeat || heldFlakPitchDirection !== 1) {
         heldFlakPitchStartTime = time;
       }
@@ -340,7 +340,7 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
   }
   if (playerActive && isInputKey(event, "down")) {
-    if (flakViewActive && event.shiftKey) {
+    if (flakViewActive && !event.shiftKey) {
       if (!event.repeat || heldFlakPitchDirection !== -1) {
         heldFlakPitchStartTime = time;
       }
@@ -369,7 +369,7 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
   }
   if (playerActive && isInputKey(event, "left")) {
-    if (flakViewActive && event.shiftKey) {
+    if (flakViewActive && !event.shiftKey) {
       if (!event.repeat || heldFlakDirection !== -1) {
         heldFlakStartTime = time;
       }
@@ -387,7 +387,7 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
   }
   if (playerActive && isInputKey(event, "right")) {
-    if (flakViewActive && event.shiftKey) {
+    if (flakViewActive && !event.shiftKey) {
       if (!event.repeat || heldFlakDirection !== 1) {
         heldFlakStartTime = time;
       }
@@ -419,8 +419,8 @@ window.addEventListener("keydown", (event) => {
 window.addEventListener("keyup", (event) => {
   if (isHudControlEvent(event)) return;
   if (event.code === "ShiftLeft" || event.code === "ShiftRight") {
-    heldFlakDirection = 0;
-    heldFlakPitchDirection = 0;
+    heldEngineDirection = 0;
+    heldRudderDirection = 0;
   }
   if (isInputKey(event, "up") && heldEngineDirection > 0) {
     heldEngineDirection = 0;
