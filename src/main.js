@@ -934,8 +934,9 @@ scene.onBeforeRenderObservable.add(() => {
   compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
   if (compassHeading) compassHeading.textContent = `HDG ${formatHeadingDegrees(heading)}`;
   updateRudderGauge(rudderIndicator, rudderValue, rudderDegrees);
-  const radarHeading = flakViewActive ? normalizeAngle(heading + flakYaw) : heading;
-  updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, getRadarContacts(enemyMotions), blockedWaters, heading, radarHeading);
+  updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, getRadarContacts(enemyMotions), blockedWaters, heading, heading, {
+    flakLookHeading: flakViewActive ? normalizeAngle(heading + flakYaw) : null
+  });
   flushPerformanceTelemetry(time);
 });
 
@@ -3104,15 +3105,16 @@ function updateRudderGauge(indicator, valueElement, degrees) {
   }
 }
 
-function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading, radarHeading = heading) {
+function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading, radarHeading = heading, options = {}) {
   if (!flakViewActive && !bombBayViewActive) {
     drawMapInstrument(mapCanvas, playerPosition, landZones, mapZoom, heading);
   }
   const radarRange = bombBayViewActive
     ? clientRadarRange * bombBayRadarRangeFactor
-    : (scoutPlaneMode || flakViewActive ? clientRadarRange * scoutPlaneRadarRangeFactor : clientRadarRange);
+    : clientRadarRange * scoutPlaneRadarRangeFactor;
   drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, radarHeading, radarRange, {
-    ignoreLandShadows: scoutPlaneMode || flakViewActive
+    ignoreLandShadows: scoutPlaneMode,
+    flakLookHeading: options.flakLookHeading
   });
   document.body.dataset.radarHeading = String(Math.round(normalizeAngle(radarHeading) * 180 / Math.PI));
 }
@@ -3337,6 +3339,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   }
 
   drawRadarLandUnion(ctx, landZones, playerPosition, centerX, centerY, scale, heading, width, height);
+  drawRadarFlakLookIndicator(ctx, centerX, centerY, radius, options.flakLookHeading, heading);
 
   const contacts = radarContacts
     .map((contact) => ({
@@ -3369,6 +3372,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   }
 
   drawRadarContactMarker(ctx, centerX, centerY, "light", true);
+  drawRadarOwnHeadingMarker(ctx, centerX, centerY);
   ctx.restore();
 
   ctx.strokeStyle = "rgba(155, 229, 223, 0.62)";
@@ -3944,6 +3948,55 @@ function drawRadarCompassRing(ctx, centerX, centerY, radius, radarHeading) {
     ctx.strokeText(label, x, y);
     ctx.fillText(label, x, y);
   });
+  ctx.restore();
+}
+
+function drawRadarFlakLookIndicator(ctx, centerX, centerY, radius, flakLookHeading, radarHeading) {
+  if (!Number.isFinite(flakLookHeading) || !Number.isFinite(radarHeading)) return;
+  const relative = normalizeAngle(flakLookHeading - radarHeading);
+  const inner = radius * 0.14;
+  const outer = radius * 0.96;
+  const left = relative - 0.055;
+  const right = relative + 0.055;
+  const tipX = centerX + Math.sin(relative) * outer;
+  const tipY = centerY - Math.cos(relative) * outer;
+
+  ctx.save();
+  ctx.fillStyle = "rgba(174, 255, 245, 0.09)";
+  ctx.strokeStyle = "rgba(174, 255, 245, 0.72)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(centerX + Math.sin(left) * inner, centerY - Math.cos(left) * inner);
+  ctx.lineTo(centerX + Math.sin(relative) * outer, centerY - Math.cos(relative) * outer);
+  ctx.lineTo(centerX + Math.sin(right) * inner, centerY - Math.cos(right) * inner);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(247, 251, 255, 0.86)";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(tipX - Math.cos(relative) * 5, tipY - Math.sin(relative) * 5);
+  ctx.lineTo(tipX + Math.cos(relative) * 5, tipY + Math.sin(relative) * 5);
+  ctx.moveTo(tipX - Math.sin(relative) * 5, tipY + Math.cos(relative) * 5);
+  ctx.lineTo(tipX + Math.sin(relative) * 5, tipY - Math.cos(relative) * 5);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawRadarOwnHeadingMarker(ctx, centerX, centerY) {
+  ctx.save();
+  ctx.fillStyle = "rgba(247, 251, 255, 0.94)";
+  ctx.strokeStyle = "rgba(2, 16, 21, 0.86)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(centerX, centerY - 9);
+  ctx.lineTo(centerX + 4.2, centerY + 5.8);
+  ctx.lineTo(centerX, centerY + 3.2);
+  ctx.lineTo(centerX - 4.2, centerY + 5.8);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fill();
   ctx.restore();
 }
 
