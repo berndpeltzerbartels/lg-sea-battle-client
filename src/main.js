@@ -2692,13 +2692,37 @@ function applyServerGameSnapshot(snapshot) {
     Array.isArray(snapshot.flakProjectiles) ? snapshot.flakProjectiles : [],
     snapshotClientTime
   );
+  syncServerFlakImpacts(Array.isArray(snapshot.flakImpacts) ? snapshot.flakImpacts : []);
   syncServerFlakHitEffects(Array.isArray(snapshot.flakHits) ? snapshot.flakHits : [], ownShip);
   syncServerOwnFlakHits(Array.isArray(snapshot.flakHits) ? snapshot.flakHits : [], ownShip);
   document.body.dataset.remoteShips = String(snapshot.ships.length);
   document.body.dataset.serverTorpedoes = String(Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes.length : 0);
   document.body.dataset.serverBombs = String(Array.isArray(snapshot.bombs) ? snapshot.bombs.length : 0);
   document.body.dataset.serverFlakProjectiles = String(Array.isArray(snapshot.flakProjectiles) ? snapshot.flakProjectiles.length : 0);
+  document.body.dataset.serverFlakImpacts = String(Array.isArray(snapshot.flakImpacts) ? snapshot.flakImpacts.length : 0);
   document.body.dataset.playerStateSync = "ok";
+}
+
+function syncServerFlakImpacts(impacts) {
+  if (!Array.isArray(impacts)) return;
+  impacts.forEach((impact) => {
+    const key = `${impact.id}:${impact.reason}:${impact.t}`;
+    if (flakSystem.impactEffectIds.has(key)) return;
+    flakSystem.impactEffectIds.add(key);
+    const position = new Vector3(
+      Number.isFinite(impact.x) ? impact.x : 0,
+      Number.isFinite(impact.y) ? impact.y : 0,
+      Number.isFinite(impact.z) ? impact.z : 0
+    );
+    if (impact.reason === "land-hit") {
+      createFlakLandImpactEffect(flakSystem, position);
+    } else {
+      createFlakWaterImpactEffect(flakSystem, position);
+    }
+  });
+  if (flakSystem.impactEffectIds.size > 120) {
+    flakSystem.impactEffectIds = new Set(Array.from(flakSystem.impactEffectIds).slice(-80));
+  }
 }
 
 function syncServerFlakHitEffects(hits, ownShip = null) {
@@ -4920,6 +4944,7 @@ function createFlakSystem(scene, materials, parent) {
     airHitEffects: [],
     scheduledHitEffects: [],
     hitEffectIds: new Set(),
+    impactEffectIds: new Set(),
     serverVisuals: new Map(),
     nextFireTime: 0,
     nextDemoMotionIndex: 0,
@@ -5175,6 +5200,76 @@ function createScoutPlaneHitSequence(system, position) {
     age: 0,
     delay: 0.62,
     position: position.clone()
+  });
+}
+
+function createFlakWaterImpactEffect(system, position) {
+  const effectId = system.nextId++;
+  const surfacePosition = new Vector3(position.x, 0.055, position.z);
+  for (let index = 0; index < 3; index += 1) {
+    const patch = createJaggedSurfacePatch(`flak_water_impact_${effectId}_${index}`, system.scene, 0.34 + index * 0.12, 0.2 + index * 0.06, effectId + index * 17);
+    patch.parent = system.root;
+    patch.material = system.materials.foam;
+    patch.position.copyFrom(surfacePosition.add(new Vector3(
+      (stableUnitNoise(effectId + index * 7) - 0.5) * 0.18,
+      index * 0.006,
+      (stableUnitNoise(effectId + index * 11) - 0.5) * 0.18
+    )));
+    patch.rotation.y = stableUnitNoise(effectId + index * 13) * Math.PI * 2;
+    patch.isPickable = false;
+    system.airHitEffects.push({
+      mesh: patch,
+      age: 0,
+      lifetime: 0.42 + index * 0.08,
+      origin: patch.position.clone(),
+      velocity: new Vector3(0, 0.02 + index * 0.008, 0),
+      gravity: 0.04,
+      baseScale: new Vector3(0.55, 0.55, 0.55),
+      grow: new Vector3(1.35, 0.08, 1.0),
+      alpha: 0.62
+    });
+  }
+}
+
+function createFlakLandImpactEffect(system, position) {
+  const effectId = system.nextId++;
+  const spark = MeshBuilder.CreateSphere(`flak_land_impact_spark_${effectId}`, {
+    diameter: 0.42,
+    segments: 8
+  }, system.scene);
+  spark.parent = system.root;
+  spark.material = system.materials.flakFlash;
+  spark.position.copyFrom(position.add(new Vector3(0, 0.08, 0)));
+  spark.isPickable = false;
+  system.airHitEffects.push({
+    mesh: spark,
+    age: 0,
+    lifetime: 0.16,
+    origin: spark.position.clone(),
+    velocity: Vector3.Zero(),
+    baseScale: new Vector3(0.45, 0.45, 0.45),
+    grow: new Vector3(1.2, 1.2, 1.2),
+    alpha: 0.72
+  });
+
+  const dust = MeshBuilder.CreateSphere(`flak_land_impact_dust_${effectId}`, {
+    diameter: 0.56,
+    segments: 8
+  }, system.scene);
+  dust.parent = system.root;
+  dust.material = system.materials.volcanicSmoke;
+  dust.position.copyFrom(position.add(new Vector3(0, 0.12, 0)));
+  dust.isPickable = false;
+  system.airHitEffects.push({
+    mesh: dust,
+    age: 0,
+    lifetime: 0.7,
+    origin: dust.position.clone(),
+    velocity: new Vector3(0, 0.42, 0),
+    gravity: 0.16,
+    baseScale: new Vector3(0.35, 0.24, 0.35),
+    grow: new Vector3(1.15, 0.72, 1.15),
+    alpha: 0.44
   });
 }
 
@@ -7430,67 +7525,95 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
 function createScoutPlane(scene, materials, name = "scout_plane", teamId = "light", isPlayer = false) {
   const root = new TransformNode(name, scene);
   const teamMaterials = isPlayer ? getPlayerShipTeamMaterials(materials, teamId) : getShipTeamMaterials(materials, teamId);
-  const bodyMaterial = createScoutPlaneMaterial(scene, `${name}_body_material`, teamMaterials.cabin.diffuseColor, 0.92);
-  const wingMaterial = createScoutPlaneMaterial(scene, `${name}_wing_material`, teamMaterials.hull.diffuseColor, 0.9);
-  const glassMaterial = createScoutPlaneMaterial(scene, `${name}_glass_material`, new Color3(0.26, 0.58, 0.72), 0.72);
+  const bodyMaterial = createScoutPlaneMaterial(scene, `${name}_body_material`, teamMaterials.cabin.diffuseColor, 1);
+  const wingMaterial = createScoutPlaneMaterial(scene, `${name}_wing_material`, teamMaterials.hull.diffuseColor, 1);
 
-  const fuselage = MeshBuilder.CreateBox(`${name}_fuselage`, { width: 0.78, height: 0.38, depth: 5.8 }, scene);
+  const fuselage = MeshBuilder.CreateBox(`${name}_fuselage`, { width: 0.95, height: 0.48, depth: 7.15 }, scene);
   fuselage.parent = root;
+  fuselage.position.z = -0.1;
   fuselage.material = bodyMaterial;
 
   const nose = MeshBuilder.CreateCylinder(`${name}_nose`, {
-    diameterTop: 0.1,
-    diameterBottom: 0.72,
-    height: 0.82,
+    diameterTop: 0.12,
+    diameterBottom: 0.9,
+    height: 0.92,
     tessellation: 12
   }, scene);
   nose.parent = root;
-  nose.position.z = 3.28;
+  nose.position.z = 3.95;
   nose.rotation.x = Math.PI / 2;
   nose.material = bodyMaterial;
 
-  const cockpit = MeshBuilder.CreateBox(`${name}_cockpit`, { width: 0.48, height: 0.24, depth: 0.82 }, scene);
+  const cockpit = MeshBuilder.CreateBox(`${name}_cockpit`, { width: 0.56, height: 0.28, depth: 1.05 }, scene);
   cockpit.parent = root;
-  cockpit.position.y = 0.28;
-  cockpit.position.z = 1.0;
-  cockpit.material = glassMaterial;
+  cockpit.position.y = 0.36;
+  cockpit.position.z = 1.2;
+  cockpit.material = bodyMaterial;
 
-  const wing = MeshBuilder.CreateBox(`${name}_wing`, { width: 7.9, height: 0.12, depth: 1.05 }, scene);
+  const wing = MeshBuilder.CreateBox(`${name}_wing`, { width: 10.8, height: 0.14, depth: 1.38 }, scene);
   wing.parent = root;
-  wing.position.z = 0.18;
+  wing.position.z = 0.28;
   wing.material = wingMaterial;
 
-  const tailWing = MeshBuilder.CreateBox(`${name}_tail_wing`, { width: 2.7, height: 0.1, depth: 0.55 }, scene);
+  const bombBay = MeshBuilder.CreateBox(`${name}_bomb_bay`, { width: 0.64, height: 0.08, depth: 1.35 }, scene);
+  bombBay.parent = root;
+  bombBay.position.y = -0.28;
+  bombBay.position.z = -0.45;
+  bombBay.material = materials.funnel;
+
+  const tailWing = MeshBuilder.CreateBox(`${name}_tail_wing`, { width: 3.45, height: 0.1, depth: 0.66 }, scene);
   tailWing.parent = root;
-  tailWing.position.z = -2.45;
-  tailWing.position.y = 0.04;
+  tailWing.position.z = -3.36;
+  tailWing.position.y = 0.08;
   tailWing.material = wingMaterial;
 
-  const fin = MeshBuilder.CreateBox(`${name}_fin`, { width: 0.12, height: 0.8, depth: 0.56 }, scene);
+  const fin = MeshBuilder.CreateBox(`${name}_fin`, { width: 0.14, height: 0.94, depth: 0.7 }, scene);
   fin.parent = root;
-  fin.position.y = 0.42;
-  fin.position.z = -2.72;
+  fin.position.y = 0.54;
+  fin.position.z = -3.68;
   fin.material = wingMaterial;
 
-  const propellerRoot = new TransformNode(`${name}_propeller_root`, scene);
-  propellerRoot.parent = root;
-  propellerRoot.position.z = 3.78;
-  const propellerA = MeshBuilder.CreateBox(`${name}_propeller_a`, { width: 0.16, height: 1.72, depth: 0.045 }, scene);
-  propellerA.parent = propellerRoot;
-  propellerA.material = materials.funnel;
-  const propellerB = MeshBuilder.CreateBox(`${name}_propeller_b`, { width: 1.72, height: 0.16, depth: 0.045 }, scene);
-  propellerB.parent = propellerRoot;
-  propellerB.material = materials.funnel;
+  const propellerRoots = [-2.35, 2.35].map((x, index) => {
+    const engine = MeshBuilder.CreateCylinder(`${name}_engine_${index + 1}`, {
+      diameter: 0.58,
+      height: 1.18,
+      tessellation: 14
+    }, scene);
+    engine.parent = root;
+    engine.position.x = x;
+    engine.position.y = -0.03;
+    engine.position.z = 0.76;
+    engine.rotation.x = Math.PI / 2;
+    engine.material = bodyMaterial;
 
-  if (isPlayer) {
-    const marker = MeshBuilder.CreateBox(`${name}_player_marker`, { width: 0.35, height: 0.08, depth: 0.35 }, scene);
-    marker.parent = root;
-    marker.position.y = 0.44;
-    marker.position.z = 0.1;
-    marker.material = teamMaterials.deck;
-  }
+    const cowling = MeshBuilder.CreateCylinder(`${name}_engine_cowling_${index + 1}`, {
+      diameterTop: 0.5,
+      diameterBottom: 0.62,
+      height: 0.28,
+      tessellation: 14
+    }, scene);
+    cowling.parent = root;
+    cowling.position.x = x;
+    cowling.position.y = -0.03;
+    cowling.position.z = 1.47;
+    cowling.rotation.x = Math.PI / 2;
+    cowling.material = materials.funnel;
 
-  return { root, propellerRoot };
+    const propellerRoot = new TransformNode(`${name}_propeller_root_${index + 1}`, scene);
+    propellerRoot.parent = root;
+    propellerRoot.position.x = x;
+    propellerRoot.position.y = -0.03;
+    propellerRoot.position.z = 1.66;
+    const propellerA = MeshBuilder.CreateBox(`${name}_propeller_${index + 1}_a`, { width: 0.13, height: 1.34, depth: 0.04 }, scene);
+    propellerA.parent = propellerRoot;
+    propellerA.material = materials.funnel;
+    const propellerB = MeshBuilder.CreateBox(`${name}_propeller_${index + 1}_b`, { width: 1.34, height: 0.13, depth: 0.04 }, scene);
+    propellerB.parent = propellerRoot;
+    propellerB.material = materials.funnel;
+    return propellerRoot;
+  });
+
+  return { root, propellerRoot: propellerRoots[0], propellerRoots };
 }
 
 function createScoutPlaneMaterial(scene, name, color, alpha) {
@@ -7498,13 +7621,17 @@ function createScoutPlaneMaterial(scene, name, color, alpha) {
   material.diffuseColor = color;
   material.specularColor = new Color3(0.08, 0.09, 0.09);
   material.alpha = alpha;
-  material.backFaceCulling = false;
+  material.backFaceCulling = alpha < 1 ? false : true;
   return material;
 }
 
 function updateScoutPlaneVisual(plane, speed, time) {
-  if (plane.propellerRoot) {
-    plane.propellerRoot.rotation.z += Math.max(0.6, Math.abs(speed) * 0.9);
+  const roots = plane.propellerRoots ?? (plane.propellerRoot ? [plane.propellerRoot] : []);
+  roots.forEach((propellerRoot, index) => {
+    propellerRoot.rotation.z += (index % 2 === 0 ? 1 : -1) * Math.max(0.6, Math.abs(speed) * 0.9);
+  });
+  if (!plane.propellerRoot && roots[0]) {
+    plane.propellerRoot = roots[0];
   }
 }
 
