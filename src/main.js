@@ -5206,35 +5206,82 @@ function createScoutPlaneHitSequence(system, position) {
 function createFlakWaterImpactEffect(system, position) {
   const effectId = system.nextId++;
   const surfacePosition = new Vector3(position.x, 0.055, position.z);
-  for (let index = 0; index < 3; index += 1) {
-    const patch = createJaggedSurfacePatch(`flak_water_impact_${effectId}_${index}`, system.scene, 0.34 + index * 0.12, 0.2 + index * 0.06, effectId + index * 17);
+  createFlakImpactFlash(system, effectId, surfacePosition.add(new Vector3(0, 0.42, 0)), 0.52, 18, 1.45);
+
+  const core = MeshBuilder.CreateSphere(`flak_water_impact_core_${effectId}`, {
+    diameter: 0.34,
+    segments: 10
+  }, system.scene);
+  core.parent = system.root;
+  core.material = system.materials.flakFlash;
+  core.position.copyFrom(surfacePosition.add(new Vector3(0, 0.16, 0)));
+  core.isPickable = false;
+  system.airHitEffects.push({
+    mesh: core,
+    age: 0,
+    lifetime: 0.18,
+    origin: core.position.clone(),
+    velocity: new Vector3(0, 0.08, 0),
+    baseScale: new Vector3(0.48, 0.38, 0.48),
+    grow: new Vector3(1.5, 0.9, 1.5),
+    alpha: 0.92
+  });
+
+  for (let index = 0; index < 5; index += 1) {
+    const patch = createJaggedSurfacePatch(`flak_water_impact_${effectId}_${index}`, system.scene, 0.42 + index * 0.12, 0.3 + index * 0.06, effectId + index * 17);
     patch.parent = system.root;
     patch.material = system.materials.foam;
     patch.position.copyFrom(surfacePosition.add(new Vector3(
-      (stableUnitNoise(effectId + index * 7) - 0.5) * 0.18,
+      (stableUnitNoise(effectId + index * 7) - 0.5) * 0.24,
       index * 0.006,
-      (stableUnitNoise(effectId + index * 11) - 0.5) * 0.18
+      (stableUnitNoise(effectId + index * 11) - 0.5) * 0.24
     )));
     patch.rotation.y = stableUnitNoise(effectId + index * 13) * Math.PI * 2;
     patch.isPickable = false;
     system.airHitEffects.push({
       mesh: patch,
       age: 0,
-      lifetime: 0.42 + index * 0.08,
+      lifetime: 0.58 + index * 0.08,
       origin: patch.position.clone(),
-      velocity: new Vector3(0, 0.02 + index * 0.008, 0),
-      gravity: 0.04,
-      baseScale: new Vector3(0.55, 0.55, 0.55),
-      grow: new Vector3(1.35, 0.08, 1.0),
-      alpha: 0.62
+      velocity: new Vector3(0, 0.04 + index * 0.018, 0),
+      gravity: 0.05,
+      baseScale: new Vector3(0.62, 0.62, 0.62),
+      grow: new Vector3(1.8, 0.1, 1.35),
+      alpha: 0.78
+    });
+  }
+
+  for (let index = 0; index < 4; index += 1) {
+    const spray = createJaggedHitWall(`flak_water_spray_${effectId}_${index}`, system.scene, 0.12 + index * 0.035, 0.26 + index * 0.05, effectId + index * 29);
+    spray.parent = system.root;
+    spray.material = system.materials.foam;
+    spray.position.copyFrom(surfacePosition.add(new Vector3(0, 0.18 + index * 0.04, 0)));
+    spray.rotation.y = stableUnitNoise(effectId + index * 31) * Math.PI * 2;
+    spray.isPickable = false;
+    system.airHitEffects.push({
+      mesh: spray,
+      age: 0,
+      lifetime: 0.46 + index * 0.05,
+      origin: spray.position.clone(),
+      velocity: new Vector3(
+        (stableUnitNoise(effectId + index * 37) - 0.5) * 0.9,
+        0.38 + index * 0.06,
+        (stableUnitNoise(effectId + index * 41) - 0.5) * 0.9
+      ),
+      gravity: 0.42,
+      baseScale: new Vector3(0.72, 0.72, 0.72),
+      grow: new Vector3(0.55, 0.4, 0.55),
+      alpha: 0.82
     });
   }
 }
 
 function createFlakLandImpactEffect(system, position) {
   const effectId = system.nextId++;
+  createFlakImpactFlash(system, effectId, position.add(new Vector3(0, 0.26, 0)), 0.34, 16, 0.95);
+
   const spark = MeshBuilder.CreateSphere(`flak_land_impact_spark_${effectId}`, {
-    diameter: 0.42,
+    diameter: 0.48,
     segments: 8
   }, system.scene);
   spark.parent = system.root;
@@ -5244,16 +5291,16 @@ function createFlakLandImpactEffect(system, position) {
   system.airHitEffects.push({
     mesh: spark,
     age: 0,
-    lifetime: 0.16,
+    lifetime: 0.2,
     origin: spark.position.clone(),
     velocity: Vector3.Zero(),
-    baseScale: new Vector3(0.45, 0.45, 0.45),
-    grow: new Vector3(1.2, 1.2, 1.2),
-    alpha: 0.72
+    baseScale: new Vector3(0.52, 0.52, 0.52),
+    grow: new Vector3(1.45, 1.15, 1.45),
+    alpha: 0.88
   });
 
   const dust = MeshBuilder.CreateSphere(`flak_land_impact_dust_${effectId}`, {
-    diameter: 0.56,
+    diameter: 0.72,
     segments: 8
   }, system.scene);
   dust.parent = system.root;
@@ -5263,13 +5310,28 @@ function createFlakLandImpactEffect(system, position) {
   system.airHitEffects.push({
     mesh: dust,
     age: 0,
-    lifetime: 0.7,
+    lifetime: 0.86,
     origin: dust.position.clone(),
-    velocity: new Vector3(0, 0.42, 0),
-    gravity: 0.16,
-    baseScale: new Vector3(0.35, 0.24, 0.35),
-    grow: new Vector3(1.15, 0.72, 1.15),
-    alpha: 0.44
+    velocity: new Vector3(0, 0.48, 0),
+    gravity: 0.18,
+    baseScale: new Vector3(0.42, 0.3, 0.42),
+    grow: new Vector3(1.45, 0.9, 1.45),
+    alpha: 0.52
+  });
+}
+
+function createFlakImpactFlash(system, effectId, position, lifetime, range, intensity) {
+  const light = new PointLight(`flak_impact_flash_${effectId}`, position, system.scene);
+  light.diffuse = new Color3(0.98, 0.96, 0.82);
+  light.specular = new Color3(1.0, 0.92, 0.72);
+  light.intensity = intensity;
+  light.range = range;
+  system.airHitEffects.push({
+    light,
+    age: 0,
+    lifetime,
+    intensity,
+    range
   });
 }
 
