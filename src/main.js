@@ -4960,6 +4960,10 @@ function firePlayerFlak() {
   if (!flakViewActive || playerDamageState !== "active" || time < flakSystem.nextFireTime) return;
   const shot = getPlayerFlakShot();
   if (!shot) return;
+  if (flakShotWouldHitOwnBoat(shot)) {
+    document.body.dataset.flakFire = "blocked-own-ship";
+    return;
+  }
 
   flakSystem.nextFireTime = time + flakFireCooldownSeconds;
   const spreadShot = createSpreadFlakShot(shot, flakSystem.nextId);
@@ -5006,6 +5010,54 @@ function getPlayerFlakShot() {
     null,
     getForwardVector(heading).scale(speed)
   );
+}
+
+function flakShotWouldHitOwnBoat(shot) {
+  if (!shot?.position || !shot?.direction || !boat?.root) return true;
+  const inverse = boat.root.computeWorldMatrix(true).clone();
+  inverse.invert();
+  for (let distance = 0.35; distance <= 8.0; distance += 1.5) {
+    const worldPoint = shot.position.add(shot.direction.scale(distance));
+    const localPoint = Vector3.TransformCoordinates(worldPoint, inverse);
+    if (ownBoatFlakHitArea(localPoint) !== "miss") {
+      return true;
+    }
+  }
+  return false;
+}
+
+function ownBoatFlakHitArea(point) {
+  const absRight = Math.abs(point.x);
+  if (point.y >= 0.72 && point.y <= 1.72 && point.z >= 0.32 && point.z <= 1.24 && absRight <= 0.62) {
+    return "critical";
+  }
+  if (point.y >= 0.78 && point.y <= 1.92 && point.z >= -1.62 && point.z <= 0.36 && absRight <= 0.38) {
+    return "critical";
+  }
+  if (point.y >= 0.1 && point.y <= 0.98 && point.z >= -4.23 && point.z <= 4.63 && absRight <= ownBoatHullHalfWidthAt(point.z) + 0.18) {
+    return "surface";
+  }
+  return "miss";
+}
+
+function ownBoatHullHalfWidthAt(forward) {
+  const sections = [
+    { z: -4.05, halfWidth: 0.39 },
+    { z: -2.3, halfWidth: 0.61 },
+    { z: 1.55, halfWidth: 0.66 },
+    { z: 3.25, halfWidth: 0.31 },
+    { z: 4.45, halfWidth: 0.04 }
+  ];
+  if (forward <= sections[0].z) return sections[0].halfWidth;
+  for (let index = 0; index < sections.length - 1; index += 1) {
+    const current = sections[index];
+    const next = sections[index + 1];
+    if (forward <= next.z) {
+      const t = (forward - current.z) / (next.z - current.z);
+      return current.halfWidth + (next.halfWidth - current.halfWidth) * t;
+    }
+  }
+  return sections[sections.length - 1].halfWidth;
 }
 
 function getFlakShotFromElevationRoot(elevationRoot, scale, target, baseVelocity) {
