@@ -6063,15 +6063,14 @@ function applyServerTorpedoSnapshot(visual, snapshot, snapshotClientTime = time)
 
 function updateServerTorpedoVisuals(system, dt, now) {
   system.serverVisuals.forEach((visual) => {
-    const frameDt = Math.min(dt, 0.05);
-    const snapshotAge = Math.min(0.18, Math.max(0, now - (visual.serverSnapshotTime ?? now)));
+    const snapshotAge = Math.max(0, now - (visual.serverSnapshotTime ?? now));
     const forward = visual.forward;
     const projected = visual.serverPosition.add(forward.scale(visual.speed * snapshotAge));
-    const step = visual.speed * frameDt;
+    const step = visual.speed * dt;
 
     visual.root.position.addInPlace(forward.scale(step));
-    visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, frameDt * 4.5);
-    visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, frameDt * 4.5);
+    visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 4.5);
+    visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 4.5);
     visual.root.position.y = 0.05;
     visual.root.rotationQuaternion = Quaternion.FromEulerAngles(0, visual.heading, 0);
     visual.runDistance += step;
