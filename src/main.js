@@ -6156,22 +6156,7 @@ function getServerTorpedoLaunch(system, snapshot) {
 }
 
 function applyServerTorpedoSnapshot(visual, snapshot, snapshotClientTime = time) {
-  if (snapshotClientTime + 0.001 < (visual.serverSnapshotTime ?? snapshotClientTime)) {
-    document.body.dataset.torpedoSnapshotIgnored = snapshot.id ?? "";
-    return;
-  }
-  const nextServerPosition = new Vector3(
-    Number.isFinite(snapshot.x) ? snapshot.x : visual.serverPosition.x,
-    0.05,
-    Number.isFinite(snapshot.z) ? snapshot.z : visual.serverPosition.z
-  );
-  const correctionDistance = distance2D(visual.root.position, nextServerPosition);
-  if (time >= (visual.launchBlendUntil ?? 0) && correctionDistance > 18) {
-    visual.root.position.copyFrom(nextServerPosition);
-    resetTorpedoWake(visual);
-    document.body.dataset.torpedoVisualReset = `${snapshot.id ?? ""}:${Math.round(correctionDistance)}`;
-  }
-  visual.serverPosition = nextServerPosition;
+  visual.serverPosition = new Vector3(snapshot.x, 0.05, snapshot.z);
   visual.serverSnapshotTime = snapshotClientTime;
   visual.heading = Number.isFinite(snapshot.heading) ? snapshot.heading : visual.heading;
   visual.forward = getForwardVector(visual.heading);
@@ -6191,15 +6176,6 @@ function updateServerTorpedoVisuals(system, dt, now) {
     const forward = visual.forward;
     const projected = visual.serverPosition.add(forward.scale(visual.speed * snapshotAge));
     const step = visual.speed * dt;
-    const projectionError = distance2D(visual.root.position, projected);
-
-    if (now >= (visual.launchBlendUntil ?? 0) && projectionError > 24) {
-      visual.root.position.copyFrom(projected);
-      visual.root.position.y = 0.05;
-      resetTorpedoWake(visual);
-      document.body.dataset.torpedoProjectionReset = `${visual.id ?? ""}:${Math.round(projectionError)}`;
-      return;
-    }
 
     visual.root.position.addInPlace(forward.scale(step));
     visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 4.5);
@@ -6887,11 +6863,6 @@ function updateTorpedoWake(torpedo, visible, time) {
     segment.scaling.x = 1 + index * 0.16;
     segment.scaling.z = 1 + Math.sin(time * 4.5 + index) * 0.08;
   });
-}
-
-function resetTorpedoWake(torpedo) {
-  torpedo.runDistance = 0;
-  torpedo.wake?.forEach((segment) => segment.setEnabled(false));
 }
 
 function createRangeSplash(system, position, heading) {
