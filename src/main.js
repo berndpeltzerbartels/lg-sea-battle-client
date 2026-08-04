@@ -147,7 +147,7 @@ const scoutPlaneExperimentFlakDemo = urlParams.get("flak-demo") === "1";
 const playerSternFlakZ = -2.92;
 const remoteSternFlakZ = -2.92;
 const flakMinPitch = -0.12;
-const flakMaxPitch = 1.31;
+const flakMaxPitch = 1.18;
 const flakPitchStepRadians = 0.008;
 const flakHoldMediumDelaySeconds = 0.55;
 const flakHoldFastDelaySeconds = 1.35;
@@ -165,8 +165,8 @@ const flakDemoFireIntervalSeconds = 0.25;
 const flakBarrelLength = 1.62;
 const flakBarrelCenterZ = 0.22;
 const playerSternFlakScale = 0.54;
-const playerFlakSightYOffset = 0.14 * playerSternFlakScale;
-const playerFlakEyeZ = 0.08 * playerSternFlakScale;
+const playerFlakSightYOffset = 0.16 * playerSternFlakScale;
+const playerFlakEyeZ = 0.02 * playerSternFlakScale;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = urlParams.get("perf-log") === "1";
@@ -1040,19 +1040,17 @@ function getPlayerCameraSetup(forward) {
 
   if (!scoutPlaneMode && flakViewActive) {
     const elevationRoot = boat.sternFlak?.elevationRoot;
-    const flakMount = boat.sternFlak?.mount;
-    if (!elevationRoot || !flakMount) {
+    if (!elevationRoot) {
       return { position: camera.position.clone(), target: cameraTarget.clone() };
     }
-    const mountWorldMatrix = flakMount.computeWorldMatrix(true);
-    const elevationWorldMatrix = elevationRoot.computeWorldMatrix(true);
+    const worldMatrix = elevationRoot.computeWorldMatrix(true);
     const position = Vector3.TransformCoordinates(
-      new Vector3(0, 0.08 * playerSternFlakScale + playerFlakSightYOffset, 0.28 * playerSternFlakScale + playerFlakEyeZ),
-      mountWorldMatrix
+      new Vector3(0, playerFlakSightYOffset, playerFlakEyeZ),
+      worldMatrix
     );
     const target = Vector3.TransformCoordinates(
       new Vector3(0, playerFlakSightYOffset, 72),
-      elevationWorldMatrix
+      worldMatrix
     );
     return {
       position,
