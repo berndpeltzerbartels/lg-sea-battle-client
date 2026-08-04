@@ -903,6 +903,7 @@ scene.onBeforeRenderObservable.add(() => {
     camera.rotation.x = -Math.abs(camera.rotation.x);
   }
   boat.flakDeckView?.setEnabled(flakViewActive);
+  boat.flakViewHiddenMeshes?.forEach((mesh) => mesh.setEnabled(!flakViewActive));
   document.body.dataset.camera = `${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)}`;
   document.body.dataset.frameMs = (rawFrameSeconds * 1000).toFixed(1);
   document.body.dataset.simulationMs = (dt * 1000).toFixed(1);
@@ -7862,7 +7863,7 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
 
   const sternFlak = createSternFlak(scene, materials, root, name, teamMaterials, playerSternFlakZ, true);
 
-  return { root, sternFlak, flakDeckView };
+  return { root, sternFlak, flakDeckView, flakViewHiddenMeshes: [rearDeck] };
 }
 
 function createScoutPlane(scene, materials, name = "scout_plane", teamId = "light", isPlayer = false) {
