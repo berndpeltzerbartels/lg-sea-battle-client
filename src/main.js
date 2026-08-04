@@ -4068,32 +4068,16 @@ function drawRadarCompassRing(ctx, centerX, centerY, radius, radarHeading) {
 function drawRadarFlakLookIndicator(ctx, centerX, centerY, radius, flakLookHeading, radarHeading) {
   if (!Number.isFinite(flakLookHeading) || !Number.isFinite(radarHeading)) return;
   const relative = normalizeAngle(flakLookHeading - radarHeading);
-  const inner = radius * 0.14;
-  const outer = radius * 0.96;
-  const left = relative - 0.055;
-  const right = relative + 0.055;
-  const tipX = centerX + Math.sin(relative) * outer;
-  const tipY = centerY - Math.cos(relative) * outer;
+  const inner = radius * 0.17;
+  const outer = radius * 0.9;
 
   ctx.save();
-  ctx.fillStyle = "rgba(174, 255, 245, 0.09)";
-  ctx.strokeStyle = "rgba(174, 255, 245, 0.72)";
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "rgba(155, 229, 223, 0.54)";
+  ctx.lineWidth = 0.85;
+  ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.moveTo(centerX + Math.sin(left) * inner, centerY - Math.cos(left) * inner);
+  ctx.moveTo(centerX + Math.sin(relative) * inner, centerY - Math.cos(relative) * inner);
   ctx.lineTo(centerX + Math.sin(relative) * outer, centerY - Math.cos(relative) * outer);
-  ctx.lineTo(centerX + Math.sin(right) * inner, centerY - Math.cos(right) * inner);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.strokeStyle = "rgba(247, 251, 255, 0.86)";
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.moveTo(tipX - Math.cos(relative) * 5, tipY - Math.sin(relative) * 5);
-  ctx.lineTo(tipX + Math.cos(relative) * 5, tipY + Math.sin(relative) * 5);
-  ctx.moveTo(tipX - Math.sin(relative) * 5, tipY + Math.cos(relative) * 5);
-  ctx.lineTo(tipX + Math.sin(relative) * 5, tipY - Math.cos(relative) * 5);
   ctx.stroke();
   ctx.restore();
 }
