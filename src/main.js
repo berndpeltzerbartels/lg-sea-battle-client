@@ -147,7 +147,7 @@ const scoutPlaneExperimentFlakDemo = urlParams.get("flak-demo") === "1";
 const playerSternFlakZ = -2.92;
 const remoteSternFlakZ = -2.92;
 const flakMinPitch = -0.12;
-const flakMaxPitch = 0.92;
+const flakMaxPitch = 1.4;
 const flakPitchStepRadians = 0.008;
 const flakHoldMediumDelaySeconds = 0.55;
 const flakHoldFastDelaySeconds = 1.35;
