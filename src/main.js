@@ -135,9 +135,9 @@ const bombDropForwardOffset = 0.6;
 const bombDropVerticalOffset = 0.65;
 const bombsPerDrop = 12;
 const bombReleaseIntervalSeconds = 0.12;
-const bombPatternLateralSpacing = 1.9;
-const bombPatternHeadingJitter = 0.026;
-const bombPatternSpeedJitter = 2.7;
+const bombPatternLateralSpacing = 0.18;
+const bombPatternHeadingJitter = 0.008;
+const bombPatternSpeedJitter = 1.1;
 const bombSightArmLength = 4.2;
 const bombBayWideFov = 0.92;
 const bombBayZoomFov = 0.62;
@@ -1208,8 +1208,7 @@ function predictScoutPlaneBombReleaseState(delaySeconds) {
 
 function getBombPatternOffset(index) {
   const side = index % 2 === 0 ? -1 : 1;
-  const lane = Math.floor(index / 2) % 3;
-  return side * (0.45 + lane * 0.28) * bombPatternLateralSpacing;
+  return side * bombPatternLateralSpacing;
 }
 
 function getBombPatternHeadingJitter(index) {
@@ -2836,6 +2835,9 @@ function syncServerFlakImpacts(impacts) {
     const key = `${impact.id}:${impact.reason}:${impact.t}`;
     if (flakSystem.impactEffectIds.has(key)) return;
     flakSystem.impactEffectIds.add(key);
+    if (impact.reason === "ship-critical-hit") {
+      notifyOwnWeaponImpact(impact, "Flak", "flak");
+    }
     const position = new Vector3(
       Number.isFinite(impact.x) ? impact.x : 0,
       Number.isFinite(impact.y) ? impact.y : 0,
@@ -4381,7 +4383,8 @@ function createShipDesignation(ship) {
   const match = String(ship.id ?? "").match(/(\d+)$/);
   const number = match ? Number.parseInt(match[1], 10) : 0;
   const base = getTeamDefinition(ship.teamId)?.shipBase ?? 50;
-  return `S ${base + number}`;
+  const prefix = getShipVehicleType(ship) === "scout-plane" ? "F" : "S";
+  return `${prefix} ${base + number}`;
 }
 
 function createRadarContactLabel(ship) {
@@ -4887,7 +4890,7 @@ function beginScoutPlaneFlakHit(hit, now) {
   planeHitFlashUntil = now + 0.82;
   document.body.dataset.playerDamageState = "air-hit";
   document.body.dataset.scoutPlaneFlakHit = hit?.id ?? "";
-  showDamageMessage(createDestroyedByText("Flakgeschosse", hit?.shipId), now, scoutPlaneFlakRespawnSeconds);
+  showDamageMessage(createDestroyedByText("Flak", hit?.shipId), now, scoutPlaneFlakRespawnSeconds);
 }
 
 function updateScoutPlaneFlakHitSequence(playerPlane, now, dt) {
@@ -6366,7 +6369,7 @@ function updateServerTorpedoVisuals(system, dt, now) {
     } else {
       if (visual.launchMode === "air-drop" && !visual.airDropSplashCreated) {
         visual.airDropSplashCreated = true;
-        createAirDroppedTorpedoSplash(system, visual.airDropSplashPosition ?? visual.root.position, visual.heading);
+        createAirDroppedTorpedoSplash(system, visual.root.position, visual.heading);
       }
       visual.root.position.addInPlace(forward.scale(step));
       visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 4.5);
@@ -6523,8 +6526,8 @@ function updateBombSightPattern(marker, preview) {
   const centerZ = 0;
   const fixedSpreadXs = Array.from({ length: bombsPerDrop }, (_, index) => getBombPatternOffset(index));
   const fixedImpactWidth = Math.max(...fixedSpreadXs) - Math.min(...fixedSpreadXs);
-  const impactWidth = Math.max(6.8, preview.bounds.width + 3.8, fixedImpactWidth + 2.4);
-  const impactLength = Math.max(4.4, preview.bounds.length + 4.0);
+  const impactWidth = Math.max(2.8, preview.bounds.width + 1.2, fixedImpactWidth + 1.2);
+  const impactLength = Math.max(4.4, preview.bounds.length + 3.0);
   const armLength = bombSightArmLength;
   const gapX = impactWidth * 0.5;
   const gapZ = impactLength * 0.5;
