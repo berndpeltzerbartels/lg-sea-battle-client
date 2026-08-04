@@ -7773,6 +7773,16 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
   flakDeckView.parent = root;
   flakDeckView.setEnabled(false);
 
+  const flakViewPlatform = MeshBuilder.CreateCylinder(`${name}_flak_view_platform`, {
+    diameter: 0.68,
+    height: 0.045,
+    tessellation: 28
+  }, scene);
+  flakViewPlatform.parent = flakDeckView;
+  flakViewPlatform.position.y = 0.94;
+  flakViewPlatform.position.z = playerSternFlakZ;
+  flakViewPlatform.material = deckMaterial;
+
   const bridgeBase = MeshBuilder.CreateBox(`${name}_flak_view_bridge_base`, { width: 0.96, height: 0.28, depth: 1.05 }, scene);
   bridgeBase.parent = flakDeckView;
   bridgeBase.position.y = 0.75;
