@@ -166,7 +166,7 @@ const flakBarrelLength = 1.62;
 const flakBarrelCenterZ = 0.22;
 const playerSternFlakScale = 0.54;
 const playerFlakSightYOffset = 0.14 * playerSternFlakScale;
-const playerFlakEyeZ = -0.34 * playerSternFlakScale;
+const playerFlakEyeZ = 0.08 * playerSternFlakScale;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = urlParams.get("perf-log") === "1";
