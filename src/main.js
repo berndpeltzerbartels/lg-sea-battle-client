@@ -669,7 +669,6 @@ const bombBayRadarRangeFactor = 0.58;
 let serverShipsById = indexShipsById(gameState.ships);
 let serverClockOffset = Number.isFinite(gameState.t) ? -gameState.t : null;
 let lastServerSnapshotTime = Number.isFinite(gameState.t) ? gameState.t : null;
-let lastServerSnapshotClientTime = 0;
 let gameEventSource = null;
 let gameEventSourceReady = false;
 let lastGameStreamMessageAt = 0;
@@ -2912,20 +2911,12 @@ function getSnapshotClientTime(snapshot) {
 
   const observedOffset = time - snapshot.t;
   const serverTimeReset = Number.isFinite(lastServerSnapshotTime) && snapshot.t + 2 < lastServerSnapshotTime;
-  const clientElapsed = lastServerSnapshotClientTime > 0 ? Math.max(0, time - lastServerSnapshotClientTime) : 0;
-  const serverElapsed = Number.isFinite(lastServerSnapshotTime) ? Math.max(0, snapshot.t - lastServerSnapshotTime) : clientElapsed;
-  const serverTimePaused = clientElapsed > 0.75
-    && serverElapsed + 0.35 < clientElapsed
-    && serverClockOffset !== null
-    && observedOffset > serverClockOffset + 0.5;
-  serverClockOffset = serverClockOffset === null || serverTimeReset || serverTimePaused
+  serverClockOffset = serverClockOffset === null || serverTimeReset
     ? observedOffset
     : Math.min(serverClockOffset, observedOffset);
   lastServerSnapshotTime = snapshot.t;
-  lastServerSnapshotClientTime = time;
   document.body.dataset.serverClockOffset = serverClockOffset.toFixed(3);
   document.body.dataset.serverClockReset = serverTimeReset ? "1" : "0";
-  document.body.dataset.serverClockPaused = serverTimePaused ? "1" : "0";
   return snapshot.t + serverClockOffset;
 }
 
@@ -6324,18 +6315,7 @@ function applyServerTorpedoSnapshot(visual, snapshot, snapshotClientTime = time)
 
 function updateServerTorpedoVisuals(system, dt, now) {
   system.serverVisuals.forEach((visual) => {
-    const rawSnapshotAge = Math.max(0, now - (visual.serverSnapshotTime ?? now));
-    const snapshotAge = Math.min(rawSnapshotAge, 0.45);
-    if (!visual.reportedProjectionClamp && rawSnapshotAge > 0.9) {
-      visual.reportedProjectionClamp = true;
-      sendClientGameEvent("torpedo-projection-clamped", {
-        torpedoId: visual.id,
-        rawSnapshotAge: Number(rawSnapshotAge.toFixed(2)),
-        snapshotAge: Number(snapshotAge.toFixed(2)),
-        serverPosition: summarizeVector(visual.serverPosition),
-        visualPosition: summarizeVector(visual.root.position)
-      });
-    }
+    const snapshotAge = Math.max(0, now - (visual.serverSnapshotTime ?? now));
     const forward = visual.forward;
     const projected = visual.serverPosition.add(forward.scale(visual.speed * snapshotAge));
     const step = visual.speed * dt;
