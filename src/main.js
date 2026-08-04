@@ -1672,6 +1672,49 @@ function sendPerformanceReport(report) {
   );
 }
 
+function sendClientGameEvent(event, details = {}) {
+  const report = {
+    playerId,
+    teamId: playerTeamId,
+    shipId: playerServerShipId ?? pendingPlayerServerShip?.id ?? "",
+    event,
+    clientTime: Number(time.toFixed(2)),
+    x: Number(boat.root.position.x.toFixed(2)),
+    z: Number(boat.root.position.z.toFixed(2)),
+    heading: Number(heading.toFixed(4)),
+    speed: Number(speed.toFixed(2)),
+    damageState: playerDamageState,
+    localTorpedoes: torpedoSystem.active.length,
+    serverTorpedoes: readDatasetInt("serverTorpedoes"),
+    serverTorpedoVisuals: readDatasetInt("serverTorpedoVisuals"),
+    details: stringifyClientEventDetails(details)
+  };
+  const payload = JSON.stringify(report);
+  const endpoint = getClientGameEventEndpoint();
+
+  if (navigator.sendBeacon) {
+    const sent = navigator.sendBeacon(endpoint, new Blob([payload], { type: "application/json" }));
+    if (sent) return;
+  }
+
+  fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: payload,
+    keepalive: true
+  }).catch((error) => {
+    document.body.dataset.clientEventLogError = error.message;
+  });
+}
+
+function stringifyClientEventDetails(details) {
+  try {
+    return JSON.stringify(details).slice(0, 1200);
+  } catch {
+    return "{}";
+  }
+}
+
 function averageMs(totalMs, count) {
   return count > 0 ? Number((totalMs / count).toFixed(2)) : 0;
 }
@@ -2007,6 +2050,14 @@ function getFireFlakEndpoint() {
   }
 
   return gameEndpoint("/game/fire-flak");
+}
+
+function getClientGameEventEndpoint() {
+  if (location.port === "5173" || location.port === "4173") {
+    return `${location.protocol}//${location.hostname}/game/client-event`;
+  }
+
+  return gameEndpoint("/game/client-event");
 }
 
 function getGameEventsEndpoint() {
@@ -2551,23 +2602,31 @@ async function requestPlayerTorpedoFire() {
 
   fireTorpedoRequestInFlight = true;
   const requestStartedAt = beginHttpRequest();
+  const fireRequest = {
+    playerId,
+    teamId: playerTeamId,
+    vehicleType: scoutPlaneMode ? "scout-plane" : "torpedo-boat",
+    x: boat.root.position.x,
+    z: boat.root.position.z,
+    heading,
+    speed,
+    turnVelocity,
+    engineOrder,
+    rudderDegrees: Math.round(rudderDegrees),
+    clientTime: performance.now() / 1000
+  };
+  sendClientGameEvent("torpedo-fire-request", {
+    request: summarizeFireRequest(fireRequest),
+    playerServerShipId,
+    pendingPlayerServerShipId: pendingPlayerServerShip?.id ?? "",
+    serverClockOffset: Number.isFinite(serverClockOffset) ? Number(serverClockOffset.toFixed(3)) : null,
+    serverClockReset: document.body.dataset.serverClockReset ?? ""
+  });
   try {
     const response = await fetch(getFireTorpedoEndpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        playerId,
-        teamId: playerTeamId,
-        vehicleType: scoutPlaneMode ? "scout-plane" : "torpedo-boat",
-        x: boat.root.position.x,
-        z: boat.root.position.z,
-        heading,
-        speed,
-        turnVelocity,
-        engineOrder,
-        rudderDegrees: Math.round(rudderDegrees),
-        clientTime: performance.now() / 1000
-      })
+      body: JSON.stringify(fireRequest)
     });
     if (!response.ok) {
       if (response.status === 403) {
@@ -2576,15 +2635,49 @@ async function requestPlayerTorpedoFire() {
       }
       throw new Error(`Fire torpedo request failed with ${response.status}`);
     }
-    applyServerGameSnapshot(await response.json());
+    const snapshot = await response.json();
+    applyServerGameSnapshot(snapshot);
+    sendClientGameEvent("torpedo-fire-response", {
+      status: response.status,
+      snapshotT: Number.isFinite(snapshot?.t) ? Number(snapshot.t.toFixed(2)) : null,
+      torpedoes: Array.isArray(snapshot?.torpedoes) ? snapshot.torpedoes.length : -1,
+      ownShip: summarizeShip(snapshot?.ships?.find((ship) => ship.controlledBy === playerId && ship.teamId === playerTeamId))
+    });
     document.body.dataset.fireTorpedoSync = "ok";
   } catch (error) {
     document.body.dataset.fireTorpedoSync = "error";
     document.body.dataset.fireTorpedoSyncError = error.message;
+    sendClientGameEvent("torpedo-fire-error", { message: error.message });
   } finally {
     finishHttpRequest("fireTorpedo", requestStartedAt);
     fireTorpedoRequestInFlight = false;
   }
+}
+
+function summarizeFireRequest(request) {
+  return {
+    x: Number(request.x.toFixed(2)),
+    z: Number(request.z.toFixed(2)),
+    heading: Number(request.heading.toFixed(4)),
+    speed: Number(request.speed.toFixed(2)),
+    turnVelocity: Number(request.turnVelocity.toFixed(4)),
+    engineOrder: request.engineOrder,
+    rudderDegrees: request.rudderDegrees,
+    clientTime: Number(request.clientTime.toFixed(3))
+  };
+}
+
+function summarizeShip(ship) {
+  if (!ship) return null;
+  return {
+    id: ship.id ?? "",
+    state: ship.state ?? "",
+    x: Number.isFinite(ship.x) ? Number(ship.x.toFixed(2)) : null,
+    z: Number.isFinite(ship.z) ? Number(ship.z.toFixed(2)) : null,
+    heading: Number.isFinite(ship.heading) ? Number(ship.heading.toFixed(4)) : null,
+    speed: Number.isFinite(ship.speed) ? Number(ship.speed.toFixed(2)) : null,
+    torpedoesRemaining: Number.isFinite(ship.torpedoesRemaining) ? ship.torpedoesRemaining : null
+  };
 }
 
 async function requestPlayerBombDrop() {
@@ -2647,6 +2740,11 @@ function applyServerGameSnapshot(snapshot) {
   if (ownShip) {
     const assignedShipChanged = playerServerShipId !== ownShip.id;
     if (assignedShipChanged && playerServerSnapshotReceived && playerServerShipId) {
+      sendClientGameEvent("player-ship-change-pending", {
+        previousShipId: playerServerShipId,
+        nextShip: summarizeShip(ownShip),
+        damageStateBefore: playerDamageState
+      });
       pendingPlayerServerShip = ownShip;
       document.body.dataset.pendingPlayerShipId = ownShip.id;
       if (playerDamageState === "active") {
@@ -2661,6 +2759,10 @@ function applyServerGameSnapshot(snapshot) {
       document.body.dataset.pendingPlayerShipId = "";
       updatePlayerTorpedoStock(Number.isFinite(ownShip.torpedoesRemaining) ? ownShip.torpedoesRemaining : null);
       if (!playerServerSnapshotReceived || assignedShipChanged) {
+        sendClientGameEvent("player-ship-assigned", {
+          assignedShipChanged,
+          ship: summarizeShip(ownShip)
+        });
         alignPlayerBoatToServerShip(ownShip);
         playerServerSnapshotReceived = true;
       } else {
@@ -2676,6 +2778,10 @@ function applyServerGameSnapshot(snapshot) {
   ) {
     pendingPlayerServerShip = null;
     document.body.dataset.pendingPlayerShipId = "";
+    sendClientGameEvent("player-ship-missing-start-sinking", {
+      previousOwnShip: summarizeShip(previousOwnShip),
+      playerServerShipId
+    });
     beginPlayerSinking(null, time);
   }
 
@@ -4726,6 +4832,12 @@ function getSnapshotRadarContacts() {
 function beginPlayerSinking(hitPosition, now, damageMessage = null) {
   if (playerDamageState !== "active") return;
 
+  sendClientGameEvent("player-sinking-start", {
+    damageMessage: damageMessage ?? "",
+    hitPosition: hitPosition ? summarizeVector(hitPosition) : null,
+    playerServerShipId,
+    pendingPlayerServerShipId: pendingPlayerServerShip?.id ?? ""
+  });
   playerDamageState = "sinking";
   playerSinkStartTime = now;
   playerSinkStartY = boat.root.position.y;
@@ -4836,6 +4948,9 @@ function respawnPlayerBoat(playerBoat) {
     updatePlayerTorpedoStock(Number.isFinite(nextShip.torpedoesRemaining) ? nextShip.torpedoesRemaining : null);
     playerDamageState = "active";
     updateSinkingWaterOverlay(0);
+    sendClientGameEvent("player-respawn-server-ship", {
+      ship: summarizeShip(nextShip)
+    });
     return;
   }
 
@@ -4854,6 +4969,13 @@ function respawnPlayerBoat(playerBoat) {
   document.body.dataset.playerShipId = "pending";
   playerBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
   updateSinkingWaterOverlay(0);
+  sendClientGameEvent("player-respawn-pending", {
+    spawn: {
+      x: Number(spawn.position.x.toFixed(2)),
+      z: Number(spawn.position.z.toFixed(2)),
+      heading: Number(spawn.heading.toFixed(4))
+    }
+  });
 }
 
 function respawnPlayerScoutPlane(playerPlane) {
@@ -6103,6 +6225,19 @@ function createServerTorpedoVisual(system, snapshot, snapshotClientTime = time) 
   };
   system.serverVisuals.set(snapshot.id, visual);
 
+  if (snapshot.shipId === playerServerShipId || snapshot.shipId === pendingPlayerServerShip?.id) {
+    sendClientGameEvent("own-torpedo-visual-created", {
+      torpedoId: snapshot.id,
+      torpedoShipId: snapshot.shipId ?? "",
+      launchMode: launch.mode,
+      serverPosition: summarizeVector(visual.serverPosition),
+      visualStart: summarizeVector(root.position),
+      snapshotClientTime: Number(snapshotClientTime.toFixed(2)),
+      firedAt: Number.isFinite(snapshot.firedAt) ? Number(snapshot.firedAt.toFixed(2)) : null,
+      serverClockOffset: Number.isFinite(serverClockOffset) ? Number(serverClockOffset.toFixed(3)) : null
+    });
+  }
+
   if (launch.showMuzzleEffect) {
     createLaunchPuff(system, launch.puffPosition, launch.heading, launch.tubeSide);
     createMuzzleEffect(system, launch.muzzlePosition, launch.heading, launch.tubeSide);
@@ -6114,6 +6249,7 @@ function getServerTorpedoLaunch(system, snapshot) {
   const heading = Number.isFinite(snapshot.heading) ? snapshot.heading : 0;
   const serverPosition = new Vector3(snapshot.x, 0.05, snapshot.z);
   const isOwnTorpedo = snapshot.shipId && snapshot.shipId === playerServerShipId;
+  const isPendingOwnTorpedo = snapshot.shipId && snapshot.shipId === pendingPlayerServerShip?.id;
 
   if (isOwnTorpedo && boat?.root?.position && distance2D(boat.root.position, serverPosition) < 35) {
     const tubeSide = system.nextTube === 0 ? -1 : 1;
@@ -6142,6 +6278,7 @@ function getServerTorpedoLaunch(system, snapshot) {
 
     document.body.dataset.ownServerTorpedoLaunch = "local";
     return {
+      mode: "local-tube",
       heading: launchHeading,
       start,
       puffPosition,
@@ -6153,6 +6290,7 @@ function getServerTorpedoLaunch(system, snapshot) {
   }
 
   return {
+    mode: isPendingOwnTorpedo ? "pending-own-server-position" : "server-position",
     heading,
     start: serverPosition,
     puffPosition: serverPosition,
@@ -6172,6 +6310,19 @@ function applyServerTorpedoSnapshot(visual, snapshot, snapshotClientTime = time)
 
   if (!visual.root.rotationQuaternion) {
     visual.root.rotationQuaternion = Quaternion.FromEulerAngles(0, visual.heading, 0);
+  }
+  const visualDistance = distance2D(visual.root.position, visual.serverPosition);
+  if (!visual.reportedLargeCorrection && snapshot.shipId === playerServerShipId && visualDistance > 20) {
+    visual.reportedLargeCorrection = true;
+    sendClientGameEvent("torpedo-visual-large-correction", {
+      torpedoId: snapshot.id,
+      shipId: snapshot.shipId ?? "",
+      distance: Number(visualDistance.toFixed(2)),
+      visualPosition: summarizeVector(visual.root.position),
+      serverPosition: summarizeVector(visual.serverPosition),
+      snapshotClientTime: Number(snapshotClientTime.toFixed(2)),
+      snapshotT: Number.isFinite(snapshot.t) ? Number(snapshot.t.toFixed(2)) : null
+    });
   }
   if (time >= (visual.launchBlendUntil ?? 0) && distance2D(visual.root.position, visual.serverPosition) > 45) {
     visual.root.position.copyFrom(visual.serverPosition);
