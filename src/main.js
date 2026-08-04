@@ -1040,17 +1040,19 @@ function getPlayerCameraSetup(forward) {
 
   if (!scoutPlaneMode && flakViewActive) {
     const elevationRoot = boat.sternFlak?.elevationRoot;
-    if (!elevationRoot) {
+    const flakMount = boat.sternFlak?.mount;
+    if (!elevationRoot || !flakMount) {
       return { position: camera.position.clone(), target: cameraTarget.clone() };
     }
-    const worldMatrix = elevationRoot.computeWorldMatrix(true);
+    const mountWorldMatrix = flakMount.computeWorldMatrix(true);
+    const elevationWorldMatrix = elevationRoot.computeWorldMatrix(true);
     const position = Vector3.TransformCoordinates(
-      new Vector3(0, playerFlakSightYOffset, playerFlakEyeZ),
-      worldMatrix
+      new Vector3(0, 0.08 * playerSternFlakScale + playerFlakSightYOffset, 0.28 * playerSternFlakScale + playerFlakEyeZ),
+      mountWorldMatrix
     );
     const target = Vector3.TransformCoordinates(
       new Vector3(0, playerFlakSightYOffset, 72),
-      worldMatrix
+      elevationWorldMatrix
     );
     return {
       position,
