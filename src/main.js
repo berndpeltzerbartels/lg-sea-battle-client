@@ -690,6 +690,7 @@ const torpedoLaunchDefaults = {
   startZ: 2.45,
   startY: 0.6
 };
+const airDroppedTorpedoFallSeconds = 1.55;
 const torpedoSystem = createTorpedoSystem(scene, materials, world);
 const bombSystem = createBombSystem(scene, materials, world);
 const flakSystem = createFlakSystem(scene, materials, world);
@@ -6211,8 +6212,12 @@ function createServerTorpedoVisual(system, snapshot, snapshotClientTime = time) 
     serverPosition: new Vector3(snapshot.x, 0.05, snapshot.z),
     serverSnapshotTime: snapshotClientTime,
     runDistance: 0,
+    launchStart: launch.start.clone(),
     launchMode: launch.mode,
-    launchBlendUntil: launch.blendUntil
+    launchBlendUntil: launch.blendUntil,
+    launchBlendDuration: launch.blendDuration ?? 0.35,
+    airDropSplashCreated: false,
+    airDropSplashPosition: launch.splashPosition?.clone?.() ?? null
   };
   system.serverVisuals.set(snapshot.id, visual);
 
@@ -6255,10 +6260,12 @@ function getServerTorpedoLaunch(system, snapshot) {
       mode: "air-drop",
       heading,
       start: sourcePosition,
+      splashPosition: serverPosition.clone(),
       puffPosition: serverPosition,
       muzzlePosition: serverPosition,
       tubeSide: 1,
-      blendUntil: time + 0.85,
+      blendUntil: time + airDroppedTorpedoFallSeconds,
+      blendDuration: airDroppedTorpedoFallSeconds,
       showMuzzleEffect: false
     };
   }
@@ -6349,18 +6356,24 @@ function updateServerTorpedoVisuals(system, dt, now) {
     const step = visual.speed * dt;
 
     if (now < (visual.launchBlendUntil ?? 0) && visual.launchMode === "air-drop") {
-      const t = 1 - clamp((visual.launchBlendUntil - now) / 0.85, 0, 1);
+      const duration = visual.launchBlendDuration || airDroppedTorpedoFallSeconds;
+      const t = 1 - clamp((visual.launchBlendUntil - now) / duration, 0, 1);
       const eased = easeInOutCubic(t);
-      visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 1.8);
-      visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 1.8);
-      visual.root.position.y += (0.05 - visual.root.position.y) * eased;
+      visual.root.position.x = visual.launchStart.x + (projected.x - visual.launchStart.x) * eased;
+      visual.root.position.z = visual.launchStart.z + (projected.z - visual.launchStart.z) * eased;
+      visual.root.position.y = visual.launchStart.y + (0.05 - visual.launchStart.y) * (t * t);
+      visual.root.rotationQuaternion = Quaternion.FromEulerAngles(0.52 * (1 - eased), visual.heading, 0);
     } else {
+      if (visual.launchMode === "air-drop" && !visual.airDropSplashCreated) {
+        visual.airDropSplashCreated = true;
+        createAirDroppedTorpedoSplash(system, visual.airDropSplashPosition ?? visual.root.position, visual.heading);
+      }
       visual.root.position.addInPlace(forward.scale(step));
       visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 4.5);
       visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 4.5);
       visual.root.position.y = 0.05;
+      visual.root.rotationQuaternion = Quaternion.FromEulerAngles(0, visual.heading, 0);
     }
-    visual.root.rotationQuaternion = Quaternion.FromEulerAngles(0, visual.heading, 0);
     visual.runDistance += step;
     updateTorpedoWake(visual, visual.root.position.y <= 0.08, now);
   });
@@ -7069,6 +7082,56 @@ function createRangeSplash(system, position, heading) {
       baseScale: patch.scaling.clone(),
       grow: new Vector3(1.1 + i * 0.12, 0.06, 0.78 + i * 0.08),
       seed: i + 40
+    });
+  }
+}
+
+function createAirDroppedTorpedoSplash(system, position, heading) {
+  const splashPosition = new Vector3(position.x, 0.06, position.z);
+  const forward = getForwardVector(heading);
+  const right = getRightVector(heading);
+  const effectId = system.nextId++;
+
+  for (let i = 0; i < 7; i += 1) {
+    const patch = createJaggedSurfacePatch(`air_torpedo_splash_${effectId}_${i}`, system.scene, 0.62 + i * 0.14, 0.42 + i * 0.07, effectId + i * 19);
+    patch.parent = system.root;
+    patch.material = system.materials.foam;
+    patch.position.copyFrom(
+      splashPosition
+        .add(forward.scale((i - 2) * 0.08))
+        .add(right.scale(((i % 3) - 1) * 0.14))
+        .add(new Vector3(0, 0.006 + i * 0.003, 0))
+    );
+    patch.rotation.y = heading + i * 0.47;
+    system.hitEffects.push({
+      mesh: patch,
+      age: 0,
+      lifetime: 0.85 + i * 0.04,
+      origin: patch.position.clone(),
+      velocity: forward.scale(-0.035 * i).add(right.scale(((i % 2) * 2 - 1) * 0.055)).add(new Vector3(0, 0.028, 0)),
+      gravity: 0.035,
+      baseScale: patch.scaling.clone(),
+      grow: new Vector3(1.55 + i * 0.14, 0.1, 1.08 + i * 0.1),
+      seed: effectId + i
+    });
+  }
+
+  for (let i = 0; i < 6; i += 1) {
+    const spray = createJaggedHitWall(`air_torpedo_spray_${effectId}_${i}`, system.scene, 0.18 + i * 0.028, 0.44 + i * 0.08, effectId + i * 23);
+    spray.parent = system.root;
+    spray.material = system.materials.foam;
+    spray.position.copyFrom(splashPosition.add(new Vector3(0, 0.2 + i * 0.035, 0)));
+    spray.rotation.y = heading + (i - 2.5) * 0.22;
+    system.hitEffects.push({
+      mesh: spray,
+      age: 0,
+      lifetime: 0.54 + i * 0.035,
+      origin: spray.position.clone(),
+      velocity: forward.scale(0.16 + i * 0.025).add(right.scale((i - 2.5) * 0.11)).add(new Vector3(0, 0.56 + i * 0.05, 0)),
+      gravity: 0.58,
+      baseScale: spray.scaling.clone(),
+      grow: new Vector3(0.72, 0.42, 0.72),
+      seed: effectId + 60 + i
     });
   }
 }
@@ -8205,8 +8268,10 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   sight.material = metalMaterial;
 
   const sightSpokes = [
-    { width: 0.13, height: 0.002 },
-    { width: 0.002, height: 0.13 }
+    { x: -0.041, y: 0, width: 0.048, height: 0.002 },
+    { x: 0.041, y: 0, width: 0.048, height: 0.002 },
+    { x: 0, y: -0.041, width: 0.002, height: 0.048 },
+    { x: 0, y: 0.041, width: 0.002, height: 0.048 }
   ];
   sightSpokes.forEach((spoke, index) => {
     const mesh = MeshBuilder.CreateBox(`${name}_flak_ring_sight_spoke_${index}`, {
@@ -8215,7 +8280,8 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
       depth: 0.006 * scale
     }, scene);
     mesh.parent = elevationRoot;
-    mesh.position.y = sightYOffset;
+    mesh.position.x = spoke.x * scale;
+    mesh.position.y = sightYOffset + spoke.y * scale;
     mesh.position.z = sightZ;
     mesh.material = metalMaterial;
   });
