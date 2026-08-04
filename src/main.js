@@ -149,10 +149,13 @@ const remoteSternFlakZ = -2.92;
 const flakMinPitch = -0.12;
 const flakMaxPitch = 0.92;
 const flakPitchStepRadians = 0.008;
-const flakHoldAccelerationDelaySeconds = 0.7;
-const flakYawFineSpeed = 0.16;
+const flakHoldMediumDelaySeconds = 0.55;
+const flakHoldFastDelaySeconds = 1.35;
+const flakYawFineSpeed = 0.105;
+const flakYawMediumSpeed = 0.18;
 const flakYawFastSpeed = 0.34;
-const flakPitchFineSpeed = 0.085;
+const flakPitchFineSpeed = 0.055;
+const flakPitchMediumSpeed = 0.095;
 const flakPitchFastSpeed = 0.19;
 const flakFireCooldownSeconds = 0.1167;
 const flakProjectileSpeed = 209.8;
@@ -718,11 +721,11 @@ scene.onBeforeRenderObservable.add(() => {
     );
   }
   if (playerActive && flakViewActive && heldFlakDirection !== 0) {
-    flakYaw = normalizeAngle(flakYaw + heldFlakDirection * getHeldFlakSpeed(heldFlakStartTime, flakYawFineSpeed, flakYawFastSpeed) * dt);
+    flakYaw = normalizeAngle(flakYaw + heldFlakDirection * getHeldFlakSpeed(heldFlakStartTime, flakYawFineSpeed, flakYawMediumSpeed, flakYawFastSpeed) * dt);
   }
   if (playerActive && flakViewActive && heldFlakPitchDirection !== 0) {
     flakPitch = clamp(
-      flakPitch + heldFlakPitchDirection * getHeldFlakSpeed(heldFlakPitchStartTime, flakPitchFineSpeed, flakPitchFastSpeed) * dt,
+      flakPitch + heldFlakPitchDirection * getHeldFlakSpeed(heldFlakPitchStartTime, flakPitchFineSpeed, flakPitchMediumSpeed, flakPitchFastSpeed) * dt,
       flakMinPitch,
       flakMaxPitch
     );
@@ -1013,8 +1016,11 @@ function changeFlakPitch(direction) {
   flakPitch = clamp(flakPitch + direction * flakPitchStepRadians, flakMinPitch, flakMaxPitch);
 }
 
-function getHeldFlakSpeed(startTime, fineSpeed, fastSpeed) {
-  return time - startTime >= flakHoldAccelerationDelaySeconds ? fastSpeed : fineSpeed;
+function getHeldFlakSpeed(startTime, fineSpeed, mediumSpeed, fastSpeed) {
+  const heldSeconds = time - startTime;
+  if (heldSeconds >= flakHoldFastDelaySeconds) return fastSpeed;
+  if (heldSeconds >= flakHoldMediumDelaySeconds) return mediumSpeed;
+  return fineSpeed;
 }
 
 function getPlayerCameraSetup(forward) {
