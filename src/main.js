@@ -2558,7 +2558,15 @@ async function requestPlayerTorpedoFire() {
       body: JSON.stringify({
         playerId,
         teamId: playerTeamId,
-        vehicleType: scoutPlaneMode ? "scout-plane" : "torpedo-boat"
+        vehicleType: scoutPlaneMode ? "scout-plane" : "torpedo-boat",
+        x: boat.root.position.x,
+        z: boat.root.position.z,
+        heading,
+        speed,
+        turnVelocity,
+        engineOrder,
+        rudderDegrees: Math.round(rudderDegrees),
+        clientTime: performance.now() / 1000
       })
     });
     if (!response.ok) {
