@@ -830,10 +830,10 @@ scene.onBeforeRenderObservable.add(() => {
   const bob = Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035;
   if (playerActive) {
     boat.root.position.y = scoutPlaneMode
-      ? scoutPlaneAltitude + Math.sin(time * 1.1) * 0.22
+      ? scoutPlaneAltitude
       : torpedoBoatWaterlineY + bob;
     boat.root.rotationQuaternion = Quaternion.FromEulerAngles(
-      scoutPlaneMode ? scoutPlanePitch + Math.sin(time * 1.15) * 0.018 : Math.sin(time * 2.6) * 0.025,
+      scoutPlaneMode ? scoutPlanePitch : Math.sin(time * 2.6) * 0.025,
       heading,
       scoutPlaneMode ? -turnVelocity * 2.8 : -turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018
     );
@@ -4657,13 +4657,12 @@ function updateServerEnemyMotion(motion, dt, time) {
   motion.root.position.y += (motion.serverPosition.y - motion.root.position.y) * Math.min(1, dt * 2.6);
   motion.root.position.z += (projectedServerPosition.z - motion.root.position.z) * Math.min(1, dt * correctionStrength);
   if (isScoutPlaneMotion(motion)) {
-    motion.root.position.y += Math.sin(time * 0.85 + motion.numericIndex) * 0.018;
     const targetBank = clamp(-motion.turnVelocity * 2.35, -0.72, 0.72);
     motion.visualBank += (targetBank - motion.visualBank) * Math.min(1, dt * 4.2);
     motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
-      Math.sin(time * 0.7 + motion.numericIndex) * 0.025,
+      0,
       motion.heading,
-      motion.visualBank + Math.sin(time * 0.9 + motion.numericIndex) * 0.018
+      motion.visualBank
     );
     updateScoutPlaneVisual(motion, Math.max(6, Math.abs(motion.speed)), time);
   } else {
@@ -6206,6 +6205,7 @@ function createServerTorpedoVisual(system, snapshot, snapshotClientTime = time) 
     serverPosition: new Vector3(snapshot.x, 0.05, snapshot.z),
     serverSnapshotTime: snapshotClientTime,
     runDistance: 0,
+    launchMode: launch.mode,
     launchBlendUntil: launch.blendUntil
   };
   system.serverVisuals.set(snapshot.id, visual);
@@ -6235,6 +6235,27 @@ function getServerTorpedoLaunch(system, snapshot) {
   const serverPosition = new Vector3(snapshot.x, 0.05, snapshot.z);
   const isOwnTorpedo = snapshot.shipId && snapshot.shipId === playerServerShipId;
   const isPendingOwnTorpedo = snapshot.shipId && snapshot.shipId === pendingPlayerServerShip?.id;
+  const shooterShip = snapshot.shipId ? serverShipsById.get(snapshot.shipId) : null;
+  const shooterMotion = snapshot.shipId ? enemyMotions.find((motion) => motion.id === snapshot.shipId) : null;
+  const isAirDropped = shooterShip?.vehicleType === "scout-plane" || shooterMotion?.vehicleType === "scout-plane";
+
+  if (isAirDropped) {
+    const sourcePosition = shooterMotion?.root?.position
+      ? shooterMotion.root.position.clone()
+      : new Vector3(serverPosition.x, remoteVehicleY(shooterShip), serverPosition.z);
+    sourcePosition.y = Math.max(8, sourcePosition.y - 0.7);
+    document.body.dataset.serverTorpedoLaunch = "air-drop";
+    return {
+      mode: "air-drop",
+      heading,
+      start: sourcePosition,
+      puffPosition: serverPosition,
+      muzzlePosition: serverPosition,
+      tubeSide: 1,
+      blendUntil: time + 0.85,
+      showMuzzleEffect: false
+    };
+  }
 
   if (isOwnTorpedo && boat?.root?.position && distance2D(boat.root.position, serverPosition) < 35) {
     const tubeSide = system.nextTube === 0 ? -1 : 1;
@@ -6321,13 +6342,21 @@ function updateServerTorpedoVisuals(system, dt, now) {
     const projected = visual.serverPosition.add(forward.scale(visual.speed * snapshotAge));
     const step = visual.speed * dt;
 
-    visual.root.position.addInPlace(forward.scale(step));
-    visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 4.5);
-    visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 4.5);
-    visual.root.position.y = 0.05;
+    if (now < (visual.launchBlendUntil ?? 0) && visual.launchMode === "air-drop") {
+      const t = 1 - clamp((visual.launchBlendUntil - now) / 0.85, 0, 1);
+      const eased = easeInOutCubic(t);
+      visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 1.8);
+      visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 1.8);
+      visual.root.position.y += (0.05 - visual.root.position.y) * eased;
+    } else {
+      visual.root.position.addInPlace(forward.scale(step));
+      visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 4.5);
+      visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 4.5);
+      visual.root.position.y = 0.05;
+    }
     visual.root.rotationQuaternion = Quaternion.FromEulerAngles(0, visual.heading, 0);
     visual.runDistance += step;
-    updateTorpedoWake(visual, true, now);
+    updateTorpedoWake(visual, visual.root.position.y <= 0.08, now);
   });
 }
 
