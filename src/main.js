@@ -935,7 +935,7 @@ scene.onBeforeRenderObservable.add(() => {
   if (compassHeading) compassHeading.textContent = `HDG ${formatHeadingDegrees(heading)}`;
   updateRudderGauge(rudderIndicator, rudderValue, rudderDegrees);
   updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, getRadarContacts(enemyMotions), blockedWaters, heading, heading, {
-    flakLookHeading: flakViewActive ? normalizeAngle(heading + flakYaw) : null
+    flakLookHeading: !scoutPlaneMode ? normalizeAngle(heading + flakYaw) : null
   });
   flushPerformanceTelemetry(time);
 });
