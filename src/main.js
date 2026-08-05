@@ -1283,6 +1283,7 @@ function setupRadarRangeControl(button) {
       // The selected radar range is only a convenience preference.
     }
     updateRadarRangeButton();
+    button.blur();
     event.stopPropagation();
   });
 }
@@ -1290,7 +1291,7 @@ function setupRadarRangeControl(button) {
 function updateRadarRangeButton() {
   document.body.dataset.radarRangeMode = radarRangeMode;
   if (radarRangeButton) {
-    radarRangeButton.textContent = radarRangeMode === "far" ? "RNG FAR" : "RNG NEAR";
+    radarRangeButton.textContent = radarRangeMode === "far" ? "Radar weit" : "Radar nah";
   }
 }
 
@@ -1303,6 +1304,7 @@ function setupFlakViewControl(button) {
   updateFlakViewButton();
   button.addEventListener("click", (event) => {
     toggleFlakView();
+    button.blur();
     event.stopPropagation();
   });
 }
