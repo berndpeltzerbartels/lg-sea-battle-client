@@ -308,10 +308,17 @@
         </div>
       </div>
       <div class="nav-instrument nav-instrument-radar" aria-hidden="true">
-        <div class="nav-title">Radar</div>
+        <div class="nav-title-row">
+          <div class="nav-title">Radar</div>
+          <button id="radarRangeButton" class="instrument-button" type="button">RNG FAR</button>
+        </div>
         <canvas id="radarCanvas" width="300" height="300"></canvas>
         <small id="radarStatus">Clear</small>
       </div>
+      <button id="flakViewButton" class="view-toggle-button" type="button">
+        <span>FLAK</span>
+        <kbd>F</kbd>
+      </button>
       <div id="fleetStatusRows" class="fleet-status" aria-hidden="true"></div>
       <div class="version-panel" aria-hidden="true">
         <span>Client <strong id="clientVersionValue">--</strong></span>

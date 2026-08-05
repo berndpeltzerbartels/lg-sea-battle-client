@@ -412,6 +412,35 @@ body.debug-marker-map {
   text-transform: uppercase;
 }
 
+.nav-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.nav-title-row .nav-title {
+  margin-bottom: 0;
+}
+
+.instrument-button,
+.view-toggle-button {
+  border: 1px solid rgb(155 229 223 / 36%);
+  border-radius: 6px;
+  background: rgb(2 22 28 / 64%);
+  color: rgb(247 251 255 / 86%);
+  font: 800 9px/1 Inter, Arial, sans-serif;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.instrument-button {
+  min-width: 54px;
+  padding: 4px 6px;
+}
+
 .nav-instrument canvas {
   display: block;
   width: 100%;
@@ -428,6 +457,35 @@ body.debug-marker-map {
 .nav-instrument-radar canvas {
   height: auto;
   aspect-ratio: 1;
+}
+
+.view-toggle-button {
+  position: absolute;
+  left: 24px;
+  bottom: calc(24px + var(--radar-size) + 58px);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  background: rgb(5 27 40 / 58%);
+  box-shadow: 0 10px 26px rgb(1 15 24 / 20%);
+  backdrop-filter: blur(7px);
+  pointer-events: auto;
+}
+
+.view-toggle-button kbd {
+  min-width: 16px;
+  padding: 2px 4px;
+  border: 1px solid rgb(247 251 255 / 28%);
+  border-radius: 4px;
+  background: rgb(247 251 255 / 10%);
+  color: #9be5df;
+  font: inherit;
+  text-align: center;
+}
+
+body[data-player-vehicle="scout-plane"] .view-toggle-button {
+  display: none;
 }
 
 body[data-flak-view="active"] .nav-instrument-map,

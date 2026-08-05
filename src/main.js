@@ -75,6 +75,8 @@ const undoDebugMapMarkerButton = document.getElementById("undoDebugMapMarkerButt
 const clearDebugMapMarkersButton = document.getElementById("clearDebugMapMarkersButton");
 const radarCanvas = document.getElementById("radarCanvas");
 const radarStatus = document.getElementById("radarStatus");
+const radarRangeButton = document.getElementById("radarRangeButton");
+const flakViewButton = document.getElementById("flakViewButton");
 const flakHitAlert = document.getElementById("flakHitAlert");
 const rudderIndicator = document.getElementById("rudderIndicator");
 const rudderValue = document.getElementById("rudderValue");
@@ -234,6 +236,8 @@ updatePlayerList(gameState.ships);
 updatePlayerTorpedoStock(playerTorpedoesRemaining);
 setupResetGameControl(resetGameButton);
 setupMapZoomControl(mapZoom);
+setupRadarRangeControl(radarRangeButton);
+setupFlakViewControl(flakViewButton);
 setupDebugMapMarkerPanel();
 setupDebugMapTeleport(mapCanvas);
 updateDebugMapMarkerPanel();
@@ -614,6 +618,7 @@ let nextRudderHoldChangeTime = 0;
 let flakViewActive = false;
 let bombBayViewActive = false;
 let bombBayImpactFocus = null;
+let radarRangeMode = readStoredValue("seaBattleRadarRangeMode") === "near" ? "near" : "far";
 let flakYaw = 0;
 let flakPitch = 0;
 let heldFlakDirection = 0;
@@ -668,7 +673,10 @@ let remoteCorrectionMax = 0;
 let playerServerSnapshotReceived = false;
 const clientRadarRange = 945;
 const scoutPlaneRadarRangeFactor = 1.5;
-const bombBayRadarRangeFactor = 0.58;
+const radarRangeFactors = {
+  near: 0.62,
+  far: scoutPlaneRadarRangeFactor
+};
 let serverShipsById = indexShipsById(gameState.ships);
 let serverClockOffset = Number.isFinite(gameState.t) ? -gameState.t : null;
 let lastServerSnapshotTime = Number.isFinite(gameState.t) ? gameState.t : null;
@@ -940,7 +948,7 @@ scene.onBeforeRenderObservable.add(() => {
   if (compassHeading) compassHeading.textContent = `HDG ${formatHeadingDegrees(heading)}`;
   updateRudderGauge(rudderIndicator, rudderValue, rudderDegrees);
   updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, getRadarContacts(enemyMotions), blockedWaters, heading, heading, {
-    flakLookHeading: !scoutPlaneMode ? normalizeAngle(heading + flakYaw) : null
+    flakLookHeading: !scoutPlaneMode ? normalizeAngle(heading + (flakViewActive ? flakYaw : 0)) : null
   });
   flushPerformanceTelemetry(time);
 });
@@ -985,6 +993,7 @@ function toggleFlakView() {
   heldElevatorDirection = 0;
   rightMouseRudderActive = false;
   document.body.dataset.flakView = flakViewActive ? "active" : "bridge";
+  updateFlakViewButton();
 }
 
 function toggleBombBayView() {
@@ -1261,6 +1270,47 @@ function setupMapZoomControl(input) {
     event.stopPropagation();
     event.preventDefault();
   });
+}
+
+function setupRadarRangeControl(button) {
+  if (!button) return;
+  updateRadarRangeButton();
+  button.addEventListener("click", (event) => {
+    radarRangeMode = radarRangeMode === "far" ? "near" : "far";
+    try {
+      localStorage.setItem("seaBattleRadarRangeMode", radarRangeMode);
+    } catch (ignored) {
+      // The selected radar range is only a convenience preference.
+    }
+    updateRadarRangeButton();
+    event.stopPropagation();
+  });
+}
+
+function updateRadarRangeButton() {
+  document.body.dataset.radarRangeMode = radarRangeMode;
+  if (radarRangeButton) {
+    radarRangeButton.textContent = radarRangeMode === "far" ? "RNG FAR" : "RNG NEAR";
+  }
+}
+
+function getSelectedRadarRange() {
+  return clientRadarRange * (radarRangeFactors[radarRangeMode] ?? radarRangeFactors.far);
+}
+
+function setupFlakViewControl(button) {
+  if (!button) return;
+  updateFlakViewButton();
+  button.addEventListener("click", (event) => {
+    toggleFlakView();
+    event.stopPropagation();
+  });
+}
+
+function updateFlakViewButton() {
+  if (!flakViewButton) return;
+  const label = flakViewActive ? "BRIDGE" : "FLAK";
+  flakViewButton.innerHTML = `<span>${label}</span><kbd>F</kbd>`;
 }
 
 function setupDebugMapTeleport(canvas) {
@@ -3240,9 +3290,7 @@ function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, player
   if (!flakViewActive && !bombBayViewActive) {
     drawMapInstrument(mapCanvas, playerPosition, landZones, mapZoom, heading);
   }
-  const radarRange = bombBayViewActive
-    ? clientRadarRange * bombBayRadarRangeFactor
-    : clientRadarRange * scoutPlaneRadarRangeFactor;
+  const radarRange = getSelectedRadarRange();
   drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, radarHeading, radarRange, {
     ignoreLandShadows: scoutPlaneMode,
     flakLookHeading: options.flakLookHeading
@@ -4089,8 +4137,8 @@ function drawRadarFlakLookIndicator(ctx, centerX, centerY, radius, flakLookHeadi
   const outer = radius * 0.9;
 
   ctx.save();
-  ctx.strokeStyle = "rgba(155, 229, 223, 0.54)";
-  ctx.lineWidth = 0.85;
+  ctx.strokeStyle = "rgba(155, 229, 223, 0.62)";
+  ctx.lineWidth = 1.15;
   ctx.lineCap = "round";
   ctx.beginPath();
   ctx.moveTo(centerX + Math.sin(relative) * inner, centerY - Math.cos(relative) * inner);
@@ -4390,8 +4438,13 @@ function createShipDesignation(ship) {
   const match = String(ship.id ?? "").match(/(\d+)$/);
   const number = match ? Number.parseInt(match[1], 10) : 0;
   const base = getTeamDefinition(ship.teamId)?.shipBase ?? 50;
-  const prefix = getShipVehicleType(ship) === "scout-plane" ? "F" : "S";
+  const prefix = getVehiclePrefixFromShipId(ship.id) ?? (getShipVehicleType(ship) === "scout-plane" ? "F" : "S");
   return `${prefix} ${base + number}`;
+}
+
+function getVehiclePrefixFromShipId(shipId) {
+  const match = String(shipId ?? "").match(/(?:^|[-_])([FBS])\d+$/i);
+  return match ? match[1].toUpperCase() : null;
 }
 
 function createRadarContactLabel(ship) {
