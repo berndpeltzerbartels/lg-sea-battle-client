@@ -788,11 +788,11 @@ body.big-map .map-meta span {
 
 .version-panel {
   position: absolute;
-  right: 24px;
-  bottom: 18px;
+  top: 22px;
+  right: calc(34px + var(--compass-size));
   display: grid;
   gap: 2px;
-  max-width: 420px;
+  max-width: min(360px, calc(100vw - var(--compass-size) - 82px));
   padding: 7px 9px;
   border: 1px solid rgb(255 255 255 / 24%);
   border-radius: 8px;
