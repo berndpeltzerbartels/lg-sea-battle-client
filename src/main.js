@@ -3716,7 +3716,9 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
     .map((contact) => ({
       ...contact,
       distance: Number.isFinite(contact.distance) ? contact.distance : distance2D(playerPosition, contact.position),
-      blocked: ignoreLandShadows || contact.serverVisible ? false : isLineBlockedByLand(playerPosition, contact.position, landZones)
+      blocked: contactIgnoresRadarShadow(contact, ignoreLandShadows)
+        ? false
+        : isLineBlockedByLand(playerPosition, contact.position, landZones)
     }))
     .filter((contact) => contact.distance <= radarRange);
   const visibleContacts = contacts.filter((contact) => !contact.blocked);
@@ -3752,6 +3754,10 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.stroke();
   drawRadarCompassRing(ctx, centerX, centerY, radius, heading);
+}
+
+function contactIgnoresRadarShadow(contact, ignoreLandShadows) {
+  return ignoreLandShadows || contact.serverVisible || contact.vehicleType === "scout-plane";
 }
 
 function prepareInstrumentCanvas(canvas) {
