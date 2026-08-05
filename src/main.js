@@ -2477,6 +2477,8 @@ function updatePlayerList(ships, killsByPlayer = {}) {
     const teamClass = `player-list-row-${getTeamDefinition(ship.teamId)?.className ?? "dark"}`;
     row.className = `player-list-row ${teamClass}${ship.controlledBy === playerId ? " player-list-row-own" : ""}`;
 
+    const marker = createPlayerListMarker(ship);
+
     const initials = document.createElement("strong");
     initials.textContent = getPlayerInitialsFromId(ship.controlledBy);
 
@@ -2500,11 +2502,17 @@ function updatePlayerList(ships, killsByPlayer = {}) {
     const sector = document.createElement("small");
     sector.textContent = formatMapSector(ship);
 
-    row.append(initials, shipLabel, kills, bearing, sector);
+    row.append(marker, initials, shipLabel, kills, bearing, sector);
     playerListRows.append(row);
   });
 
   document.body.dataset.humanPlayers = String(humanShips.length);
+}
+
+function createPlayerListMarker(ship) {
+  const marker = createUnitMarker(ship.teamId, getShipVehicleType(ship));
+  marker.classList.add("player-list-marker");
+  return marker;
 }
 
 function updateKillFeedFromSnapshot(snapshot) {
@@ -2664,9 +2672,15 @@ function renderKillFeed() {
 }
 
 function createKillFeedMarker(teamId, vehicleType) {
+  const marker = createUnitMarker(teamId, vehicleType);
+  marker.classList.add("kill-feed-marker");
+  return marker;
+}
+
+function createUnitMarker(teamId, vehicleType) {
   const marker = document.createElement("i");
   const teamClass = getTeamDefinition(teamId)?.className ?? "unknown";
-  marker.className = `kill-feed-marker kill-feed-marker-${teamClass} kill-feed-marker-${vehicleType === "scout-plane" ? "plane" : "ship"}`;
+  marker.className = `unit-marker unit-marker-${teamClass} unit-marker-${vehicleType === "scout-plane" ? "plane" : "ship"}`;
   marker.setAttribute("aria-hidden", "true");
   return marker;
 }
@@ -8431,8 +8445,10 @@ function createScoutPlaneMaterial(scene, name, color, alpha) {
 
 function updateScoutPlaneVisual(plane, speed, time) {
   const roots = plane.propellerRoots ?? (plane.propellerRoot ? [plane.propellerRoot] : []);
+  const propellerRate = Math.max(16, Math.abs(speed) * 11.5);
   roots.forEach((propellerRoot, index) => {
-    propellerRoot.rotation.z += (index % 2 === 0 ? 1 : -1) * Math.max(0.6, Math.abs(speed) * 0.9);
+    const direction = index % 2 === 0 ? 1 : -1;
+    propellerRoot.rotation.z = direction * (time * propellerRate + index * Math.PI * 0.5);
   });
   if (!plane.propellerRoot && roots[0]) {
     plane.propellerRoot = roots[0];
