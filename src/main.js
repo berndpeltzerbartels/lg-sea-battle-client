@@ -700,6 +700,7 @@ const torpedoLaunchDefaults = {
 };
 const airDroppedTorpedoFallSeconds = 1.55;
 const airDroppedTorpedoSubmergedDistance = 20;
+const airDroppedTorpedoAccelerationDistance = 52;
 const torpedoSystem = createTorpedoSystem(scene, materials, world);
 const bombSystem = createBombSystem(scene, materials, world);
 const flakSystem = createFlakSystem(scene, materials, world);
@@ -6426,10 +6427,15 @@ function applyServerTorpedoSnapshot(visual, snapshot, snapshotClientTime = time)
 
 function updateServerTorpedoVisuals(system, dt, now) {
   system.serverVisuals.forEach((visual) => {
-    const snapshotAge = Math.max(0, now - (visual.serverSnapshotTime ?? now));
     const forward = visual.forward;
-    const projected = visual.serverPosition.add(forward.scale(visual.speed * snapshotAge));
-    const step = visual.speed * dt;
+    const airDropRunningDistance = visual.launchMode === "air-drop" ? Math.max(0, visual.runDistance) : airDroppedTorpedoAccelerationDistance;
+    const accelerationFactor = visual.launchMode === "air-drop"
+      ? 0.28 + 0.72 * easeInOutCubic(clamp(airDropRunningDistance / airDroppedTorpedoAccelerationDistance, 0, 1))
+      : 1;
+    const visualSpeed = visual.speed * accelerationFactor;
+    const snapshotAge = Math.max(0, now - (visual.serverSnapshotTime ?? now));
+    const projected = visual.serverPosition.add(forward.scale(visualSpeed * snapshotAge));
+    const step = visualSpeed * dt;
 
     if (now < (visual.launchBlendUntil ?? 0) && visual.launchMode === "air-drop") {
       const duration = visual.launchBlendDuration || airDroppedTorpedoFallSeconds;
@@ -6451,8 +6457,9 @@ function updateServerTorpedoVisuals(system, dt, now) {
         createAirDroppedTorpedoSplash(system, splashPosition, visual.heading);
       }
       visual.root.position.addInPlace(forward.scale(step));
-      visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 4.5);
-      visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 4.5);
+      const correctionRate = visual.launchMode === "air-drop" && !visual.airDropSurfaced ? 0.9 : 4.5;
+      visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * correctionRate);
+      visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * correctionRate);
       if (visual.launchMode === "air-drop" && !visual.airDropSurfaced && visual.runDistance < visual.airDropSubmergedUntilDistance) {
         visual.root.position.y = -0.22;
       } else {
