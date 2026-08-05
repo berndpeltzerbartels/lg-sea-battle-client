@@ -85,6 +85,7 @@ const planeHitFlash = document.getElementById("planeHitFlash");
 const fleetStatusRows = document.getElementById("fleetStatusRows");
 const torpedoStockValue = document.getElementById("torpedoStockValue");
 const playerListRows = document.getElementById("playerListRows");
+const killFeedRows = document.getElementById("killFeedRows");
 const resetGameButton = document.getElementById("resetGameButton");
 const mobileFireButton = document.getElementById("mobileFireButton");
 const clientVersionValue = document.getElementById("clientVersionValue");
@@ -108,6 +109,7 @@ const legacyTeamAliases = new Map([
   ["kaki", "sand"]
 ]);
 const worldMetersPerUnit = 20;
+const killFeedLimit = 3;
 const torpedoLogLimit = 40;
 const enemyTorpedoFireArcRadians = 0.14;
 const enemyTorpedoAimJitterRadians = 0.035;
@@ -650,6 +652,8 @@ let playerSinkSide = -1;
 let lastFlakHitId = "";
 let flakHitAlertUntil = 0;
 let damageNotificationIds = new Set();
+let killFeedEventIds = new Set();
+let killFeedEvents = [];
 let scoutPlaneFlakHitStartTime = 0;
 let scoutPlaneFlakHitExploded = false;
 let nextScoutPlaneFlakSmokeTime = 0;
@@ -711,6 +715,7 @@ setupRudderDragControl(document.querySelector(".rudder-gauge"));
 setupMobileFireButton(mobileFireButton);
 updateFleetStatus(gameState.ships, gameState.destroyedShipsByTeam);
 updatePlayerList(gameState.ships, gameState.killsByPlayer);
+updateKillFeedFromSnapshot(gameState);
 updatePlayerTorpedoStock(playerTorpedoesRemaining);
 enemyMotions
   .filter((enemyMotion) => !enemyMotion.isServerControlled)
@@ -2496,6 +2501,81 @@ function updatePlayerList(ships, killsByPlayer = {}) {
   document.body.dataset.humanPlayers = String(humanShips.length);
 }
 
+function updateKillFeedFromSnapshot(snapshot) {
+  if (!killFeedRows || !snapshot) return;
+  const candidates = [
+    ...collectKillFeedImpacts(snapshot.torpedoImpacts, "torpedo", "Torpedo"),
+    ...collectKillFeedImpacts(snapshot.bombImpacts, "bomb", "Bomben"),
+    ...collectKillFeedImpacts(snapshot.flakHits, "flak", "Flak", () => true)
+  ].sort((left, right) => left.t - right.t);
+
+  candidates.forEach((event) => {
+    if (killFeedEventIds.has(event.key)) return;
+    killFeedEventIds.add(event.key);
+    killFeedEvents.unshift(event);
+  });
+
+  if (killFeedEvents.length > killFeedLimit) {
+    killFeedEvents = killFeedEvents.slice(0, killFeedLimit);
+  }
+  if (killFeedEventIds.size > 80) {
+    killFeedEventIds = new Set(killFeedEvents.map((event) => event.key));
+  }
+  renderKillFeed();
+}
+
+function collectKillFeedImpacts(impacts, type, weaponLabel, isKill = (impact) => impact?.reason === "ship-hit") {
+  if (!Array.isArray(impacts)) return [];
+  return impacts
+    .filter((impact) => impact?.id && impact?.shipId && impact?.targetShipId && isKill(impact))
+    .map((impact) => {
+      const sourceShip = serverShipsById.get(impact.shipId);
+      const targetShip = serverShipsById.get(impact.targetShipId);
+      return {
+        key: `${type}:${impact.id}:${impact.targetShipId}:${impact.t}`,
+        t: Number.isFinite(impact.t) ? impact.t : 0,
+        weaponLabel,
+        sourceLabel: getWeaponSourceLabel(impact.shipId, sourceShip?.vehicleType, impact.teamId),
+        targetLabel: getKillFeedShipLabel(impact.targetShipId, targetShip)
+      };
+    });
+}
+
+function getKillFeedShipLabel(shipId, ship = null) {
+  const target = ship ?? serverShipsById.get(shipId);
+  if (target) return createShipDesignation(target);
+  if (shipId) return createShipDesignation({ id: shipId, teamId: null, controlledBy: "bot" });
+  return "unbekannt";
+}
+
+function renderKillFeed() {
+  if (!killFeedRows) return;
+  killFeedRows.innerHTML = "";
+  if (killFeedEvents.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "kill-feed-empty";
+    empty.textContent = "Keine Abschüsse";
+    killFeedRows.append(empty);
+    document.body.dataset.killFeedEvents = "0";
+    return;
+  }
+
+  killFeedEvents.forEach((event) => {
+    const row = document.createElement("div");
+    row.className = "kill-feed-row";
+
+    const victim = document.createElement("strong");
+    victim.textContent = event.targetLabel;
+
+    const detail = document.createElement("span");
+    detail.textContent = `durch ${event.weaponLabel} von ${event.sourceLabel}`;
+
+    row.append(victim, detail);
+    killFeedRows.append(row);
+  });
+  document.body.dataset.killFeedEvents = String(killFeedEvents.length);
+}
+
 function isHumanController(controller) {
   return typeof controller === "string" && controller.length > 0 && controller !== "bot";
 }
@@ -2800,6 +2880,7 @@ function applyServerGameSnapshot(snapshot) {
   serverShipsById = indexShipsById(snapshot.ships);
   updateFleetStatus(snapshot.ships, snapshot.destroyedShipsByTeam);
   updatePlayerList(snapshot.ships, snapshot.killsByPlayer);
+  updateKillFeedFromSnapshot(snapshot);
 
   const ownShip = snapshot.ships.find((ship) => ship.controlledBy === playerId && ship.teamId === playerTeamId);
   const previousOwnShip = snapshot.ships.find((ship) => ship.id === playerServerShipId);

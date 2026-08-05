@@ -932,6 +932,58 @@ body.big-map .map-meta span {
   text-transform: uppercase;
 }
 
+.kill-feed {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid rgb(155 229 223 / 20%);
+}
+
+.kill-feed-title {
+  margin-bottom: 6px;
+  color: rgb(155 229 223 / 82%);
+  font-size: 9px;
+  font-weight: 850;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.kill-feed-rows {
+  display: grid;
+  gap: 4px;
+}
+
+.kill-feed-row {
+  display: grid;
+  gap: 2px;
+  min-height: 24px;
+  color: rgb(247 251 255 / 74%);
+  font-size: 10px;
+  font-weight: 780;
+  line-height: 1.18;
+  text-transform: uppercase;
+}
+
+.kill-feed-row strong {
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.kill-feed-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kill-feed-empty {
+  color: rgb(247 251 255 / 48%);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 .reset-game-button {
   width: 100%;
   margin-top: 8px;
