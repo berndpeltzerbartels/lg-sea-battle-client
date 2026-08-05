@@ -2453,18 +2453,25 @@ function getPlayerInitialsFromId(controller) {
   return (match?.[1] ?? controller.slice(0, maxPlayerInitialsLength)).toUpperCase();
 }
 
-function getWeaponSourceLabel(shipId) {
+function getWeaponSourceLabel(shipId, sourceVehicleType = null, teamId = null) {
   const ship = serverShipsById.get(shipId) ?? enemyMotions.find((motion) => motion.id === shipId);
   if (isHumanController(ship?.controlledBy)) {
     return getPlayerInitialsFromId(ship.controlledBy);
   }
+  if (shipId) {
+    return createShipDesignation({
+      id: shipId,
+      teamId: ship?.teamId ?? teamId,
+      controlledBy: ship?.controlledBy,
+      vehicleType: sourceVehicleType ?? ship?.vehicleType
+    });
+  }
   if (ship?.label) return ship.label;
-  if (shipId) return createShipDesignation({ id: shipId, teamId: ship?.teamId });
   return "unbekannt";
 }
 
-function createDestroyedByText(weaponLabel, shipId) {
-  return `Abgeschossen durch ${weaponLabel} von ${getWeaponSourceLabel(shipId)}`;
+function createDestroyedByText(weaponLabel, shipId, sourceVehicleType = null, teamId = null) {
+  return `Abgeschossen durch ${weaponLabel} von ${getWeaponSourceLabel(shipId, sourceVehicleType, teamId)}`;
 }
 
 function showDamageMessage(text, now = time, duration = 2.2) {
@@ -2474,7 +2481,7 @@ function showDamageMessage(text, now = time, duration = 2.2) {
   }
 }
 
-function notifyOwnWeaponImpact(impact, weaponLabel, notificationPrefix) {
+function notifyOwnWeaponImpact(impact, weaponLabel, notificationPrefix, sourceVehicleType = null) {
   const ownShipId = playerServerShipId ?? pendingPlayerServerShip?.id;
   if (!impact?.id || !ownShipId || impact.targetShipId !== ownShipId) return;
   const key = `${notificationPrefix}:${impact.id}:${impact.t}`;
@@ -2483,7 +2490,7 @@ function notifyOwnWeaponImpact(impact, weaponLabel, notificationPrefix) {
   if (damageNotificationIds.size > 80) {
     damageNotificationIds = new Set(Array.from(damageNotificationIds).slice(-48));
   }
-  showDamageMessage(createDestroyedByText(weaponLabel, impact.shipId), time, 2.6);
+  showDamageMessage(createDestroyedByText(weaponLabel, impact.shipId, sourceVehicleType, impact.teamId), time, 2.6);
 }
 
 function getRelativeBearingToShip(ship) {
@@ -5059,6 +5066,7 @@ function createTorpedoSystem(scene, materials, parent) {
     muzzleEffects: [],
     hitEffects: [],
     serverVisuals: new Map(),
+    serverSourceVehicleTypes: new Map(),
     serverImpactIds: new Set(),
     nextTube: 0,
     nextFireTime: 0,
@@ -6146,6 +6154,7 @@ function syncServerTorpedoes(torpedoes, impacts = [], snapshotClientTime = time)
 
     disposeServerTorpedoVisual(visual);
     torpedoSystem.serverVisuals.delete(id);
+    torpedoSystem.serverSourceVehicleTypes.delete(id);
   });
   document.body.dataset.serverTorpedoVisuals = String(torpedoSystem.serverVisuals.size);
 }
@@ -6155,7 +6164,8 @@ function renderServerTorpedoImpacts(impacts) {
     const key = `${impact.id}:${impact.reason}:${impact.t}`;
     if (torpedoSystem.serverImpactIds.has(key)) return;
     torpedoSystem.serverImpactIds.add(key);
-    notifyOwnWeaponImpact(impact, "Torpedo", "torpedo");
+    const sourceVehicleType = torpedoSystem.serverSourceVehicleTypes.get(impact.id);
+    notifyOwnWeaponImpact(impact, "Torpedo", "torpedo", sourceVehicleType === "scout-plane" ? sourceVehicleType : null);
 
     const position = new Vector3(
       Number.isFinite(impact.x) ? impact.x : 0,
@@ -6223,6 +6233,9 @@ function createServerTorpedoVisual(system, snapshot, snapshotClientTime = time) 
     airDropSplashPosition: launch.splashPosition?.clone?.() ?? null
   };
   system.serverVisuals.set(snapshot.id, visual);
+  if (launch.mode === "air-drop") {
+    system.serverSourceVehicleTypes.set(snapshot.id, "scout-plane");
+  }
 
   if (snapshot.shipId === playerServerShipId || snapshot.shipId === pendingPlayerServerShip?.id) {
     sendClientGameEvent("own-torpedo-visual-created", {
@@ -6552,7 +6565,7 @@ function renderServerBombImpacts(impacts) {
     const key = `${impact.id}:${impact.reason}:${impact.t}`;
     if (bombSystem.serverImpactIds.has(key)) return;
     bombSystem.serverImpactIds.add(key);
-    notifyOwnWeaponImpact(impact, "Bomben", "bomb");
+    notifyOwnWeaponImpact(impact, "Bomben", "bomb", "scout-plane");
 
     const position = new Vector3(
       Number.isFinite(impact.x) ? impact.x : 0,
