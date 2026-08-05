@@ -655,6 +655,7 @@ let damageNotificationIds = new Set();
 let killFeedEventIds = new Set();
 let killFeedEvents = [];
 let killFeedShipLabels = new Map();
+let nextKillFeedNumber = 1;
 let scoutPlaneFlakHitStartTime = 0;
 let scoutPlaneFlakHitExploded = false;
 let nextScoutPlaneFlakSmokeTime = 0;
@@ -2514,6 +2515,8 @@ function updateKillFeedFromSnapshot(snapshot) {
   candidates.forEach((event) => {
     if (killFeedEventIds.has(event.key)) return;
     killFeedEventIds.add(event.key);
+    event.number = nextKillFeedNumber;
+    nextKillFeedNumber += 1;
     event.highlight = true;
     killFeedEvents.unshift(event);
   });
@@ -2586,13 +2589,13 @@ function renderKillFeed() {
     return;
   }
 
-  killFeedEvents.forEach((event, index) => {
+  killFeedEvents.forEach((event) => {
     const row = document.createElement("div");
     row.className = `kill-feed-row${event.highlight ? " is-new" : ""}`;
 
     const number = document.createElement("span");
     number.className = "kill-feed-number";
-    number.textContent = `${index + 1}`;
+    number.textContent = `${event.number ?? ""}`;
 
     const text = document.createElement("div");
     text.className = "kill-feed-text";
