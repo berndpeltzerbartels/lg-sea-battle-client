@@ -954,7 +954,9 @@ body.big-map .map-meta span {
 
 .kill-feed-row {
   display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
   gap: 2px;
+  column-gap: 6px;
   min-height: 22px;
   padding: 3px 5px;
   border-radius: 5px;
@@ -963,6 +965,21 @@ body.big-map .map-meta span {
   font-weight: 780;
   line-height: 1.18;
   text-transform: uppercase;
+}
+
+.kill-feed-number {
+  align-self: start;
+  color: rgb(155 229 223 / 58%);
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1.18;
+  text-align: right;
+}
+
+.kill-feed-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
 .kill-feed-row.is-new {

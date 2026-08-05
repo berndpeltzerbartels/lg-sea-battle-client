@@ -2531,7 +2531,15 @@ function rememberKillFeedShipLabels(ships) {
   if (!Array.isArray(ships)) return;
   ships.forEach((ship) => {
     if (!ship?.id) return;
-    killFeedShipLabels.set(ship.id, createShipDesignation(ship));
+    const cached = killFeedShipLabels.get(ship.id);
+    const controlledByHuman = isHumanController(ship.controlledBy);
+    if (controlledByHuman || !cached) {
+      killFeedShipLabels.set(ship.id, {
+        controlledBy: ship.controlledBy,
+        label: createShipDesignation(ship),
+        wasHuman: controlledByHuman
+      });
+    }
   });
   if (killFeedShipLabels.size > 120) {
     killFeedShipLabels = new Map(Array.from(killFeedShipLabels.entries()).slice(-90));
@@ -2557,9 +2565,11 @@ function collectKillFeedImpacts(impacts, type, weaponLabel, isKill = (impact) =>
 
 function getKillFeedShipLabel(shipId, ship = null, teamId = null) {
   const target = ship ?? serverShipsById.get(shipId);
-  if (target) return createShipDesignation(target);
   const cachedLabel = killFeedShipLabels.get(shipId);
-  if (cachedLabel) return cachedLabel;
+  if (target && isHumanController(target.controlledBy)) return createShipDesignation(target);
+  if (target && target.state === "active") return createShipDesignation(target);
+  if (cachedLabel?.label) return cachedLabel.label;
+  if (target) return createShipDesignation(target);
   if (shipId) return createShipDesignation({ id: shipId, teamId, controlledBy: "bot" });
   return "unbekannt";
 }
@@ -2576,9 +2586,16 @@ function renderKillFeed() {
     return;
   }
 
-  killFeedEvents.forEach((event) => {
+  killFeedEvents.forEach((event, index) => {
     const row = document.createElement("div");
     row.className = `kill-feed-row${event.highlight ? " is-new" : ""}`;
+
+    const number = document.createElement("span");
+    number.className = "kill-feed-number";
+    number.textContent = `${index + 1}`;
+
+    const text = document.createElement("div");
+    text.className = "kill-feed-text";
 
     const victim = document.createElement("strong");
     victim.textContent = event.targetLabel;
@@ -2586,7 +2603,8 @@ function renderKillFeed() {
     const detail = document.createElement("span");
     detail.textContent = `durch ${event.weaponLabel} von ${event.sourceLabel}`;
 
-    row.append(victim, detail);
+    text.append(victim, detail);
+    row.append(number, text);
     killFeedRows.append(row);
     event.highlight = false;
   });
