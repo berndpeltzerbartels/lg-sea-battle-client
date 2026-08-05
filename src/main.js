@@ -6477,11 +6477,13 @@ function syncServerBombs(bombs, impacts = [], snapshotClientTime = time) {
 function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
   const root = new TransformNode(`server_bomb_${snapshot.id}`, system.scene);
   root.parent = system.root;
-  root.position = new Vector3(
+  const serverPosition = new Vector3(
     Number.isFinite(snapshot.x) ? snapshot.x : 0,
     Number.isFinite(snapshot.y) ? snapshot.y : 0,
     Number.isFinite(snapshot.z) ? snapshot.z : 0
   );
+  const launch = getServerBombLaunch(snapshot, serverPosition);
+  root.position.copyFrom(launch.start);
   root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2, Number.isFinite(snapshot.heading) ? snapshot.heading : 0, 0);
 
   const body = MeshBuilder.CreateCylinder(`${root.name}_body`, {
@@ -6518,11 +6520,45 @@ function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
     heading: Number.isFinite(snapshot.heading) ? snapshot.heading : 0,
     speed: Number.isFinite(snapshot.speed) ? snapshot.speed : 0,
     verticalSpeed: 0,
-    serverPosition: root.position.clone(),
-    serverSnapshotTime: snapshotClientTime
+    serverPosition,
+    serverSnapshotTime: snapshotClientTime,
+    launchStart: launch.start.clone(),
+    launchBlendUntil: launch.blendUntil,
+    launchBlendDuration: launch.blendDuration
   };
   system.serverVisuals.set(snapshot.id, visual);
   return visual;
+}
+
+function getServerBombLaunch(snapshot, serverPosition) {
+  const shipId = snapshot.shipId;
+  const ship = shipId ? serverShipsById.get(shipId) : null;
+  const motion = shipId ? enemyMotions.find((candidate) => candidate.id === shipId) : null;
+  const sourceRoot = shipId === playerServerShipId || shipId === pendingPlayerServerShip?.id
+    ? boat?.root
+    : motion?.root;
+  const vehicleType = ship?.vehicleType ?? motion?.vehicleType;
+  if (vehicleType !== "scout-plane" || !sourceRoot?.position) {
+    return { start: serverPosition, blendUntil: 0, blendDuration: 0 };
+  }
+
+  const heading = Number.isFinite(motion?.heading)
+    ? motion.heading
+    : Number.isFinite(ship?.heading)
+      ? ship.heading
+      : Number.isFinite(snapshot.heading)
+        ? snapshot.heading
+        : 0;
+  const sourcePosition = sourceRoot.position.clone();
+  const start = sourcePosition
+    .add(getForwardVector(heading).scale(-0.45))
+    .add(new Vector3(0, -0.36, 0));
+  const closeEnough = distance2D(start, serverPosition) < 90 && start.y > serverPosition.y + 0.35;
+  return {
+    start: closeEnough ? start : serverPosition,
+    blendUntil: closeEnough ? time + 0.24 : 0,
+    blendDuration: closeEnough ? 0.24 : 0
+  };
 }
 
 function applyServerBombSnapshot(visual, snapshot, snapshotClientTime = time) {
@@ -6557,6 +6593,17 @@ function updateServerBombVisuals(system, dt, now) {
     const snapshotAge = Math.max(0, now - (visual.serverSnapshotTime ?? now));
     const projected = visual.serverPosition.add(forward.scale(visual.speed * snapshotAge));
     const projectedY = visual.serverPosition.y + (Number.isFinite(visual.verticalSpeed) ? visual.verticalSpeed * snapshotAge : 0);
+
+    if (now < (visual.launchBlendUntil ?? 0)) {
+      const duration = visual.launchBlendDuration || 0.24;
+      const t = 1 - clamp((visual.launchBlendUntil - now) / duration, 0, 1);
+      const eased = easeInOutCubic(t);
+      visual.root.position.x = visual.launchStart.x + (projected.x - visual.launchStart.x) * eased;
+      visual.root.position.y = visual.launchStart.y + (projectedY - visual.launchStart.y) * eased;
+      visual.root.position.z = visual.launchStart.z + (projected.z - visual.launchStart.z) * eased;
+      visual.root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2, visual.heading, 0);
+      return;
+    }
 
     visual.root.position.addInPlace(forward.scale(visual.speed * dt));
     if (Number.isFinite(visual.verticalSpeed)) {
