@@ -148,6 +148,7 @@ const bombBayZoomFov = 0.62;
 const bombBayImpactFocusExtraSeconds = 1.5;
 const scoutPlaneExperimentShowAllFlak = true;
 const scoutPlaneExperimentFlakDemo = urlParams.get("flak-demo") === "1";
+const flakHitboxDebugEnabled = urlParams.get("flak-hitbox") === "1";
 const playerSternFlakZ = -2.92;
 const remoteSternFlakZ = -2.92;
 const flakMinPitch = -0.12;
@@ -7990,6 +7991,15 @@ function createMaterials(scene) {
   beaconBeam.disableLighting = true;
   beaconBeam.backFaceCulling = false;
 
+  const flakHitboxDebug = new StandardMaterial("flak_hitbox_debug_material", scene);
+  flakHitboxDebug.diffuseColor = new Color3(0.38, 0.95, 1.0);
+  flakHitboxDebug.emissiveColor = new Color3(0.18, 0.62, 0.72);
+  flakHitboxDebug.specularColor = Color3.Black();
+  flakHitboxDebug.alpha = 0.18;
+  flakHitboxDebug.wireframe = true;
+  flakHitboxDebug.disableLighting = true;
+  flakHitboxDebug.backFaceCulling = false;
+
   return {
     water,
     sand,
@@ -8034,7 +8044,8 @@ function createMaterials(scene) {
     flakTracerTrail,
     flakFlash,
     beaconGlow,
-    beaconBeam
+    beaconBeam,
+    flakHitboxDebug
   };
 }
 
@@ -8425,7 +8436,32 @@ function createScoutPlane(scene, materials, name = "scout_plane", teamId = "ligh
     return propellerRoot;
   });
 
+  if (flakHitboxDebugEnabled) {
+    addScoutPlaneFlakHitboxDebug(scene, materials, root, name);
+  }
+
   return { root, propellerRoot: propellerRoots[0], propellerRoots };
+}
+
+function addScoutPlaneFlakHitboxDebug(scene, materials, root, name) {
+  const verticalSize = 4.5;
+  const parts = [
+    { suffix: "fuselage", width: 3.3, height: verticalSize, depth: 9.2, z: 0 },
+    { suffix: "wing", width: 10.5, height: verticalSize, depth: 3.6, z: 0.25 },
+    { suffix: "tail", width: 5.1, height: verticalSize, depth: 2.95, z: -2.475 }
+  ];
+
+  parts.forEach((part) => {
+    const box = MeshBuilder.CreateBox(`${name}_flak_hitbox_${part.suffix}`, {
+      width: part.width,
+      height: part.height,
+      depth: part.depth
+    }, scene);
+    box.parent = root;
+    box.position.z = part.z;
+    box.material = materials.flakHitboxDebug;
+    box.isPickable = false;
+  });
 }
 
 function createScoutPlaneMaterial(scene, name, color, alpha) {
