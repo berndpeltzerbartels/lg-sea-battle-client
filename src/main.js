@@ -2540,6 +2540,8 @@ function rememberKillFeedShipLabels(ships) {
       killFeedShipLabels.set(ship.id, {
         controlledBy: ship.controlledBy,
         label: createShipDesignation(ship),
+        teamId: ship.teamId,
+        vehicleType: getShipVehicleType(ship),
         wasHuman: controlledByHuman
       });
     }
@@ -2556,25 +2558,59 @@ function collectKillFeedImpacts(impacts, type, weaponLabel, isKill = (impact) =>
     .map((impact) => {
       const sourceShip = serverShipsById.get(impact.shipId);
       const targetShip = serverShipsById.get(impact.targetShipId);
+      const source = getKillFeedShipInfo(impact.shipId, sourceShip, impact.teamId);
+      const target = getKillFeedShipInfo(impact.targetShipId, targetShip);
       return {
         key: `${type}:${impact.id}:${impact.targetShipId}:${impact.t}`,
         t: Number.isFinite(impact.t) ? impact.t : 0,
         weaponLabel,
-        sourceLabel: getKillFeedShipLabel(impact.shipId, sourceShip, impact.teamId),
-        targetLabel: getKillFeedShipLabel(impact.targetShipId, targetShip)
+        sourceLabel: source.label,
+        sourceTeamId: source.teamId,
+        sourceVehicleType: source.vehicleType,
+        targetLabel: target.label,
+        targetTeamId: target.teamId,
+        targetVehicleType: target.vehicleType
       };
     });
 }
 
 function getKillFeedShipLabel(shipId, ship = null, teamId = null) {
+  return getKillFeedShipInfo(shipId, ship, teamId).label;
+}
+
+function getKillFeedShipInfo(shipId, ship = null, teamId = null) {
   const target = ship ?? serverShipsById.get(shipId);
   const cachedLabel = killFeedShipLabels.get(shipId);
-  if (target && isHumanController(target.controlledBy)) return createShipDesignation(target);
-  if (target && target.state === "active") return createShipDesignation(target);
-  if (cachedLabel?.label) return cachedLabel.label;
-  if (target) return createShipDesignation(target);
-  if (shipId) return createShipDesignation({ id: shipId, teamId, controlledBy: "bot" });
-  return "unbekannt";
+  if (target && (isHumanController(target.controlledBy) || target.state === "active")) {
+    return {
+      label: createShipDesignation(target),
+      teamId: target.teamId,
+      vehicleType: getShipVehicleType(target)
+    };
+  }
+  if (cachedLabel?.label) {
+    return {
+      label: cachedLabel.label,
+      teamId: cachedLabel.teamId ?? target?.teamId ?? teamId,
+      vehicleType: cachedLabel.vehicleType ?? getShipVehicleType(target)
+    };
+  }
+  if (target) {
+    return {
+      label: createShipDesignation(target),
+      teamId: target.teamId,
+      vehicleType: getShipVehicleType(target)
+    };
+  }
+  if (shipId) {
+    const fallback = { id: shipId, teamId, controlledBy: "bot" };
+    return {
+      label: createShipDesignation(fallback),
+      teamId,
+      vehicleType: getShipVehicleType(fallback)
+    };
+  }
+  return { label: "unbekannt", teamId, vehicleType: "torpedo-boat" };
 }
 
 function renderKillFeed() {
@@ -2601,10 +2637,19 @@ function renderKillFeed() {
     text.className = "kill-feed-text";
 
     const victim = document.createElement("strong");
-    victim.textContent = event.targetLabel;
+    victim.className = "kill-feed-party";
+    victim.append(
+      createKillFeedMarker(event.targetTeamId, event.targetVehicleType),
+      document.createTextNode(event.targetLabel)
+    );
 
     const detail = document.createElement("span");
-    detail.textContent = `durch ${event.weaponLabel} von ${event.sourceLabel}`;
+    detail.className = "kill-feed-detail";
+    detail.append(
+      document.createTextNode(`durch ${event.weaponLabel} von `),
+      createKillFeedMarker(event.sourceTeamId, event.sourceVehicleType),
+      document.createTextNode(event.sourceLabel)
+    );
 
     text.append(victim, detail);
     row.append(number, text);
@@ -2612,6 +2657,14 @@ function renderKillFeed() {
     event.highlight = false;
   });
   document.body.dataset.killFeedEvents = String(killFeedEvents.length);
+}
+
+function createKillFeedMarker(teamId, vehicleType) {
+  const marker = document.createElement("i");
+  const teamClass = getTeamDefinition(teamId)?.className ?? "unknown";
+  marker.className = `kill-feed-marker kill-feed-marker-${teamClass} kill-feed-marker-${vehicleType === "scout-plane" ? "plane" : "ship"}`;
+  marker.setAttribute("aria-hidden", "true");
+  return marker;
 }
 
 function isHumanController(controller) {

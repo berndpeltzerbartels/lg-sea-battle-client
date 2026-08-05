@@ -993,6 +993,55 @@ body.big-map .map-meta span {
   letter-spacing: 0;
 }
 
+.kill-feed-party,
+.kill-feed-detail {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.kill-feed-detail {
+  gap: 3px;
+}
+
+.kill-feed-marker {
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  background: #9be5df;
+  filter: drop-shadow(0 0 4px rgb(155 229 223 / 34%));
+}
+
+.kill-feed-marker-ship {
+  clip-path: polygon(50% 0, 75% 34%, 68% 100%, 50% 85%, 32% 100%, 25% 34%);
+}
+
+.kill-feed-marker-plane {
+  clip-path: polygon(50% 0, 61% 45%, 100% 52%, 61% 61%, 58% 86%, 78% 100%, 50% 91%, 22% 100%, 42% 86%, 39% 61%, 0 52%, 39% 45%);
+}
+
+.kill-feed-marker-light {
+  background: #7fd7ff;
+}
+
+.kill-feed-marker-dark {
+  background: #ff6b4a;
+}
+
+.kill-feed-marker-green {
+  background: #75d28d;
+}
+
+.kill-feed-marker-sand {
+  background: #e0c878;
+}
+
+.kill-feed-marker-unknown {
+  background: rgb(247 251 255 / 58%);
+}
+
 .kill-feed-row span {
   overflow: hidden;
   text-overflow: ellipsis;
