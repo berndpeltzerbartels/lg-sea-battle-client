@@ -109,7 +109,7 @@ const legacyTeamAliases = new Map([
   ["kaki", "sand"]
 ]);
 const worldMetersPerUnit = 20;
-const killFeedLimit = 3;
+const killFeedLimit = 5;
 const torpedoLogLimit = 40;
 const enemyTorpedoFireArcRadians = 0.14;
 const enemyTorpedoAimJitterRadians = 0.035;
@@ -654,6 +654,7 @@ let flakHitAlertUntil = 0;
 let damageNotificationIds = new Set();
 let killFeedEventIds = new Set();
 let killFeedEvents = [];
+let killFeedShipLabels = new Map();
 let scoutPlaneFlakHitStartTime = 0;
 let scoutPlaneFlakHitExploded = false;
 let nextScoutPlaneFlakSmokeTime = 0;
@@ -2503,6 +2504,7 @@ function updatePlayerList(ships, killsByPlayer = {}) {
 
 function updateKillFeedFromSnapshot(snapshot) {
   if (!killFeedRows || !snapshot) return;
+  rememberKillFeedShipLabels(snapshot.ships);
   const candidates = [
     ...collectKillFeedImpacts(snapshot.torpedoImpacts, "torpedo", "Torpedo"),
     ...collectKillFeedImpacts(snapshot.bombImpacts, "bomb", "Bomben"),
@@ -2512,6 +2514,7 @@ function updateKillFeedFromSnapshot(snapshot) {
   candidates.forEach((event) => {
     if (killFeedEventIds.has(event.key)) return;
     killFeedEventIds.add(event.key);
+    event.highlight = true;
     killFeedEvents.unshift(event);
   });
 
@@ -2522,6 +2525,17 @@ function updateKillFeedFromSnapshot(snapshot) {
     killFeedEventIds = new Set(killFeedEvents.map((event) => event.key));
   }
   renderKillFeed();
+}
+
+function rememberKillFeedShipLabels(ships) {
+  if (!Array.isArray(ships)) return;
+  ships.forEach((ship) => {
+    if (!ship?.id) return;
+    killFeedShipLabels.set(ship.id, createShipDesignation(ship));
+  });
+  if (killFeedShipLabels.size > 120) {
+    killFeedShipLabels = new Map(Array.from(killFeedShipLabels.entries()).slice(-90));
+  }
 }
 
 function collectKillFeedImpacts(impacts, type, weaponLabel, isKill = (impact) => impact?.reason === "ship-hit") {
@@ -2535,16 +2549,18 @@ function collectKillFeedImpacts(impacts, type, weaponLabel, isKill = (impact) =>
         key: `${type}:${impact.id}:${impact.targetShipId}:${impact.t}`,
         t: Number.isFinite(impact.t) ? impact.t : 0,
         weaponLabel,
-        sourceLabel: getWeaponSourceLabel(impact.shipId, sourceShip?.vehicleType, impact.teamId),
+        sourceLabel: getKillFeedShipLabel(impact.shipId, sourceShip, impact.teamId),
         targetLabel: getKillFeedShipLabel(impact.targetShipId, targetShip)
       };
     });
 }
 
-function getKillFeedShipLabel(shipId, ship = null) {
+function getKillFeedShipLabel(shipId, ship = null, teamId = null) {
   const target = ship ?? serverShipsById.get(shipId);
   if (target) return createShipDesignation(target);
-  if (shipId) return createShipDesignation({ id: shipId, teamId: null, controlledBy: "bot" });
+  const cachedLabel = killFeedShipLabels.get(shipId);
+  if (cachedLabel) return cachedLabel;
+  if (shipId) return createShipDesignation({ id: shipId, teamId, controlledBy: "bot" });
   return "unbekannt";
 }
 
@@ -2562,7 +2578,7 @@ function renderKillFeed() {
 
   killFeedEvents.forEach((event) => {
     const row = document.createElement("div");
-    row.className = "kill-feed-row";
+    row.className = `kill-feed-row${event.highlight ? " is-new" : ""}`;
 
     const victim = document.createElement("strong");
     victim.textContent = event.targetLabel;
@@ -2572,6 +2588,7 @@ function renderKillFeed() {
 
     row.append(victim, detail);
     killFeedRows.append(row);
+    event.highlight = false;
   });
   document.body.dataset.killFeedEvents = String(killFeedEvents.length);
 }
