@@ -3500,8 +3500,7 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, headi
   if (!ctx || width < 2 || height < 2) return;
   const zoomIndex = clamp(Number(zoomControl?.value ?? 1), 0, mapZoomScales.length - 1);
   const zoomScale = mapZoomScales[zoomIndex];
-  const tile = getMapTile(playerPosition, zoomScale);
-  const bounds = getMapTileBounds(tile, zoomScale);
+  const bounds = getCenteredMapBounds(playerPosition, zoomScale);
   const scale = Math.min(width / (bounds.maxX - bounds.minX), height / (bounds.maxZ - bounds.minZ));
   lastMapViewport = { bounds, width, height, scale };
 
@@ -4517,25 +4516,14 @@ function formatWorldDistance(worldUnits) {
   return `${Math.round(meters)} m`;
 }
 
-function getMapTile(position, zoomScale = 1) {
+function getCenteredMapBounds(position, zoomScale = 1) {
   const size = mapTileSize * zoomScale;
 
   return {
-    x: Math.floor((position.x + size * 0.5) / size),
-    z: Math.floor((position.z + size * 0.5) / size)
-  };
-}
-
-function getMapTileBounds(tile, zoomScale = 1) {
-  const size = mapTileSize * zoomScale;
-  const centerX = tile.x * size;
-  const centerZ = tile.z * size;
-
-  return {
-    minX: centerX - size * 0.5,
-    maxX: centerX + size * 0.5,
-    minZ: centerZ - size * 0.5,
-    maxZ: centerZ + size * 0.5
+    minX: position.x - size * 0.5,
+    maxX: position.x + size * 0.5,
+    minZ: position.z - size * 0.5,
+    maxZ: position.z + size * 0.5
   };
 }
 
