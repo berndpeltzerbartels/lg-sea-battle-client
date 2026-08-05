@@ -236,8 +236,6 @@ updatePlayerList(gameState.ships);
 updatePlayerTorpedoStock(playerTorpedoesRemaining);
 setupResetGameControl(resetGameButton);
 setupMapZoomControl(mapZoom);
-setupRadarRangeControl(radarRangeButton);
-setupFlakViewControl(flakViewButton);
 setupDebugMapMarkerPanel();
 setupDebugMapTeleport(mapCanvas);
 updateDebugMapMarkerPanel();
@@ -677,6 +675,8 @@ const radarRangeFactors = {
   near: 0.62,
   far: scoutPlaneRadarRangeFactor
 };
+setupRadarRangeControl(radarRangeButton);
+setupFlakViewControl(flakViewButton);
 let serverShipsById = indexShipsById(gameState.ships);
 let serverClockOffset = Number.isFinite(gameState.t) ? -gameState.t : null;
 let lastServerSnapshotTime = Number.isFinite(gameState.t) ? gameState.t : null;
