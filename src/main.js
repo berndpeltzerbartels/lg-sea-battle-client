@@ -699,6 +699,7 @@ const torpedoLaunchDefaults = {
   startY: 0.6
 };
 const airDroppedTorpedoFallSeconds = 1.55;
+const airDroppedTorpedoSubmergedDistance = 20;
 const torpedoSystem = createTorpedoSystem(scene, materials, world);
 const bombSystem = createBombSystem(scene, materials, world);
 const flakSystem = createFlakSystem(scene, materials, world);
@@ -6286,6 +6287,8 @@ function createServerTorpedoVisual(system, snapshot, snapshotClientTime = time) 
     launchBlendUntil: launch.blendUntil,
     launchBlendDuration: launch.blendDuration ?? 0.35,
     airDropSplashCreated: false,
+    airDropSurfaced: launch.mode !== "air-drop",
+    airDropSubmergedUntilDistance: launch.mode === "air-drop" ? airDroppedTorpedoSubmergedDistance : 0,
     airDropSplashPosition: launch.splashPosition?.clone?.() ?? null
   };
   system.serverVisuals.set(snapshot.id, visual);
@@ -6442,17 +6445,29 @@ function updateServerTorpedoVisuals(system, dt, now) {
         visual.airDropSplashCreated = true;
         const splashPosition = visual.airDropSplashPosition ?? visual.root.position;
         visual.root.position.copyFrom(splashPosition);
-        visual.root.position.y = 0.05;
+        visual.root.position.y = -0.22;
+        visual.body?.setEnabled(false);
+        visual.nose?.setEnabled(false);
         createAirDroppedTorpedoSplash(system, splashPosition, visual.heading);
       }
       visual.root.position.addInPlace(forward.scale(step));
       visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 4.5);
       visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 4.5);
-      visual.root.position.y = 0.05;
+      if (visual.launchMode === "air-drop" && !visual.airDropSurfaced && visual.runDistance < visual.airDropSubmergedUntilDistance) {
+        visual.root.position.y = -0.22;
+      } else {
+        if (visual.launchMode === "air-drop" && !visual.airDropSurfaced) {
+          visual.airDropSurfaced = true;
+          visual.body?.setEnabled(true);
+          visual.nose?.setEnabled(true);
+          createAirDroppedTorpedoSurfaceWake(system, visual.root.position, visual.heading);
+        }
+        visual.root.position.y = 0.05;
+      }
       visual.root.rotationQuaternion = Quaternion.FromEulerAngles(0, visual.heading, 0);
     }
     visual.runDistance += step;
-    updateTorpedoWake(visual, visual.root.position.y <= 0.08, now);
+    updateTorpedoWake(visual, visual.root.position.y <= 0.08 && visual.airDropSurfaced !== false, now);
   });
 }
 
@@ -7217,8 +7232,8 @@ function createAirDroppedTorpedoSplash(system, position, heading) {
   const effectId = system.nextId++;
   createExplosionLightFlash(system, splashPosition);
 
-  for (let i = 0; i < 8; i += 1) {
-    const patch = createJaggedSurfacePatch(`air_torpedo_splash_${effectId}_${i}`, system.scene, 0.78 + i * 0.16, 0.5 + i * 0.08, effectId + i * 19);
+  for (let i = 0; i < 10; i += 1) {
+    const patch = createJaggedSurfacePatch(`air_torpedo_splash_${effectId}_${i}`, system.scene, 0.9 + i * 0.18, 0.58 + i * 0.09, effectId + i * 19);
     patch.parent = system.root;
     patch.material = system.materials.foam;
     patch.position.copyFrom(
@@ -7231,18 +7246,18 @@ function createAirDroppedTorpedoSplash(system, position, heading) {
     system.hitEffects.push({
       mesh: patch,
       age: 0,
-      lifetime: 0.95 + i * 0.045,
+      lifetime: 1.05 + i * 0.045,
       origin: patch.position.clone(),
-      velocity: forward.scale(-0.045 * i).add(right.scale(((i % 2) * 2 - 1) * 0.07)).add(new Vector3(0, 0.035, 0)),
+      velocity: forward.scale(-0.052 * i).add(right.scale(((i % 2) * 2 - 1) * 0.085)).add(new Vector3(0, 0.042, 0)),
       gravity: 0.035,
       baseScale: patch.scaling.clone(),
-      grow: new Vector3(1.85 + i * 0.16, 0.11, 1.3 + i * 0.12),
+      grow: new Vector3(2.15 + i * 0.18, 0.12, 1.5 + i * 0.13),
       seed: effectId + i
     });
   }
 
-  for (let i = 0; i < 7; i += 1) {
-    const spray = createJaggedHitWall(`air_torpedo_spray_${effectId}_${i}`, system.scene, 0.22 + i * 0.032, 0.56 + i * 0.09, effectId + i * 23);
+  for (let i = 0; i < 9; i += 1) {
+    const spray = createJaggedHitWall(`air_torpedo_spray_${effectId}_${i}`, system.scene, 0.24 + i * 0.034, 0.66 + i * 0.1, effectId + i * 23);
     spray.parent = system.root;
     spray.material = system.materials.foam;
     spray.position.copyFrom(splashPosition.add(new Vector3(0, 0.2 + i * 0.035, 0)));
@@ -7250,13 +7265,44 @@ function createAirDroppedTorpedoSplash(system, position, heading) {
     system.hitEffects.push({
       mesh: spray,
       age: 0,
-      lifetime: 0.62 + i * 0.038,
+      lifetime: 0.7 + i * 0.04,
       origin: spray.position.clone(),
-      velocity: forward.scale(0.18 + i * 0.03).add(right.scale((i - 3) * 0.13)).add(new Vector3(0, 0.7 + i * 0.06, 0)),
-      gravity: 0.66,
+      velocity: forward.scale(0.2 + i * 0.034).add(right.scale((i - 4) * 0.145)).add(new Vector3(0, 0.82 + i * 0.065, 0)),
+      gravity: 0.72,
       baseScale: spray.scaling.clone(),
-      grow: new Vector3(0.86, 0.48, 0.86),
+      grow: new Vector3(0.96, 0.54, 0.96),
       seed: effectId + 60 + i
+    });
+  }
+}
+
+function createAirDroppedTorpedoSurfaceWake(system, position, heading) {
+  const surfacePosition = new Vector3(position.x, 0.055, position.z);
+  const forward = getForwardVector(heading);
+  const right = getRightVector(heading);
+  const effectId = system.nextId++;
+
+  for (let i = 0; i < 5; i += 1) {
+    const patch = createJaggedSurfacePatch(`air_torpedo_surface_${effectId}_${i}`, system.scene, 0.46 + i * 0.1, 0.3 + i * 0.045, effectId + i * 29);
+    patch.parent = system.root;
+    patch.material = system.materials.foam;
+    patch.position.copyFrom(
+      surfacePosition
+        .add(forward.scale(-0.18 - i * 0.08))
+        .add(right.scale((i - 2) * 0.07))
+        .add(new Vector3(0, 0.004 + i * 0.002, 0))
+    );
+    patch.rotation.y = heading + i * 0.36;
+    system.hitEffects.push({
+      mesh: patch,
+      age: 0,
+      lifetime: 0.55 + i * 0.035,
+      origin: patch.position.clone(),
+      velocity: forward.scale(-0.08 - i * 0.02).add(right.scale((i - 2) * 0.025)),
+      gravity: 0.02,
+      baseScale: patch.scaling.clone(),
+      grow: new Vector3(1.1 + i * 0.12, 0.06, 0.78 + i * 0.08),
+      seed: effectId + i
     });
   }
 }
