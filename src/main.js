@@ -2530,7 +2530,8 @@ function updateKillFeedFromSnapshot(snapshot) {
   const candidates = [
     ...collectKillFeedImpacts(snapshot.torpedoImpacts, "torpedo", "Torpedo"),
     ...collectKillFeedImpacts(snapshot.bombImpacts, "bomb", "Bomben"),
-    ...collectKillFeedImpacts(snapshot.flakHits, "flak", "Flak", () => true)
+    ...collectKillFeedImpacts(snapshot.flakHits, "flak", "Flak", () => true),
+    ...collectKillFeedImpacts(snapshot.ramHits, "ram", "Rammen", () => true)
   ].sort((left, right) => left.t - right.t);
 
   candidates.forEach((event) => {
