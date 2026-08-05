@@ -5690,7 +5690,7 @@ function createScoutPlaneHitSequence(system, position) {
 function createFlakWaterImpactEffect(system, position) {
   const effectId = system.nextId++;
   const surfacePosition = new Vector3(position.x, 0.055, position.z);
-  createFlakImpactFlash(system, effectId, surfacePosition.add(new Vector3(0, 0.5, 0)), 0.6, 24, 2.05);
+  createFlakImpactFlash(system, effectId, surfacePosition.add(new Vector3(0, 0.62, 0)), 0.72, 28, 2.18);
 
   const core = MeshBuilder.CreateSphere(`flak_water_impact_core_${effectId}`, {
     diameter: 0.46,
@@ -5736,26 +5736,26 @@ function createFlakWaterImpactEffect(system, position) {
   }
 
   for (let index = 0; index < 4; index += 1) {
-    const spray = createJaggedHitWall(`flak_water_spray_${effectId}_${index}`, system.scene, 0.12 + index * 0.035, 0.26 + index * 0.05, effectId + index * 29);
+    const spray = createJaggedHitWall(`flak_water_spray_${effectId}_${index}`, system.scene, 0.15 + index * 0.04, 0.46 + index * 0.12, effectId + index * 29);
     spray.parent = system.root;
     spray.material = system.materials.foam;
-    spray.position.copyFrom(surfacePosition.add(new Vector3(0, 0.18 + index * 0.04, 0)));
+    spray.position.copyFrom(surfacePosition.add(new Vector3(0, 0.24 + index * 0.07, 0)));
     spray.rotation.y = stableUnitNoise(effectId + index * 31) * Math.PI * 2;
     spray.isPickable = false;
     system.airHitEffects.push({
       mesh: spray,
       age: 0,
-      lifetime: 0.46 + index * 0.05,
+      lifetime: 0.54 + index * 0.055,
       origin: spray.position.clone(),
       velocity: new Vector3(
-        (stableUnitNoise(effectId + index * 37) - 0.5) * 1.05,
-        0.48 + index * 0.075,
-        (stableUnitNoise(effectId + index * 41) - 0.5) * 1.05
+        (stableUnitNoise(effectId + index * 37) - 0.5) * 0.96,
+        0.74 + index * 0.105,
+        (stableUnitNoise(effectId + index * 41) - 0.5) * 0.96
       ),
-      gravity: 0.48,
-      baseScale: new Vector3(0.82, 0.82, 0.82),
-      grow: new Vector3(0.7, 0.48, 0.7),
-      alpha: 0.9
+      gravity: 0.62,
+      baseScale: new Vector3(0.78, 0.92, 0.78),
+      grow: new Vector3(0.62, 0.78, 0.62),
+      alpha: 0.96
     });
   }
 }
