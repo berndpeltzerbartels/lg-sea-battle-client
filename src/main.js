@@ -9015,16 +9015,16 @@ function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2
   const elevationRoot = new TransformNode(`${name}_cannon_elevation`, scene);
   elevationRoot.parent = mount;
   elevationRoot.position.y = 0.23 * cannonScale;
-  elevationRoot.position.z = 0.12 * cannonScale;
+  elevationRoot.position.z = 0.02 * cannonScale;
 
-  const barrelLength = 1.55 * cannonScale;
+  const barrelLength = 0.78 * cannonScale;
   const barrel = MeshBuilder.CreateCylinder(`${name}_cannon_barrel`, {
     diameter: 0.07 * cannonScale,
     height: barrelLength,
     tessellation: 14
   }, scene);
   barrel.parent = elevationRoot;
-  barrel.position.z = barrelLength * 0.5;
+  barrel.position.z = barrelLength * 0.42;
   barrel.rotation.x = Math.PI / 2;
   barrel.material = metalMaterial;
 
