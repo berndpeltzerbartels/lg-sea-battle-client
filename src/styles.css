@@ -981,7 +981,7 @@ body.big-map .map-meta span {
 
 .kill-feed-row {
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr);
   gap: 2px;
   column-gap: 6px;
   min-height: 22px;
@@ -1000,6 +1000,7 @@ body.big-map .map-meta span {
   font-size: 9px;
   font-weight: 900;
   line-height: 1.18;
+  min-width: 28px;
   text-align: right;
 }
 
