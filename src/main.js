@@ -8789,7 +8789,7 @@ function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2
   const scale = isPlayer ? 0.72 : 0.78;
 
   const platform = MeshBuilder.CreateCylinder(`${name}_cannon_platform`, {
-    diameter: 0.82 * scale,
+    diameter: 0.52 * scale,
     height: 0.075 * scale,
     tessellation: 28
   }, scene);
@@ -8803,30 +8803,28 @@ function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2
   mount.position.y = platform.position.y + 0.02 * scale;
   mount.position.z = bowZ;
 
-  const cupola = MeshBuilder.CreateSphere(`${name}_cannon_cupola`, {
-    diameter: 0.72 * scale,
-    segments: 20
+  const turretBase = MeshBuilder.CreateCylinder(`${name}_cannon_turret_base`, {
+    diameter: 0.42 * scale,
+    height: 0.26 * scale,
+    tessellation: 22
   }, scene);
-  cupola.parent = mount;
-  cupola.position.y = 0.13 * scale;
-  cupola.scaling.y = 0.42;
-  cupola.material = turretMaterial;
+  turretBase.parent = mount;
+  turretBase.position.y = 0.13 * scale;
+  turretBase.material = turretMaterial;
 
-  const collar = MeshBuilder.CreateCylinder(`${name}_cannon_collar`, {
-    diameter: 0.44 * scale,
-    height: 0.14 * scale,
-    tessellation: 16
+  const turretRoof = MeshBuilder.CreateSphere(`${name}_cannon_turret_roof`, {
+    diameter: 0.42 * scale,
+    segments: 18
   }, scene);
-  collar.parent = mount;
-  collar.position.y = 0.18 * scale;
-  collar.position.z = 0.2 * scale;
-  collar.rotation.x = Math.PI / 2;
-  collar.material = metalMaterial;
+  turretRoof.parent = mount;
+  turretRoof.position.y = 0.26 * scale;
+  turretRoof.scaling.y = 0.28;
+  turretRoof.material = turretMaterial;
 
   const elevationRoot = new TransformNode(`${name}_cannon_elevation`, scene);
   elevationRoot.parent = mount;
-  elevationRoot.position.y = 0.2 * scale;
-  elevationRoot.position.z = 0.16 * scale;
+  elevationRoot.position.y = 0.23 * scale;
+  elevationRoot.position.z = 0.12 * scale;
 
   const barrelLength = 1.55 * scale;
   const barrel = MeshBuilder.CreateCylinder(`${name}_cannon_barrel`, {
@@ -8838,16 +8836,6 @@ function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2
   barrel.position.z = barrelLength * 0.5;
   barrel.rotation.x = Math.PI / 2;
   barrel.material = metalMaterial;
-
-  const breech = MeshBuilder.CreateBox(`${name}_cannon_breech`, {
-    width: 0.28 * scale,
-    height: 0.18 * scale,
-    depth: 0.24 * scale
-  }, scene);
-  breech.parent = elevationRoot;
-  breech.position.y = -0.01 * scale;
-  breech.position.z = -0.08 * scale;
-  breech.material = metalMaterial;
 
   return { mount, elevationRoot };
 }
