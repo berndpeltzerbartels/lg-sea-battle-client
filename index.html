@@ -322,6 +322,22 @@
         <span>FLAK</span>
         <kbd>F</kbd>
       </button>
+      <button id="cannonViewButton" class="view-toggle-button view-toggle-button-cannon" type="button">
+        <span>KANONE</span>
+        <kbd>C</kbd>
+      </button>
+      <div class="cannon-scope" aria-hidden="true">
+        <div class="cannon-scope-vignette"></div>
+        <div class="cannon-scope-glass">
+          <span class="cannon-scope-line cannon-scope-line-horizontal"></span>
+          <span class="cannon-scope-line cannon-scope-line-vertical"></span>
+          <span class="cannon-scope-ring cannon-scope-ring-inner"></span>
+          <span class="cannon-scope-ring cannon-scope-ring-outer"></span>
+          <span class="cannon-scope-range cannon-scope-range-near"></span>
+          <span class="cannon-scope-range cannon-scope-range-mid"></span>
+          <span class="cannon-scope-range cannon-scope-range-far"></span>
+        </div>
+      </div>
       <div id="fleetStatusRows" class="fleet-status" aria-hidden="true"></div>
       <div class="version-panel" aria-hidden="true">
         <span>Client <strong id="clientVersionValue">--</strong></span>
