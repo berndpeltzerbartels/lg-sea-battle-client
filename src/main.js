@@ -1111,11 +1111,11 @@ function getPlayerCameraSetup(forward) {
 
   // Fixed bridge camera for ships; oblique chase camera for the scout-plane perspective test.
   const cameraDistance = scoutPlaneMode ? 24.0 : -0.2;
-  const cameraHeight = scoutPlaneMode ? 9.5 - scoutPlanePitch * 10 : 1.55;
+  const cameraHeight = scoutPlaneMode ? 9.5 - scoutPlanePitch * 10 : 1.28;
   const position = boat.root.position
     .subtract(forward.scale(cameraDistance))
     .add(new Vector3(0, cameraHeight, 0));
-  const planeLookDown = scoutPlaneMode ? -8.0 - scoutPlanePitch * 42 : 1.05;
+  const planeLookDown = scoutPlaneMode ? -8.0 - scoutPlanePitch * 42 : 0.9;
   const target = boat.root.position
     .add(forward.scale(scoutPlaneMode ? 90.0 : 24.0))
     .add(new Vector3(0, planeLookDown, 0));
@@ -8553,7 +8553,7 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
   hatch.position.z = -0.36;
   hatch.material = teamMaterials.cabin;
 
-  const bowCannon = createBowCannon(scene, materials, root, name, teamMaterials, 2.42, true);
+  const bowCannon = createBowCannon(scene, materials, root, name, teamMaterials, 1.58, true);
   const sternFlak = createSternFlak(scene, materials, root, name, teamMaterials, playerSternFlakZ, true);
 
   return { root, bowCannon, sternFlak, flakDeckView, flakViewHiddenMeshes: [rearDeck] };
@@ -8800,7 +8800,7 @@ function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2
 
   const mount = new TransformNode(`${name}_cannon_mount`, scene);
   mount.parent = parent;
-  mount.position.y = platform.position.y + 0.08 * scale;
+  mount.position.y = platform.position.y + 0.02 * scale;
   mount.position.z = bowZ;
 
   const cupola = MeshBuilder.CreateSphere(`${name}_cannon_cupola`, {
@@ -8808,7 +8808,7 @@ function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2
     segments: 20
   }, scene);
   cupola.parent = mount;
-  cupola.position.y = 0.15 * scale;
+  cupola.position.y = 0.13 * scale;
   cupola.scaling.y = 0.42;
   cupola.material = turretMaterial;
 
@@ -8818,14 +8818,14 @@ function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2
     tessellation: 16
   }, scene);
   collar.parent = mount;
-  collar.position.y = 0.2 * scale;
+  collar.position.y = 0.18 * scale;
   collar.position.z = 0.2 * scale;
   collar.rotation.x = Math.PI / 2;
   collar.material = metalMaterial;
 
   const elevationRoot = new TransformNode(`${name}_cannon_elevation`, scene);
   elevationRoot.parent = mount;
-  elevationRoot.position.y = 0.22 * scale;
+  elevationRoot.position.y = 0.2 * scale;
   elevationRoot.position.z = 0.16 * scale;
 
   const barrelLength = 1.55 * scale;
@@ -8838,15 +8838,6 @@ function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2
   barrel.position.z = barrelLength * 0.5;
   barrel.rotation.x = Math.PI / 2;
   barrel.material = metalMaterial;
-
-  const muzzle = MeshBuilder.CreateCylinder(`${name}_cannon_muzzle`, {
-    diameter: 0.14 * scale,
-    height: 0.12 * scale,
-    tessellation: 14
-  }, scene);
-  muzzle.parent = barrel;
-  muzzle.position.y = barrelLength * 0.5;
-  muzzle.material = metalMaterial;
 
   const breech = MeshBuilder.CreateBox(`${name}_cannon_breech`, {
     width: 0.28 * scale,
@@ -9071,7 +9062,7 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = 
   mast.rotation.x = -0.16;
   mast.material = funnelMaterial;
 
-  const bowCannon = createBowCannon(scene, materials, root, name, teamMaterials, 2.35, false);
+  const bowCannon = createBowCannon(scene, materials, root, name, teamMaterials, 1.55, false);
   const sternFlak = hasFlak
     ? createSternFlak(scene, materials, root, name, teamMaterials, remoteSternFlakZ, false)
     : null;
