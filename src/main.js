@@ -161,17 +161,20 @@ const flakHoldMediumDelaySeconds = 0.35;
 const flakHoldFastDelaySeconds = 0.85;
 const flakHoldVeryFastDelaySeconds = 1.35;
 const flakHoldMaxDelaySeconds = 2.05;
+const flakHoldExtremeDelaySeconds = 2.75;
 const flakYawFineSpeed = 0.105;
 const flakYawMediumSpeed = 0.18;
 const flakYawFastSpeed = 0.34;
 const flakYawVeryFastSpeed = 0.48;
 const flakYawMaxSpeed = 0.62;
+const flakYawExtremeSpeed = 0.82;
 const flakPitchFineSpeed = 0.055;
 const flakPitchMediumSpeed = 0.095;
 const flakPitchFastSpeed = 0.19;
 const flakPitchVeryFastSpeed = 0.27;
 const flakPitchMaxSpeed = 0.34;
-const flakFireCooldownSeconds = 0.083;
+const flakPitchExtremeSpeed = 0.46;
+const flakFireCooldownSeconds = 0.075;
 const flakProjectileSpeed = 241.3;
 const flakProjectileGravity = 9;
 const flakProjectileLifetime = 8.0;
@@ -761,11 +764,11 @@ scene.onBeforeRenderObservable.add(() => {
     );
   }
   if (playerActive && flakViewActive && heldFlakDirection !== 0) {
-    flakYaw = normalizeAngle(flakYaw + heldFlakDirection * getHeldFlakSpeed(heldFlakStartTime, flakYawFineSpeed, flakYawMediumSpeed, flakYawFastSpeed, flakYawVeryFastSpeed, flakYawMaxSpeed) * dt);
+    flakYaw = normalizeAngle(flakYaw + heldFlakDirection * getHeldFlakSpeed(heldFlakStartTime, flakYawFineSpeed, flakYawMediumSpeed, flakYawFastSpeed, flakYawVeryFastSpeed, flakYawMaxSpeed, flakYawExtremeSpeed) * dt);
   }
   if (playerActive && flakViewActive && heldFlakPitchDirection !== 0) {
     flakPitch = clamp(
-      flakPitch + heldFlakPitchDirection * getHeldFlakSpeed(heldFlakPitchStartTime, flakPitchFineSpeed, flakPitchMediumSpeed, flakPitchFastSpeed, flakPitchVeryFastSpeed, flakPitchMaxSpeed) * dt,
+      flakPitch + heldFlakPitchDirection * getHeldFlakSpeed(heldFlakPitchStartTime, flakPitchFineSpeed, flakPitchMediumSpeed, flakPitchFastSpeed, flakPitchVeryFastSpeed, flakPitchMaxSpeed, flakPitchExtremeSpeed) * dt,
       flakMinPitch,
       flakMaxPitch
     );
@@ -1062,8 +1065,9 @@ function changeFlakPitch(direction) {
   flakPitch = clamp(flakPitch + direction * flakPitchStepRadians, flakMinPitch, flakMaxPitch);
 }
 
-function getHeldFlakSpeed(startTime, fineSpeed, mediumSpeed, fastSpeed, veryFastSpeed, maxSpeed) {
+function getHeldFlakSpeed(startTime, fineSpeed, mediumSpeed, fastSpeed, veryFastSpeed, maxSpeed, extremeSpeed) {
   const heldSeconds = time - startTime;
+  if (heldSeconds >= flakHoldExtremeDelaySeconds) return extremeSpeed;
   if (heldSeconds >= flakHoldMaxDelaySeconds) return maxSpeed;
   if (heldSeconds >= flakHoldVeryFastDelaySeconds) return veryFastSpeed;
   if (heldSeconds >= flakHoldFastDelaySeconds) return fastSpeed;
