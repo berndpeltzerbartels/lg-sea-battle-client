@@ -1111,11 +1111,11 @@ function getPlayerCameraSetup(forward) {
 
   // Fixed bridge camera for ships; oblique chase camera for the scout-plane perspective test.
   const cameraDistance = scoutPlaneMode ? 24.0 : -0.2;
-  const cameraHeight = scoutPlaneMode ? 9.5 - scoutPlanePitch * 10 : 1.22;
+  const cameraHeight = scoutPlaneMode ? 9.5 - scoutPlanePitch * 10 : 1.55;
   const position = boat.root.position
     .subtract(forward.scale(cameraDistance))
     .add(new Vector3(0, cameraHeight, 0));
-  const planeLookDown = scoutPlaneMode ? -8.0 - scoutPlanePitch * 42 : 0.78;
+  const planeLookDown = scoutPlaneMode ? -8.0 - scoutPlanePitch * 42 : 1.05;
   const target = boat.root.position
     .add(forward.scale(scoutPlaneMode ? 90.0 : 24.0))
     .add(new Vector3(0, planeLookDown, 0));
