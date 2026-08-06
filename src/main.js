@@ -8787,10 +8787,11 @@ function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2
   const turretMaterial = teamMaterials.cabin ?? teamMaterials.hull;
   const metalMaterial = teamMaterials.funnel ?? materials.funnel;
   const scale = isPlayer ? 0.72 : 0.78;
+  const cannonScale = scale * 0.68;
 
   const platform = MeshBuilder.CreateCylinder(`${name}_cannon_platform`, {
-    diameter: 0.52 * scale,
-    height: 0.075 * scale,
+    diameter: 0.52 * cannonScale,
+    height: 0.075 * cannonScale,
     tessellation: 28
   }, scene);
   platform.parent = parent;
@@ -8800,35 +8801,35 @@ function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2
 
   const mount = new TransformNode(`${name}_cannon_mount`, scene);
   mount.parent = parent;
-  mount.position.y = platform.position.y + 0.02 * scale;
+  mount.position.y = platform.position.y + 0.02 * cannonScale;
   mount.position.z = bowZ;
 
   const turretBase = MeshBuilder.CreateCylinder(`${name}_cannon_turret_base`, {
-    diameter: 0.42 * scale,
-    height: 0.26 * scale,
+    diameter: 0.42 * cannonScale,
+    height: 0.26 * cannonScale,
     tessellation: 22
   }, scene);
   turretBase.parent = mount;
-  turretBase.position.y = 0.13 * scale;
+  turretBase.position.y = 0.13 * cannonScale;
   turretBase.material = turretMaterial;
 
   const turretRoof = MeshBuilder.CreateSphere(`${name}_cannon_turret_roof`, {
-    diameter: 0.42 * scale,
+    diameter: 0.42 * cannonScale,
     segments: 18
   }, scene);
   turretRoof.parent = mount;
-  turretRoof.position.y = 0.26 * scale;
+  turretRoof.position.y = 0.26 * cannonScale;
   turretRoof.scaling.y = 0.28;
   turretRoof.material = turretMaterial;
 
   const elevationRoot = new TransformNode(`${name}_cannon_elevation`, scene);
   elevationRoot.parent = mount;
-  elevationRoot.position.y = 0.23 * scale;
-  elevationRoot.position.z = 0.12 * scale;
+  elevationRoot.position.y = 0.23 * cannonScale;
+  elevationRoot.position.z = 0.12 * cannonScale;
 
-  const barrelLength = 1.55 * scale;
+  const barrelLength = 1.55 * cannonScale;
   const barrel = MeshBuilder.CreateCylinder(`${name}_cannon_barrel`, {
-    diameter: 0.105 * scale,
+    diameter: 0.07 * cannonScale,
     height: barrelLength,
     tessellation: 14
   }, scene);
