@@ -203,6 +203,10 @@ const cannonPitchMaxSpeed = 0.16;
 const cannonPitchExtremeSpeed = 0.2;
 const playerCannonSightYOffset = 0.08;
 const playerCannonEyeZ = -0.12;
+const cannonFireCooldownSeconds = 5.4;
+const cannonProjectileSpeed = 118;
+const cannonProjectileGravity = 9.8;
+const cannonProjectileLifetime = 7.0;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = urlParams.get("perf-log") === "1";
@@ -504,7 +508,7 @@ window.addEventListener("keydown", (event) => {
       return;
     }
     if (cannonViewActive) {
-      document.body.dataset.cannonFire = "not-armed";
+      firePlayerCannon();
       event.preventDefault();
       return;
     }
@@ -741,6 +745,7 @@ let heldCannonDirection = 0;
 let heldCannonPitchDirection = 0;
 let heldCannonStartTime = 0;
 let heldCannonPitchStartTime = 0;
+let nextCannonFireTime = 0;
 let mouseButtonMask = 0;
 let mouseWheelEngineAccumulator = 0;
 let measuredSpeedSample = {
@@ -827,6 +832,7 @@ const airDroppedTorpedoSubmergedDistance = 20;
 const torpedoSystem = createTorpedoSystem(scene, materials, world);
 const bombSystem = createBombSystem(scene, materials, world);
 const flakSystem = createFlakSystem(scene, materials, world);
+const cannonSystem = createCannonSystem(scene, materials, world);
 connectGameEventStream();
 
 const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
@@ -1018,6 +1024,7 @@ scene.onBeforeRenderObservable.add(() => {
   updateServerBombVisuals(bombSystem, dt, time);
   updateBombSightMarker(bombSystem, forward);
   updateFlakSystem(flakSystem, dt, time);
+  updateCannonSystem(cannonSystem, dt, time, blockedWaters);
   updateFlakHitAlert(time);
   updatePlaneHitFlash(time);
   syncMultiplayerState(time);
@@ -5664,6 +5671,8 @@ function resetTransientWeaponVisualsAfterRespawn() {
   bombSystem.serverVisuals.clear();
   flakSystem.serverVisuals.forEach(disposeFlakProjectile);
   flakSystem.serverVisuals.clear();
+  cannonSystem.active.forEach(disposeFlakProjectile);
+  cannonSystem.active = [];
   document.body.dataset.weaponVisualsResetAt = time.toFixed(2);
 }
 
@@ -5803,6 +5812,21 @@ function createFlakSystem(scene, materials, parent) {
   };
 }
 
+function createCannonSystem(scene, materials, parent) {
+  const root = new TransformNode("cannon_projectiles", scene);
+  root.parent = parent;
+
+  return {
+    root,
+    scene,
+    materials,
+    active: [],
+    flashes: [],
+    airHitEffects: [],
+    nextId: 1
+  };
+}
+
 function firePlayerFlak() {
   if (!flakViewActive || playerDamageState !== "active" || time < flakSystem.nextFireTime) return;
   const shot = getPlayerFlakShot();
@@ -5819,6 +5843,63 @@ function firePlayerFlak() {
   reportPlayerFlakShot(spreadShot);
   document.body.dataset.flakFire = "ok";
   document.body.dataset.flakShots = String(flakSystem.nextId - 1);
+}
+
+function firePlayerCannon() {
+  if (!cannonViewActive || playerDamageState !== "active") return;
+  if (time < nextCannonFireTime) {
+    document.body.dataset.cannonFire = "reloading";
+    document.body.dataset.cannonReload = Math.max(0, nextCannonFireTime - time).toFixed(1);
+    return;
+  }
+
+  const shot = getPlayerCannonShot();
+  if (!shot) return;
+  if (cannonShotWouldHitOwnBoat(shot)) {
+    document.body.dataset.cannonFire = "blocked-own-ship";
+    return;
+  }
+
+  nextCannonFireTime = time + cannonFireCooldownSeconds;
+  createCannonProjectile(cannonSystem, shot.position, shot.velocity, shot.direction);
+  createCannonMuzzleBlast(cannonSystem, shot.muzzle, shot.direction);
+  document.body.dataset.cannonFire = "ok";
+  document.body.dataset.cannonShots = String(cannonSystem.nextId - 1);
+  document.body.dataset.cannonReload = cannonFireCooldownSeconds.toFixed(1);
+}
+
+function getPlayerCannonShot() {
+  const cannon = boat.bowCannon;
+  const elevationRoot = cannon?.elevationRoot;
+  if (!elevationRoot) return null;
+
+  const worldMatrix = elevationRoot.computeWorldMatrix(true);
+  const muzzleZ = cannon.muzzleZ ?? 0.52;
+  const barrelY = 0;
+  const muzzle = Vector3.TransformCoordinates(new Vector3(0, barrelY, muzzleZ), worldMatrix);
+  const aimTarget = Vector3.TransformCoordinates(new Vector3(0, barrelY, 80), worldMatrix);
+  const direction = aimTarget.subtract(muzzle).normalize();
+
+  return {
+    position: muzzle.add(direction.scale(0.12)),
+    muzzle,
+    direction,
+    velocity: direction.scale(cannonProjectileSpeed).add(getForwardVector(heading).scale(speed))
+  };
+}
+
+function cannonShotWouldHitOwnBoat(shot) {
+  if (!shot?.position || !shot?.direction || !boat?.root) return true;
+  const inverse = boat.root.computeWorldMatrix(true).clone();
+  inverse.invert();
+  for (let distance = 0.65; distance <= 7.5; distance += 0.85) {
+    const worldPoint = shot.position.add(shot.direction.scale(distance));
+    const localPoint = Vector3.TransformCoordinates(worldPoint, inverse);
+    if (ownBoatFlakHitArea(localPoint) === "critical") {
+      return true;
+    }
+  }
+  return false;
 }
 
 async function reportPlayerFlakShot(shot) {
@@ -6012,6 +6093,55 @@ function createFlakProjectile(system, position, velocity, direction) {
   return system.active[system.active.length - 1];
 }
 
+function createCannonProjectile(system, position, velocity, direction) {
+  const id = system.nextId;
+  system.nextId += 1;
+
+  const root = new TransformNode(`cannon_shell_${id}`, system.scene);
+  root.parent = system.root;
+  root.position.copyFrom(position);
+
+  const core = MeshBuilder.CreateSphere(`${root.name}_core`, {
+    diameter: 0.34,
+    segments: 12
+  }, system.scene);
+  core.parent = root;
+  core.material = system.materials.flakTracer;
+
+  const trail = [];
+  for (let i = 0; i < 3; i += 1) {
+    const segment = MeshBuilder.CreateSphere(`${root.name}_trail_${i}`, {
+      diameter: 0.24 - i * 0.04,
+      segments: 8
+    }, system.scene);
+    segment.parent = system.root;
+    segment.material = system.materials.flakTracerTrail;
+    segment.position.copyFrom(position.add(direction.scale(-0.28 - i * 0.42)));
+    trail.push(segment);
+  }
+
+  const light = new PointLight(`${root.name}_light`, position, system.scene);
+  light.diffuse = new Color3(1.0, 0.9, 0.68);
+  light.specular = new Color3(1.0, 0.86, 0.58);
+  light.intensity = 1.55;
+  light.range = 38;
+
+  system.active.push({
+    root,
+    core,
+    trail,
+    light,
+    position: position.clone(),
+    previousPosition: position.subtract(direction.scale(0.65)),
+    velocity,
+    age: 0,
+    lifetime: cannonProjectileLifetime,
+    direction: direction.clone(),
+    samplePositions: Array.from({ length: 4 }, (_, index) => position.add(direction.scale(-0.28 - index * 0.42)))
+  });
+  return system.active[system.active.length - 1];
+}
+
 function createFlakMuzzleFlash(system, position, direction) {
   const flash = MeshBuilder.CreateSphere(`flak_muzzle_flash_${system.nextId}`, {
     diameter: 0.14,
@@ -6035,6 +6165,59 @@ function createFlakMuzzleFlash(system, position, direction) {
     lifetime: 0.12,
     direction: direction.clone()
   });
+}
+
+function createCannonMuzzleBlast(system, position, direction) {
+  const flashId = system.nextId;
+  const flash = MeshBuilder.CreateSphere(`cannon_muzzle_flash_${flashId}`, {
+    diameter: 0.42,
+    segments: 12
+  }, system.scene);
+  flash.parent = system.root;
+  flash.material = system.materials.flakFlash;
+  flash.position.copyFrom(position.add(direction.scale(0.18)));
+  flash.isPickable = false;
+
+  const light = new PointLight(`${flash.name}_light`, flash.position.clone(), system.scene);
+  light.diffuse = new Color3(1.0, 0.78, 0.42);
+  light.specular = new Color3(1.0, 0.86, 0.62);
+  light.intensity = 2.15;
+  light.range = 30;
+
+  system.flashes.push({
+    mesh: flash,
+    light,
+    origin: flash.position.clone(),
+    age: 0,
+    lifetime: 0.18,
+    direction: direction.clone()
+  });
+
+  for (let index = 0; index < 5; index += 1) {
+    const puff = MeshBuilder.CreateSphere(`cannon_muzzle_smoke_${flashId}_${index}`, {
+      diameter: 0.42 + index * 0.07,
+      segments: 10
+    }, system.scene);
+    puff.parent = system.root;
+    puff.material = system.materials.volcanicSmoke;
+    puff.position.copyFrom(position.add(direction.scale(0.12 + index * 0.12)).add(new Vector3(
+      (stableUnitNoise(flashId + index * 13) - 0.5) * 0.18,
+      (stableUnitNoise(flashId + index * 17) - 0.5) * 0.12,
+      (stableUnitNoise(flashId + index * 19) - 0.5) * 0.18
+    )));
+    puff.isPickable = false;
+    system.airHitEffects.push({
+      mesh: puff,
+      age: 0,
+      lifetime: 1.05 + index * 0.08,
+      origin: puff.position.clone(),
+      velocity: direction.scale(0.8 + index * 0.18).add(new Vector3(0, 0.28 + index * 0.04, 0)),
+      gravity: 0.02,
+      baseScale: new Vector3(0.44, 0.36, 0.44),
+      grow: new Vector3(1.65, 1.05, 1.65),
+      alpha: 0.42
+    });
+  }
 }
 
 function updateFlakSystem(system, dt, now) {
@@ -6093,6 +6276,87 @@ function updateFlakSystem(system, dt, now) {
   system.scheduledHitEffects = system.scheduledHitEffects.filter((effect) => updateScheduledHitEffect(system, effect, dt));
 
   document.body.dataset.flakProjectiles = String(system.active.length);
+}
+
+function updateCannonSystem(system, dt, now, landZones) {
+  system.active = system.active.filter((projectile) => {
+    projectile.age += dt;
+    if (projectile.age >= projectile.lifetime) {
+      disposeFlakProjectile(projectile);
+      return false;
+    }
+
+    projectile.previousPosition.copyFrom(projectile.position);
+    projectile.velocity.y -= cannonProjectileGravity * dt;
+    projectile.position.addInPlace(projectile.velocity.scale(dt));
+    projectile.root.position.copyFrom(projectile.position);
+    projectile.direction = projectile.position.subtract(projectile.previousPosition).normalize();
+
+    const impact = getCannonProjectileImpact(projectile, landZones);
+    if (impact) {
+      if (impact.kind === "land") {
+        createFlakLandImpactEffect(system, impact.position);
+      } else {
+        createFlakWaterImpactEffect(system, impact.position);
+      }
+      disposeFlakProjectile(projectile);
+      return false;
+    }
+
+    const pulse = 0.82 + Math.sin(now * 46 + projectile.age * 11) * 0.1;
+    projectile.core.visibility = pulse;
+    projectile.samplePositions.unshift(projectile.position.clone());
+    projectile.samplePositions = projectile.samplePositions.slice(0, projectile.trail.length + 1);
+    projectile.trail.forEach((segment, index) => {
+      const sample = projectile.samplePositions[index + 1] ?? projectile.previousPosition;
+      segment.position.copyFrom(sample);
+      segment.visibility = Math.max(0.14, pulse - index * 0.24);
+      segment.scaling.setAll(1 - index * 0.16);
+    });
+    projectile.light.position.copyFrom(projectile.position);
+    projectile.light.intensity = 0.55 + pulse * 0.55;
+    return true;
+  });
+
+  system.flashes = system.flashes.filter((flash) => {
+    flash.age += dt;
+    const t = flash.age / flash.lifetime;
+    if (t >= 1) {
+      flash.light.dispose();
+      flash.mesh.dispose();
+      return false;
+    }
+    const fade = 1 - t;
+    flash.mesh.visibility = fade;
+    flash.mesh.scaling.setAll(1 + t * 2.2);
+    flash.mesh.position.copyFrom(flash.origin.add(flash.direction.scale(t * 0.55)));
+    flash.light.position.copyFrom(flash.mesh.position);
+    flash.light.intensity = 2.15 * fade;
+    return true;
+  });
+
+  system.airHitEffects = system.airHitEffects.filter((effect) => updateAirHitEffect(effect, dt));
+  document.body.dataset.cannonProjectiles = String(system.active.length);
+  document.body.dataset.cannonReload = Math.max(0, nextCannonFireTime - now).toFixed(1);
+}
+
+function getCannonProjectileImpact(projectile, landZones) {
+  const position = projectile.position;
+  if (isCannonProjectileInLand(position, landZones)) {
+    return { kind: "land", position: position.clone() };
+  }
+  if (position.y <= 0.03) {
+    return { kind: "water", position: new Vector3(position.x, 0.03, position.z) };
+  }
+  return null;
+}
+
+function isCannonProjectileInLand(position, landZones) {
+  if (position.y > 3.2) return false;
+  return landZones.some((zone) => {
+    const distance = getZoneShapeDistance(position, zone, zone.rx, zone.rz);
+    return distance < getZoneBlockDistance(zone, "navigation") && !isInLandWater(position, zone);
+  });
 }
 
 function createScoutPlaneHitSequence(system, position) {
@@ -9020,7 +9284,7 @@ function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2
   elevationRoot.position.y = 0.23 * cannonScale;
   elevationRoot.position.z = 0;
 
-  const barrelLength = 0.78 * cannonScale;
+  const barrelLength = 0.42 * cannonScale;
   const barrel = MeshBuilder.CreateCylinder(`${name}_cannon_barrel`, {
     diameter: 0.07 * cannonScale,
     height: barrelLength,
@@ -9031,7 +9295,7 @@ function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2
   barrel.rotation.x = Math.PI / 2;
   barrel.material = metalMaterial;
 
-  return { mount, elevationRoot };
+  return { mount, elevationRoot, muzzleZ: barrel.position.z + barrelLength * 0.5 };
 }
 
 function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ = -3.45, isPlayer = false) {
