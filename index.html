@@ -310,7 +310,10 @@
       <div class="nav-instrument nav-instrument-radar" aria-hidden="true">
         <div class="nav-title-row">
           <div class="nav-title">Radar</div>
-          <button id="radarRangeButton" class="instrument-button" type="button">Radar weit</button>
+          <div class="instrument-button-group">
+            <button id="radarRangeButton" class="instrument-button" type="button">Radar</button>
+            <button id="targetRadarButton" class="instrument-button" type="button">Gefechtsradar <kbd>R</kbd></button>
+          </div>
         </div>
         <canvas id="radarCanvas" width="300" height="300"></canvas>
         <small id="radarStatus">Clear</small>
@@ -377,6 +380,16 @@
           <div id="rudderIndicator" class="rudder-indicator"></div>
         </div>
         <strong id="rudderValue">0°</strong>
+      </div>
+      <div class="flak-elevation" aria-hidden="true">
+        <div class="flak-elevation-title">EL</div>
+        <div class="flak-elevation-gauge">
+          <span class="flak-elevation-mark flak-elevation-mark-high">70</span>
+          <span class="flak-elevation-mark flak-elevation-mark-mid">35</span>
+          <span class="flak-elevation-mark flak-elevation-mark-low">0</span>
+          <div id="flakElevationIndicator" class="flak-elevation-indicator"></div>
+        </div>
+        <strong id="flakElevationValue">0°</strong>
       </div>
       <button id="mobileFireButton" class="mobile-fire-button" type="button" aria-label="Fire torpedo">Fire</button>
     </div>

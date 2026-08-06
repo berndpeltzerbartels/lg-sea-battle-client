@@ -76,10 +76,13 @@ const clearDebugMapMarkersButton = document.getElementById("clearDebugMapMarkers
 const radarCanvas = document.getElementById("radarCanvas");
 const radarStatus = document.getElementById("radarStatus");
 const radarRangeButton = document.getElementById("radarRangeButton");
+const targetRadarButton = document.getElementById("targetRadarButton");
 const flakViewButton = document.getElementById("flakViewButton");
 const flakHitAlert = document.getElementById("flakHitAlert");
 const rudderIndicator = document.getElementById("rudderIndicator");
 const rudderValue = document.getElementById("rudderValue");
+const flakElevationIndicator = document.getElementById("flakElevationIndicator");
+const flakElevationValue = document.getElementById("flakElevationValue");
 const sinkingWaterOverlay = document.getElementById("sinkingWaterOverlay");
 const planeHitFlash = document.getElementById("planeHitFlash");
 const fleetStatusRows = document.getElementById("fleetStatusRows");
@@ -168,7 +171,7 @@ const flakPitchMediumSpeed = 0.095;
 const flakPitchFastSpeed = 0.19;
 const flakPitchVeryFastSpeed = 0.27;
 const flakPitchMaxSpeed = 0.34;
-const flakFireCooldownSeconds = 0.09725;
+const flakFireCooldownSeconds = 0.083;
 const flakProjectileSpeed = 241.3;
 const flakProjectileGravity = 9;
 const flakProjectileLifetime = 8.0;
@@ -321,6 +324,11 @@ window.addEventListener("keydown", (event) => {
   }
   if (playerActive && isBombBayViewToggleKey(event) && !event.repeat) {
     toggleBombBayView();
+    event.preventDefault();
+    return;
+  }
+  if (playerActive && isRadarModeToggleKey(event) && !event.repeat) {
+    setRadarMode(radarMode === "target" ? "radar" : "target");
     event.preventDefault();
     return;
   }
@@ -629,7 +637,9 @@ let nextRudderHoldChangeTime = 0;
 let flakViewActive = false;
 let bombBayViewActive = false;
 let bombBayImpactFocus = null;
-let radarRangeMode = readStoredValue("seaBattleRadarRangeMode") === "near" ? "near" : "far";
+let radarMode = readStoredValue("seaBattleRadarRangeMode") === "near" || readStoredValue("seaBattleRadarMode") === "target"
+  ? "target"
+  : "radar";
 let flakYaw = 0;
 let flakPitch = 0;
 let heldFlakDirection = 0;
@@ -667,6 +677,7 @@ let killFeedEventIds = new Set();
 let killFeedEvents = [];
 let killFeedShipLabels = new Map();
 let nextKillFeedNumber = 1;
+let radarTorpedoSnapshots = Array.isArray(gameState.torpedoes) ? gameState.torpedoes : [];
 let scoutPlaneFlakHitStartTime = 0;
 let scoutPlaneFlakHitExploded = false;
 let nextScoutPlaneFlakSmokeTime = 0;
@@ -693,6 +704,7 @@ const radarRangeFactors = {
   far: scoutPlaneRadarRangeFactor
 };
 setupRadarRangeControl(radarRangeButton);
+setupTargetRadarControl(targetRadarButton);
 setupFlakViewControl(flakViewButton);
 let serverShipsById = indexShipsById(gameState.ships);
 let serverClockOffset = Number.isFinite(gameState.t) ? -gameState.t : null;
@@ -966,6 +978,7 @@ scene.onBeforeRenderObservable.add(() => {
   compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
   if (compassHeading) compassHeading.textContent = `HDG ${formatHeadingDegrees(heading)}`;
   updateRudderGauge(rudderIndicator, rudderValue, rudderDegrees);
+  updateFlakElevationGauge(flakElevationIndicator, flakElevationValue, flakPitch);
   updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, getRadarContacts(enemyMotions), blockedWaters, heading, heading, {
     flakLookHeading: !scoutPlaneMode ? normalizeAngle(heading + (flakViewActive ? flakYaw : 0)) : null
   });
@@ -998,6 +1011,10 @@ function isFlakViewToggleKey(event) {
 
 function isBombBayViewToggleKey(event) {
   return scoutPlaneMode && (event.code === "KeyB" || event.key === "b" || event.key === "B");
+}
+
+function isRadarModeToggleKey(event) {
+  return !scoutPlaneMode && (event.code === "KeyR" || event.key === "r" || event.key === "R");
 }
 
 function toggleFlakView() {
@@ -1295,29 +1312,48 @@ function setupMapZoomControl(input) {
 
 function setupRadarRangeControl(button) {
   if (!button) return;
-  updateRadarRangeButton();
   button.addEventListener("click", (event) => {
-    radarRangeMode = radarRangeMode === "far" ? "near" : "far";
-    try {
-      localStorage.setItem("seaBattleRadarRangeMode", radarRangeMode);
-    } catch (ignored) {
-      // The selected radar range is only a convenience preference.
-    }
-    updateRadarRangeButton();
+    setRadarMode("radar");
     button.blur();
     event.stopPropagation();
   });
 }
 
-function updateRadarRangeButton() {
-  document.body.dataset.radarRangeMode = radarRangeMode;
+function setupTargetRadarControl(button) {
+  if (!button) return;
+  button.addEventListener("click", (event) => {
+    setRadarMode("target");
+    button.blur();
+    event.stopPropagation();
+  });
+  updateRadarModeButtons();
+}
+
+function setRadarMode(mode) {
+  radarMode = mode === "target" ? "target" : "radar";
+  try {
+    localStorage.setItem("seaBattleRadarMode", radarMode);
+    localStorage.setItem("seaBattleRadarRangeMode", radarMode === "target" ? "near" : "far");
+  } catch (ignored) {
+    // The selected radar mode is only a convenience preference.
+  }
+  updateRadarModeButtons();
+}
+
+function updateRadarModeButtons() {
+  document.body.dataset.radarRangeMode = radarMode === "target" ? "near" : "far";
+  document.body.dataset.radarMode = radarMode;
   if (radarRangeButton) {
-    radarRangeButton.textContent = radarRangeMode === "far" ? "Radar weit" : "Radar nah";
+    radarRangeButton.classList.toggle("is-active", radarMode !== "target");
+  }
+  if (targetRadarButton) {
+    targetRadarButton.classList.toggle("is-active", radarMode === "target");
   }
 }
 
 function getSelectedRadarRange() {
-  return clientRadarRange * (radarRangeFactors[radarRangeMode] ?? radarRangeFactors.far);
+  const rangeMode = radarMode === "target" ? "near" : "far";
+  return clientRadarRange * (radarRangeFactors[rangeMode] ?? radarRangeFactors.far);
 }
 
 function setupFlakViewControl(button) {
@@ -3069,6 +3105,7 @@ function applyServerGameSnapshot(snapshot) {
     Array.isArray(snapshot.torpedoImpacts) ? snapshot.torpedoImpacts : [],
     snapshotClientTime
   );
+  radarTorpedoSnapshots = Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes : [];
   syncServerBombs(
     Array.isArray(snapshot.bombs) ? snapshot.bombs : [],
     Array.isArray(snapshot.bombImpacts) ? snapshot.bombImpacts : [],
@@ -3489,6 +3526,15 @@ function updateRudderGauge(indicator, valueElement, degrees) {
   }
 }
 
+function updateFlakElevationGauge(indicator, valueElement, pitch) {
+  const ratio = clamp((pitch - flakMinPitch) / (flakMaxPitch - flakMinPitch), 0, 1);
+  indicator?.style.setProperty("--flak-elevation-ratio", String(ratio));
+
+  if (valueElement) {
+    valueElement.textContent = `${Math.round(Math.max(0, pitch) * 180 / Math.PI)}°`;
+  }
+}
+
 function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading, radarHeading = heading, options = {}) {
   if (!flakViewActive && !bombBayViewActive) {
     drawMapInstrument(mapCanvas, playerPosition, landZones, mapZoom, heading);
@@ -3496,7 +3542,10 @@ function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, player
   const radarRange = getSelectedRadarRange();
   drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, radarHeading, radarRange, {
     ignoreLandShadows: scoutPlaneMode,
-    flakLookHeading: options.flakLookHeading
+    flakLookHeading: options.flakLookHeading,
+    targetMode: !scoutPlaneMode && (radarMode === "target" || flakViewActive),
+    targetLineMode: flakViewActive ? "flak" : "torpedo",
+    radarTorpedoes: radarMode === "target" && !scoutPlaneMode ? radarTorpedoSnapshots : []
   });
   document.body.dataset.radarHeading = String(Math.round(normalizeAngle(radarHeading) * 180 / Math.PI));
 }
@@ -3704,6 +3753,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   const radius = Math.max(1, Math.min(width, height) * 0.46);
   const radarRange = range;
   const ignoreLandShadows = options.ignoreLandShadows === true;
+  const targetMode = options.targetMode === true;
   const scale = radius / radarRange;
 
   ctx.clearRect(0, 0, width, height);
@@ -3720,7 +3770,6 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   }
 
   drawRadarLandUnion(ctx, landZones, playerPosition, centerX, centerY, scale, heading, width, height);
-  drawRadarFlakLookIndicator(ctx, centerX, centerY, radius, options.flakLookHeading, heading);
 
   const contacts = radarContacts
     .map((contact) => ({
@@ -3736,6 +3785,37 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
     const contactPoint = worldToRadarPoint(contact.position, playerPosition, centerX, centerY, scale, heading);
     drawRadarContactMarker(ctx, contactPoint.x, contactPoint.y, contact.team, false, contact.heading, heading, contact.label, contact.vehicleType);
   });
+
+  if (targetMode) {
+    drawRadarTorpedoes(
+      ctx,
+      centerX,
+      centerY,
+      playerPosition,
+      options.radarTorpedoes,
+      landZones,
+      heading,
+      radarRange,
+      scale
+    );
+  }
+
+  if (targetMode) {
+    drawRadarTargetLine(
+      ctx,
+      centerX,
+      centerY,
+      radius,
+      playerPosition,
+      visibleContacts,
+      heading,
+      radarRange,
+      scale,
+      options.targetLineMode === "flak" ? options.flakLookHeading : heading,
+      options.targetLineMode ?? "torpedo",
+      landZones
+    );
+  }
 
   const nearestVisible = visibleContacts.reduce((nearest, contact) => (
     !nearest || contact.distance < nearest.distance ? contact : nearest
@@ -4353,6 +4433,126 @@ function drawRadarFlakLookIndicator(ctx, centerX, centerY, radius, flakLookHeadi
   ctx.lineTo(centerX + Math.sin(relative) * outer, centerY - Math.cos(relative) * outer);
   ctx.stroke();
   ctx.restore();
+}
+
+function drawRadarTorpedoes(ctx, centerX, centerY, playerPosition, torpedoes, landZones, radarHeading, radarRange, scale) {
+  if (!Array.isArray(torpedoes) || torpedoes.length === 0) return;
+
+  let visible = 0;
+  for (const torpedo of torpedoes) {
+    if (visible >= 16) break;
+    if (!torpedo || torpedo.state !== "running") continue;
+    if (!Number.isFinite(torpedo.x) || !Number.isFinite(torpedo.z)) continue;
+
+    const position = { x: torpedo.x, z: torpedo.z };
+    const distance = distance2D(playerPosition, position);
+    if (distance > radarRange) continue;
+
+    const own = torpedo.teamId === playerTeamId;
+    if (!own && isLineBlockedByLand(playerPosition, position, landZones)) continue;
+
+    const point = worldToRadarPoint(position, playerPosition, centerX, centerY, scale, radarHeading);
+    drawRadarTorpedoMarker(ctx, point.x, point.y, Number.isFinite(torpedo.heading) ? torpedo.heading : 0, radarHeading);
+    visible += 1;
+  }
+}
+
+function drawRadarTorpedoMarker(ctx, x, y, heading, radarHeading) {
+  const relativeHeading = normalizeAngle(heading - radarHeading);
+  const length = 2.4;
+  const halfLength = length * 0.5;
+  const dx = Math.sin(relativeHeading) * halfLength;
+  const dy = -Math.cos(relativeHeading) * halfLength;
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(235, 245, 244, 0.82)";
+  ctx.lineWidth = 1.15;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(x - dx, y - dy);
+  ctx.lineTo(x + dx, y + dy);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawRadarTargetLine(ctx, centerX, centerY, radius, playerPosition, visibleContacts, radarHeading, radarRange, scale, firingHeading, mode, landZones) {
+  if (!Number.isFinite(firingHeading)) return;
+
+  const relative = normalizeAngle(firingHeading - radarHeading);
+  const obstruction = mode === "torpedo"
+    ? findRadarTargetLineObstruction(playerPosition, firingHeading, visibleContacts, landZones, radarRange)
+    : null;
+  const endpointDistance = obstruction ? obstruction.distance : radarRange;
+  const inner = radius * 0.12;
+  const outer = clamp(endpointDistance * scale, inner, radius * 0.92);
+  const endX = centerX + Math.sin(relative) * outer;
+  const endY = centerY - Math.cos(relative) * outer;
+
+  ctx.save();
+  ctx.strokeStyle = obstruction ? "rgba(255, 239, 164, 0.58)" : "rgba(155, 229, 223, 0.42)";
+  ctx.lineWidth = 1.0;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(centerX + Math.sin(relative) * inner, centerY - Math.cos(relative) * inner);
+  ctx.lineTo(endX, endY);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function findRadarTargetLineObstruction(playerPosition, firingHeading, contacts, landZones, radarRange) {
+  let best = null;
+  const forward = { x: Math.sin(firingHeading), z: Math.cos(firingHeading) };
+  for (const contact of contacts) {
+    if (!contact || contact.vehicleType === "scout-plane") continue;
+    if (!Number.isFinite(contact.position?.x) || !Number.isFinite(contact.position?.z)) continue;
+    const dx = contact.position.x - playerPosition.x;
+    const dz = contact.position.z - playerPosition.z;
+    const along = dx * forward.x + dz * forward.z;
+    if (along <= 0 || along > radarRange) continue;
+    const cross = Math.abs(dx * forward.z - dz * forward.x);
+    if (cross > 10.5) continue;
+
+    const start = Math.max(0, along - 12);
+    const end = Math.min(radarRange, along + 12);
+    for (let distance = start; distance <= end; distance += 1.0) {
+      const point = {
+        x: playerPosition.x + forward.x * distance,
+        z: playerPosition.z + forward.z * distance
+      };
+      if (pointHitsRadarShipHull(point, contact)) {
+        if (!best || distance < best.distance) {
+          best = { distance, contact };
+        }
+        break;
+      }
+    }
+  }
+  const land = findRadarTargetLineLandObstruction(playerPosition, forward, landZones, radarRange);
+  if (land && (!best || land.distance < best.distance)) {
+    best = land;
+  }
+  return best;
+}
+
+function findRadarTargetLineLandObstruction(playerPosition, forward, landZones, radarRange) {
+  if (!Array.isArray(landZones) || landZones.length === 0) return null;
+  for (let distance = 4; distance <= radarRange; distance += 4) {
+    const point = {
+      x: playerPosition.x + forward.x * distance,
+      z: playerPosition.z + forward.z * distance
+    };
+    if (isRadarBlockedAt(point, landZones)) {
+      return { distance };
+    }
+  }
+  return null;
+}
+
+function pointHitsRadarShipHull(point, contact) {
+  const heading = Number.isFinite(contact.heading) ? contact.heading : 0;
+  const local = getEnemyHitLocalPoint(point, contact.position, heading);
+  if (local.forward < -4.05 || local.forward > 4.45) return false;
+  return Math.abs(local.right) <= getEnemyHullHalfWidthAt(local.forward) + 0.35;
 }
 
 function drawRadarOwnHeadingMarker(ctx, centerX, centerY) {

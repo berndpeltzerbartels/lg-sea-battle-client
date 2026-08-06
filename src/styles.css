@@ -436,9 +436,34 @@ body.debug-marker-map {
   cursor: pointer;
 }
 
+.instrument-button-group {
+  display: flex;
+  gap: 4px;
+}
+
 .instrument-button {
   min-width: 54px;
   padding: 4px 6px;
+}
+
+.instrument-button kbd {
+  display: inline-block;
+  min-width: 14px;
+  margin-left: 3px;
+  padding: 1px 3px;
+  border: 1px solid rgb(247 251 255 / 26%);
+  border-radius: 4px;
+  background: rgb(247 251 255 / 8%);
+  color: #9be5df;
+  font: inherit;
+  line-height: 1;
+  text-align: center;
+}
+
+.instrument-button.is-active {
+  border-color: rgb(155 229 223 / 72%);
+  background: rgb(155 229 223 / 18%);
+  color: #d7fff9;
 }
 
 .nav-instrument canvas {
@@ -1522,6 +1547,104 @@ body[data-player-vehicle="scout-plane"] .altimeter {
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
+}
+
+.flak-elevation {
+  position: absolute;
+  left: calc(50% + 108px);
+  bottom: 24px;
+  display: none;
+  width: 52px;
+  padding: 9px 8px 8px;
+  border: 1px solid rgb(255 255 255 / 28%);
+  border-radius: 8px;
+  background: rgb(5 27 40 / 38%);
+  box-shadow: 0 12px 32px rgb(1 15 24 / 18%);
+  text-align: center;
+  backdrop-filter: blur(7px);
+  pointer-events: none;
+}
+
+body[data-flak-view="active"] .flak-elevation {
+  display: block;
+}
+
+.flak-elevation-title {
+  margin-bottom: 5px;
+  color: #9be5df;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.flak-elevation-gauge {
+  position: relative;
+  width: 24px;
+  height: 62px;
+  margin: 0 auto;
+  border-left: 1px solid rgb(247 251 255 / 24%);
+}
+
+.flak-elevation-gauge::before,
+.flak-elevation-gauge::after {
+  position: absolute;
+  left: -4px;
+  width: 8px;
+  height: 1px;
+  background: rgb(247 251 255 / 42%);
+  content: "";
+}
+
+.flak-elevation-gauge::before {
+  top: 0;
+}
+
+.flak-elevation-gauge::after {
+  bottom: 0;
+}
+
+.flak-elevation-mark {
+  position: absolute;
+  left: 8px;
+  color: rgb(247 251 255 / 55%);
+  font-size: 8px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.flak-elevation-mark-high {
+  top: -3px;
+}
+
+.flak-elevation-mark-mid {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.flak-elevation-mark-low {
+  bottom: -3px;
+}
+
+.flak-elevation-indicator {
+  position: absolute;
+  left: -5px;
+  bottom: calc(var(--flak-elevation-ratio, 0) * 100%);
+  width: 10px;
+  height: 4px;
+  border-radius: 999px;
+  background: #9be5df;
+  box-shadow: 0 0 10px rgb(155 229 223 / 58%);
+  transform: translateY(50%);
+}
+
+.flak-elevation strong {
+  display: block;
+  margin-top: 6px;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .mobile-fire-button {
