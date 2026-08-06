@@ -479,6 +479,10 @@ body.debug-marker-map {
   width: var(--radar-size);
 }
 
+body[data-cannon-view="active"] .nav-instrument-radar {
+  z-index: 4;
+}
+
 .nav-instrument-radar canvas {
   height: auto;
   aspect-ratio: 1;
