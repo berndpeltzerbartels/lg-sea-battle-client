@@ -531,6 +531,7 @@ body[data-cannon-view="active"] .cannon-scope {
 .cannon-scope-vignette {
   position: absolute;
   inset: 0;
+  z-index: 0;
   background:
     radial-gradient(circle at 50% 50%, transparent 0 22%, rgb(1 8 10 / 12%) 34%, rgb(1 8 10 / 78%) 72%, rgb(0 0 0 / 92%) 100%);
 }
@@ -539,6 +540,7 @@ body[data-cannon-view="active"] .cannon-scope {
   position: absolute;
   left: 50%;
   top: 50%;
+  z-index: 1;
   width: min(58vw, 560px);
   aspect-ratio: 1;
   transform: translate(-50%, -50%);
@@ -550,12 +552,37 @@ body[data-cannon-view="active"] .cannon-scope {
     0 0 0 999px rgb(0 0 0 / 18%);
 }
 
+.cannon-scope-glass::after {
+  position: absolute;
+  left: 50%;
+  bottom: 18%;
+  display: none;
+  min-width: 76px;
+  padding: 7px 10px;
+  transform: translateX(-50%);
+  border: 1px solid rgb(155 229 223 / 42%);
+  border-radius: 6px;
+  background: rgb(4 22 28 / 58%);
+  color: rgb(220 255 249 / 88%);
+  content: "LADEN";
+  font: 900 11px/1 Inter, Arial, sans-serif;
+  letter-spacing: 0;
+  text-align: center;
+  text-transform: uppercase;
+  box-shadow: 0 0 18px rgb(155 229 223 / 12%);
+}
+
+body[data-cannon-reloading="true"] .cannon-scope-glass::after {
+  display: block;
+}
+
 .cannon-scope-line,
 .cannon-scope-ring,
 .cannon-scope-range {
   position: absolute;
+  z-index: 2;
   display: block;
-  background: rgb(3 8 9 / 74%);
+  background: rgb(1 7 8 / 86%);
 }
 
 .cannon-scope-line-horizontal {
@@ -578,7 +605,7 @@ body[data-cannon-view="active"] .cannon-scope {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  border: 1px solid rgb(3 8 9 / 52%);
+  border: 1px solid rgb(1 7 8 / 72%);
   border-radius: 50%;
   background: transparent;
 }

@@ -204,7 +204,7 @@ const cannonPitchExtremeSpeed = 0.2;
 const playerCannonSightYOffset = 0.08;
 const playerCannonEyeZ = -0.12;
 const cannonFireCooldownSeconds = 5.4;
-const cannonProjectileSpeed = 118;
+const cannonProjectileSpeed = 340;
 const cannonProjectileGravity = 9.8;
 const cannonProjectileLifetime = 7.0;
 const testPlayerInvulnerable = false;
@@ -5850,6 +5850,7 @@ function firePlayerCannon() {
   if (time < nextCannonFireTime) {
     document.body.dataset.cannonFire = "reloading";
     document.body.dataset.cannonReload = Math.max(0, nextCannonFireTime - time).toFixed(1);
+    document.body.dataset.cannonReloading = "true";
     return;
   }
 
@@ -5866,6 +5867,7 @@ function firePlayerCannon() {
   document.body.dataset.cannonFire = "ok";
   document.body.dataset.cannonShots = String(cannonSystem.nextId - 1);
   document.body.dataset.cannonReload = cannonFireCooldownSeconds.toFixed(1);
+  document.body.dataset.cannonReloading = "true";
 }
 
 function getPlayerCannonShot() {
@@ -6338,6 +6340,7 @@ function updateCannonSystem(system, dt, now, landZones) {
   system.airHitEffects = system.airHitEffects.filter((effect) => updateAirHitEffect(effect, dt));
   document.body.dataset.cannonProjectiles = String(system.active.length);
   document.body.dataset.cannonReload = Math.max(0, nextCannonFireTime - now).toFixed(1);
+  document.body.dataset.cannonReloading = nextCannonFireTime > now ? "true" : "false";
 }
 
 function getCannonProjectileImpact(projectile, landZones) {
