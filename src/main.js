@@ -8553,9 +8553,10 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
   hatch.position.z = -0.36;
   hatch.material = teamMaterials.cabin;
 
+  const bowCannon = createBowCannon(scene, materials, root, name, teamMaterials, 2.42, true);
   const sternFlak = createSternFlak(scene, materials, root, name, teamMaterials, playerSternFlakZ, true);
 
-  return { root, sternFlak, flakDeckView, flakViewHiddenMeshes: [rearDeck] };
+  return { root, bowCannon, sternFlak, flakDeckView, flakViewHiddenMeshes: [rearDeck] };
 }
 
 function createScoutPlane(scene, materials, name = "scout_plane", teamId = "light", isPlayer = false) {
@@ -8781,6 +8782,85 @@ function createMeshFromData(name, scene, positions, indices) {
   return mesh;
 }
 
+function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2.35, isPlayer = false) {
+  const deckMaterial = teamMaterials.deck;
+  const turretMaterial = teamMaterials.cabin ?? teamMaterials.hull;
+  const metalMaterial = teamMaterials.funnel ?? materials.funnel;
+  const scale = isPlayer ? 0.72 : 0.78;
+
+  const platform = MeshBuilder.CreateCylinder(`${name}_cannon_platform`, {
+    diameter: 0.82 * scale,
+    height: 0.075 * scale,
+    tessellation: 28
+  }, scene);
+  platform.parent = parent;
+  platform.position.y = isPlayer ? 0.86 : 0.78;
+  platform.position.z = bowZ;
+  platform.material = deckMaterial;
+
+  const mount = new TransformNode(`${name}_cannon_mount`, scene);
+  mount.parent = parent;
+  mount.position.y = platform.position.y + 0.08 * scale;
+  mount.position.z = bowZ;
+
+  const cupola = MeshBuilder.CreateSphere(`${name}_cannon_cupola`, {
+    diameter: 0.72 * scale,
+    segments: 20
+  }, scene);
+  cupola.parent = mount;
+  cupola.position.y = 0.15 * scale;
+  cupola.scaling.y = 0.42;
+  cupola.material = turretMaterial;
+
+  const collar = MeshBuilder.CreateCylinder(`${name}_cannon_collar`, {
+    diameter: 0.44 * scale,
+    height: 0.14 * scale,
+    tessellation: 16
+  }, scene);
+  collar.parent = mount;
+  collar.position.y = 0.2 * scale;
+  collar.position.z = 0.2 * scale;
+  collar.rotation.x = Math.PI / 2;
+  collar.material = metalMaterial;
+
+  const elevationRoot = new TransformNode(`${name}_cannon_elevation`, scene);
+  elevationRoot.parent = mount;
+  elevationRoot.position.y = 0.22 * scale;
+  elevationRoot.position.z = 0.16 * scale;
+
+  const barrelLength = 1.55 * scale;
+  const barrel = MeshBuilder.CreateCylinder(`${name}_cannon_barrel`, {
+    diameter: 0.105 * scale,
+    height: barrelLength,
+    tessellation: 14
+  }, scene);
+  barrel.parent = elevationRoot;
+  barrel.position.z = barrelLength * 0.5;
+  barrel.rotation.x = Math.PI / 2;
+  barrel.material = metalMaterial;
+
+  const muzzle = MeshBuilder.CreateCylinder(`${name}_cannon_muzzle`, {
+    diameter: 0.14 * scale,
+    height: 0.12 * scale,
+    tessellation: 14
+  }, scene);
+  muzzle.parent = barrel;
+  muzzle.position.y = barrelLength * 0.5;
+  muzzle.material = metalMaterial;
+
+  const breech = MeshBuilder.CreateBox(`${name}_cannon_breech`, {
+    width: 0.28 * scale,
+    height: 0.18 * scale,
+    depth: 0.24 * scale
+  }, scene);
+  breech.parent = elevationRoot;
+  breech.position.y = -0.01 * scale;
+  breech.position.z = -0.08 * scale;
+  breech.material = metalMaterial;
+
+  return { mount, elevationRoot };
+}
+
 function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ = -3.45, isPlayer = false) {
   const deckMaterial = teamMaterials.deck;
   const metalMaterial = teamMaterials.funnel ?? materials.funnel;
@@ -8991,13 +9071,14 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = 
   mast.rotation.x = -0.16;
   mast.material = funnelMaterial;
 
+  const bowCannon = createBowCannon(scene, materials, root, name, teamMaterials, 2.35, false);
   const sternFlak = hasFlak
     ? createSternFlak(scene, materials, root, name, teamMaterials, remoteSternFlakZ, false)
     : null;
 
   const bowWake = createEnemyBowWake(scene, materials, root, name);
 
-  return { root, bowWake, sternFlak };
+  return { root, bowWake, bowCannon, sternFlak };
 }
 
 function createEnemyBowWake(scene, materials, parent, name) {
