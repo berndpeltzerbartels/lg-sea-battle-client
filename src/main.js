@@ -188,7 +188,7 @@ const playerFlakEyeZ = 0.02 * playerSternFlakScale;
 const cannonMinPitch = -0.035;
 const cannonMaxPitch = 0.34;
 const cannonPitchStepRadians = 0.004;
-const cannonYawLimit = 0.82;
+const cannonYawLimit = 2.25;
 const cannonYawFineSpeed = 0.038;
 const cannonYawMediumSpeed = 0.07;
 const cannonYawFastSpeed = 0.12;
@@ -972,6 +972,8 @@ scene.onBeforeRenderObservable.add(() => {
     heldElevatorDirection = 0;
     heldFlakDirection = 0;
     heldFlakPitchDirection = 0;
+    heldCannonDirection = 0;
+    heldCannonPitchDirection = 0;
     engineOrder = 2;
     speed *= Math.max(0, 1 - dt * 1.7);
     turnVelocity *= Math.max(0, 1 - dt * 2.0);
@@ -980,15 +982,16 @@ scene.onBeforeRenderObservable.add(() => {
     scoutPlanePitch += (0 - scoutPlanePitch) * Math.min(1, dt * 2.2);
   }
 
-  const bob = Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035;
+  const shipStabilization = cannonViewActive && !scoutPlaneMode ? 0.18 : 1;
+  const bob = (Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035) * shipStabilization;
   if (playerActive) {
     boat.root.position.y = scoutPlaneMode
       ? scoutPlaneAltitude
       : torpedoBoatWaterlineY + bob;
     boat.root.rotationQuaternion = Quaternion.FromEulerAngles(
-      scoutPlaneMode ? scoutPlanePitch : Math.sin(time * 2.6) * 0.025,
+      scoutPlaneMode ? scoutPlanePitch : Math.sin(time * 2.6) * 0.025 * shipStabilization,
       heading,
-      scoutPlaneMode ? -turnVelocity * 2.8 : -turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018
+      scoutPlaneMode ? -turnVelocity * 2.8 : (-turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018) * shipStabilization
     );
     if (scoutPlaneMode) {
       updateScoutPlaneVisual(boat, speed, time);
