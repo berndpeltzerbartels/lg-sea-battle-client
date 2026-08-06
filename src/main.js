@@ -2372,6 +2372,13 @@ function getFireFlakEndpoint() {
   return gameEndpoint("/game/fire-flak");
 }
 
+function getFireCannonEndpoint() {
+  if (isStandaloneSeaBattleRoute()) {
+    return `${location.protocol}//${location.hostname}/game/fire-cannon`;
+  }
+  return gameEndpoint("/game/fire-cannon");
+}
+
 function getClientGameEventEndpoint() {
   if (location.port === "5173" || location.port === "4173") {
     return `${location.protocol}//${location.hostname}/game/client-event`;
@@ -2770,7 +2777,7 @@ function updateKillFeedFromSnapshot(snapshot) {
   const candidates = [
     ...collectKillFeedImpacts(snapshot.torpedoImpacts, "torpedo", "Torpedo"),
     ...collectKillFeedImpacts(snapshot.bombImpacts, "bomb", "Bomben"),
-    ...collectKillFeedImpacts(snapshot.flakHits, "flak", "Flak", () => true),
+    ...collectKillFeedImpacts(snapshot.flakHits, "flak", (impact) => isCannonServerProjectile(impact?.id) ? "Kanone" : "Flak", () => true),
     ...collectKillFeedImpacts(snapshot.ramHits, "ram", "Rammen", () => true)
   ].sort((left, right) => left.t - right.t);
 
@@ -2825,7 +2832,7 @@ function collectKillFeedImpacts(impacts, type, weaponLabel, isKill = (impact) =>
       return {
         key: `${type}:${impact.id}:${impact.targetShipId}:${impact.t}`,
         t: Number.isFinite(impact.t) ? impact.t : 0,
-        weaponLabel,
+        weaponLabel: typeof weaponLabel === "function" ? weaponLabel(impact) : weaponLabel,
         sourceLabel: source.label,
         sourceTeamId: source.teamId,
         sourceVehicleType: source.vehicleType,
@@ -2834,6 +2841,10 @@ function collectKillFeedImpacts(impacts, type, weaponLabel, isKill = (impact) =>
         targetVehicleType: target.vehicleType
       };
     });
+}
+
+function isCannonServerProjectile(id) {
+  return typeof id === "string" && id.startsWith("cannon-");
 }
 
 function getKillFeedShipLabel(shipId, ship = null, teamId = null) {
@@ -3337,7 +3348,8 @@ function syncServerFlakImpacts(impacts) {
     if (flakSystem.impactEffectIds.has(key)) return;
     flakSystem.impactEffectIds.add(key);
     if (impact.reason === "ship-critical-hit") {
-      notifyOwnWeaponImpact(impact, "Flak", "flak");
+      const cannonImpact = isCannonServerProjectile(impact.id);
+      notifyOwnWeaponImpact(impact, cannonImpact ? "Kanone" : "Flak", cannonImpact ? "cannon" : "flak");
     }
     const position = new Vector3(
       Number.isFinite(impact.x) ? impact.x : 0,
@@ -5864,6 +5876,7 @@ function firePlayerCannon() {
   nextCannonFireTime = time + cannonFireCooldownSeconds;
   createCannonProjectile(cannonSystem, shot.position, shot.velocity, shot.direction);
   createCannonMuzzleBlast(cannonSystem, shot.muzzle, shot.direction);
+  reportPlayerCannonShot(shot);
   document.body.dataset.cannonFire = "ok";
   document.body.dataset.cannonShots = String(cannonSystem.nextId - 1);
   document.body.dataset.cannonReload = cannonFireCooldownSeconds.toFixed(1);
@@ -5902,6 +5915,35 @@ function cannonShotWouldHitOwnBoat(shot) {
     }
   }
   return false;
+}
+
+async function reportPlayerCannonShot(shot) {
+  if (!playerServerShipId || !playerId || !playerTeamId || !shot) return;
+  try {
+    const response = await fetch(getFireCannonEndpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        playerId,
+        teamId: playerTeamId,
+        shipId: playerServerShipId,
+        x: shot.position.x,
+        y: shot.position.y,
+        z: shot.position.z,
+        vx: shot.velocity.x,
+        vy: shot.velocity.y,
+        vz: shot.velocity.z
+      })
+    });
+    if (response.status === 403) {
+      expireActiveLogin("fire-cannon-403");
+      return;
+    }
+    document.body.dataset.cannonFireSync = response.ok ? "ok" : `http-${response.status}`;
+  } catch (error) {
+    document.body.dataset.cannonFireSync = "error";
+    document.body.dataset.cannonFireSyncError = error.message;
+  }
 }
 
 async function reportPlayerFlakShot(shot) {
@@ -9287,7 +9329,7 @@ function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2
   elevationRoot.position.y = 0.23 * cannonScale;
   elevationRoot.position.z = 0;
 
-  const barrelLength = 0.42 * cannonScale;
+  const barrelLength = 0.63 * cannonScale;
   const barrel = MeshBuilder.CreateCylinder(`${name}_cannon_barrel`, {
     diameter: 0.07 * cannonScale,
     height: barrelLength,
