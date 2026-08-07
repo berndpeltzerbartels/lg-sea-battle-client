@@ -359,12 +359,17 @@ window.addEventListener("keydown", (event) => {
   const playerActive = playerDamageState === "active";
 
   if (playerActive && isFlakViewToggleKey(event) && !event.repeat) {
-    toggleFlakView();
+    setBattleStation("flak");
     event.preventDefault();
     return;
   }
   if (playerActive && isCannonViewToggleKey(event) && !event.repeat) {
-    toggleCannonView();
+    setBattleStation("cannon");
+    event.preventDefault();
+    return;
+  }
+  if (playerActive && isBridgeViewKey(event) && !event.repeat) {
+    setBattleStation("bridge");
     event.preventDefault();
     return;
   }
@@ -1166,6 +1171,10 @@ function isCannonViewToggleKey(event) {
   return !scoutPlaneMode && (event.code === "KeyC" || event.key === "c" || event.key === "C");
 }
 
+function isBridgeViewKey(event) {
+  return !scoutPlaneMode && (event.code === "KeyB" || event.key === "b" || event.key === "B");
+}
+
 function isBombBayViewToggleKey(event) {
   return scoutPlaneMode && (event.code === "KeyB" || event.key === "b" || event.key === "B");
 }
@@ -1175,11 +1184,11 @@ function isRadarModeToggleKey(event) {
 }
 
 function toggleFlakView() {
-  setBattleStation(flakViewActive ? "bridge" : "flak");
+  setBattleStation("flak");
 }
 
 function toggleCannonView() {
-  setBattleStation(cannonViewActive ? "bridge" : "cannon");
+  setBattleStation("cannon");
 }
 
 function setBattleStation(station) {
@@ -1566,7 +1575,7 @@ function setupFlakViewControl(button) {
   if (!button) return;
   updateBattleStationButtons();
   button.addEventListener("click", (event) => {
-    toggleFlakView();
+    setBattleStation("flak");
     button.blur();
     event.stopPropagation();
   });
@@ -1586,7 +1595,7 @@ function setupCannonViewControl(button) {
   if (!button) return;
   updateBattleStationButtons();
   button.addEventListener("click", (event) => {
-    toggleCannonView();
+    setBattleStation("cannon");
     button.blur();
     event.stopPropagation();
   });

@@ -491,14 +491,15 @@ body[data-cannon-view="active"] .nav-instrument-radar {
   position: absolute;
   left: 24px;
   bottom: calc(24px + var(--radar-size) + 58px);
-  width: 172px;
-  height: 86px;
+  width: var(--radar-size);
+  height: 104px;
   box-sizing: border-box;
-  padding: 9px 11px;
+  padding: 10px 12px;
   border: 1px solid rgb(155 229 223 / 26%);
   border-radius: 8px;
   background:
-    linear-gradient(180deg, rgb(6 34 48 / 70%), rgb(2 20 29 / 58%));
+    radial-gradient(ellipse at 72% 42%, rgb(255 107 74 / 8%), transparent 34%),
+    linear-gradient(180deg, rgb(6 34 48 / 72%), rgb(2 20 29 / 60%));
   box-shadow: 0 10px 26px rgb(1 15 24 / 20%);
   backdrop-filter: blur(7px);
   pointer-events: auto;
@@ -506,48 +507,149 @@ body[data-cannon-view="active"] .nav-instrument-radar {
 
 .battle-station-hull {
   position: absolute;
-  left: 15px;
-  right: 15px;
-  top: 27px;
-  height: 28px;
-  border: 1px solid rgb(155 229 223 / 28%);
-  border-radius: 52% 18% 18% 52% / 50%;
+  left: 22px;
+  right: 22px;
+  top: 31px;
+  height: 40px;
+  border: 1px solid rgb(155 229 223 / 22%);
   background:
-    linear-gradient(90deg, transparent 0 4%, rgb(155 229 223 / 13%) 4% 74%, transparent 74%),
-    linear-gradient(180deg, rgb(196 230 234 / 16%), rgb(2 18 25 / 34%));
-  clip-path: polygon(0 50%, 13% 10%, 74% 10%, 100% 50%, 74% 90%, 13% 90%);
+    linear-gradient(180deg, rgb(250 255 255 / 14%), rgb(2 18 25 / 48%) 58%, rgb(0 0 0 / 38%)),
+    linear-gradient(90deg, rgb(4 22 29 / 82%), rgb(13 37 43 / 78%) 48%, rgb(4 22 29 / 90%));
+  box-shadow:
+    inset 0 9px 13px rgb(255 255 255 / 8%),
+    inset 0 -12px 20px rgb(0 0 0 / 32%),
+    0 9px 18px rgb(0 0 0 / 24%);
+  clip-path: polygon(0 50%, 10% 20%, 38% 14%, 74% 18%, 100% 50%, 74% 82%, 38% 86%, 10% 80%);
 }
 
 .battle-station-bow,
+.battle-station-deck,
+.battle-station-cabin,
+.battle-station-funnel,
+.battle-station-tubes,
+.battle-station-cannon-mark,
 .battle-station-bridge-mark,
+.battle-station-flak-mark,
 .battle-station-stern-mark {
   position: absolute;
   display: block;
-  background: rgb(214 247 244 / 34%);
+  background: rgb(214 247 244 / 28%);
+  pointer-events: none;
 }
 
 .battle-station-bow {
-  right: 18px;
-  top: 10px;
-  width: 22px;
-  height: 8px;
-  border-radius: 8px 8px 2px 2px;
+  right: 16px;
+  top: 17px;
+  width: 32px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgb(214 247 244 / 18%);
+}
+
+.battle-station-deck {
+  left: 23%;
+  right: 18%;
+  top: 15px;
+  height: 10px;
+  border-radius: 60% 12% 12% 60% / 50%;
+  background: rgb(214 247 244 / 11%);
 }
 
 .battle-station-bridge-mark {
-  left: 65px;
+  left: 45%;
   top: 7px;
-  width: 19px;
-  height: 15px;
+  width: 22px;
+  height: 18px;
   border-radius: 3px;
+  background: rgb(214 247 244 / 32%);
+  box-shadow: 18px 2px 0 -7px rgb(214 247 244 / 18%);
+}
+
+.battle-station-cabin {
+  left: 39%;
+  top: 16px;
+  width: 42px;
+  height: 9px;
+  border-radius: 3px;
+  background: rgb(214 247 244 / 18%);
+}
+
+.battle-station-funnel {
+  left: 56%;
+  top: 2px;
+  width: 10px;
+  height: 21px;
+  border-radius: 2px;
+  background: rgb(4 13 17 / 72%);
+  box-shadow: 0 0 0 1px rgb(214 247 244 / 16%);
+}
+
+.battle-station-tubes {
+  left: 31%;
+  width: 60px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(214 247 244 / 24%);
+}
+
+.battle-station-tubes-port {
+  top: 10px;
+  transform: rotate(9deg);
+}
+
+.battle-station-tubes-starboard {
+  bottom: 10px;
+  transform: rotate(-9deg);
+}
+
+.battle-station-cannon-mark {
+  right: 19%;
+  top: 16px;
+  width: 22px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgb(214 247 244 / 28%);
+}
+
+.battle-station-cannon-mark::after {
+  content: "";
+  position: absolute;
+  right: -24px;
+  top: 3px;
+  width: 27px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgb(214 247 244 / 38%);
 }
 
 .battle-station-stern-mark {
-  left: 31px;
-  top: 10px;
-  width: 17px;
-  height: 8px;
-  border-radius: 8px;
+  left: 13%;
+  top: 14px;
+  width: 18px;
+  height: 12px;
+  border-radius: 3px;
+  background: rgb(214 247 244 / 16%);
+}
+
+.battle-station-flak-mark {
+  left: 14%;
+  top: 15px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgb(214 247 244 / 34%);
+  border-radius: 999px;
+  background: transparent;
+}
+
+.battle-station-flak-mark::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: -17px;
+  width: 2px;
+  height: 23px;
+  border-radius: 999px;
+  background: rgb(214 247 244 / 36%);
 }
 
 .battle-station {
@@ -555,29 +657,24 @@ body[data-cannon-view="active"] .nav-instrument-radar {
   z-index: 1;
   display: grid;
   place-items: center;
-  min-width: 44px;
-  min-height: 30px;
-  padding: 3px 5px;
-  border: 1px solid rgb(155 229 223 / 24%);
-  border-radius: 6px;
-  background: rgb(2 22 28 / 62%);
-  color: rgb(247 251 255 / 84%);
+  min-width: 58px;
+  min-height: 34px;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: rgb(247 251 255 / 74%);
   font: 800 8px/1.05 Inter, Arial, sans-serif;
   letter-spacing: 0;
   text-align: center;
   text-transform: uppercase;
   cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 
 .battle-station span,
 .battle-station small {
   pointer-events: none;
-}
-
-.battle-station small {
-  color: rgb(155 229 223 / 78%);
-  font: 800 7px/1 Inter, Arial, sans-serif;
-  text-transform: uppercase;
 }
 
 .battle-station kbd {
@@ -593,14 +690,20 @@ body[data-cannon-view="active"] .nav-instrument-radar {
 }
 
 .battle-station.is-active {
-  border-color: rgb(155 229 223 / 78%);
+  border-color: rgb(255 107 74 / 82%);
   background:
-    radial-gradient(circle at 50% 46%, rgb(155 229 223 / 28%), transparent 68%),
-    rgb(5 37 45 / 76%);
+    radial-gradient(circle at 50% 52%, rgb(255 107 74 / 32%), transparent 68%),
+    rgb(36 23 20 / 62%);
   box-shadow:
-    0 0 0 1px rgb(155 229 223 / 12%),
-    0 0 16px rgb(155 229 223 / 18%);
-  color: #eafffb;
+    0 0 0 1px rgb(255 107 74 / 16%),
+    0 0 16px rgb(255 107 74 / 26%);
+  color: #fff7ef;
+}
+
+.battle-station.is-active kbd {
+  border-color: rgb(255 107 74 / 48%);
+  background: rgb(255 107 74 / 18%);
+  color: #ffd7c9;
 }
 
 .battle-station.is-active::after {
@@ -611,24 +714,24 @@ body[data-cannon-view="active"] .nav-instrument-radar {
   width: 22px;
   height: 2px;
   border-radius: 999px;
-  background: #9be5df;
-  box-shadow: 0 0 10px rgb(155 229 223 / 74%);
+  background: #ff6b4a;
+  box-shadow: 0 0 10px rgb(255 107 74 / 74%);
   transform: translateX(-50%);
 }
 
 .battle-station-cannon {
-  right: 6px;
-  top: 3px;
+  right: 13%;
+  top: 11px;
 }
 
 .battle-station-bridge {
-  left: 63px;
-  top: 47px;
+  left: 41%;
+  top: 58px;
 }
 
 .battle-station-flak {
-  left: 6px;
-  top: 3px;
+  left: 7%;
+  top: 11px;
 }
 
 body[data-player-vehicle="scout-plane"] .battle-station-panel {
@@ -1968,26 +2071,27 @@ body[data-cannon-view="active"] .cannon-elevation {
   .battle-station-panel {
     left: 102px;
     bottom: 12px;
-    width: 140px;
-    height: 66px;
+    width: var(--radar-size);
+    height: 68px;
     padding: 6px 8px;
   }
 
   .battle-station-hull {
-    left: 12px;
-    right: 12px;
-    top: 21px;
-    height: 20px;
+    left: 10px;
+    right: 10px;
+    top: 22px;
+    height: 22px;
   }
 
   .battle-station {
-    min-width: 36px;
+    min-width: 34px;
     min-height: 24px;
     padding: 2px 4px;
     font-size: 7px;
   }
 
-  .battle-station small {
+  .battle-station-panel .battle-station-deck,
+  .battle-station-panel .battle-station-tubes {
     display: none;
   }
 
@@ -1997,17 +2101,17 @@ body[data-cannon-view="active"] .cannon-elevation {
   }
 
   .battle-station-cannon {
-    right: 4px;
+    right: 8%;
     top: 2px;
   }
 
   .battle-station-bridge {
-    left: 51px;
+    left: 38%;
     top: 38px;
   }
 
   .battle-station-flak {
-    left: 4px;
+    left: 5%;
     top: 2px;
   }
 
