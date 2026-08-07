@@ -1099,6 +1099,7 @@ scene.onBeforeRenderObservable.add(() => {
   }
   boat.flakDeckView?.setEnabled(flakViewActive);
   boat.flakViewHiddenMeshes?.forEach((mesh) => mesh.setEnabled(!flakViewActive));
+  updateTorpedoViewState();
   document.body.dataset.camera = `${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)}`;
   document.body.dataset.frameMs = (rawFrameSeconds * 1000).toFixed(1);
   document.body.dataset.simulationMs = (dt * 1000).toFixed(1);
@@ -1213,7 +1214,13 @@ function setBattleStation(station) {
   rightMouseRudderActive = false;
   document.body.dataset.flakView = flakViewActive ? "active" : "bridge";
   document.body.dataset.cannonView = cannonViewActive ? "active" : "bridge";
+  updateTorpedoViewState();
   updateBattleStationButtons();
+}
+
+function updateTorpedoViewState() {
+  const active = !scoutPlaneMode && !flakViewActive && !cannonViewActive && !bombBayViewActive && playerDamageState === "active";
+  document.body.dataset.torpedoView = active ? "active" : "hidden";
 }
 
 function toggleBombBayView() {
@@ -1221,6 +1228,7 @@ function toggleBombBayView() {
   heldElevatorDirection = 0;
   rightMouseRudderActive = false;
   document.body.dataset.bombBayView = bombBayViewActive ? "active" : "off";
+  updateTorpedoViewState();
 }
 
 function changeScoutPlaneTargetSpeed(direction) {
@@ -1623,7 +1631,7 @@ function setupAlignWeaponsControl(button) {
 
 function alignWeaponsForBridge() {
   flakYaw = Math.PI;
-  flakPitch = clamp(25 * Math.PI / 180, flakMinPitch, flakMaxPitch);
+  flakPitch = clamp(12.5 * Math.PI / 180, flakMinPitch, flakMaxPitch);
   cannonYaw = 0;
   cannonPitch = clamp(5 * Math.PI / 180, cannonMinPitch, cannonMaxPitch);
   updatePlayerFlakMount();
