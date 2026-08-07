@@ -6240,7 +6240,7 @@ function spreadFlakVelocity(velocity, sideSpread, verticalSpread) {
     .scale(speed);
 }
 
-function createFlakProjectile(system, position, velocity, direction) {
+function createFlakProjectile(system, position, velocity, direction, options = {}) {
   const id = system.nextId;
   system.nextId += 1;
 
@@ -6256,7 +6256,8 @@ function createFlakProjectile(system, position, velocity, direction) {
   core.material = system.materials.flakTracer;
 
   const trail = [];
-  for (let i = 0; i < 4; i += 1) {
+  const trailSegments = options.trailSegments ?? 0;
+  for (let i = 0; i < trailSegments; i += 1) {
     const segment = MeshBuilder.CreateSphere(`${root.name}_trail_${i}`, {
       diameter: 0.16 - i * 0.018,
       segments: 8
@@ -6286,7 +6287,7 @@ function createFlakProjectile(system, position, velocity, direction) {
     age: 0,
     lifetime: flakProjectileLifetime,
     direction: direction.clone(),
-    samplePositions: Array.from({ length: 5 }, (_, index) => position.add(direction.scale(-0.18 - index * 0.28)))
+    samplePositions: Array.from({ length: trailSegments + 1 }, (_, index) => position.add(direction.scale(-0.18 - index * 0.28)))
   });
   return system.active[system.active.length - 1];
 }
@@ -7218,7 +7219,9 @@ function createServerFlakProjectile(system, snapshot, snapshotClientTime = time)
     Number.isFinite(snapshot.vz) ? snapshot.vz : 1
   );
   const direction = velocity.lengthSquared() > 0.0001 ? velocity.normalizeToNew() : Vector3.Forward();
-  const visual = createFlakProjectile(system, position, velocity, direction);
+  const visual = createFlakProjectile(system, position, velocity, direction, {
+    trailSegments: isCannonProjectile ? 4 : 0
+  });
   visual.serverId = snapshot.id;
   visual.weaponType = isCannonProjectile ? "cannon" : "flak";
   if (isCannonProjectile) {
