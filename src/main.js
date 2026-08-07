@@ -207,13 +207,18 @@ const cannonMinPitch = -0.035;
 const cannonMaxPitch = 31 * Math.PI / 180;
 const cannonPitchStepRadians = 0.004;
 const cannonYawLimit = 2.62;
-const cannonYawFineSpeed = 0.038;
+const cannonHoldMediumDelaySeconds = 0.24;
+const cannonHoldFastDelaySeconds = 0.68;
+const cannonHoldVeryFastDelaySeconds = 1.08;
+const cannonHoldMaxDelaySeconds = 1.64;
+const cannonHoldExtremeDelaySeconds = 2.2;
+const cannonYawFineSpeed = 0.024;
 const cannonYawMediumSpeed = 0.07;
 const cannonYawFastSpeed = 0.12;
 const cannonYawVeryFastSpeed = 0.18;
 const cannonYawMaxSpeed = 0.24;
 const cannonYawExtremeSpeed = 0.3;
-const cannonPitchFineSpeed = 0.026;
+const cannonPitchFineSpeed = 0.016;
 const cannonPitchMediumSpeed = 0.048;
 const cannonPitchFastSpeed = 0.082;
 const cannonPitchVeryFastSpeed = 0.12;
@@ -864,7 +869,7 @@ let debugTeleportPending = false;
 let fireTorpedoRequestInFlight = false;
 let dropBombRequestInFlight = false;
 const maxRudderDegrees = 35;
-const rudderStepDegrees = 3;
+const rudderStepDegrees = 2;
 const rudderHoldInitialDelaySeconds = 0.22;
 const rudderHoldDegreesPerSecond = 60;
 const maxSimulationFrameSeconds = 0.12;
@@ -921,14 +926,14 @@ scene.onBeforeRenderObservable.add(() => {
   }
   if (playerActive && cannonViewActive && heldCannonDirection !== 0) {
     cannonYaw = clamp(
-      cannonYaw + heldCannonDirection * getHeldFlakSpeed(heldCannonStartTime, cannonYawFineSpeed, cannonYawMediumSpeed, cannonYawFastSpeed, cannonYawVeryFastSpeed, cannonYawMaxSpeed, cannonYawExtremeSpeed) * dt,
+      cannonYaw + heldCannonDirection * getHeldWeaponSpeed(heldCannonStartTime, cannonYawFineSpeed, cannonYawMediumSpeed, cannonYawFastSpeed, cannonYawVeryFastSpeed, cannonYawMaxSpeed, cannonYawExtremeSpeed, cannonHoldTimings) * dt,
       -cannonYawLimit,
       cannonYawLimit
     );
   }
   if (playerActive && cannonViewActive && heldCannonPitchDirection !== 0) {
     cannonPitch = clamp(
-      cannonPitch + heldCannonPitchDirection * getHeldFlakSpeed(heldCannonPitchStartTime, cannonPitchFineSpeed, cannonPitchMediumSpeed, cannonPitchFastSpeed, cannonPitchVeryFastSpeed, cannonPitchMaxSpeed, cannonPitchExtremeSpeed) * dt,
+      cannonPitch + heldCannonPitchDirection * getHeldWeaponSpeed(heldCannonPitchStartTime, cannonPitchFineSpeed, cannonPitchMediumSpeed, cannonPitchFastSpeed, cannonPitchVeryFastSpeed, cannonPitchMaxSpeed, cannonPitchExtremeSpeed, cannonHoldTimings) * dt,
       cannonMinPitch,
       cannonMaxPitch
     );
@@ -1308,12 +1313,32 @@ function changeCannonPitch(direction) {
 }
 
 function getHeldFlakSpeed(startTime, fineSpeed, mediumSpeed, fastSpeed, veryFastSpeed, maxSpeed, extremeSpeed) {
+  return getHeldWeaponSpeed(startTime, fineSpeed, mediumSpeed, fastSpeed, veryFastSpeed, maxSpeed, extremeSpeed, flakHoldTimings);
+}
+
+const flakHoldTimings = {
+  medium: flakHoldMediumDelaySeconds,
+  fast: flakHoldFastDelaySeconds,
+  veryFast: flakHoldVeryFastDelaySeconds,
+  max: flakHoldMaxDelaySeconds,
+  extreme: flakHoldExtremeDelaySeconds
+};
+
+const cannonHoldTimings = {
+  medium: cannonHoldMediumDelaySeconds,
+  fast: cannonHoldFastDelaySeconds,
+  veryFast: cannonHoldVeryFastDelaySeconds,
+  max: cannonHoldMaxDelaySeconds,
+  extreme: cannonHoldExtremeDelaySeconds
+};
+
+function getHeldWeaponSpeed(startTime, fineSpeed, mediumSpeed, fastSpeed, veryFastSpeed, maxSpeed, extremeSpeed, timings) {
   const heldSeconds = time - startTime;
-  if (heldSeconds >= flakHoldExtremeDelaySeconds) return extremeSpeed;
-  if (heldSeconds >= flakHoldMaxDelaySeconds) return maxSpeed;
-  if (heldSeconds >= flakHoldVeryFastDelaySeconds) return veryFastSpeed;
-  if (heldSeconds >= flakHoldFastDelaySeconds) return fastSpeed;
-  if (heldSeconds >= flakHoldMediumDelaySeconds) return mediumSpeed;
+  if (heldSeconds >= timings.extreme) return extremeSpeed;
+  if (heldSeconds >= timings.max) return maxSpeed;
+  if (heldSeconds >= timings.veryFast) return veryFastSpeed;
+  if (heldSeconds >= timings.fast) return fastSpeed;
+  if (heldSeconds >= timings.medium) return mediumSpeed;
   return fineSpeed;
 }
 
