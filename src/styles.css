@@ -946,8 +946,10 @@ body[data-torpedo-view="active"] .torpedo-scope {
   left: 50%;
   bottom: 112px;
   z-index: 4;
+  display: block;
   min-width: 106px;
   box-sizing: border-box;
+  appearance: none;
   padding: 7px 10px 8px;
   border: 1px solid rgb(155 229 223 / 30%);
   border-radius: 7px;
@@ -961,8 +963,21 @@ body[data-torpedo-view="active"] .torpedo-scope {
   letter-spacing: 0;
   text-align: center;
   text-transform: uppercase;
-  pointer-events: none;
+  cursor: pointer;
+  pointer-events: auto;
   transform: translateX(-50%);
+}
+
+.torpedo-aid:hover,
+.torpedo-aid:focus-visible,
+body[data-torpedo-view="active"] .torpedo-aid {
+  border-color: rgb(255 107 74 / 62%);
+  color: #fff7f2;
+  outline: none;
+  box-shadow:
+    0 10px 24px rgb(1 15 24 / 18%),
+    inset 0 0 18px rgb(255 107 74 / 9%),
+    0 0 14px rgb(255 107 74 / 16%);
 }
 
 body[data-cannon-view="active"] .torpedo-aid,
@@ -972,9 +987,14 @@ body[data-player-vehicle="scout-plane"] .torpedo-aid {
 }
 
 .torpedo-aid-title {
+  display: block;
   margin-bottom: 3px;
   color: #9be5df;
   font: 900 10px/1 Inter, Arial, sans-serif;
+}
+
+.torpedo-aid > span:not(.torpedo-aid-title) {
+  display: block;
 }
 
 .torpedo-aid strong {

@@ -81,6 +81,7 @@ const flakViewButton = document.getElementById("flakViewButton");
 const cannonViewButton = document.getElementById("cannonViewButton");
 const bridgeViewButton = document.getElementById("bridgeViewButton");
 const alignWeaponsButton = document.getElementById("alignWeaponsButton");
+const torpedoAidButton = document.getElementById("torpedoAidButton");
 const flakHitAlert = document.getElementById("flakHitAlert");
 const rudderIndicator = document.getElementById("rudderIndicator");
 const rudderValue = document.getElementById("rudderValue");
@@ -371,6 +372,11 @@ window.addEventListener("keydown", (event) => {
   }
   if (playerActive && isBridgeViewKey(event) && !event.repeat) {
     setBattleStation("bridge");
+    event.preventDefault();
+    return;
+  }
+  if (playerActive && isTorpedoScopeToggleKey(event) && !event.repeat) {
+    toggleTorpedoScope();
     event.preventDefault();
     return;
   }
@@ -755,6 +761,8 @@ let heldRudderDirection = 0;
 let nextRudderHoldChangeTime = 0;
 let flakViewActive = false;
 let cannonViewActive = false;
+let torpedoScopeActive = false;
+let torpedoScopeUntil = 0;
 let bombBayViewActive = false;
 let bombBayImpactFocus = null;
 const RADAR_MODE_OVERRIDE_MS = 10000;
@@ -838,6 +846,7 @@ setupBridgeViewControl(bridgeViewButton);
 setupFlakViewControl(flakViewButton);
 setupCannonViewControl(cannonViewButton);
 setupAlignWeaponsControl(alignWeaponsButton);
+setupTorpedoAidControl(torpedoAidButton);
 let serverShipsById = indexShipsById(gameState.ships);
 let serverClockOffset = Number.isFinite(gameState.t) ? -gameState.t : null;
 let lastServerSnapshotTime = Number.isFinite(gameState.t) ? gameState.t : null;
@@ -1089,7 +1098,7 @@ scene.onBeforeRenderObservable.add(() => {
   ramShake = Math.max(0, ramShake - dt * 2.6);
 
   camera.minZ = (flakViewActive || cannonViewActive) ? 0.03 : (bombBayViewActive ? 0.2 : (scoutPlaneMode ? 1.5 : 0.2));
-  camera.fov = cannonViewActive ? 0.34 : (bombBayViewActive ? getBombBayFov() : (scoutPlaneMode ? 1.02 : 0.78));
+  camera.fov = cannonViewActive ? 0.34 : (torpedoScopeActive ? 0.42 : (bombBayViewActive ? getBombBayFov() : (scoutPlaneMode ? 1.02 : 0.78)));
   cameraPosition.copyFrom(desiredCameraPosition.add(shakeOffset));
   cameraTarget.copyFrom(desiredTarget);
   camera.position.copyFrom(cameraPosition);
@@ -1180,6 +1189,10 @@ function isBridgeViewKey(event) {
   return !scoutPlaneMode && (event.code === "KeyB" || event.key === "b" || event.key === "B");
 }
 
+function isTorpedoScopeToggleKey(event) {
+  return !scoutPlaneMode && (event.code === "KeyT" || event.key === "t" || event.key === "T");
+}
+
 function isBombBayViewToggleKey(event) {
   return scoutPlaneMode && (event.code === "KeyB" || event.key === "b" || event.key === "B");
 }
@@ -1199,6 +1212,7 @@ function toggleCannonView() {
 function setBattleStation(station) {
   flakViewActive = station === "flak";
   cannonViewActive = station === "cannon";
+  setTorpedoScope(false);
   heldFlakDirection = 0;
   heldFlakPitchDirection = 0;
   heldFlakStartTime = time;
@@ -1219,12 +1233,28 @@ function setBattleStation(station) {
 }
 
 function updateTorpedoViewState() {
-  const active = !scoutPlaneMode && !flakViewActive && !cannonViewActive && !bombBayViewActive && playerDamageState === "active";
+  if (torpedoScopeActive && (time >= torpedoScopeUntil || scoutPlaneMode || flakViewActive || cannonViewActive || bombBayViewActive || playerDamageState !== "active")) {
+    setTorpedoScope(false);
+  }
+  const active = torpedoScopeActive && !scoutPlaneMode && !flakViewActive && !cannonViewActive && !bombBayViewActive && playerDamageState === "active";
   document.body.dataset.torpedoView = active ? "active" : "hidden";
+}
+
+function toggleTorpedoScope() {
+  setTorpedoScope(!torpedoScopeActive);
+}
+
+function setTorpedoScope(active) {
+  torpedoScopeActive = Boolean(active) && !scoutPlaneMode && !flakViewActive && !cannonViewActive && !bombBayViewActive && playerDamageState === "active";
+  torpedoScopeUntil = torpedoScopeActive ? time + 12 : 0;
+  document.body.dataset.torpedoView = torpedoScopeActive ? "active" : "hidden";
 }
 
 function toggleBombBayView() {
   bombBayViewActive = !bombBayViewActive;
+  if (bombBayViewActive) {
+    setTorpedoScope(false);
+  }
   heldElevatorDirection = 0;
   rightMouseRudderActive = false;
   document.body.dataset.bombBayView = bombBayViewActive ? "active" : "off";
@@ -1624,6 +1654,15 @@ function setupAlignWeaponsControl(button) {
   if (!button) return;
   button.addEventListener("click", (event) => {
     alignWeaponsForBridge();
+    button.blur();
+    event.stopPropagation();
+  });
+}
+
+function setupTorpedoAidControl(button) {
+  if (!button) return;
+  button.addEventListener("click", (event) => {
+    toggleTorpedoScope();
     button.blur();
     event.stopPropagation();
   });
