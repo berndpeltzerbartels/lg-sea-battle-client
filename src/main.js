@@ -379,7 +379,7 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (playerActive && isTorpedoScopeToggleKey(event) && !event.repeat) {
-    toggleTorpedoScope();
+    setBattleStation("torpedo");
     event.preventDefault();
     return;
   }
@@ -1031,7 +1031,9 @@ scene.onBeforeRenderObservable.add(() => {
     scoutPlanePitch += (0 - scoutPlanePitch) * Math.min(1, dt * 2.2);
   }
 
-  const shipStabilization = cannonViewActive && !scoutPlaneMode ? 0.18 : 1;
+  const shipStabilization = torpedoScopeActive && !scoutPlaneMode
+    ? 0
+    : (cannonViewActive && !scoutPlaneMode ? 0.18 : 1);
   const bob = (Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035) * shipStabilization;
   if (playerActive) {
     boat.root.position.y = scoutPlaneMode
@@ -1050,6 +1052,7 @@ scene.onBeforeRenderObservable.add(() => {
   } else if (playerDamageState === "air-hit") {
     updateScoutPlaneFlakHitSequence(boat, time, dt);
   }
+  boat.root.setEnabled(!torpedoScopeActive);
   ocean.position.x = boat.root.position.x;
   ocean.position.z = boat.root.position.z;
 
@@ -1099,7 +1102,7 @@ scene.onBeforeRenderObservable.add(() => {
   const shakeOffset = getRamShakeOffset(heading, ramShake, time);
   ramShake = Math.max(0, ramShake - dt * 2.6);
 
-  camera.minZ = (flakViewActive || cannonViewActive) ? 0.03 : (bombBayViewActive ? 0.2 : (scoutPlaneMode ? 1.5 : 0.2));
+  camera.minZ = (flakViewActive || cannonViewActive || torpedoScopeActive) ? 0.03 : (bombBayViewActive ? 0.2 : (scoutPlaneMode ? 1.5 : 0.2));
   camera.fov = cannonViewActive ? 0.34 : (torpedoScopeActive ? 0.42 : (bombBayViewActive ? getBombBayFov() : (scoutPlaneMode ? 1.02 : 0.78)));
   cameraPosition.copyFrom(desiredCameraPosition.add(shakeOffset));
   cameraTarget.copyFrom(desiredTarget);
@@ -1214,9 +1217,7 @@ function toggleCannonView() {
 function setBattleStation(station) {
   flakViewActive = station === "flak";
   cannonViewActive = station === "cannon";
-  if (station !== "bridge") {
-    setTorpedoScope(false);
-  }
+  setTorpedoScope(station === "torpedo");
   heldFlakDirection = 0;
   heldFlakPitchDirection = 0;
   heldFlakStartTime = time;
@@ -1242,14 +1243,6 @@ function updateTorpedoViewState() {
   }
   const active = torpedoScopeActive && !scoutPlaneMode && !flakViewActive && !cannonViewActive && !bombBayViewActive && playerDamageState === "active";
   document.body.dataset.torpedoView = active ? "active" : "hidden";
-}
-
-function toggleTorpedoScope() {
-  if (scoutPlaneMode || playerDamageState !== "active") return;
-  if (!torpedoScopeActive && (flakViewActive || cannonViewActive)) {
-    setBattleStation("bridge");
-  }
-  setTorpedoScope(!torpedoScopeActive);
 }
 
 function setTorpedoScope(active) {
@@ -1669,7 +1662,7 @@ function setupAlignWeaponsControl(button) {
 function setupTorpedoAidControl(button) {
   if (!button) return;
   button.addEventListener("click", (event) => {
-    toggleTorpedoScope();
+    setBattleStation("torpedo");
     button.blur();
     event.stopPropagation();
   });
@@ -1686,7 +1679,7 @@ function alignWeaponsForBridge() {
 }
 
 function updateBattleStationButtons() {
-  bridgeViewButton?.classList.toggle("is-active", !flakViewActive && !cannonViewActive);
+  bridgeViewButton?.classList.toggle("is-active", !flakViewActive && !cannonViewActive && !torpedoScopeActive);
   flakViewButton?.classList.toggle("is-active", flakViewActive);
   cannonViewButton?.classList.toggle("is-active", cannonViewActive);
   torpedoAidButton?.classList.toggle("is-active", torpedoScopeActive);
@@ -3910,7 +3903,7 @@ function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, player
   drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, radarHeading, radarRange, {
     ignoreLandShadows: scoutPlaneMode,
     flakLookHeading: options.flakLookHeading,
-    targetMode: !scoutPlaneMode && (radarMode === "target" || flakViewActive || cannonViewActive),
+    targetMode: !scoutPlaneMode && (radarMode === "target" || flakViewActive || cannonViewActive || torpedoScopeActive),
     targetLineMode: flakViewActive ? "flak" : (cannonViewActive ? "cannon" : "torpedo"),
     radarTorpedoes: radarMode === "target" && !scoutPlaneMode ? radarTorpedoSnapshots : []
   });
