@@ -482,6 +482,10 @@ body[data-cannon-view="active"] .nav-instrument-radar {
   z-index: 4;
 }
 
+body[data-cannon-view="active"] .battle-station-panel {
+  z-index: 4;
+}
+
 .nav-instrument-radar canvas {
   height: auto;
   aspect-ratio: 1;
@@ -585,21 +589,19 @@ body[data-cannon-view="active"] .nav-instrument-radar {
 }
 
 .battle-station-tubes {
-  left: 31%;
-  width: 60px;
-  height: 4px;
+  right: 19%;
+  width: 64px;
+  height: 3px;
   border-radius: 999px;
   background: rgb(214 247 244 / 24%);
 }
 
 .battle-station-tubes-port {
-  top: 10px;
-  transform: rotate(9deg);
+  top: 12px;
 }
 
 .battle-station-tubes-starboard {
-  bottom: 10px;
-  transform: rotate(-9deg);
+  bottom: 12px;
 }
 
 .battle-station-cannon-mark {
