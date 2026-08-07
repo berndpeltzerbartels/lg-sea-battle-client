@@ -140,6 +140,16 @@ const scoutPlanePulloutStartAltitude = 8.0;
 const scoutPlaneFlakSmokeSeconds = 1.65;
 const scoutPlaneFlakRespawnSeconds = 3.35;
 const scoutPlaneFlakSmokeIntervalSeconds = 0.12;
+const scoutPlaneHitFuselageHalfWidth = 0.55;
+const scoutPlaneHitHalfLength = 3.5;
+const scoutPlaneHitWingHalfWidth = 4.15;
+const scoutPlaneHitWingForwardMin = -0.45;
+const scoutPlaneHitWingForwardMax = 0.95;
+const scoutPlaneHitTailHalfWidth = 1.45;
+const scoutPlaneHitTailForwardMin = -2.85;
+const scoutPlaneHitTailForwardMax = -2.1;
+const scoutPlaneHitVerticalHalfHeight = 1.15;
+const scoutPlaneHitMargin = 1.1;
 const bombGravity = 14.0;
 const bombDropForwardOffset = 0.6;
 const bombDropVerticalOffset = 0.65;
@@ -787,6 +797,7 @@ let killFeedEventIds = new Set();
 let killFeedEvents = [];
 let killFeedShipLabels = new Map();
 let nextKillFeedNumber = 1;
+let reportedLocalPlaneHitIds = new Set();
 let radarTorpedoSnapshots = Array.isArray(gameState.torpedoes) ? gameState.torpedoes : [];
 let scoutPlaneFlakHitStartTime = 0;
 let scoutPlaneFlakHitExploded = false;
@@ -2399,6 +2410,13 @@ function getFireCannonEndpoint() {
   return gameEndpoint("/game/fire-cannon");
 }
 
+function getReportPlaneHitEndpoint() {
+  if (location.port === "5173" || location.port === "4173") {
+    return `${location.protocol}//${location.hostname}/game/report-plane-hit`;
+  }
+  return gameEndpoint("/game/report-plane-hit");
+}
+
 function getClientGameEventEndpoint() {
   if (location.port === "5173" || location.port === "4173") {
     return `${location.protocol}//${location.hostname}/game/client-event`;
@@ -3401,7 +3419,9 @@ function syncServerFlakHitEffects(hits, ownShip = null) {
     }
     const targetMotion = enemyMotions.find((motion) => motion.id === hit.targetShipId);
     if (isScoutPlaneMotion(targetMotion)) {
-      beginEnemyScoutPlaneAirHit(targetMotion, hit, time);
+      if (targetMotion.state !== "air-hit") {
+        beginEnemyScoutPlaneAirHit(targetMotion, hit, time);
+      }
       return;
     }
     createScoutPlaneHitSequence(flakSystem, getFlakHitPosition(hit));
@@ -5997,6 +6017,40 @@ async function reportPlayerFlakShot(shot) {
   }
 }
 
+async function reportLocalPlaneHit(hit, weaponType) {
+  if (!playerServerShipId || !playerId || !playerTeamId || !hit?.motion || !hit?.position) return;
+  const key = hit.reportId ?? `${weaponType}:${hit.motion.id}:${Math.round(time * 1000)}`;
+  if (reportedLocalPlaneHitIds.has(key)) return;
+  reportedLocalPlaneHitIds.add(key);
+  if (reportedLocalPlaneHitIds.size > 40) {
+    reportedLocalPlaneHitIds = new Set(Array.from(reportedLocalPlaneHitIds).slice(-24));
+  }
+  try {
+    const response = await fetch(getReportPlaneHitEndpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        playerId,
+        teamId: playerTeamId,
+        shipId: playerServerShipId,
+        targetShipId: hit.motion.id,
+        weaponType,
+        x: hit.position.x,
+        y: hit.position.y,
+        z: hit.position.z
+      })
+    });
+    if (response.status === 403) {
+      expireActiveLogin("report-plane-hit-403");
+      return;
+    }
+    document.body.dataset.localPlaneHitSync = response.ok ? "ok" : `http-${response.status}`;
+  } catch (error) {
+    document.body.dataset.localPlaneHitSync = "error";
+    document.body.dataset.localPlaneHitSyncError = error.message;
+  }
+}
+
 function getPlayerFlakShot() {
   return getFlakShotFromElevationRoot(
     boat.sternFlak?.elevationRoot,
@@ -6144,6 +6198,8 @@ function createFlakProjectile(system, position, velocity, direction) {
   light.range = 32;
 
   system.active.push({
+    id,
+    weaponType: "flak",
     root,
     core,
     trail,
@@ -6168,7 +6224,7 @@ function createCannonProjectile(system, position, velocity, direction) {
   root.position.copyFrom(position);
 
   const core = MeshBuilder.CreateSphere(`${root.name}_core`, {
-    diameter: 0.5,
+    diameter: 0.68,
     segments: 12
   }, system.scene);
   core.parent = root;
@@ -6177,7 +6233,7 @@ function createCannonProjectile(system, position, velocity, direction) {
   const trail = [];
   for (let i = 0; i < 4; i += 1) {
     const segment = MeshBuilder.CreateSphere(`${root.name}_trail_${i}`, {
-      diameter: 0.36 - i * 0.05,
+      diameter: 0.48 - i * 0.06,
       segments: 8
     }, system.scene);
     segment.parent = system.root;
@@ -6189,10 +6245,12 @@ function createCannonProjectile(system, position, velocity, direction) {
   const light = new PointLight(`${root.name}_light`, position, system.scene);
   light.diffuse = new Color3(0.96, 0.98, 1.0);
   light.specular = new Color3(0.9, 0.96, 1.0);
-  light.intensity = 2.35;
-  light.range = 52;
+  light.intensity = 3.15;
+  light.range = 66;
 
   system.active.push({
+    id,
+    weaponType: "cannon",
     root,
     core,
     trail,
@@ -6286,6 +6344,109 @@ function createCannonMuzzleBlast(system, position, direction) {
   }
 }
 
+function getLocalProjectileScoutPlaneHit(projectile, weaponType) {
+  if (!projectile?.position || !projectile?.previousPosition) return null;
+  const candidates = enemyMotions.filter((motion) => (
+    isScoutPlaneMotion(motion) &&
+    motion.state === "active" &&
+    motion.serverState === "active" &&
+    motion.root?.isEnabled?.() &&
+    distanceToProjectileSegment2D(projectile.previousPosition, projectile.position, motion.root.position) <= 10.0
+  ));
+  if (!candidates.length) return null;
+
+  const movement = projectile.position.subtract(projectile.previousPosition);
+  const segmentLength = movement.length();
+  const samples = Math.max(1, Math.ceil(segmentLength / 1.6));
+  for (const motion of candidates) {
+    for (let index = 0; index <= samples; index += 1) {
+      const t = index / samples;
+      const position = projectile.previousPosition.add(movement.scale(t));
+      if (pointHitsScoutPlaneMotion(position, motion)) {
+        return {
+          motion,
+          position,
+          reportId: `${weaponType}:${projectile.id}:${motion.id}`
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function distanceToProjectileSegment2D(start, end, point) {
+  const dx = end.x - start.x;
+  const dz = end.z - start.z;
+  const lengthSquared = dx * dx + dz * dz;
+  const t = lengthSquared <= 0.0001
+    ? 0
+    : clamp(((point.x - start.x) * dx + (point.z - start.z) * dz) / lengthSquared, 0, 1);
+  const x = start.x + dx * t;
+  const z = start.z + dz * t;
+  return Math.hypot(point.x - x, point.z - z);
+}
+
+function pointHitsScoutPlaneMotion(position, motion) {
+  const planePosition = motion.root.position;
+  const dx = position.x - planePosition.x;
+  const dz = position.z - planePosition.z;
+  const right = dx * Math.cos(motion.heading) - dz * Math.sin(motion.heading);
+  const forward = dx * Math.sin(motion.heading) + dz * Math.cos(motion.heading);
+  const vertical = position.y - planePosition.y;
+  const bank = clamp(motion.visualBank ?? 0, -0.72, 0.72);
+  const cosBank = Math.cos(bank);
+  const sinBank = Math.sin(bank);
+  const modelRight = right * cosBank + vertical * sinBank;
+  const modelVertical = -right * sinBank + vertical * cosBank;
+  return pointHitsScoutPlanePart(
+    forward,
+    modelRight,
+    modelVertical,
+    -scoutPlaneHitHalfLength,
+    scoutPlaneHitHalfLength,
+    scoutPlaneHitFuselageHalfWidth
+  ) || pointHitsScoutPlanePart(
+    forward,
+    modelRight,
+    modelVertical,
+    scoutPlaneHitWingForwardMin,
+    scoutPlaneHitWingForwardMax,
+    scoutPlaneHitWingHalfWidth
+  ) || pointHitsScoutPlanePart(
+    forward,
+    modelRight,
+    modelVertical,
+    scoutPlaneHitTailForwardMin,
+    scoutPlaneHitTailForwardMax,
+    scoutPlaneHitTailHalfWidth
+  );
+}
+
+function pointHitsScoutPlanePart(forward, right, vertical, forwardMin, forwardMax, halfWidth) {
+  return forward >= forwardMin - scoutPlaneHitMargin &&
+    forward <= forwardMax + scoutPlaneHitMargin &&
+    Math.abs(right) <= halfWidth + scoutPlaneHitMargin &&
+    Math.abs(vertical) <= scoutPlaneHitVerticalHalfHeight + scoutPlaneHitMargin;
+}
+
+function handleLocalProjectileScoutPlaneHit(system, projectile, hit, weaponType, now) {
+  const hitId = `local-${hit.reportId}`;
+  if (!flakSystem.hitEffectIds.has(hitId)) {
+    flakSystem.hitEffectIds.add(hitId);
+  }
+  beginEnemyScoutPlaneAirHit(hit.motion, {
+    id: hitId,
+    shipId: playerServerShipId,
+    targetShipId: hit.motion.id,
+    x: hit.position.x,
+    y: hit.position.y,
+    z: hit.position.z,
+    t: now
+  }, now);
+  reportLocalPlaneHit(hit, weaponType);
+  disposeFlakProjectile(projectile);
+}
+
 function updateFlakSystem(system, dt, now) {
   system.active = system.active.filter((projectile) => {
     projectile.age += dt;
@@ -6299,6 +6460,12 @@ function updateFlakSystem(system, dt, now) {
     projectile.position.addInPlace(projectile.velocity.scale(dt));
     projectile.root.position.copyFrom(projectile.position);
     projectile.direction = projectile.position.subtract(projectile.previousPosition).normalize();
+
+    const planeHit = getLocalProjectileScoutPlaneHit(projectile, "flak");
+    if (planeHit) {
+      handleLocalProjectileScoutPlaneHit(system, projectile, planeHit, "flak", now);
+      return false;
+    }
 
     const pulse = 0.72 + Math.sin(now * 80 + projectile.age * 13) * 0.18;
     projectile.core.visibility = pulse;
@@ -6357,6 +6524,12 @@ function updateCannonSystem(system, dt, now, landZones) {
     projectile.position.addInPlace(projectile.velocity.scale(dt));
     projectile.root.position.copyFrom(projectile.position);
     projectile.direction = projectile.position.subtract(projectile.previousPosition).normalize();
+
+    const planeHit = getLocalProjectileScoutPlaneHit(projectile, "cannon");
+    if (planeHit) {
+      handleLocalProjectileScoutPlaneHit(system, projectile, planeHit, "cannon", now);
+      return false;
+    }
 
     const impact = getCannonProjectileImpact(projectile, landZones);
     if (impact) {
