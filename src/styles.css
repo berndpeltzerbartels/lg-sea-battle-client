@@ -459,6 +459,15 @@ body.debug-marker-map {
   text-align: center;
 }
 
+.instrument-button .radar-hotkey {
+  display: none;
+}
+
+body[data-radar-mode="target"] .radar-hotkey-normal,
+body:not([data-radar-mode="target"]) .radar-hotkey-target {
+  display: inline-block;
+}
+
 .instrument-button.is-active {
   border-color: rgb(155 229 223 / 72%);
   background: rgb(155 229 223 / 18%);
