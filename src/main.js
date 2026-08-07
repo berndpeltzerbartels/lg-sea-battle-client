@@ -202,7 +202,7 @@ const cannonPitchVeryFastSpeed = 0.12;
 const cannonPitchMaxSpeed = 0.16;
 const cannonPitchExtremeSpeed = 0.2;
 const playerCannonSightYOffset = 0.08;
-const playerCannonEyeZ = -0.12;
+const playerCannonEyeZ = -0.08;
 const cannonFireCooldownSeconds = 2.4;
 const cannonProjectileSpeed = 950;
 const cannonProjectileGravity = 9.8;
@@ -9398,8 +9398,8 @@ function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2
 
   const elevationRoot = new TransformNode(`${name}_cannon_elevation`, scene);
   elevationRoot.parent = mount;
-  elevationRoot.position.y = 0.23 * cannonScale;
-  elevationRoot.position.z = 0;
+  elevationRoot.position.y = 0.24 * cannonScale;
+  elevationRoot.position.z = 0.18 * cannonScale;
 
   const barrelLength = 0.63 * cannonScale;
   const barrel = MeshBuilder.CreateCylinder(`${name}_cannon_barrel`, {
@@ -9408,7 +9408,7 @@ function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2
     tessellation: 14
   }, scene);
   barrel.parent = elevationRoot;
-  barrel.position.z = barrelLength * 0.42;
+  barrel.position.z = barrelLength * 0.34;
   barrel.rotation.x = Math.PI / 2;
   barrel.material = metalMaterial;
 
