@@ -3935,7 +3935,6 @@ function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, player
   updateAutomaticRadarMode(radarContacts, playerPosition);
   const radarRange = getSelectedRadarRange();
   drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, radarHeading, radarRange, {
-    ignoreLandShadows: scoutPlaneMode,
     flakLookHeading: options.flakLookHeading,
     targetMode: !scoutPlaneMode && (radarMode === "target" || flakViewActive || cannonViewActive || torpedoScopeActive),
     targetLineMode: flakViewActive ? "flak" : (cannonViewActive ? "cannon" : "torpedo"),
@@ -4171,7 +4170,6 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   const centerY = height * 0.5;
   const radius = Math.max(1, Math.min(width, height) * 0.46);
   const radarRange = range;
-  const ignoreLandShadows = options.ignoreLandShadows === true;
   const targetMode = options.targetMode === true;
   const scale = radius / radarRange;
 
@@ -4184,19 +4182,13 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   ctx.fillRect(0, 0, width, height);
 
   drawRadarRangeRings(ctx, centerX, centerY, radius);
-  if (!ignoreLandShadows) {
-    landZones.forEach((zone) => drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, radius, radarRange));
-  }
-
   drawRadarLandUnion(ctx, landZones, playerPosition, centerX, centerY, scale, heading, width, height);
 
   const contacts = radarContacts
     .map((contact) => ({
       ...contact,
       distance: Number.isFinite(contact.distance) ? contact.distance : distance2D(playerPosition, contact.position),
-      blocked: contactIgnoresRadarShadow(contact, ignoreLandShadows)
-        ? false
-        : isLineBlockedByLand(playerPosition, contact.position, landZones)
+      blocked: false
     }))
     .filter((contact) => contact.distance <= radarRange);
   const visibleContacts = contacts.filter((contact) => !contact.blocked);
@@ -4212,7 +4204,6 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
       centerY,
       playerPosition,
       options.radarTorpedoes,
-      landZones,
       heading,
       radarRange,
       scale
@@ -4231,24 +4222,17 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
       radarRange,
       scale,
       options.targetLineMode === "torpedo" ? heading : options.flakLookHeading,
-      options.targetLineMode ?? "torpedo",
-      landZones
+      options.targetLineMode ?? "torpedo"
     );
   }
 
   const nearestVisible = visibleContacts.reduce((nearest, contact) => (
     !nearest || contact.distance < nearest.distance ? contact : nearest
   ), null);
-  const nearestShadow = contacts.reduce((nearest, contact) => (
-    contact.blocked && (!nearest || contact.distance < nearest.distance) ? contact : nearest
-  ), null);
-
   if (nearestVisible) {
     const suffix = visibleContacts.length > 1 ? ` x${visibleContacts.length}` : "";
     const label = nearestVisible.team === "light" ? "Own" : "Enemy";
     if (statusElement) statusElement.textContent = `${label} ${formatWorldDistance(nearestVisible.distance)}${suffix}`;
-  } else if (nearestShadow) {
-    if (statusElement) statusElement.textContent = `Shadow ${formatWorldDistance(nearestShadow.distance)}`;
   } else {
     if (statusElement) statusElement.textContent = `Clear ${formatWorldDistance(radarRange)}`;
   }
@@ -4263,10 +4247,6 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.stroke();
   drawRadarCompassRing(ctx, centerX, centerY, radius, heading);
-}
-
-function contactIgnoresRadarShadow(contact, ignoreLandShadows) {
-  return ignoreLandShadows || contact.serverVisible || contact.vehicleType === "scout-plane";
 }
 
 function prepareInstrumentCanvas(canvas) {
@@ -4854,7 +4834,7 @@ function drawRadarFlakLookIndicator(ctx, centerX, centerY, radius, flakLookHeadi
   ctx.restore();
 }
 
-function drawRadarTorpedoes(ctx, centerX, centerY, playerPosition, torpedoes, landZones, radarHeading, radarRange, scale) {
+function drawRadarTorpedoes(ctx, centerX, centerY, playerPosition, torpedoes, radarHeading, radarRange, scale) {
   if (!Array.isArray(torpedoes) || torpedoes.length === 0) return;
 
   let visible = 0;
@@ -4866,9 +4846,6 @@ function drawRadarTorpedoes(ctx, centerX, centerY, playerPosition, torpedoes, la
     const position = { x: torpedo.x, z: torpedo.z };
     const distance = distance2D(playerPosition, position);
     if (distance > radarRange) continue;
-
-    const own = torpedo.teamId === playerTeamId;
-    if (!own && isLineBlockedByLand(playerPosition, position, landZones)) continue;
 
     const point = worldToRadarPoint(position, playerPosition, centerX, centerY, scale, radarHeading);
     drawRadarTorpedoMarker(ctx, point.x, point.y, Number.isFinite(torpedo.heading) ? torpedo.heading : 0, radarHeading);
@@ -4894,12 +4871,12 @@ function drawRadarTorpedoMarker(ctx, x, y, heading, radarHeading) {
   ctx.restore();
 }
 
-function drawRadarTargetLine(ctx, centerX, centerY, radius, playerPosition, visibleContacts, radarHeading, radarRange, scale, firingHeading, mode, landZones) {
+function drawRadarTargetLine(ctx, centerX, centerY, radius, playerPosition, visibleContacts, radarHeading, radarRange, scale, firingHeading, mode) {
   if (!Number.isFinite(firingHeading)) return;
 
   const relative = normalizeAngle(firingHeading - radarHeading);
   const obstruction = mode === "torpedo"
-    ? findRadarTargetLineObstruction(playerPosition, firingHeading, visibleContacts, landZones, radarRange)
+    ? findRadarTargetLineObstruction(playerPosition, firingHeading, visibleContacts, radarRange)
     : null;
   const endpointDistance = obstruction ? obstruction.distance : radarRange;
   const inner = radius * 0.12;
@@ -4918,7 +4895,7 @@ function drawRadarTargetLine(ctx, centerX, centerY, radius, playerPosition, visi
   ctx.restore();
 }
 
-function findRadarTargetLineObstruction(playerPosition, firingHeading, contacts, landZones, radarRange) {
+function findRadarTargetLineObstruction(playerPosition, firingHeading, contacts, radarRange) {
   let best = null;
   const forward = { x: Math.sin(firingHeading), z: Math.cos(firingHeading) };
   for (const contact of contacts) {
@@ -4946,25 +4923,7 @@ function findRadarTargetLineObstruction(playerPosition, firingHeading, contacts,
       }
     }
   }
-  const land = findRadarTargetLineLandObstruction(playerPosition, forward, landZones, radarRange);
-  if (land && (!best || land.distance < best.distance)) {
-    best = land;
-  }
   return best;
-}
-
-function findRadarTargetLineLandObstruction(playerPosition, forward, landZones, radarRange) {
-  if (!Array.isArray(landZones) || landZones.length === 0) return null;
-  for (let distance = 4; distance <= radarRange; distance += 4) {
-    const point = {
-      x: playerPosition.x + forward.x * distance,
-      z: playerPosition.z + forward.z * distance
-    };
-    if (isRadarBlockedAt(point, landZones)) {
-      return { distance };
-    }
-  }
-  return null;
 }
 
 function pointHitsRadarShipHull(point, contact) {
@@ -5075,43 +5034,6 @@ function drawRadarRangeRings(ctx, centerX, centerY, radius) {
   ctx.moveTo(centerX - radius, centerY);
   ctx.lineTo(centerX + radius, centerY);
   ctx.stroke();
-}
-
-function drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, radius, radarRange) {
-  if (!zone.radarOcclusion) return;
-  if (!Number.isFinite(radius) || radius <= 0) return;
-
-  const dx = zone.x - playerPosition.x;
-  const dz = zone.z - playerPosition.z;
-  const distance = Math.sqrt(dx * dx + dz * dz);
-  const centerAngle = Math.atan2(dx, dz) - heading;
-  let halfAngle = 0;
-  let shadowStartDistance = Number.POSITIVE_INFINITY;
-
-  for (const point of getCoastContourPoints(zone, 40, "radar")) {
-    const pointDx = point.x - playerPosition.x;
-    const pointDz = point.z - playerPosition.z;
-    const pointDistance = Math.sqrt(pointDx * pointDx + pointDz * pointDz);
-    const pointAngle = Math.atan2(pointDx, pointDz) - heading;
-    halfAngle = Math.max(halfAngle, Math.abs(normalizeAngle(pointAngle - centerAngle)));
-    shadowStartDistance = Math.min(shadowStartDistance, pointDistance);
-  }
-
-  if (distance < 1 || shadowStartDistance <= 0 || shadowStartDistance > radarRange || halfAngle <= 0.01) return;
-
-  const near = clamp(shadowStartDistance / radarRange, 0.04, 1) * radius;
-  const start = centerAngle - halfAngle;
-  const end = centerAngle + halfAngle;
-
-  ctx.fillStyle = "rgba(0, 0, 0, 0.52)";
-  ctx.beginPath();
-  ctx.moveTo(centerX + Math.sin(start) * near, centerY - Math.cos(start) * near);
-  ctx.lineTo(centerX + Math.sin(start) * radius, centerY - Math.cos(start) * radius);
-  ctx.arc(centerX, centerY, radius, start - Math.PI / 2, end - Math.PI / 2);
-  ctx.lineTo(centerX + Math.sin(end) * near, centerY - Math.cos(end) * near);
-  ctx.arc(centerX, centerY, near, end - Math.PI / 2, start - Math.PI / 2, true);
-  ctx.closePath();
-  ctx.fill();
 }
 
 function isLineBlockedByLand(from, to, landZones) {
