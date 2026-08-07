@@ -6168,7 +6168,7 @@ function createCannonProjectile(system, position, velocity, direction) {
   root.position.copyFrom(position);
 
   const core = MeshBuilder.CreateSphere(`${root.name}_core`, {
-    diameter: 0.42,
+    diameter: 0.5,
     segments: 12
   }, system.scene);
   core.parent = root;
@@ -6177,7 +6177,7 @@ function createCannonProjectile(system, position, velocity, direction) {
   const trail = [];
   for (let i = 0; i < 4; i += 1) {
     const segment = MeshBuilder.CreateSphere(`${root.name}_trail_${i}`, {
-      diameter: 0.3 - i * 0.045,
+      diameter: 0.36 - i * 0.05,
       segments: 8
     }, system.scene);
     segment.parent = system.root;
@@ -6189,8 +6189,8 @@ function createCannonProjectile(system, position, velocity, direction) {
   const light = new PointLight(`${root.name}_light`, position, system.scene);
   light.diffuse = new Color3(0.96, 0.98, 1.0);
   light.specular = new Color3(0.9, 0.96, 1.0);
-  light.intensity = 1.9;
-  light.range = 44;
+  light.intensity = 2.35;
+  light.range = 52;
 
   system.active.push({
     root,
@@ -6259,9 +6259,9 @@ function createCannonMuzzleBlast(system, position, direction) {
     direction: direction.clone()
   });
 
-  for (let index = 0; index < 5; index += 1) {
+  for (let index = 0; index < 4; index += 1) {
     const puff = MeshBuilder.CreateSphere(`cannon_muzzle_smoke_${flashId}_${index}`, {
-      diameter: 0.42 + index * 0.07,
+      diameter: 0.34 + index * 0.055,
       segments: 10
     }, system.scene);
     puff.parent = system.root;
@@ -6275,13 +6275,13 @@ function createCannonMuzzleBlast(system, position, direction) {
     system.airHitEffects.push({
       mesh: puff,
       age: 0,
-      lifetime: 1.05 + index * 0.08,
+      lifetime: 0.82 + index * 0.07,
       origin: puff.position.clone(),
-      velocity: direction.scale(0.8 + index * 0.18).add(new Vector3(0, 0.28 + index * 0.04, 0)),
+      velocity: direction.scale(0.62 + index * 0.14).add(new Vector3(0, 0.2 + index * 0.035, 0)),
       gravity: 0.02,
-      baseScale: new Vector3(0.44, 0.36, 0.44),
-      grow: new Vector3(1.65, 1.05, 1.65),
-      alpha: 0.42
+      baseScale: new Vector3(0.34, 0.28, 0.34),
+      grow: new Vector3(1.18, 0.82, 1.18),
+      alpha: 0.26
     });
   }
 }
