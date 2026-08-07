@@ -203,8 +203,8 @@ const cannonPitchMaxSpeed = 0.16;
 const cannonPitchExtremeSpeed = 0.2;
 const playerCannonSightYOffset = 0.08;
 const playerCannonEyeZ = -0.12;
-const cannonFireCooldownSeconds = 3.8;
-const cannonProjectileSpeed = 340;
+const cannonFireCooldownSeconds = 2.4;
+const cannonProjectileSpeed = 480;
 const cannonProjectileGravity = 9.8;
 const cannonProjectileLifetime = 7.0;
 const testPlayerInvulnerable = false;
@@ -1100,7 +1100,7 @@ scene.onBeforeRenderObservable.add(() => {
   updateRudderGauge(rudderIndicator, rudderValue, rudderDegrees);
   updateFlakElevationGauge(flakElevationIndicator, flakElevationValue, flakPitch);
   updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, getRadarContacts(enemyMotions), blockedWaters, heading, heading, {
-    flakLookHeading: !scoutPlaneMode ? normalizeAngle(heading + (flakViewActive ? flakYaw : 0)) : null
+    flakLookHeading: !scoutPlaneMode ? normalizeAngle(heading + (flakViewActive ? flakYaw : (cannonViewActive ? cannonYaw : 0))) : null
   });
   flushPerformanceTelemetry(time);
 });
@@ -3752,15 +3752,15 @@ function updateFlakElevationGauge(indicator, valueElement, pitch) {
 }
 
 function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading, radarHeading = heading, options = {}) {
-  if (!flakViewActive && !bombBayViewActive) {
+  if (!flakViewActive && !cannonViewActive && !bombBayViewActive) {
     drawMapInstrument(mapCanvas, playerPosition, landZones, mapZoom, heading);
   }
   const radarRange = getSelectedRadarRange();
   drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, radarHeading, radarRange, {
     ignoreLandShadows: scoutPlaneMode,
     flakLookHeading: options.flakLookHeading,
-    targetMode: !scoutPlaneMode && (radarMode === "target" || flakViewActive),
-    targetLineMode: flakViewActive ? "flak" : "torpedo",
+    targetMode: !scoutPlaneMode && (radarMode === "target" || flakViewActive || cannonViewActive),
+    targetLineMode: flakViewActive ? "flak" : (cannonViewActive ? "cannon" : "torpedo"),
     radarTorpedoes: radarMode === "target" && !scoutPlaneMode ? radarTorpedoSnapshots : []
   });
   document.body.dataset.radarHeading = String(Math.round(normalizeAngle(radarHeading) * 180 / Math.PI));
@@ -4027,7 +4027,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
       heading,
       radarRange,
       scale,
-      options.targetLineMode === "flak" ? options.flakLookHeading : heading,
+      options.targetLineMode === "torpedo" ? heading : options.flakLookHeading,
       options.targetLineMode ?? "torpedo",
       landZones
     );
