@@ -340,6 +340,7 @@ camera.fov = scoutPlaneMode ? 1.02 : 0.78;
 scene.activeCamera = camera;
 
 window.addEventListener("keydown", (event) => {
+  if (isStartupErrorVisible() || isSystemShortcutEvent(event)) return;
   if (isHudControlEvent(event)) return;
   document.body.dataset.lastKey = formatInputEvent(event);
   const playerActive = playerDamageState === "active";
@@ -518,6 +519,7 @@ window.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("keyup", (event) => {
+  if (isStartupErrorVisible() || isSystemShortcutEvent(event)) return;
   if (isHudControlEvent(event)) return;
   if (event.code === "ShiftLeft" || event.code === "ShiftRight") {
     heldEngineDirection = 0;
@@ -586,6 +588,7 @@ window.addEventListener("keyup", (event) => {
 });
 
 window.addEventListener("mousedown", (event) => {
+  if (isStartupErrorVisible()) return;
   if (isHudControlEvent(event)) return;
   if (fireMouseTorpedo(event.button)) {
     event.preventDefault();
@@ -594,6 +597,7 @@ window.addEventListener("mousedown", (event) => {
 });
 
 window.addEventListener("pointerdown", (event) => {
+  if (isStartupErrorVisible()) return;
   if (isHudControlEvent(event)) return;
   focusGameCanvas();
   if (startGlobalMouseRudder(event)) {
@@ -604,6 +608,7 @@ window.addEventListener("pointerdown", (event) => {
 });
 
 window.addEventListener("mouseup", (event) => {
+  if (isStartupErrorVisible()) return;
   if (isHudControlEvent(event)) return;
   if (stopGlobalMouseRudder(event.button)) {
     mouseButtonMask = event.buttons;
@@ -612,6 +617,7 @@ window.addEventListener("mouseup", (event) => {
 });
 
 window.addEventListener("pointerup", (event) => {
+  if (isStartupErrorVisible()) return;
   if (isHudControlEvent(event)) return;
   if (stopGlobalMouseRudder(event.button)) {
     mouseButtonMask = event.buttons;
@@ -638,18 +644,21 @@ window.addEventListener("blur", () => {
 });
 
 window.addEventListener("contextmenu", (event) => {
+  if (isStartupErrorVisible()) return;
   if (playerDamageState === "active") {
     event.preventDefault();
   }
 });
 
 window.addEventListener("auxclick", (event) => {
+  if (isStartupErrorVisible()) return;
   if (isMouseTorpedoButton(event.button)) {
     event.preventDefault();
   }
 });
 
 window.addEventListener("wheel", (event) => {
+  if (isStartupErrorVisible()) return;
   if (playerDamageState !== "active") return;
   if (scoutPlaneMode) {
     event.preventDefault();
@@ -1127,6 +1136,14 @@ function isInputKey(event, name) {
 
 function isFlakViewToggleKey(event) {
   return !scoutPlaneMode && (event.code === "KeyF" || event.key === "f" || event.key === "F");
+}
+
+function isSystemShortcutEvent(event) {
+  return event.metaKey || event.ctrlKey;
+}
+
+function isStartupErrorVisible() {
+  return Boolean(document.body?.dataset?.startupError);
 }
 
 function isCannonViewToggleKey(event) {
