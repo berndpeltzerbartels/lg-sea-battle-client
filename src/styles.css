@@ -749,6 +749,53 @@ body[data-player-vehicle="scout-plane"] .battle-station-panel {
   display: none;
 }
 
+.torpedo-sight {
+  position: absolute;
+  left: 50%;
+  bottom: 132px;
+  width: min(440px, 34vw);
+  min-width: 300px;
+  box-sizing: border-box;
+  padding: 9px 10px 10px;
+  border: 1px solid rgb(155 229 223 / 22%);
+  border-radius: 8px;
+  background:
+    radial-gradient(ellipse at 50% 24%, rgb(155 229 223 / 10%), transparent 56%),
+    linear-gradient(180deg, rgb(6 34 48 / 62%), rgb(2 20 29 / 52%));
+  box-shadow: 0 10px 24px rgb(1 15 24 / 18%);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition: opacity 120ms ease;
+}
+
+body[data-torpedo-sight="active"] .torpedo-sight {
+  opacity: 1;
+}
+
+body[data-cannon-view="active"] .torpedo-sight,
+body[data-flak-view="active"] .torpedo-sight,
+body[data-player-vehicle="scout-plane"] .torpedo-sight {
+  display: none;
+}
+
+.torpedo-sight-title {
+  margin: 0 0 5px;
+  color: #9be5df;
+  font: 900 10px/1 Inter, Arial, sans-serif;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.torpedo-sight canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 440 / 190;
+  border-radius: 5px;
+}
+
 .cannon-scope {
   position: absolute;
   inset: 0;
@@ -2124,6 +2171,19 @@ body[data-cannon-view="active"] .cannon-elevation {
   .battle-station-flak {
     left: 5%;
     top: 2px;
+  }
+
+  .torpedo-sight {
+    left: 50%;
+    bottom: 82px;
+    width: min(300px, 38vw);
+    min-width: 220px;
+    padding: 6px 7px 7px;
+  }
+
+  .torpedo-sight-title {
+    margin-bottom: 3px;
+    font-size: 8px;
   }
 
   .boat-speed-readout span {
