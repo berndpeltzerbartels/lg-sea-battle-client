@@ -318,14 +318,25 @@
         <canvas id="radarCanvas" width="300" height="300"></canvas>
         <small id="radarStatus">Clear</small>
       </div>
-      <button id="flakViewButton" class="view-toggle-button" type="button">
-        <span>FLAK</span>
-        <kbd>F</kbd>
-      </button>
-      <button id="cannonViewButton" class="view-toggle-button view-toggle-button-cannon" type="button">
-        <span>KANONE</span>
-        <kbd>C</kbd>
-      </button>
+      <div class="battle-station-panel" aria-label="Station wählen">
+        <div class="battle-station-hull" aria-hidden="true">
+          <span class="battle-station-bow"></span>
+          <span class="battle-station-bridge-mark"></span>
+          <span class="battle-station-stern-mark"></span>
+        </div>
+        <button id="cannonViewButton" class="battle-station battle-station-cannon" type="button" aria-label="Kanone wählen">
+          <span>Kanone</span>
+          <kbd>C</kbd>
+        </button>
+        <button id="bridgeViewButton" class="battle-station battle-station-bridge" type="button" aria-label="Brücke und Torpedo wählen">
+          <span>Brücke</span>
+          <small>Torpedo</small>
+        </button>
+        <button id="flakViewButton" class="battle-station battle-station-flak" type="button" aria-label="Flak wählen">
+          <span>Flak</span>
+          <kbd>F</kbd>
+        </button>
+      </div>
       <div class="cannon-scope" aria-hidden="true">
         <div class="cannon-scope-vignette"></div>
         <div class="cannon-scope-glass">

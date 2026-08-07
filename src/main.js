@@ -79,6 +79,7 @@ const radarRangeButton = document.getElementById("radarRangeButton");
 const targetRadarButton = document.getElementById("targetRadarButton");
 const flakViewButton = document.getElementById("flakViewButton");
 const cannonViewButton = document.getElementById("cannonViewButton");
+const bridgeViewButton = document.getElementById("bridgeViewButton");
 const flakHitAlert = document.getElementById("flakHitAlert");
 const rudderIndicator = document.getElementById("rudderIndicator");
 const rudderValue = document.getElementById("rudderValue");
@@ -826,6 +827,7 @@ const radarRangeFactors = {
 };
 setupRadarRangeControl(radarRangeButton);
 setupTargetRadarControl(targetRadarButton);
+setupBridgeViewControl(bridgeViewButton);
 setupFlakViewControl(flakViewButton);
 setupCannonViewControl(cannonViewButton);
 let serverShipsById = indexShipsById(gameState.ships);
@@ -1173,10 +1175,16 @@ function isRadarModeToggleKey(event) {
 }
 
 function toggleFlakView() {
-  flakViewActive = !flakViewActive;
-  if (flakViewActive) {
-    cannonViewActive = false;
-  }
+  setBattleStation(flakViewActive ? "bridge" : "flak");
+}
+
+function toggleCannonView() {
+  setBattleStation(cannonViewActive ? "bridge" : "cannon");
+}
+
+function setBattleStation(station) {
+  flakViewActive = station === "flak";
+  cannonViewActive = station === "cannon";
   heldFlakDirection = 0;
   heldFlakPitchDirection = 0;
   heldFlakStartTime = time;
@@ -1187,33 +1195,12 @@ function toggleFlakView() {
   heldElevatorDirection = 0;
   heldCannonDirection = 0;
   heldCannonPitchDirection = 0;
-  rightMouseRudderActive = false;
-  document.body.dataset.flakView = flakViewActive ? "active" : "bridge";
-  document.body.dataset.cannonView = cannonViewActive ? "active" : "bridge";
-  updateFlakViewButton();
-  updateCannonViewButton();
-}
-
-function toggleCannonView() {
-  cannonViewActive = !cannonViewActive;
-  if (cannonViewActive) {
-    flakViewActive = false;
-  }
-  heldCannonDirection = 0;
-  heldCannonPitchDirection = 0;
   heldCannonStartTime = time;
   heldCannonPitchStartTime = time;
-  heldFlakDirection = 0;
-  heldFlakPitchDirection = 0;
-  heldFlakFire = false;
-  heldRudderDirection = 0;
-  heldEngineDirection = 0;
-  heldElevatorDirection = 0;
   rightMouseRudderActive = false;
   document.body.dataset.flakView = flakViewActive ? "active" : "bridge";
   document.body.dataset.cannonView = cannonViewActive ? "active" : "bridge";
-  updateFlakViewButton();
-  updateCannonViewButton();
+  updateBattleStationButtons();
 }
 
 function toggleBombBayView() {
@@ -1577,7 +1564,7 @@ function getSelectedRadarRange() {
 
 function setupFlakViewControl(button) {
   if (!button) return;
-  updateFlakViewButton();
+  updateBattleStationButtons();
   button.addEventListener("click", (event) => {
     toggleFlakView();
     button.blur();
@@ -1585,15 +1572,19 @@ function setupFlakViewControl(button) {
   });
 }
 
-function updateFlakViewButton() {
-  if (!flakViewButton) return;
-  const label = flakViewActive ? "BRIDGE" : "FLAK";
-  flakViewButton.innerHTML = `<span>${label}</span><kbd>F</kbd>`;
+function setupBridgeViewControl(button) {
+  if (!button) return;
+  updateBattleStationButtons();
+  button.addEventListener("click", (event) => {
+    setBattleStation("bridge");
+    button.blur();
+    event.stopPropagation();
+  });
 }
 
 function setupCannonViewControl(button) {
   if (!button) return;
-  updateCannonViewButton();
+  updateBattleStationButtons();
   button.addEventListener("click", (event) => {
     toggleCannonView();
     button.blur();
@@ -1601,10 +1592,10 @@ function setupCannonViewControl(button) {
   });
 }
 
-function updateCannonViewButton() {
-  if (!cannonViewButton) return;
-  const label = cannonViewActive ? "BRIDGE" : "KANONE";
-  cannonViewButton.innerHTML = `<span>${label}</span><kbd>C</kbd>`;
+function updateBattleStationButtons() {
+  bridgeViewButton?.classList.toggle("is-active", !flakViewActive && !cannonViewActive);
+  flakViewButton?.classList.toggle("is-active", flakViewActive);
+  cannonViewButton?.classList.toggle("is-active", cannonViewActive);
 }
 
 function setupDebugMapTeleport(canvas) {

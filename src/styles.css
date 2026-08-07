@@ -424,8 +424,7 @@ body.debug-marker-map {
   margin-bottom: 0;
 }
 
-.instrument-button,
-.view-toggle-button {
+.instrument-button {
   border: 1px solid rgb(155 229 223 / 36%);
   border-radius: 6px;
   background: rgb(2 22 28 / 64%);
@@ -488,36 +487,151 @@ body[data-cannon-view="active"] .nav-instrument-radar {
   aspect-ratio: 1;
 }
 
-.view-toggle-button {
+.battle-station-panel {
   position: absolute;
   left: 24px;
   bottom: calc(24px + var(--radar-size) + 58px);
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 10px;
-  background: rgb(5 27 40 / 58%);
+  width: 172px;
+  height: 86px;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  border: 1px solid rgb(155 229 223 / 26%);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgb(6 34 48 / 70%), rgb(2 20 29 / 58%));
   box-shadow: 0 10px 26px rgb(1 15 24 / 20%);
   backdrop-filter: blur(7px);
   pointer-events: auto;
 }
 
-.view-toggle-button-cannon {
-  bottom: calc(24px + var(--radar-size) + 96px);
+.battle-station-hull {
+  position: absolute;
+  left: 15px;
+  right: 15px;
+  top: 27px;
+  height: 28px;
+  border: 1px solid rgb(155 229 223 / 28%);
+  border-radius: 52% 18% 18% 52% / 50%;
+  background:
+    linear-gradient(90deg, transparent 0 4%, rgb(155 229 223 / 13%) 4% 74%, transparent 74%),
+    linear-gradient(180deg, rgb(196 230 234 / 16%), rgb(2 18 25 / 34%));
+  clip-path: polygon(0 50%, 13% 10%, 74% 10%, 100% 50%, 74% 90%, 13% 90%);
 }
 
-.view-toggle-button kbd {
-  min-width: 16px;
-  padding: 2px 4px;
-  border: 1px solid rgb(247 251 255 / 28%);
+.battle-station-bow,
+.battle-station-bridge-mark,
+.battle-station-stern-mark {
+  position: absolute;
+  display: block;
+  background: rgb(214 247 244 / 34%);
+}
+
+.battle-station-bow {
+  right: 18px;
+  top: 10px;
+  width: 22px;
+  height: 8px;
+  border-radius: 8px 8px 2px 2px;
+}
+
+.battle-station-bridge-mark {
+  left: 65px;
+  top: 7px;
+  width: 19px;
+  height: 15px;
+  border-radius: 3px;
+}
+
+.battle-station-stern-mark {
+  left: 31px;
+  top: 10px;
+  width: 17px;
+  height: 8px;
+  border-radius: 8px;
+}
+
+.battle-station {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 30px;
+  padding: 3px 5px;
+  border: 1px solid rgb(155 229 223 / 24%);
+  border-radius: 6px;
+  background: rgb(2 22 28 / 62%);
+  color: rgb(247 251 255 / 84%);
+  font: 800 8px/1.05 Inter, Arial, sans-serif;
+  letter-spacing: 0;
+  text-align: center;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.battle-station span,
+.battle-station small {
+  pointer-events: none;
+}
+
+.battle-station small {
+  color: rgb(155 229 223 / 78%);
+  font: 800 7px/1 Inter, Arial, sans-serif;
+  text-transform: uppercase;
+}
+
+.battle-station kbd {
+  min-width: 14px;
+  margin-top: 2px;
+  padding: 1px 3px;
+  border: 1px solid rgb(247 251 255 / 22%);
   border-radius: 4px;
-  background: rgb(247 251 255 / 10%);
+  background: rgb(247 251 255 / 8%);
   color: #9be5df;
   font: inherit;
-  text-align: center;
+  line-height: 1;
 }
 
-body[data-player-vehicle="scout-plane"] .view-toggle-button {
+.battle-station.is-active {
+  border-color: rgb(155 229 223 / 78%);
+  background:
+    radial-gradient(circle at 50% 46%, rgb(155 229 223 / 28%), transparent 68%),
+    rgb(5 37 45 / 76%);
+  box-shadow:
+    0 0 0 1px rgb(155 229 223 / 12%),
+    0 0 16px rgb(155 229 223 / 18%);
+  color: #eafffb;
+}
+
+.battle-station.is-active::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  width: 22px;
+  height: 2px;
+  border-radius: 999px;
+  background: #9be5df;
+  box-shadow: 0 0 10px rgb(155 229 223 / 74%);
+  transform: translateX(-50%);
+}
+
+.battle-station-cannon {
+  right: 6px;
+  top: 3px;
+}
+
+.battle-station-bridge {
+  left: 63px;
+  top: 47px;
+}
+
+.battle-station-flak {
+  left: 6px;
+  top: 3px;
+}
+
+body[data-player-vehicle="scout-plane"] .battle-station-panel {
   display: none;
 }
 
@@ -1849,6 +1963,52 @@ body[data-cannon-view="active"] .cannon-elevation {
     bottom: 12px;
     min-width: 82px;
     padding: 9px 10px 8px;
+  }
+
+  .battle-station-panel {
+    left: 102px;
+    bottom: 12px;
+    width: 140px;
+    height: 66px;
+    padding: 6px 8px;
+  }
+
+  .battle-station-hull {
+    left: 12px;
+    right: 12px;
+    top: 21px;
+    height: 20px;
+  }
+
+  .battle-station {
+    min-width: 36px;
+    min-height: 24px;
+    padding: 2px 4px;
+    font-size: 7px;
+  }
+
+  .battle-station small {
+    display: none;
+  }
+
+  .battle-station kbd {
+    min-width: 11px;
+    padding: 1px 2px;
+  }
+
+  .battle-station-cannon {
+    right: 4px;
+    top: 2px;
+  }
+
+  .battle-station-bridge {
+    left: 51px;
+    top: 38px;
+  }
+
+  .battle-station-flak {
+    left: 4px;
+    top: 2px;
   }
 
   .boat-speed-readout span {
