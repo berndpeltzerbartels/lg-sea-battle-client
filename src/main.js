@@ -186,7 +186,7 @@ const playerSternFlakScale = 0.54;
 const playerFlakSightYOffset = 0.16 * playerSternFlakScale;
 const playerFlakEyeZ = 0.02 * playerSternFlakScale;
 const cannonMinPitch = -0.035;
-const cannonMaxPitch = 0.34;
+const cannonMaxPitch = Math.PI / 4;
 const cannonPitchStepRadians = 0.004;
 const cannonYawLimit = 2.62;
 const cannonYawFineSpeed = 0.038;
@@ -3358,6 +3358,8 @@ function syncServerFlakImpacts(impacts) {
     );
     if (impact.reason === "land-hit" || impact.reason === "ship-hit" || impact.reason === "ship-critical-hit") {
       createFlakLandImpactEffect(flakSystem, position);
+    } else if (isCannonServerProjectile(impact.id)) {
+      createCannonWaterImpactEffect(flakSystem, position);
     } else {
       createFlakWaterImpactEffect(flakSystem, position);
     }
@@ -6341,7 +6343,7 @@ function updateCannonSystem(system, dt, now, landZones) {
       if (impact.kind === "land") {
         createFlakLandImpactEffect(system, impact.position);
       } else {
-        createFlakWaterImpactEffect(system, impact.position);
+        createCannonWaterImpactEffect(system, impact.position, projectile.direction);
       }
       disposeFlakProjectile(projectile);
       return false;
@@ -6402,6 +6404,59 @@ function isCannonProjectileInLand(position, landZones) {
     const distance = getZoneShapeDistance(position, zone, zone.rx, zone.rz);
     return distance < getZoneBlockDistance(zone, "navigation") && !isInLandWater(position, zone);
   });
+}
+
+function createCannonWaterImpactEffect(system, position, direction = null) {
+  const impactPosition = new Vector3(position.x, 0.06, position.z);
+  const heading = direction && Math.abs(direction.x) + Math.abs(direction.z) > 0.001
+    ? Math.atan2(direction.x, direction.z)
+    : 0;
+  const forward = getForwardVector(heading);
+  const right = getRightVector(heading);
+  const effectId = system.nextId++;
+
+  for (let i = 0; i < 6; i += 1) {
+    const patch = createJaggedSurfacePatch(`cannon_water_churn_${effectId}_${i}`, system.scene, 0.62 + i * 0.16, 0.42 + i * 0.08, effectId + i * 31);
+    patch.parent = system.root;
+    patch.material = system.materials.foam;
+    patch.position.copyFrom(
+      impactPosition
+        .add(forward.scale((i - 2) * 0.05))
+        .add(right.scale(((i % 3) - 1) * 0.1))
+        .add(new Vector3(0, 0.006 + i * 0.003, 0))
+    );
+    patch.rotation.y = heading + i * 0.51;
+    system.hitEffects.push({
+      mesh: patch,
+      age: 0,
+      lifetime: 0.82 + i * 0.045,
+      origin: patch.position.clone(),
+      velocity: forward.scale(-0.035 * i).add(right.scale(((i % 2) * 2 - 1) * 0.055)).add(new Vector3(0, 0.02, 0)),
+      gravity: 0.03,
+      baseScale: patch.scaling.clone(),
+      grow: new Vector3(1.55 + i * 0.14, 0.08, 1.05 + i * 0.1),
+      seed: effectId + i
+    });
+  }
+
+  for (let i = 0; i < 5; i += 1) {
+    const spray = createJaggedHitWall(`cannon_water_spray_${effectId}_${i}`, system.scene, 0.16 + i * 0.026, 0.42 + i * 0.08, effectId + i * 37);
+    spray.parent = system.root;
+    spray.material = system.materials.foam;
+    spray.position.copyFrom(impactPosition.add(new Vector3(0, 0.17 + i * 0.035, 0)));
+    spray.rotation.y = heading + (i - 2) * 0.28;
+    system.hitEffects.push({
+      mesh: spray,
+      age: 0,
+      lifetime: 0.55 + i * 0.04,
+      origin: spray.position.clone(),
+      velocity: forward.scale(0.05 + i * 0.025).add(right.scale((i - 2) * 0.09)).add(new Vector3(0, 0.48 + i * 0.065, 0)),
+      gravity: 0.42,
+      baseScale: spray.scaling.clone(),
+      grow: new Vector3(0.72, 0.42, 0.72),
+      seed: effectId + 40 + i
+    });
+  }
 }
 
 function createScoutPlaneHitSequence(system, position) {
