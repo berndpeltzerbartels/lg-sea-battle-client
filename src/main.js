@@ -2373,7 +2373,7 @@ function getFireFlakEndpoint() {
 }
 
 function getFireCannonEndpoint() {
-  if (isStandaloneSeaBattleRoute()) {
+  if (location.port === "5173" || location.port === "4173") {
     return `${location.protocol}//${location.hostname}/game/fire-cannon`;
   }
   return gameEndpoint("/game/fire-cannon");
