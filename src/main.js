@@ -746,7 +746,7 @@ function isTextEditingElement(element) {
 }
 
 const engineOrders = [
-  { label: "Astern Full", shortLabel: "Full Ast", speed: -4.2 },
+  { label: "Astern Full", shortLabel: "Full Ast", speed: -8.0 },
   { label: "Astern Half", shortLabel: "Half Ast", speed: -2.2 },
   { label: "Stop", speed: 0 },
   { label: "Ahead Slow", shortLabel: "Slow", speed: 0.55 },
