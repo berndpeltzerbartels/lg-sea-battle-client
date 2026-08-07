@@ -379,7 +379,7 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (playerActive && isRadarModeToggleKey(event) && !event.repeat) {
-    setRadarMode("target");
+    setRadarMode(radarMode === "target" ? "radar" : "target");
     event.preventDefault();
     return;
   }
