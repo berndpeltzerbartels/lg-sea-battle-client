@@ -379,7 +379,7 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (playerActive && isRadarModeToggleKey(event) && !event.repeat) {
-    setRadarMode(radarModePreference === "target" ? "radar" : "target");
+    setRadarMode("target");
     event.preventDefault();
     return;
   }
@@ -756,10 +756,10 @@ let flakViewActive = false;
 let cannonViewActive = false;
 let bombBayViewActive = false;
 let bombBayImpactFocus = null;
-let radarModePreference = readStoredValue("seaBattleRadarRangeMode") === "near" || readStoredValue("seaBattleRadarMode") === "target"
-  ? "target"
-  : "radar";
-let radarMode = radarModePreference;
+const RADAR_MODE_OVERRIDE_MS = 10000;
+let radarMode = "radar";
+let radarModeOverride = null;
+let radarModeOverrideUntil = 0;
 let flakYaw = 0;
 let flakPitch = 0;
 let cannonYaw = 0;
@@ -1546,20 +1546,14 @@ function setupTargetRadarControl(button) {
 }
 
 function setRadarMode(mode) {
-  radarModePreference = mode === "target" ? "target" : "radar";
-  radarMode = radarModePreference;
-  try {
-    localStorage.setItem("seaBattleRadarMode", radarModePreference);
-    localStorage.setItem("seaBattleRadarRangeMode", radarModePreference === "target" ? "near" : "far");
-  } catch (ignored) {
-    // The selected radar mode is only a convenience preference.
-  }
-  updateRadarModeButtons();
+  radarModeOverride = mode === "target" ? "target" : "radar";
+  radarModeOverrideUntil = performance.now() + RADAR_MODE_OVERRIDE_MS;
+  setEffectiveRadarMode(radarModeOverride, true);
 }
 
-function setEffectiveRadarMode(mode) {
+function setEffectiveRadarMode(mode, forceUpdate = false) {
   const nextMode = mode === "target" ? "target" : "radar";
-  if (radarMode === nextMode) return;
+  if (radarMode === nextMode && !forceUpdate) return;
   radarMode = nextMode;
   updateRadarModeButtons();
 }
@@ -1567,8 +1561,7 @@ function setEffectiveRadarMode(mode) {
 function updateRadarModeButtons() {
   document.body.dataset.radarRangeMode = radarMode === "target" ? "near" : "far";
   document.body.dataset.radarMode = radarMode;
-  document.body.dataset.radarModePreference = radarModePreference;
-  document.body.dataset.radarModeAuto = radarMode !== radarModePreference ? "active" : "off";
+  document.body.dataset.radarModeOverride = radarModeOverride ? "active" : "off";
   if (radarRangeButton) {
     radarRangeButton.classList.toggle("is-active", radarMode !== "target");
   }
@@ -3825,10 +3818,20 @@ function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, player
 }
 
 function updateAutomaticRadarMode(radarContacts, playerPosition) {
-  if (scoutPlaneMode || radarModePreference === "target") {
-    setEffectiveRadarMode(radarModePreference);
+  if (scoutPlaneMode) {
+    radarModeOverride = null;
+    radarModeOverrideUntil = 0;
+    setEffectiveRadarMode("radar");
     return;
   }
+
+  if (radarModeOverride && performance.now() < radarModeOverrideUntil) {
+    setEffectiveRadarMode(radarModeOverride);
+    return;
+  }
+  const hadRadarOverride = Boolean(radarModeOverride);
+  radarModeOverride = null;
+  radarModeOverrideUntil = 0;
 
   const targetRange = getRadarRangeForMode("target");
   const enemyInTargetRange = radarContacts.some((contact) => (
@@ -3836,7 +3839,7 @@ function updateAutomaticRadarMode(radarContacts, playerPosition) {
     contact.teamId !== playerTeamId &&
     distance2D(playerPosition, contact.position) <= targetRange
   ));
-  setEffectiveRadarMode(enemyInTargetRange ? "target" : "radar");
+  setEffectiveRadarMode(enemyInTargetRange ? "target" : "radar", hadRadarOverride);
 }
 
 function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, heading) {
