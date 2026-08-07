@@ -343,6 +343,7 @@
           <span>Flak</span>
           <kbd>F</kbd>
         </button>
+        <button id="alignWeaponsButton" class="align-weapons-button" type="button">Geschütze ausrichten</button>
       </div>
       <div class="cannon-scope" aria-hidden="true">
         <div class="cannon-scope-vignette"></div>
@@ -356,9 +357,20 @@
           <span class="cannon-scope-range cannon-scope-range-far"></span>
         </div>
       </div>
-      <div class="torpedo-sight" aria-hidden="true">
-        <div class="torpedo-sight-title">Torpedo</div>
-        <canvas id="torpedoSightCanvas" width="440" height="190"></canvas>
+      <div class="torpedo-scope" aria-hidden="true">
+        <div class="torpedo-scope-glass">
+          <span class="torpedo-scope-line torpedo-scope-line-left"></span>
+          <span class="torpedo-scope-line torpedo-scope-line-right"></span>
+          <span class="torpedo-scope-line torpedo-scope-line-center"></span>
+          <span class="torpedo-scope-range torpedo-scope-range-near"></span>
+          <span class="torpedo-scope-range torpedo-scope-range-mid"></span>
+          <span class="torpedo-scope-range torpedo-scope-range-far"></span>
+        </div>
+      </div>
+      <div class="torpedo-aid" aria-hidden="true">
+        <div class="torpedo-aid-title">Torpedo</div>
+        <div>Feuer: Space</div>
+        <strong>Präzision</strong>
       </div>
       <div id="fleetStatusRows" class="fleet-status" aria-hidden="true"></div>
       <div class="version-panel" aria-hidden="true">

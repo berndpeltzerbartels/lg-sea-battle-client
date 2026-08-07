@@ -504,8 +504,8 @@ body[data-cannon-view="active"] .battle-station-panel {
   position: absolute;
   left: 24px;
   bottom: calc(24px + var(--radar-size) + 58px);
-  width: var(--radar-size);
-  height: 104px;
+  width: calc(var(--radar-size) + 20px);
+  height: 128px;
   box-sizing: border-box;
   padding: 10px 12px;
   border: 1px solid rgb(155 229 223 / 26%);
@@ -749,51 +749,144 @@ body[data-player-vehicle="scout-plane"] .battle-station-panel {
   display: none;
 }
 
-.torpedo-sight {
+.align-weapons-button {
   position: absolute;
   left: 50%;
-  bottom: 132px;
-  width: min(440px, 34vw);
-  min-width: 300px;
-  box-sizing: border-box;
-  padding: 9px 10px 10px;
-  border: 1px solid rgb(155 229 223 / 22%);
-  border-radius: 8px;
-  background:
-    radial-gradient(ellipse at 50% 24%, rgb(155 229 223 / 10%), transparent 56%),
-    linear-gradient(180deg, rgb(6 34 48 / 62%), rgb(2 20 29 / 52%));
-  box-shadow: 0 10px 24px rgb(1 15 24 / 18%);
-  backdrop-filter: blur(6px);
-  opacity: 0;
-  pointer-events: none;
+  bottom: 8px;
+  width: min(156px, calc(100% - 22px));
+  min-height: 20px;
   transform: translateX(-50%);
-  transition: opacity 120ms ease;
+  border: 1px solid rgb(155 229 223 / 32%);
+  border-radius: 6px;
+  background: rgb(2 22 28 / 64%);
+  color: rgb(247 251 255 / 82%);
+  font: 800 8px/1 Inter, Arial, sans-serif;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  cursor: pointer;
 }
 
-body[data-torpedo-sight="active"] .torpedo-sight {
-  opacity: 1;
+.align-weapons-button:hover,
+.align-weapons-button:focus-visible {
+  border-color: rgb(255 107 74 / 72%);
+  color: #fff7f2;
+  outline: none;
 }
 
-body[data-cannon-view="active"] .torpedo-sight,
-body[data-flak-view="active"] .torpedo-sight,
-body[data-player-vehicle="scout-plane"] .torpedo-sight {
+.torpedo-scope {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+}
+
+body[data-cannon-view="active"] .torpedo-scope,
+body[data-flak-view="active"] .torpedo-scope,
+body[data-player-vehicle="scout-plane"] .torpedo-scope {
   display: none;
 }
 
-.torpedo-sight-title {
-  margin: 0 0 5px;
-  color: #9be5df;
-  font: 900 10px/1 Inter, Arial, sans-serif;
-  letter-spacing: 0;
-  text-transform: uppercase;
+.torpedo-scope-glass {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: min(48vw, 520px);
+  height: min(21vh, 180px);
+  transform: translate(-50%, -50%);
 }
 
-.torpedo-sight canvas {
+.torpedo-scope-line,
+.torpedo-scope-range {
+  position: absolute;
   display: block;
-  width: 100%;
-  height: auto;
-  aspect-ratio: 440 / 190;
-  border-radius: 5px;
+  background: rgb(1 7 8 / 74%);
+  box-shadow: 0 0 8px rgb(155 229 223 / 8%);
+}
+
+.torpedo-scope-line-left,
+.torpedo-scope-line-right {
+  top: 12%;
+  width: 2px;
+  height: 76%;
+}
+
+.torpedo-scope-line-left {
+  left: 18%;
+}
+
+.torpedo-scope-line-right {
+  right: 18%;
+}
+
+.torpedo-scope-line-center {
+  left: 50%;
+  top: 37%;
+  width: 2px;
+  height: 26%;
+  transform: translateX(-50%);
+  background: rgb(1 7 8 / 58%);
+}
+
+.torpedo-scope-range {
+  left: 50%;
+  width: 72%;
+  height: 2px;
+  transform: translateX(-50%);
+}
+
+.torpedo-scope-range-near {
+  top: 34%;
+}
+
+.torpedo-scope-range-mid {
+  top: 50%;
+  width: 82%;
+}
+
+.torpedo-scope-range-far {
+  top: 66%;
+}
+
+.torpedo-aid {
+  position: absolute;
+  left: 50%;
+  bottom: 112px;
+  min-width: 106px;
+  box-sizing: border-box;
+  padding: 7px 10px 8px;
+  border: 1px solid rgb(155 229 223 / 30%);
+  border-radius: 7px;
+  background:
+    radial-gradient(ellipse at 50% 10%, rgb(155 229 223 / 14%), transparent 58%),
+    linear-gradient(180deg, rgb(6 34 48 / 66%), rgb(2 20 29 / 56%));
+  box-shadow: 0 10px 24px rgb(1 15 24 / 18%), inset 0 0 18px rgb(155 229 223 / 5%);
+  backdrop-filter: blur(6px);
+  color: rgb(220 255 249 / 88%);
+  font: 800 10px/1.35 Inter, Arial, sans-serif;
+  letter-spacing: 0;
+  text-align: center;
+  text-transform: uppercase;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+body[data-cannon-view="active"] .torpedo-aid,
+body[data-flak-view="active"] .torpedo-aid,
+body[data-player-vehicle="scout-plane"] .torpedo-aid {
+  display: none;
+}
+
+.torpedo-aid-title {
+  margin-bottom: 3px;
+  color: #9be5df;
+  font: 900 10px/1 Inter, Arial, sans-serif;
+}
+
+.torpedo-aid strong {
+  display: block;
+  margin-top: 2px;
+  color: #ff8f72;
+  font: 900 9px/1 Inter, Arial, sans-serif;
 }
 
 .cannon-scope {
@@ -2129,8 +2222,8 @@ body[data-cannon-view="active"] .cannon-elevation {
   .battle-station-panel {
     left: 102px;
     bottom: 12px;
-    width: var(--radar-size);
-    height: 68px;
+    width: calc(var(--radar-size) + 16px);
+    height: 78px;
     padding: 6px 8px;
   }
 
@@ -2165,7 +2258,7 @@ body[data-cannon-view="active"] .cannon-elevation {
 
   .battle-station-bridge {
     left: 38%;
-    top: 38px;
+    top: 36px;
   }
 
   .battle-station-flak {
@@ -2173,17 +2266,33 @@ body[data-cannon-view="active"] .cannon-elevation {
     top: 2px;
   }
 
-  .torpedo-sight {
-    left: 50%;
-    bottom: 82px;
-    width: min(300px, 38vw);
-    min-width: 220px;
-    padding: 6px 7px 7px;
+  .align-weapons-button {
+    bottom: 4px;
+    width: min(118px, calc(100% - 16px));
+    min-height: 16px;
+    font-size: 6px;
   }
 
-  .torpedo-sight-title {
-    margin-bottom: 3px;
+  .torpedo-scope-glass {
+    left: 50%;
+    top: 44%;
+    width: min(44vw, 360px);
+    height: min(18vh, 120px);
+  }
+
+  .torpedo-aid {
+    bottom: 84px;
+    min-width: 88px;
+    padding: 5px 7px 6px;
     font-size: 8px;
+  }
+
+  .torpedo-aid-title {
+    font-size: 8px;
+  }
+
+  .torpedo-aid strong {
+    font-size: 7px;
   }
 
   .boat-speed-readout span {

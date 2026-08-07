@@ -77,10 +77,10 @@ const radarCanvas = document.getElementById("radarCanvas");
 const radarStatus = document.getElementById("radarStatus");
 const radarRangeButton = document.getElementById("radarRangeButton");
 const targetRadarButton = document.getElementById("targetRadarButton");
-const torpedoSightCanvas = document.getElementById("torpedoSightCanvas");
 const flakViewButton = document.getElementById("flakViewButton");
 const cannonViewButton = document.getElementById("cannonViewButton");
 const bridgeViewButton = document.getElementById("bridgeViewButton");
+const alignWeaponsButton = document.getElementById("alignWeaponsButton");
 const flakHitAlert = document.getElementById("flakHitAlert");
 const rudderIndicator = document.getElementById("rudderIndicator");
 const rudderValue = document.getElementById("rudderValue");
@@ -837,6 +837,7 @@ setupTargetRadarControl(targetRadarButton);
 setupBridgeViewControl(bridgeViewButton);
 setupFlakViewControl(flakViewButton);
 setupCannonViewControl(cannonViewButton);
+setupAlignWeaponsControl(alignWeaponsButton);
 let serverShipsById = indexShipsById(gameState.ships);
 let serverClockOffset = Number.isFinite(gameState.t) ? -gameState.t : null;
 let lastServerSnapshotTime = Number.isFinite(gameState.t) ? gameState.t : null;
@@ -1135,7 +1136,6 @@ scene.onBeforeRenderObservable.add(() => {
   updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, radarContacts, blockedWaters, heading, heading, {
     flakLookHeading: !scoutPlaneMode ? normalizeAngle(heading + (flakViewActive ? flakYaw : (cannonViewActive ? cannonYaw : 0))) : null
   });
-  drawTorpedoSightInstrument(torpedoSightCanvas, boat.root.position, radarContacts, blockedWaters, heading, speed);
   flushPerformanceTelemetry(time);
 });
 
@@ -1610,6 +1610,25 @@ function setupCannonViewControl(button) {
     button.blur();
     event.stopPropagation();
   });
+}
+
+function setupAlignWeaponsControl(button) {
+  if (!button) return;
+  button.addEventListener("click", (event) => {
+    alignWeaponsForBridge();
+    button.blur();
+    event.stopPropagation();
+  });
+}
+
+function alignWeaponsForBridge() {
+  flakYaw = Math.PI;
+  flakPitch = clamp(25 * Math.PI / 180, flakMinPitch, flakMaxPitch);
+  cannonYaw = 0;
+  cannonPitch = clamp(5 * Math.PI / 180, cannonMinPitch, cannonMaxPitch);
+  updatePlayerFlakMount();
+  updatePlayerCannonMount();
+  document.body.dataset.weaponAlign = "bridge";
 }
 
 function updateBattleStationButtons() {
@@ -3841,191 +3860,6 @@ function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, player
     radarTorpedoes: radarMode === "target" && !scoutPlaneMode ? radarTorpedoSnapshots : []
   });
   document.body.dataset.radarHeading = String(Math.round(normalizeAngle(radarHeading) * 180 / Math.PI));
-}
-
-function drawTorpedoSightInstrument(canvas, playerPosition, radarContacts, landZones, firingHeading, shipSpeed) {
-  const visible = !scoutPlaneMode && !flakViewActive && !cannonViewActive && !bombBayViewActive && playerDamageState === "active";
-  document.body.dataset.torpedoSight = visible ? "active" : "hidden";
-  if (!canvas || !visible) return;
-
-  const ctx = prepareInstrumentCanvas(canvas);
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  if (!ctx || width < 80 || height < 60) return;
-
-  const sightRange = 520;
-  const lateralRange = 76;
-  const forward = { x: Math.sin(firingHeading), z: Math.cos(firingHeading) };
-  const right = { x: Math.cos(firingHeading), z: -Math.sin(firingHeading) };
-  const torpedoSpeed = 24 + Math.max(0, shipSpeed) * 0.35;
-  const scaleX = width * 0.42 / lateralRange;
-  const topY = height * 0.16;
-  const bottomY = height * 0.88;
-  const rangeHeight = bottomY - topY;
-  const centerX = width * 0.5;
-  const laneHalfWidth = 8.5;
-  const contacts = (Array.isArray(radarContacts) ? radarContacts : [])
-    .filter((contact) => contact?.position && contact.vehicleType !== "scout-plane")
-    .map((contact) => ({
-      ...contact,
-      local: worldToTorpedoSightLocal(playerPosition, contact.position, forward, right)
-    }))
-    .filter((contact) => contact.local.along > -18 && contact.local.along <= sightRange && Math.abs(contact.local.cross) <= lateralRange * 1.25);
-  const obstruction = findRadarTargetLineObstruction(playerPosition, firingHeading, contacts, landZones, sightRange);
-  const endpointDistance = obstruction ? obstruction.distance : sightRange;
-
-  ctx.clearRect(0, 0, width, height);
-  ctx.save();
-  drawTorpedoSightBackground(ctx, width, height);
-  drawTorpedoSightScale(ctx, width, height, centerX, topY, bottomY);
-  drawTorpedoSightLane(ctx, centerX, topY, bottomY, rangeHeight, sightRange, scaleX, laneHalfWidth, endpointDistance);
-  drawTorpedoSightContacts(ctx, contacts, centerX, bottomY, rangeHeight, sightRange, scaleX, torpedoSpeed, firingHeading, forward, right);
-  ctx.restore();
-
-  document.body.dataset.torpedoSightContacts = String(contacts.length);
-  document.body.dataset.torpedoSightRange = String(Math.round(endpointDistance));
-}
-
-function drawTorpedoSightBackground(ctx, width, height) {
-  ctx.fillStyle = "rgba(2, 22, 28, 0.74)";
-  ctx.fillRect(0, 0, width, height);
-  const gradient = ctx.createLinearGradient(0, 0, 0, height);
-  gradient.addColorStop(0, "rgba(155, 229, 223, 0.12)");
-  gradient.addColorStop(0.5, "rgba(155, 229, 223, 0.035)");
-  gradient.addColorStop(1, "rgba(2, 16, 21, 0.18)");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, width, height);
-}
-
-function drawTorpedoSightScale(ctx, width, height, centerX, topY, bottomY) {
-  ctx.strokeStyle = "rgba(155, 229, 223, 0.16)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  for (let i = 1; i < 4; i += 1) {
-    const y = bottomY - (bottomY - topY) * (i / 4);
-    ctx.moveTo(width * 0.16, y);
-    ctx.lineTo(width * 0.84, y);
-  }
-  ctx.stroke();
-
-  ctx.strokeStyle = "rgba(247, 251, 255, 0.34)";
-  ctx.lineWidth = 1.1;
-  ctx.beginPath();
-  ctx.moveTo(centerX, topY - 6);
-  ctx.lineTo(centerX, bottomY + 4);
-  ctx.stroke();
-}
-
-function drawTorpedoSightLane(ctx, centerX, topY, bottomY, rangeHeight, sightRange, scaleX, laneHalfWidth, endpointDistance) {
-  const endpointY = bottomY - clamp(endpointDistance / sightRange, 0, 1) * rangeHeight;
-  const laneLeft = centerX - laneHalfWidth * scaleX;
-  const laneRight = centerX + laneHalfWidth * scaleX;
-
-  ctx.save();
-  ctx.strokeStyle = "rgba(155, 229, 223, 0.46)";
-  ctx.lineWidth = 1.4;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(laneLeft, bottomY);
-  ctx.lineTo(laneLeft, endpointY);
-  ctx.moveTo(laneRight, bottomY);
-  ctx.lineTo(laneRight, endpointY);
-  ctx.stroke();
-
-  ctx.strokeStyle = "rgba(255, 107, 74, 0.48)";
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.moveTo(centerX - 34, endpointY);
-  ctx.lineTo(centerX - 12, endpointY);
-  ctx.moveTo(centerX + 12, endpointY);
-  ctx.lineTo(centerX + 34, endpointY);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawTorpedoSightContacts(ctx, contacts, centerX, bottomY, rangeHeight, sightRange, scaleX, torpedoSpeed, firingHeading, forward, right) {
-  contacts
-    .slice()
-    .sort((a, b) => b.local.along - a.local.along)
-    .forEach((contact) => {
-      const point = torpedoSightLocalToCanvas(contact.local, centerX, bottomY, rangeHeight, sightRange, scaleX);
-      if (!point.visible) return;
-      const color = contact.teamId === playerTeamId || contact.team === "light" ? "#7fd7ff" : "#ff6b4a";
-      drawTorpedoSightShip(ctx, point.x, point.y, color, normalizeAngle((contact.heading ?? 0) - firingHeading), 1);
-      const lead = getTorpedoSightLeadLocal(contact, torpedoSpeed, forward, right);
-      if (!lead) return;
-      const leadPoint = torpedoSightLocalToCanvas(lead, centerX, bottomY, rangeHeight, sightRange, scaleX);
-      if (!leadPoint.visible) return;
-      const likelyHit = Math.abs(lead.cross) <= 10.5;
-      drawTorpedoSightLeadMark(ctx, leadPoint.x, leadPoint.y, likelyHit);
-    });
-}
-
-function getTorpedoSightLeadLocal(contact, torpedoSpeed, forward, right) {
-  if (!Number.isFinite(contact.local?.along) || contact.local.along <= 6 || !Number.isFinite(torpedoSpeed) || torpedoSpeed <= 0) return null;
-  const travelTime = clamp(contact.local.along / torpedoSpeed, 0, 28);
-  const contactSpeed = Number.isFinite(contact.speed) ? contact.speed : 0;
-  const contactHeading = Number.isFinite(contact.heading) ? contact.heading : 0;
-  const contactForward = { x: Math.sin(contactHeading), z: Math.cos(contactHeading) };
-  return {
-    along: contact.local.along + (contactForward.x * forward.x + contactForward.z * forward.z) * contactSpeed * travelTime,
-    cross: contact.local.cross + (contactForward.x * right.x + contactForward.z * right.z) * contactSpeed * travelTime
-  };
-}
-
-function drawTorpedoSightShip(ctx, x, y, color, relativeHeading, scale = 1) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(relativeHeading);
-  ctx.fillStyle = color;
-  ctx.strokeStyle = "rgba(2, 16, 21, 0.9)";
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.moveTo(0, -10 * scale);
-  ctx.lineTo(4.5 * scale, -3 * scale);
-  ctx.lineTo(4 * scale, 8 * scale);
-  ctx.lineTo(0, 6.5 * scale);
-  ctx.lineTo(-4 * scale, 8 * scale);
-  ctx.lineTo(-4.5 * scale, -3 * scale);
-  ctx.closePath();
-  ctx.stroke();
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawTorpedoSightLeadMark(ctx, x, y, likelyHit) {
-  ctx.save();
-  ctx.strokeStyle = likelyHit ? "rgba(255, 239, 164, 0.9)" : "rgba(155, 229, 223, 0.42)";
-  ctx.lineWidth = likelyHit ? 1.8 : 1.2;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(x - 18, y);
-  ctx.lineTo(x - 6, y);
-  ctx.moveTo(x + 6, y);
-  ctx.lineTo(x + 18, y);
-  ctx.moveTo(x, y - 12);
-  ctx.lineTo(x, y - 5);
-  ctx.moveTo(x, y + 5);
-  ctx.lineTo(x, y + 12);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function worldToTorpedoSightLocal(origin, point, forward, right) {
-  const dx = point.x - origin.x;
-  const dz = point.z - origin.z;
-  return {
-    along: dx * forward.x + dz * forward.z,
-    cross: dx * right.x + dz * right.z
-  };
-}
-
-function torpedoSightLocalToCanvas(local, centerX, bottomY, rangeHeight, sightRange, scaleX) {
-  return {
-    x: centerX + local.cross * scaleX,
-    y: bottomY - clamp(local.along / sightRange, 0, 1) * rangeHeight,
-    visible: local.along >= 0 && local.along <= sightRange
-  };
 }
 
 function updateAutomaticRadarMode(radarContacts, playerPosition) {
