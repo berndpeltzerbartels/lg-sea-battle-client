@@ -6426,7 +6426,7 @@ function createCannonWaterImpactEffect(system, position, direction = null) {
         .add(new Vector3(0, 0.006 + i * 0.003, 0))
     );
     patch.rotation.y = heading + i * 0.51;
-    system.hitEffects.push({
+    system.airHitEffects.push({
       mesh: patch,
       age: 0,
       lifetime: 0.82 + i * 0.045,
@@ -6445,7 +6445,7 @@ function createCannonWaterImpactEffect(system, position, direction = null) {
     spray.material = system.materials.foam;
     spray.position.copyFrom(impactPosition.add(new Vector3(0, 0.17 + i * 0.035, 0)));
     spray.rotation.y = heading + (i - 2) * 0.28;
-    system.hitEffects.push({
+    system.airHitEffects.push({
       mesh: spray,
       age: 0,
       lifetime: 0.55 + i * 0.04,
