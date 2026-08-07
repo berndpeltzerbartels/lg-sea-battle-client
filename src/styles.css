@@ -804,6 +804,20 @@ body[data-player-vehicle="scout-plane"] .battle-station-panel {
   outline: none;
 }
 
+.align-weapons-button kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 13px;
+  margin-left: 5px;
+  padding: 1px 3px;
+  border: 1px solid rgb(247 251 255 / 22%);
+  border-radius: 4px;
+  background: rgb(247 251 255 / 8%);
+  color: #9be5df;
+  font: inherit;
+  line-height: 1;
+}
+
 .torpedo-scope {
   position: absolute;
   inset: 0;

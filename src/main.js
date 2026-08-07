@@ -383,6 +383,11 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     return;
   }
+  if (playerActive && isAlignWeaponsKey(event) && !event.repeat) {
+    alignWeaponsForBridge();
+    event.preventDefault();
+    return;
+  }
   if (playerActive && isBombBayViewToggleKey(event) && !event.repeat) {
     toggleBombBayView();
     event.preventDefault();
@@ -1196,6 +1201,10 @@ function isBridgeViewKey(event) {
 
 function isTorpedoScopeToggleKey(event) {
   return !scoutPlaneMode && (event.code === "KeyT" || event.key === "t" || event.key === "T");
+}
+
+function isAlignWeaponsKey(event) {
+  return !scoutPlaneMode && (event.code === "KeyA" || event.key === "a" || event.key === "A");
 }
 
 function isBombBayViewToggleKey(event) {
