@@ -6168,16 +6168,16 @@ function createCannonProjectile(system, position, velocity, direction) {
   root.position.copyFrom(position);
 
   const core = MeshBuilder.CreateSphere(`${root.name}_core`, {
-    diameter: 0.34,
+    diameter: 0.42,
     segments: 12
   }, system.scene);
   core.parent = root;
   core.material = system.materials.flakTracer;
 
   const trail = [];
-  for (let i = 0; i < 3; i += 1) {
+  for (let i = 0; i < 4; i += 1) {
     const segment = MeshBuilder.CreateSphere(`${root.name}_trail_${i}`, {
-      diameter: 0.24 - i * 0.04,
+      diameter: 0.3 - i * 0.045,
       segments: 8
     }, system.scene);
     segment.parent = system.root;
@@ -6187,10 +6187,10 @@ function createCannonProjectile(system, position, velocity, direction) {
   }
 
   const light = new PointLight(`${root.name}_light`, position, system.scene);
-  light.diffuse = new Color3(1.0, 0.9, 0.68);
-  light.specular = new Color3(1.0, 0.86, 0.58);
-  light.intensity = 1.55;
-  light.range = 38;
+  light.diffuse = new Color3(0.96, 0.98, 1.0);
+  light.specular = new Color3(0.9, 0.96, 1.0);
+  light.intensity = 1.9;
+  light.range = 44;
 
   system.active.push({
     root,
@@ -6203,7 +6203,7 @@ function createCannonProjectile(system, position, velocity, direction) {
     age: 0,
     lifetime: cannonProjectileLifetime,
     direction: direction.clone(),
-    samplePositions: Array.from({ length: 4 }, (_, index) => position.add(direction.scale(-0.28 - index * 0.42)))
+    samplePositions: Array.from({ length: 5 }, (_, index) => position.add(direction.scale(-0.28 - index * 0.42)))
   });
   return system.active[system.active.length - 1];
 }
