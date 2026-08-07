@@ -379,7 +379,7 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (playerActive && isRadarModeToggleKey(event) && !event.repeat) {
-    setRadarMode(radarMode === "target" ? "radar" : "target");
+    setRadarMode(radarModePreference === "target" ? "radar" : "target");
     event.preventDefault();
     return;
   }
@@ -756,9 +756,10 @@ let flakViewActive = false;
 let cannonViewActive = false;
 let bombBayViewActive = false;
 let bombBayImpactFocus = null;
-let radarMode = readStoredValue("seaBattleRadarRangeMode") === "near" || readStoredValue("seaBattleRadarMode") === "target"
+let radarModePreference = readStoredValue("seaBattleRadarRangeMode") === "near" || readStoredValue("seaBattleRadarMode") === "target"
   ? "target"
   : "radar";
+let radarMode = radarModePreference;
 let flakYaw = 0;
 let flakPitch = 0;
 let cannonYaw = 0;
@@ -1545,19 +1546,29 @@ function setupTargetRadarControl(button) {
 }
 
 function setRadarMode(mode) {
-  radarMode = mode === "target" ? "target" : "radar";
+  radarModePreference = mode === "target" ? "target" : "radar";
+  radarMode = radarModePreference;
   try {
-    localStorage.setItem("seaBattleRadarMode", radarMode);
-    localStorage.setItem("seaBattleRadarRangeMode", radarMode === "target" ? "near" : "far");
+    localStorage.setItem("seaBattleRadarMode", radarModePreference);
+    localStorage.setItem("seaBattleRadarRangeMode", radarModePreference === "target" ? "near" : "far");
   } catch (ignored) {
     // The selected radar mode is only a convenience preference.
   }
   updateRadarModeButtons();
 }
 
+function setEffectiveRadarMode(mode) {
+  const nextMode = mode === "target" ? "target" : "radar";
+  if (radarMode === nextMode) return;
+  radarMode = nextMode;
+  updateRadarModeButtons();
+}
+
 function updateRadarModeButtons() {
   document.body.dataset.radarRangeMode = radarMode === "target" ? "near" : "far";
   document.body.dataset.radarMode = radarMode;
+  document.body.dataset.radarModePreference = radarModePreference;
+  document.body.dataset.radarModeAuto = radarMode !== radarModePreference ? "active" : "off";
   if (radarRangeButton) {
     radarRangeButton.classList.toggle("is-active", radarMode !== "target");
   }
@@ -1567,7 +1578,11 @@ function updateRadarModeButtons() {
 }
 
 function getSelectedRadarRange() {
-  const rangeMode = radarMode === "target" ? "near" : "far";
+  return getRadarRangeForMode(radarMode);
+}
+
+function getRadarRangeForMode(mode) {
+  const rangeMode = mode === "target" ? "near" : "far";
   return clientRadarRange * (radarRangeFactors[rangeMode] ?? radarRangeFactors.far);
 }
 
@@ -3797,6 +3812,7 @@ function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, player
   if (!flakViewActive && !cannonViewActive && !bombBayViewActive) {
     drawMapInstrument(mapCanvas, playerPosition, landZones, mapZoom, heading);
   }
+  updateAutomaticRadarMode(radarContacts, playerPosition);
   const radarRange = getSelectedRadarRange();
   drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, radarHeading, radarRange, {
     ignoreLandShadows: scoutPlaneMode,
@@ -3806,6 +3822,21 @@ function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, player
     radarTorpedoes: radarMode === "target" && !scoutPlaneMode ? radarTorpedoSnapshots : []
   });
   document.body.dataset.radarHeading = String(Math.round(normalizeAngle(radarHeading) * 180 / Math.PI));
+}
+
+function updateAutomaticRadarMode(radarContacts, playerPosition) {
+  if (scoutPlaneMode || radarModePreference === "target") {
+    setEffectiveRadarMode(radarModePreference);
+    return;
+  }
+
+  const targetRange = getRadarRangeForMode("target");
+  const enemyInTargetRange = radarContacts.some((contact) => (
+    contact?.position &&
+    contact.teamId !== playerTeamId &&
+    distance2D(playerPosition, contact.position) <= targetRange
+  ));
+  setEffectiveRadarMode(enemyInTargetRange ? "target" : "radar");
 }
 
 function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, heading) {
