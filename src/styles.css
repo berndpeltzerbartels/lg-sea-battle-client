@@ -803,7 +803,7 @@ body[data-torpedo-view="active"] .torpedo-scope {
 .torpedo-scope-glass {
   position: absolute;
   left: 50%;
-  top: 47%;
+  top: 51%;
   z-index: 1;
   width: min(54vw, 560px);
   aspect-ratio: 1;
@@ -2390,7 +2390,7 @@ body[data-cannon-view="active"] .cannon-elevation {
 
   .torpedo-scope-glass {
     left: 50%;
-    top: 44%;
+    top: 49%;
     width: min(44vw, 360px);
     height: min(18vh, 120px);
   }

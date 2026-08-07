@@ -762,7 +762,6 @@ let nextRudderHoldChangeTime = 0;
 let flakViewActive = false;
 let cannonViewActive = false;
 let torpedoScopeActive = false;
-let torpedoScopeUntil = 0;
 let bombBayViewActive = false;
 let bombBayImpactFocus = null;
 const RADAR_MODE_OVERRIDE_MS = 10000;
@@ -1212,7 +1211,9 @@ function toggleCannonView() {
 function setBattleStation(station) {
   flakViewActive = station === "flak";
   cannonViewActive = station === "cannon";
-  setTorpedoScope(false);
+  if (station !== "bridge") {
+    setTorpedoScope(false);
+  }
   heldFlakDirection = 0;
   heldFlakPitchDirection = 0;
   heldFlakStartTime = time;
@@ -1233,7 +1234,7 @@ function setBattleStation(station) {
 }
 
 function updateTorpedoViewState() {
-  if (torpedoScopeActive && (time >= torpedoScopeUntil || scoutPlaneMode || flakViewActive || cannonViewActive || bombBayViewActive || playerDamageState !== "active")) {
+  if (torpedoScopeActive && (scoutPlaneMode || flakViewActive || cannonViewActive || bombBayViewActive || playerDamageState !== "active")) {
     setTorpedoScope(false);
   }
   const active = torpedoScopeActive && !scoutPlaneMode && !flakViewActive && !cannonViewActive && !bombBayViewActive && playerDamageState === "active";
@@ -1241,12 +1242,15 @@ function updateTorpedoViewState() {
 }
 
 function toggleTorpedoScope() {
+  if (scoutPlaneMode || playerDamageState !== "active") return;
+  if (!torpedoScopeActive && (flakViewActive || cannonViewActive)) {
+    setBattleStation("bridge");
+  }
   setTorpedoScope(!torpedoScopeActive);
 }
 
 function setTorpedoScope(active) {
   torpedoScopeActive = Boolean(active) && !scoutPlaneMode && !flakViewActive && !cannonViewActive && !bombBayViewActive && playerDamageState === "active";
-  torpedoScopeUntil = torpedoScopeActive ? time + 12 : 0;
   document.body.dataset.torpedoView = torpedoScopeActive ? "active" : "hidden";
 }
 
