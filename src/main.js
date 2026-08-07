@@ -120,6 +120,9 @@ const legacyTeamAliases = new Map([
 const worldMetersPerUnit = 20;
 const killFeedLimit = 5;
 const torpedoLogLimit = 40;
+const shipTorpedoBaseSpeed = 24;
+const shipTorpedoSpeedGain = 0.35;
+const airTorpedoSpeedFactor = 0.75;
 const enemyTorpedoFireArcRadians = 0.14;
 const enemyTorpedoAimJitterRadians = 0.035;
 const enemyTargetingRange = 945;
@@ -7454,7 +7457,7 @@ function firePlayerTorpedo(system, shipRoot, heading, turnVelocity, shipSpeed, n
     runStart,
     age: 0,
     runDistance: 0,
-    speed: 24 + Math.max(0, shipSpeed) * 0.35,
+    speed: shipTorpedoBaseSpeed + Math.max(0, shipSpeed) * shipTorpedoSpeedGain,
     owner: "player",
     // Keep launch nearly immediate so turning fire does not drag behind the player's aim.
     launchDuration: 0.2,
@@ -7650,7 +7653,7 @@ function createServerTorpedoVisual(system, snapshot, snapshotClientTime = time) 
     wake: createTorpedoWake(system.scene, system.materials, root.name),
     heading: Number.isFinite(snapshot.heading) ? snapshot.heading : 0,
     forward: getForwardVector(Number.isFinite(snapshot.heading) ? snapshot.heading : 0),
-    speed: Number.isFinite(snapshot.speed) ? snapshot.speed : 24,
+    speed: Number.isFinite(snapshot.speed) ? snapshot.speed : fallbackServerTorpedoSpeed(launch),
     serverPosition: new Vector3(snapshot.x, 0.05, snapshot.z),
     serverSnapshotTime: snapshotClientTime,
     runDistance: 0,
@@ -7767,6 +7770,12 @@ function getServerTorpedoLaunch(system, snapshot) {
     blendUntil: 0,
     showMuzzleEffect: false
   };
+}
+
+function fallbackServerTorpedoSpeed(launch) {
+  return launch?.mode === "air-drop"
+    ? shipTorpedoBaseSpeed * airTorpedoSpeedFactor
+    : shipTorpedoBaseSpeed;
 }
 
 function applyServerTorpedoSnapshot(visual, snapshot, snapshotClientTime = time) {
