@@ -3681,6 +3681,7 @@ function updateOrCreateRemoteShip(ship) {
     vehicleType: getShipVehicleType(ship)
   };
   const motion = createEnemyMotion(boatModel, headingValue, ship.engineOrder ?? 2, enemyMotions.length, ship);
+  applyRemoteWeaponAim(motion, ship);
   enemyMotions.push(motion);
   return motion;
 }
@@ -3734,6 +3735,7 @@ function applyServerShipSnapshot(motion, ship) {
   motion.serverSpeed = Number.isFinite(ship.speed) ? ship.speed : motion.serverSpeed;
   motion.serverTurnVelocity = Number.isFinite(ship.turnVelocity) ? ship.turnVelocity : motion.serverTurnVelocity;
   motion.serverSnapshotTime = time;
+  applyRemoteWeaponAim(motion, ship);
   motion.heading = Number.isFinite(ship.heading) ? blendAngle(motion.heading, ship.heading, 0.18) : motion.heading;
   motion.speed = Number.isFinite(ship.speed) ? motion.speed + (ship.speed - motion.speed) * 0.18 : motion.speed;
   motion.engineOrder = Number.isInteger(ship.engineOrder) ? ship.engineOrder : motion.engineOrder;
@@ -3751,6 +3753,27 @@ function applyServerShipSnapshot(motion, ship) {
     controlledBy: ship.controlledBy,
     vehicleType: motion.vehicleType
   };
+}
+
+function applyRemoteWeaponAim(motion, ship) {
+  if (!motion || isScoutPlaneMotion(motion)) return;
+  motion.flakYaw = Number.isFinite(ship.flakYaw) ? ship.flakYaw : (motion.flakYaw ?? 0);
+  motion.flakPitch = Number.isFinite(ship.flakPitch) ? ship.flakPitch : (motion.flakPitch ?? 0);
+  motion.cannonYaw = Number.isFinite(ship.cannonYaw) ? ship.cannonYaw : (motion.cannonYaw ?? 0);
+  motion.cannonPitch = Number.isFinite(ship.cannonPitch) ? ship.cannonPitch : (motion.cannonPitch ?? 0);
+
+  if (motion.boat?.sternFlak?.mount) {
+    motion.boat.sternFlak.mount.rotation.y = motion.flakYaw;
+  }
+  if (motion.boat?.sternFlak?.elevationRoot) {
+    motion.boat.sternFlak.elevationRoot.rotation.x = -motion.flakPitch;
+  }
+  if (motion.boat?.bowCannon?.mount) {
+    motion.boat.bowCannon.mount.rotation.y = motion.cannonYaw;
+  }
+  if (motion.boat?.bowCannon?.elevationRoot) {
+    motion.boat.bowCannon.elevationRoot.rotation.x = -motion.cannonPitch;
+  }
 }
 
 function escapeHtml(value) {
@@ -5247,7 +5270,9 @@ function createEnemyFleet(scene, materials, serverShips) {
       controlledBy: ship.controlledBy,
       vehicleType: getShipVehicleType(ship)
     };
-    return createEnemyMotion(enemyBoat, heading, engineOrder, index, ship);
+    const motion = createEnemyMotion(enemyBoat, heading, engineOrder, index, ship);
+    applyRemoteWeaponAim(motion, ship);
+    return motion;
   });
 }
 
@@ -5294,6 +5319,10 @@ function createEnemyMotion(vehicle, heading, engineOrder, index = 0, serverShip 
     bowWake: vehicle.bowWake,
     propellerRoot: vehicle.propellerRoot,
     shadow: vehicle.shadow,
+    flakYaw: Number.isFinite(serverShip?.flakYaw) ? serverShip.flakYaw : 0,
+    flakPitch: Number.isFinite(serverShip?.flakPitch) ? serverShip.flakPitch : 0,
+    cannonYaw: Number.isFinite(serverShip?.cannonYaw) ? serverShip.cannonYaw : 0,
+    cannonPitch: Number.isFinite(serverShip?.cannonPitch) ? serverShip.cannonPitch : 0,
     heading,
     speed: serverShip?.speed ?? 0,
     isServerControlled: Boolean(serverShip),
@@ -5960,7 +5989,13 @@ function firePlayerCannon() {
 }
 
 function getPlayerCannonShot() {
-  const cannon = boat.bowCannon;
+  const shot = getCannonShotFromModel(boat.bowCannon, heading, speed);
+  return shot
+    ? { ...shot, weaponYaw: cannonYaw, weaponPitch: cannonPitch }
+    : null;
+}
+
+function getCannonShotFromModel(cannon, baseHeading = 0, baseSpeed = 0) {
   const elevationRoot = cannon?.elevationRoot;
   if (!elevationRoot) return null;
 
@@ -5975,7 +6010,7 @@ function getPlayerCannonShot() {
     position: muzzle.add(direction.scale(0.12)),
     muzzle,
     direction,
-    velocity: direction.scale(cannonProjectileSpeed).add(getForwardVector(heading).scale(speed))
+    velocity: direction.scale(cannonProjectileSpeed).add(getForwardVector(baseHeading).scale(baseSpeed))
   };
 }
 
@@ -6008,7 +6043,9 @@ async function reportPlayerCannonShot(shot) {
         z: shot.position.z,
         vx: shot.velocity.x,
         vy: shot.velocity.y,
-        vz: shot.velocity.z
+        vz: shot.velocity.z,
+        weaponYaw: shot.weaponYaw ?? cannonYaw,
+        weaponPitch: shot.weaponPitch ?? cannonPitch
       })
     });
     if (response.status === 403) {
@@ -6037,7 +6074,9 @@ async function reportPlayerFlakShot(shot) {
         z: shot.position.z,
         vx: shot.velocity.x,
         vy: shot.velocity.y,
-        vz: shot.velocity.z
+        vz: shot.velocity.z,
+        weaponYaw: shot.weaponYaw ?? flakYaw,
+        weaponPitch: shot.weaponPitch ?? flakPitch
       })
     });
     if (response.status === 403) {
@@ -6086,12 +6125,15 @@ async function reportLocalPlaneHit(hit, weaponType) {
 }
 
 function getPlayerFlakShot() {
-  return getFlakShotFromElevationRoot(
+  const shot = getFlakShotFromElevationRoot(
     boat.sternFlak?.elevationRoot,
     playerSternFlakScale,
     null,
     getForwardVector(heading).scale(speed)
   );
+  return shot
+    ? { ...shot, weaponYaw: flakYaw, weaponPitch: flakPitch }
+    : null;
 }
 
 function flakShotWouldHitOwnBoat(shot) {
@@ -7164,6 +7206,7 @@ function syncServerFlakProjectiles(projectiles, snapshotClientTime = time) {
 }
 
 function createServerFlakProjectile(system, snapshot, snapshotClientTime = time) {
+  const isCannonProjectile = isCannonServerProjectile(snapshot.id);
   const position = new Vector3(
     Number.isFinite(snapshot.x) ? snapshot.x : 0,
     Number.isFinite(snapshot.y) ? snapshot.y : 0,
@@ -7177,9 +7220,64 @@ function createServerFlakProjectile(system, snapshot, snapshotClientTime = time)
   const direction = velocity.lengthSquared() > 0.0001 ? velocity.normalizeToNew() : Vector3.Forward();
   const visual = createFlakProjectile(system, position, velocity, direction);
   visual.serverId = snapshot.id;
+  visual.weaponType = isCannonProjectile ? "cannon" : "flak";
+  if (isCannonProjectile) {
+    emphasizeServerCannonProjectile(visual);
+  }
   visual.age = Math.max(0, snapshotClientTime - (Number.isFinite(snapshot.firedAt) ? snapshot.firedAt : snapshotClientTime));
   system.serverVisuals.set(snapshot.id, visual);
+  createRemoteMuzzleEffectForProjectile(snapshot);
   return visual;
+}
+
+function emphasizeServerCannonProjectile(visual) {
+  visual.core?.scaling?.setAll(2.1);
+  visual.trail?.forEach((segment, index) => {
+    segment.scaling.setAll(1.85 - index * 0.18);
+  });
+  if (visual.light) {
+    visual.light.intensity = 2.6;
+    visual.light.range = 58;
+  }
+}
+
+function createRemoteMuzzleEffectForProjectile(snapshot) {
+  const motion = snapshot?.shipId ? enemyMotions.find((candidate) => candidate.id === snapshot.shipId) : null;
+  if (!motion || motion.id === playerServerShipId || !motion.root?.isEnabled?.()) return;
+  const isCannonProjectile = isCannonServerProjectile(snapshot.id);
+  const shot = isCannonProjectile
+    ? getCannonShotFromModel(motion.boat?.bowCannon, motion.heading, motion.speed)
+    : getRemoteFlakShot(motion);
+  const fallbackDirection = getProjectileDirectionFromSnapshot(snapshot);
+  const muzzle = shot?.muzzle ?? new Vector3(
+    Number.isFinite(snapshot.x) ? snapshot.x : motion.root.position.x,
+    Number.isFinite(snapshot.y) ? snapshot.y : motion.root.position.y,
+    Number.isFinite(snapshot.z) ? snapshot.z : motion.root.position.z
+  );
+  const direction = shot?.direction ?? fallbackDirection;
+  if (isCannonProjectile) {
+    createCannonMuzzleBlast(cannonSystem, muzzle, direction);
+  } else {
+    createFlakMuzzleFlash(flakSystem, muzzle, direction);
+  }
+}
+
+function getRemoteFlakShot(motion) {
+  return getFlakShotFromElevationRoot(
+    motion?.boat?.sternFlak?.elevationRoot,
+    0.75,
+    null,
+    getForwardVector(motion?.heading ?? 0).scale(motion?.speed ?? 0)
+  );
+}
+
+function getProjectileDirectionFromSnapshot(snapshot) {
+  const velocity = new Vector3(
+    Number.isFinite(snapshot?.vx) ? snapshot.vx : 0,
+    Number.isFinite(snapshot?.vy) ? snapshot.vy : 0,
+    Number.isFinite(snapshot?.vz) ? snapshot.vz : 1
+  );
+  return velocity.lengthSquared() > 0.0001 ? velocity.normalizeToNew() : Vector3.Forward();
 }
 
 function applyServerFlakProjectileSnapshot(visual, snapshot, snapshotClientTime = time) {
