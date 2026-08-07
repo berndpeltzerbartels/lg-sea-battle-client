@@ -1686,6 +1686,7 @@ function updateBattleStationButtons() {
   bridgeViewButton?.classList.toggle("is-active", !flakViewActive && !cannonViewActive);
   flakViewButton?.classList.toggle("is-active", flakViewActive);
   cannonViewButton?.classList.toggle("is-active", cannonViewActive);
+  torpedoAidButton?.classList.toggle("is-active", torpedoScopeActive);
 }
 
 function setupDebugMapTeleport(canvas) {
