@@ -84,6 +84,8 @@ const rudderIndicator = document.getElementById("rudderIndicator");
 const rudderValue = document.getElementById("rudderValue");
 const flakElevationIndicator = document.getElementById("flakElevationIndicator");
 const flakElevationValue = document.getElementById("flakElevationValue");
+const cannonElevationIndicator = document.getElementById("cannonElevationIndicator");
+const cannonElevationValue = document.getElementById("cannonElevationValue");
 const sinkingWaterOverlay = document.getElementById("sinkingWaterOverlay");
 const planeHitFlash = document.getElementById("planeHitFlash");
 const fleetStatusRows = document.getElementById("fleetStatusRows");
@@ -1107,7 +1109,8 @@ scene.onBeforeRenderObservable.add(() => {
   compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
   if (compassHeading) compassHeading.textContent = `HDG ${formatHeadingDegrees(heading)}`;
   updateRudderGauge(rudderIndicator, rudderValue, rudderDegrees);
-  updateFlakElevationGauge(flakElevationIndicator, flakElevationValue, flakPitch);
+  updateWeaponElevationGauge(flakElevationIndicator, flakElevationValue, flakPitch, flakMinPitch, flakMaxPitch);
+  updateWeaponElevationGauge(cannonElevationIndicator, cannonElevationValue, cannonPitch, cannonMinPitch, cannonMaxPitch);
   updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, getRadarContacts(enemyMotions), blockedWaters, heading, heading, {
     flakLookHeading: !scoutPlaneMode ? normalizeAngle(heading + (flakViewActive ? flakYaw : (cannonViewActive ? cannonYaw : 0))) : null
   });
@@ -3761,9 +3764,9 @@ function updateRudderGauge(indicator, valueElement, degrees) {
   }
 }
 
-function updateFlakElevationGauge(indicator, valueElement, pitch) {
-  const ratio = clamp((pitch - flakMinPitch) / (flakMaxPitch - flakMinPitch), 0, 1);
-  indicator?.style.setProperty("--flak-elevation-ratio", String(ratio));
+function updateWeaponElevationGauge(indicator, valueElement, pitch, minPitch, maxPitch) {
+  const ratio = clamp((pitch - minPitch) / Math.max(0.001, maxPitch - minPitch), 0, 1);
+  indicator?.style.setProperty("--weapon-elevation-ratio", String(ratio));
 
   if (valueElement) {
     valueElement.textContent = `${Math.round(Math.max(0, pitch) * 180 / Math.PI)}°`;

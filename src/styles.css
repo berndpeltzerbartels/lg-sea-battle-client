@@ -1681,7 +1681,7 @@ body[data-player-vehicle="scout-plane"] .altimeter {
   text-transform: uppercase;
 }
 
-.flak-elevation {
+.weapon-elevation {
   position: absolute;
   left: calc(50% + 108px);
   bottom: 24px;
@@ -1697,7 +1697,8 @@ body[data-player-vehicle="scout-plane"] .altimeter {
   pointer-events: none;
 }
 
-body[data-flak-view="active"] .flak-elevation {
+body[data-flak-view="active"] .flak-elevation,
+body[data-cannon-view="active"] .cannon-elevation {
   display: block;
 }
 
@@ -1761,7 +1762,7 @@ body[data-flak-view="active"] .flak-elevation {
 .flak-elevation-indicator {
   position: absolute;
   left: -5px;
-  bottom: calc(var(--flak-elevation-ratio, 0) * 100%);
+  bottom: calc(var(--weapon-elevation-ratio, var(--flak-elevation-ratio, 0)) * 100%);
   width: 10px;
   height: 4px;
   border-radius: 999px;
@@ -1770,7 +1771,7 @@ body[data-flak-view="active"] .flak-elevation {
   transform: translateY(50%);
 }
 
-.flak-elevation strong {
+.weapon-elevation strong {
   display: block;
   margin-top: 6px;
   color: #ffffff;
