@@ -122,6 +122,7 @@ const killFeedLimit = 5;
 const torpedoLogLimit = 40;
 const shipTorpedoBaseSpeed = 24;
 const shipTorpedoSpeedGain = 0.35;
+const playerTorpedoFireCooldownSeconds = 2.4;
 const airTorpedoSpeedFactor = 0.75;
 const enemyTorpedoFireArcRadians = 0.14;
 const enemyTorpedoAimJitterRadians = 0.035;
@@ -3264,6 +3265,11 @@ async function requestPlayerTorpedoFire() {
   if (fireTorpedoRequestInFlight || playerDamageState !== "active") return;
   if (scoutPlaneMode) {
     document.body.dataset.fireTorpedoSync = "ignored-scout-plane";
+    return;
+  }
+  const localFired = firePlayerTorpedo(torpedoSystem, boat.root, heading, turnVelocity, speed, time);
+  if (!localFired) {
+    document.body.dataset.fireTorpedoSync = "local-cooldown";
     return;
   }
 
@@ -7335,7 +7341,7 @@ function firePlayerTorpedo(system, shipRoot, heading, turnVelocity, shipSpeed, n
 
   const tubeSide = system.nextTube === 0 ? -1 : 1;
   system.nextTube = 1 - system.nextTube;
-  system.nextFireTime = now + 1.15;
+  system.nextFireTime = now + playerTorpedoFireCooldownSeconds;
 
   // Firing while turning is the normal attack maneuver. Aim very slightly into the current turn
   // so the shot feels tied to the tube direction, without making torpedoes steer after launch.
@@ -7523,6 +7529,9 @@ function syncServerTorpedoes(torpedoes, impacts = [], snapshotClientTime = time)
   const activeIds = new Set();
 
   torpedoes.forEach((snapshot) => {
+    if (snapshot.shipId === playerServerShipId || snapshot.shipId === pendingPlayerServerShip?.id) {
+      return;
+    }
     activeIds.add(snapshot.id);
     const visual = torpedoSystem.serverVisuals.get(snapshot.id) ?? createServerTorpedoVisual(torpedoSystem, snapshot, snapshotClientTime);
     applyServerTorpedoSnapshot(visual, snapshot, snapshotClientTime);
