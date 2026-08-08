@@ -81,6 +81,7 @@ const flakViewButton = document.getElementById("flakViewButton");
 const cannonViewButton = document.getElementById("cannonViewButton");
 const bridgeViewButton = document.getElementById("bridgeViewButton");
 const alignWeaponsButton = document.getElementById("alignWeaponsButton");
+const alignAirDefenseButton = document.getElementById("alignAirDefenseButton");
 const torpedoAidButton = document.getElementById("torpedoAidButton");
 const flakHitAlert = document.getElementById("flakHitAlert");
 const rudderIndicator = document.getElementById("rudderIndicator");
@@ -231,6 +232,11 @@ const cannonFireCooldownSeconds = 2.4;
 const cannonProjectileSpeed = 950;
 const cannonProjectileGravity = 9.8;
 const cannonProjectileLifetime = 7.0;
+const weaponAlignYawSpeed = 1.55;
+const weaponAlignPitchSpeed = 0.62;
+const weaponAlignFlatFlakPitch = 0;
+const weaponAlignAirDefenseFlakPitch = 18 * Math.PI / 180;
+const weaponAlignCannonPitch = 5 * Math.PI / 180;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = urlParams.get("perf-log") === "1";
@@ -390,7 +396,7 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (playerActive && isAlignWeaponsKey(event) && !event.repeat) {
-    alignWeaponsForBridge();
+    alignWeaponsForBridge(event.shiftKey ? "air-defense" : "flat");
     event.preventDefault();
     return;
   }
@@ -786,6 +792,7 @@ let flakYaw = Math.PI;
 let flakPitch = 0;
 let cannonYaw = 0;
 let cannonPitch = 0.04;
+let weaponAlignTarget = null;
 let heldFlakDirection = 0;
 let heldFlakPitchDirection = 0;
 let heldFlakStartTime = 0;
@@ -859,6 +866,7 @@ setupBridgeViewControl(bridgeViewButton);
 setupFlakViewControl(flakViewButton);
 setupCannonViewControl(cannonViewButton);
 setupAlignWeaponsControl(alignWeaponsButton);
+setupAlignWeaponsControl(alignAirDefenseButton, "air-defense");
 setupTorpedoAidControl(torpedoAidButton);
 let serverShipsById = indexShipsById(gameState.ships);
 let serverClockOffset = Number.isFinite(gameState.t) ? -gameState.t : null;
@@ -916,9 +924,11 @@ scene.onBeforeRenderObservable.add(() => {
     );
   }
   if (playerActive && flakViewActive && heldFlakDirection !== 0) {
+    cancelWeaponAlignment();
     flakYaw = normalizeAngle(flakYaw + heldFlakDirection * getHeldFlakSpeed(heldFlakStartTime, flakYawFineSpeed, flakYawMediumSpeed, flakYawFastSpeed, flakYawVeryFastSpeed, flakYawMaxSpeed, flakYawExtremeSpeed) * dt);
   }
   if (playerActive && flakViewActive && heldFlakPitchDirection !== 0) {
+    cancelWeaponAlignment();
     flakPitch = clamp(
       flakPitch + heldFlakPitchDirection * getHeldFlakSpeed(heldFlakPitchStartTime, flakPitchFineSpeed, flakPitchMediumSpeed, flakPitchFastSpeed, flakPitchVeryFastSpeed, flakPitchMaxSpeed, flakPitchExtremeSpeed) * dt,
       flakMinPitch,
@@ -926,6 +936,7 @@ scene.onBeforeRenderObservable.add(() => {
     );
   }
   if (playerActive && cannonViewActive && heldCannonDirection !== 0) {
+    cancelWeaponAlignment();
     cannonYaw = clamp(
       cannonYaw + heldCannonDirection * getHeldWeaponSpeed(heldCannonStartTime, cannonYawFineSpeed, cannonYawMediumSpeed, cannonYawFastSpeed, cannonYawVeryFastSpeed, cannonYawMaxSpeed, cannonYawExtremeSpeed, cannonHoldTimings) * dt,
       -cannonYawLimit,
@@ -933,6 +944,7 @@ scene.onBeforeRenderObservable.add(() => {
     );
   }
   if (playerActive && cannonViewActive && heldCannonPitchDirection !== 0) {
+    cancelWeaponAlignment();
     cannonPitch = clamp(
       cannonPitch + heldCannonPitchDirection * getHeldWeaponSpeed(heldCannonPitchStartTime, cannonPitchFineSpeed, cannonPitchMediumSpeed, cannonPitchFastSpeed, cannonPitchVeryFastSpeed, cannonPitchMaxSpeed, cannonPitchExtremeSpeed, cannonHoldTimings) * dt,
       cannonMinPitch,
@@ -942,6 +954,7 @@ scene.onBeforeRenderObservable.add(() => {
   if (playerActive && flakViewActive && heldFlakFire) {
     firePlayerFlak();
   }
+  updateWeaponAlignment(dt);
   updatePlayerFlakMount();
   updatePlayerCannonMount();
 
@@ -1306,10 +1319,12 @@ function updatePlayerCannonMount() {
 }
 
 function changeFlakPitch(direction) {
+  cancelWeaponAlignment();
   flakPitch = clamp(flakPitch + direction * flakPitchStepRadians, flakMinPitch, flakMaxPitch);
 }
 
 function changeCannonPitch(direction) {
+  cancelWeaponAlignment();
   cannonPitch = clamp(cannonPitch + direction * cannonPitchStepRadians, cannonMinPitch, cannonMaxPitch);
 }
 
@@ -1685,10 +1700,10 @@ function setupCannonViewControl(button) {
   });
 }
 
-function setupAlignWeaponsControl(button) {
+function setupAlignWeaponsControl(button, mode = "flat") {
   if (!button) return;
   button.addEventListener("click", (event) => {
-    alignWeaponsForBridge();
+    alignWeaponsForBridge(mode);
     button.blur();
     event.stopPropagation();
   });
@@ -1703,14 +1718,60 @@ function setupTorpedoAidControl(button) {
   });
 }
 
-function alignWeaponsForBridge() {
-  flakYaw = Math.PI;
-  flakPitch = clamp(12.5 * Math.PI / 180, flakMinPitch, flakMaxPitch);
-  cannonYaw = 0;
-  cannonPitch = clamp(5 * Math.PI / 180, cannonMinPitch, cannonMaxPitch);
-  updatePlayerFlakMount();
-  updatePlayerCannonMount();
-  document.body.dataset.weaponAlign = "bridge";
+function alignWeaponsForBridge(mode = "flat") {
+  const airDefense = mode === "air-defense";
+  weaponAlignTarget = {
+    flakYaw: Math.PI,
+    flakPitch: clamp(airDefense ? weaponAlignAirDefenseFlakPitch : weaponAlignFlatFlakPitch, flakMinPitch, flakMaxPitch),
+    cannonYaw: 0,
+    cannonPitch: clamp(weaponAlignCannonPitch, cannonMinPitch, cannonMaxPitch),
+    mode: airDefense ? "air-defense" : "flat"
+  };
+  document.body.dataset.weaponAlign = weaponAlignTarget.mode;
+}
+
+function cancelWeaponAlignment() {
+  if (!weaponAlignTarget) return;
+  weaponAlignTarget = null;
+  document.body.dataset.weaponAlign = "manual";
+}
+
+function updateWeaponAlignment(dt) {
+  if (!weaponAlignTarget) return;
+  flakYaw = moveAngleToward(flakYaw, weaponAlignTarget.flakYaw, weaponAlignYawSpeed * dt);
+  flakPitch = moveValueToward(flakPitch, weaponAlignTarget.flakPitch, weaponAlignPitchSpeed * dt);
+  cannonYaw = moveValueToward(cannonYaw, weaponAlignTarget.cannonYaw, weaponAlignYawSpeed * dt);
+  cannonPitch = moveValueToward(cannonPitch, weaponAlignTarget.cannonPitch, weaponAlignPitchSpeed * dt);
+  if (
+    Math.abs(shortestAngleDelta(flakYaw, weaponAlignTarget.flakYaw)) < 0.002
+    && Math.abs(flakPitch - weaponAlignTarget.flakPitch) < 0.002
+    && Math.abs(cannonYaw - weaponAlignTarget.cannonYaw) < 0.002
+    && Math.abs(cannonPitch - weaponAlignTarget.cannonPitch) < 0.002
+  ) {
+    weaponAlignTarget = null;
+  }
+}
+
+function moveValueToward(value, target, maxStep) {
+  if (Math.abs(target - value) <= maxStep) {
+    return target;
+  }
+  return value + Math.sign(target - value) * maxStep;
+}
+
+function moveAngleToward(value, target, maxStep) {
+  const delta = shortestAngleDelta(value, target);
+  if (Math.abs(delta) <= maxStep) {
+    return normalizeAngle(target);
+  }
+  return normalizeAngle(value + Math.sign(delta) * maxStep);
+}
+
+function shortestAngleDelta(from, to) {
+  let delta = normalizeAngle(to) - normalizeAngle(from);
+  if (delta > Math.PI) delta -= Math.PI * 2;
+  if (delta < -Math.PI) delta += Math.PI * 2;
+  return delta;
 }
 
 function updateBattleStationButtons() {
