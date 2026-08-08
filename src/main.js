@@ -5902,6 +5902,8 @@ function resetTransientWeaponVisualsAfterRespawn() {
   bombSystem.serverVisuals.clear();
   flakSystem.serverVisuals.forEach(disposeFlakProjectile);
   flakSystem.serverVisuals.clear();
+  cannonSystem.serverVisuals.forEach(disposeFlakProjectile);
+  cannonSystem.serverVisuals.clear();
   cannonSystem.active.forEach(disposeFlakProjectile);
   cannonSystem.active = [];
   document.body.dataset.weaponVisualsResetAt = time.toFixed(2);
@@ -6054,6 +6056,7 @@ function createCannonSystem(scene, materials, parent) {
     active: [],
     flashes: [],
     airHitEffects: [],
+    serverVisuals: new Map(),
     nextId: 1
   };
 }
@@ -7303,24 +7306,42 @@ function disposeFlakProjectile(projectile) {
 }
 
 function syncServerFlakProjectiles(projectiles, snapshotClientTime = time) {
-  const activeIds = new Set();
+  const activeFlakIds = new Set();
+  const activeCannonIds = new Set();
   projectiles
     .filter((snapshot) => snapshot.shipId !== playerServerShipId)
     .forEach((snapshot) => {
-      activeIds.add(snapshot.id);
-      const visual = flakSystem.serverVisuals.get(snapshot.id) ?? createServerFlakProjectile(flakSystem, snapshot, snapshotClientTime);
+      const system = isCannonServerProjectile(snapshot.id) ? cannonSystem : flakSystem;
+      const visualId = getServerProjectileVisualId(snapshot);
+      if (system === cannonSystem) {
+        activeCannonIds.add(visualId);
+      } else {
+        activeFlakIds.add(visualId);
+      }
+      const visual = system.serverVisuals.get(visualId) ?? createServerFlakProjectile(system, snapshot, snapshotClientTime, visualId);
       applyServerFlakProjectileSnapshot(visual, snapshot, snapshotClientTime);
     });
 
   flakSystem.serverVisuals.forEach((visual, id) => {
-    if (!activeIds.has(id)) {
+    if (!activeFlakIds.has(id)) {
       disposeFlakProjectile(visual);
       flakSystem.serverVisuals.delete(id);
     }
   });
+  cannonSystem.serverVisuals.forEach((visual, id) => {
+    if (!activeCannonIds.has(id)) {
+      disposeFlakProjectile(visual);
+      cannonSystem.serverVisuals.delete(id);
+    }
+  });
 }
 
-function createServerFlakProjectile(system, snapshot, snapshotClientTime = time) {
+function getServerProjectileVisualId(snapshot) {
+  const firedAt = Number.isFinite(snapshot?.firedAt) ? snapshot.firedAt.toFixed(3) : "unknown";
+  return `${snapshot?.id ?? "projectile"}@${firedAt}`;
+}
+
+function createServerFlakProjectile(system, snapshot, snapshotClientTime = time, visualId = getServerProjectileVisualId(snapshot)) {
   const isCannonProjectile = isCannonServerProjectile(snapshot.id);
   const position = new Vector3(
     Number.isFinite(snapshot.x) ? snapshot.x : 0,
@@ -7342,7 +7363,7 @@ function createServerFlakProjectile(system, snapshot, snapshotClientTime = time)
     emphasizeServerCannonProjectile(visual);
   }
   visual.age = Math.max(0, snapshotClientTime - (Number.isFinite(snapshot.firedAt) ? snapshot.firedAt : snapshotClientTime));
-  system.serverVisuals.set(snapshot.id, visual);
+  system.serverVisuals.set(visualId, visual);
   createRemoteMuzzleEffectForProjectile(snapshot);
   return visual;
 }
