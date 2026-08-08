@@ -236,7 +236,8 @@ const weaponAlignYawSpeed = 1.55;
 const weaponAlignPitchSpeed = 0.62;
 const weaponAlignFlatFlakPitch = 0;
 const weaponAlignAirDefenseFlakPitch = 18 * Math.PI / 180;
-const weaponAlignCannonPitch = 5 * Math.PI / 180;
+const weaponAlignFlatCannonPitch = 5 * Math.PI / 180;
+const weaponAlignAirDefenseCannonPitch = 20 * Math.PI / 180;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
 const performanceLoggingEnabled = urlParams.get("perf-log") === "1";
@@ -1724,7 +1725,7 @@ function alignWeaponsForBridge(mode = "flat") {
     flakYaw: Math.PI,
     flakPitch: clamp(airDefense ? weaponAlignAirDefenseFlakPitch : weaponAlignFlatFlakPitch, flakMinPitch, flakMaxPitch),
     cannonYaw: 0,
-    cannonPitch: clamp(weaponAlignCannonPitch, cannonMinPitch, cannonMaxPitch),
+    cannonPitch: clamp(airDefense ? weaponAlignAirDefenseCannonPitch : weaponAlignFlatCannonPitch, cannonMinPitch, cannonMaxPitch),
     mode: airDefense ? "air-defense" : "flat"
   };
   document.body.dataset.weaponAlign = weaponAlignTarget.mode;
