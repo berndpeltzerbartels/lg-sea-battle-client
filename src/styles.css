@@ -780,27 +780,31 @@ body[data-player-vehicle="scout-plane"] .battle-station-panel {
   display: none;
 }
 
-.align-weapons-button {
+.align-weapons-group {
   position: absolute;
+  left: 10px;
+  right: 10px;
   bottom: 8px;
-  width: min(128px, calc(50% - 16px));
+  display: grid;
+  grid-template-columns: auto 1fr 1.35fr;
+  gap: 6px;
+  align-items: center;
+  color: rgb(247 251 255 / 68%);
+  font: 800 8px/1 Inter, Arial, sans-serif;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.align-weapons-button {
   min-height: 20px;
   border: 1px solid rgb(155 229 223 / 32%);
   border-radius: 6px;
   background: rgb(2 22 28 / 64%);
   color: rgb(247 251 255 / 82%);
-  font: 800 8px/1 Inter, Arial, sans-serif;
+  font: inherit;
   letter-spacing: 0;
   text-transform: uppercase;
   cursor: pointer;
-}
-
-.align-weapons-flat {
-  left: 10px;
-}
-
-.align-weapons-air {
-  right: 10px;
 }
 
 .align-weapons-button:hover,
@@ -2369,19 +2373,18 @@ body[data-cannon-view="active"] .cannon-elevation {
     min-width: 62px;
   }
 
-  .align-weapons-button {
+  .align-weapons-group {
     bottom: 4px;
-    width: calc(50% - 12px);
-    min-height: 16px;
+    left: 6px;
+    right: 6px;
+    grid-template-columns: 1fr 0.8fr 1.2fr;
+    gap: 4px;
     font-size: 6px;
   }
 
-  .align-weapons-flat {
-    left: 6px;
-  }
-
-  .align-weapons-air {
-    right: 6px;
+  .align-weapons-button {
+    min-height: 16px;
+    font-size: 6px;
   }
 
   .torpedo-scope-glass {
