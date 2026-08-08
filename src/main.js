@@ -159,6 +159,7 @@ const scoutPlaneHitMargin = 1.1;
 const bombGravity = 14.0;
 const bombDropForwardOffset = 0.6;
 const bombDropVerticalOffset = 0.65;
+const bombVisualLaunchVerticalOffset = -0.62;
 const bombsPerDrop = 12;
 const bombReleaseIntervalSeconds = 0.12;
 const bombPatternLateralSpacing = 0.18;
@@ -7899,9 +7900,9 @@ function getServerBombLaunch(snapshot, serverPosition) {
         : 0;
   const sourcePosition = sourceRoot.position.clone();
   const start = sourcePosition
-    .add(getForwardVector(heading).scale(-0.45))
-    .add(new Vector3(0, -0.36, 0));
-  const closeEnough = distance2D(start, serverPosition) < 90 && start.y > serverPosition.y + 0.35;
+    .add(getForwardVector(heading).scale(bombDropForwardOffset))
+    .add(new Vector3(0, bombVisualLaunchVerticalOffset, 0));
+  const closeEnough = distance2D(start, serverPosition) < 28 && Math.abs(start.y - serverPosition.y) < 1.2;
   return {
     start: closeEnough ? start : serverPosition,
     blendUntil: closeEnough ? time + 0.24 : 0,
@@ -7940,7 +7941,8 @@ function updateServerBombVisuals(system, dt, now) {
     const forward = getForwardVector(visual.heading);
     const snapshotAge = Math.max(0, now - (visual.serverSnapshotTime ?? now));
     const projected = visual.serverPosition.add(forward.scale(visual.speed * snapshotAge));
-    const projectedY = visual.serverPosition.y + (Number.isFinite(visual.verticalSpeed) ? visual.verticalSpeed * snapshotAge : 0);
+    const verticalSpeed = Number.isFinite(visual.verticalSpeed) ? visual.verticalSpeed : 0;
+    const projectedY = visual.serverPosition.y + verticalSpeed * snapshotAge - 0.5 * bombGravity * snapshotAge * snapshotAge;
 
     if (now < (visual.launchBlendUntil ?? 0)) {
       const duration = visual.launchBlendDuration || 0.24;
@@ -7955,6 +7957,7 @@ function updateServerBombVisuals(system, dt, now) {
 
     visual.root.position.addInPlace(forward.scale(visual.speed * dt));
     if (Number.isFinite(visual.verticalSpeed)) {
+      visual.verticalSpeed -= bombGravity * dt;
       visual.root.position.y += visual.verticalSpeed * dt;
     }
     visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 4.5);
