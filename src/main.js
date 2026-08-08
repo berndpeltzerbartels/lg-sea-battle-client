@@ -3299,6 +3299,10 @@ async function sendPlayerState() {
         turnVelocity,
         engineOrder,
         rudderDegrees: Math.round(rudderDegrees),
+        flakYaw,
+        flakPitch,
+        cannonYaw,
+        cannonPitch,
         clientTime: performance.now() / 1000,
         debugTeleport,
         vehicleType: scoutPlaneMode ? "scout-plane" : "torpedo-boat"
