@@ -9494,19 +9494,19 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
   const hull = createTaperedHull(`${name}_hull`, scene, [
     { z: -4.05, width: 0.88, top: 0.66, bottom: 0.08 },
     { z: -2.3, width: 1.56, top: 0.76, bottom: 0.08 },
-    { z: -1.35, width: 1.7, top: 0.72, bottom: 0.12 },
-    { z: 1.95, width: 1.08, top: 0.68, bottom: 0.02 },
-    { z: 3.65, width: 0.18, top: 0.62, bottom: 0.0 }
+    { z: -1.35, width: 1.62, top: 0.76, bottom: 0.12 },
+    { z: 2.45, width: 1.18, top: 0.76, bottom: 0.02 },
+    { z: 3.65, width: 0.18, top: 0.66, bottom: 0.0 }
   ]);
   hull.parent = root;
   hull.material = hullMaterial;
 
   const deck = createTaperedDeck(`${name}_foredeck`, scene, [
-    { z: -3.72, width: 0.74, y: 0.78 },
+    { z: -3.72, width: 0.74, y: 0.82 },
     { z: -2.3, width: 1.24, y: 0.82 },
-    { z: -1.08, width: 1.35, y: 0.78 },
-    { z: 1.95, width: 0.88, y: 0.76 },
-    { z: 3.32, width: 0.26, y: 0.72 }
+    { z: -1.08, width: 1.28, y: 0.82 },
+    { z: 2.45, width: 1.04, y: 0.82 },
+    { z: 3.32, width: 0.26, y: 0.82 }
   ]);
   deck.parent = root;
   deck.material = deckMaterial;
@@ -9594,13 +9594,13 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
     cap.material = tubeMaterial;
   }
 
-  createRailSegment(`${name}_deck_edge_left`, scene, hullMaterial, root, -0.58, -1.09, -0.58, 1.58, 0.76);
-  createRailSegment(`${name}_deck_edge_right`, scene, hullMaterial, root, 0.58, -1.09, 0.58, 1.58, 0.76);
+  createRailSegment(`${name}_deck_edge_left`, scene, hullMaterial, root, -0.58, -1.09, -0.58, 2.2, 0.82);
+  createRailSegment(`${name}_deck_edge_right`, scene, hullMaterial, root, 0.58, -1.09, 0.58, 2.2, 0.82);
 
-  createRailSegment(`${name}_bow_rail_left_a`, scene, hullMaterial, root, -0.58, 1.58, -0.38, 2.45, 0.76);
-  createRailSegment(`${name}_bow_rail_left_b`, scene, hullMaterial, root, -0.16, 2.86, 0, 3.22, 0.76);
-  createRailSegment(`${name}_bow_rail_right_a`, scene, hullMaterial, root, 0.58, 1.58, 0.38, 2.45, 0.76);
-  createRailSegment(`${name}_bow_rail_right_b`, scene, hullMaterial, root, 0.16, 2.86, 0, 3.22, 0.76);
+  createRailSegment(`${name}_bow_rail_left_a`, scene, hullMaterial, root, -0.58, 2.2, -0.34, 2.75, 0.82);
+  createRailSegment(`${name}_bow_rail_left_b`, scene, hullMaterial, root, -0.16, 3.02, 0, 3.22, 0.82);
+  createRailSegment(`${name}_bow_rail_right_a`, scene, hullMaterial, root, 0.58, 2.2, 0.34, 2.75, 0.82);
+  createRailSegment(`${name}_bow_rail_right_b`, scene, hullMaterial, root, 0.16, 3.02, 0, 3.22, 0.82);
 
   const hatch = MeshBuilder.CreateBox(`${name}_deck_hatch`, { width: 0.46, height: 0.11, depth: 0.52 }, scene);
   hatch.parent = root;
@@ -10176,9 +10176,9 @@ function createEnemyBoatBody(name, scene) {
   const sections = [
     { z: -4.05, topWidth: 0.78, chineWidth: 0.62, top: 0.52, chine: 0.24, keel: 0.02 },
     { z: -2.3, topWidth: 1.22, chineWidth: 1.02, top: 0.66, chine: 0.2, keel: -0.03 },
-    { z: 1.55, topWidth: 1.32, chineWidth: 1.05, top: 0.68, chine: 0.18, keel: -0.04 },
-    { z: 3.25, topWidth: 0.62, chineWidth: 0.42, top: 0.56, chine: 0.14, keel: -0.02 },
-    { z: 4.45, topWidth: 0.08, chineWidth: 0.04, top: 0.43, chine: 0.11, keel: 0.02 }
+    { z: 2.55, topWidth: 1.12, chineWidth: 0.86, top: 0.66, chine: 0.18, keel: -0.04 },
+    { z: 3.55, topWidth: 0.48, chineWidth: 0.32, top: 0.58, chine: 0.14, keel: -0.02 },
+    { z: 4.45, topWidth: 0.08, chineWidth: 0.04, top: 0.5, chine: 0.11, keel: 0.02 }
   ];
   const positions = [];
   const indices = [];
