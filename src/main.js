@@ -892,6 +892,7 @@ const torpedoLaunchDefaults = {
 };
 const airDroppedTorpedoFallSeconds = 1.55;
 const airDroppedTorpedoSubmergedDistance = 20;
+const serverTorpedoFreshLaunchSeconds = 0.55;
 const torpedoSystem = createTorpedoSystem(scene, materials, world);
 const bombSystem = createBombSystem(scene, materials, world);
 const flakSystem = createFlakSystem(scene, materials, world);
@@ -2852,7 +2853,7 @@ async function requestHostGameReset() {
 
 function promptGameSetupId() {
   const defaultChoice = "1";
-  const choice = window.prompt("World: 1 = Dense land, 2 = Islands, 3 = Escort debug, 4 = Landmark tour, 5 = Dense land crowded, 6 = Dense land crowded reverse, 7 = Scout plane", defaultChoice);
+  const choice = window.prompt("World: 1 = Dense land, 2 = Islands, 3 = Escort debug, 4 = Landmark tour, 5 = Dense land crowded, 6 = Dense land crowded reverse, 7 = Scout plane, 8 = Seitenansicht Sandbox", defaultChoice);
   if (choice === null) return null;
   const normalized = choice.trim().toLowerCase();
   if (normalized === "2" || normalized === "islands" || normalized === "island") return "islands";
@@ -2861,6 +2862,7 @@ function promptGameSetupId() {
   if (normalized === "5" || normalized === "fleet-clash" || normalized === "clash" || normalized === "crowded") return "dense-land-crowded";
   if (normalized === "6" || normalized === "fleet-clash-reverse" || normalized === "clash-reverse" || normalized === "crowded-reverse") return "dense-land-crowded-reverse";
   if (normalized === "7" || normalized === "scout-plane" || normalized === "plane" || normalized === "flugzeug" || normalized === "aufklaerer") return scoutPlaneSetupId;
+  if (normalized === "8" || normalized === "side-view-sandbox" || normalized === "sandbox" || normalized === "seitenansicht") return "side-view-sandbox";
   return "dense-land";
 }
 
@@ -3531,7 +3533,8 @@ function applyServerGameSnapshot(snapshot) {
   syncServerTorpedoes(
     Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes : [],
     Array.isArray(snapshot.torpedoImpacts) ? snapshot.torpedoImpacts : [],
-    snapshotClientTime
+    time,
+    snapshot.t
   );
   radarTorpedoSnapshots = Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes : [];
   syncServerBombs(
@@ -7595,13 +7598,13 @@ function isTargetInEnemyTorpedoArc(motion, targetPosition) {
   return getAngularDistance(targetHeading, motion.heading) <= enemyTorpedoFireArcRadians;
 }
 
-function syncServerTorpedoes(torpedoes, impacts = [], snapshotClientTime = time) {
+function syncServerTorpedoes(torpedoes, impacts = [], snapshotReceivedAt = time, snapshotServerTime = null) {
   const activeIds = new Set();
 
   torpedoes.forEach((snapshot) => {
     activeIds.add(snapshot.id);
-    const visual = torpedoSystem.serverVisuals.get(snapshot.id) ?? createServerTorpedoVisual(torpedoSystem, snapshot, snapshotClientTime);
-    applyServerTorpedoSnapshot(visual, snapshot, snapshotClientTime);
+    const visual = torpedoSystem.serverVisuals.get(snapshot.id) ?? createServerTorpedoVisual(torpedoSystem, snapshot, snapshotReceivedAt, snapshotServerTime);
+    applyServerTorpedoSnapshot(visual, snapshot, snapshotReceivedAt);
   });
 
   renderServerTorpedoImpacts(impacts);
@@ -7643,10 +7646,10 @@ function renderServerTorpedoImpacts(impacts) {
   }
 }
 
-function createServerTorpedoVisual(system, snapshot, snapshotClientTime = time) {
+function createServerTorpedoVisual(system, snapshot, snapshotReceivedAt = time, snapshotServerTime = null) {
   const root = new TransformNode(`server_torpedo_${snapshot.id}`, system.scene);
   root.parent = system.root;
-  const launch = getServerTorpedoLaunch(system, snapshot);
+  const launch = getServerTorpedoLaunch(system, snapshot, snapshotServerTime);
   root.position.copyFrom(launch.start);
   root.rotationQuaternion = Quaternion.FromEulerAngles(0, launch.heading, 0);
 
@@ -7670,6 +7673,12 @@ function createServerTorpedoVisual(system, snapshot, snapshotClientTime = time) 
   nose.rotation.x = Math.PI / 2;
   nose.material = system.materials.funnel;
 
+  const speedValue = Number.isFinite(snapshot.speed) ? snapshot.speed : fallbackServerTorpedoSpeed(launch);
+  const launchIsBeingReplayed = launch.mode === "local-tube" || launch.mode === "air-drop";
+  const initialRunDistance = launchIsBeingReplayed
+    ? 0
+    : Math.max(0, getServerTorpedoAge(snapshot, snapshotServerTime) * speedValue);
+
   const visual = {
     id: snapshot.id,
     root,
@@ -7678,10 +7687,10 @@ function createServerTorpedoVisual(system, snapshot, snapshotClientTime = time) 
     wake: createTorpedoWake(system.scene, system.materials, root.name),
     heading: Number.isFinite(snapshot.heading) ? snapshot.heading : 0,
     forward: getForwardVector(Number.isFinite(snapshot.heading) ? snapshot.heading : 0),
-    speed: Number.isFinite(snapshot.speed) ? snapshot.speed : fallbackServerTorpedoSpeed(launch),
+    speed: speedValue,
     serverPosition: new Vector3(snapshot.x, 0.05, snapshot.z),
-    serverSnapshotTime: snapshotClientTime,
-    runDistance: 0,
+    serverSnapshotTime: snapshotReceivedAt,
+    runDistance: initialRunDistance,
     launchStart: launch.start.clone(),
     launchWaterStart: launch.waterStart?.clone?.() ?? null,
     launchMode: launch.mode,
@@ -7693,7 +7702,7 @@ function createServerTorpedoVisual(system, snapshot, snapshotClientTime = time) 
     airDropSplashPosition: launch.splashPosition?.clone?.() ?? null
   };
   system.serverVisuals.set(snapshot.id, visual);
-  if (launch.mode === "air-drop") {
+  if (launch.sourceVehicleType === "scout-plane") {
     system.serverSourceVehicleTypes.set(snapshot.id, "scout-plane");
   }
 
@@ -7702,9 +7711,12 @@ function createServerTorpedoVisual(system, snapshot, snapshotClientTime = time) 
       torpedoId: snapshot.id,
       torpedoShipId: snapshot.shipId ?? "",
       launchMode: launch.mode,
+      torpedoAge: Number(getServerTorpedoAge(snapshot, snapshotServerTime).toFixed(2)),
+      initialRunDistance: Number(initialRunDistance.toFixed(2)),
       serverPosition: summarizeVector(visual.serverPosition),
       visualStart: summarizeVector(root.position),
-      snapshotClientTime: Number(snapshotClientTime.toFixed(2)),
+      snapshotReceivedAt: Number(snapshotReceivedAt.toFixed(2)),
+      snapshotServerTime: Number.isFinite(snapshotServerTime) ? Number(snapshotServerTime.toFixed(2)) : null,
       firedAt: Number.isFinite(snapshot.firedAt) ? Number(snapshot.firedAt.toFixed(2)) : null,
       serverClockOffset: Number.isFinite(serverClockOffset) ? Number(serverClockOffset.toFixed(3)) : null
     });
@@ -7717,16 +7729,19 @@ function createServerTorpedoVisual(system, snapshot, snapshotClientTime = time) 
   return visual;
 }
 
-function getServerTorpedoLaunch(system, snapshot) {
+function getServerTorpedoLaunch(system, snapshot, snapshotServerTime = null) {
   const heading = Number.isFinite(snapshot.heading) ? snapshot.heading : 0;
   const serverPosition = new Vector3(snapshot.x, 0.05, snapshot.z);
-  const isOwnTorpedo = snapshot.shipId && snapshot.shipId === playerServerShipId;
+  const isOwnTorpedo = snapshot.shipId && (snapshot.shipId === playerServerShipId || snapshot.shipId === pendingPlayerServerShip?.id);
   const isPendingOwnTorpedo = snapshot.shipId && snapshot.shipId === pendingPlayerServerShip?.id;
   const shooterShip = snapshot.shipId ? serverShipsById.get(snapshot.shipId) : null;
   const shooterMotion = snapshot.shipId ? enemyMotions.find((motion) => motion.id === snapshot.shipId) : null;
   const isAirDropped = shooterShip?.vehicleType === "scout-plane" || shooterMotion?.vehicleType === "scout-plane";
+  const torpedoAge = getServerTorpedoAge(snapshot, snapshotServerTime);
+  const isFreshShipLaunch = torpedoAge <= serverTorpedoFreshLaunchSeconds;
+  const isFreshAirDrop = torpedoAge <= airDroppedTorpedoFallSeconds + 0.15;
 
-  if (isAirDropped) {
+  if (isAirDropped && isFreshAirDrop) {
     const sourcePosition = shooterMotion?.root?.position
       ? shooterMotion.root.position.clone()
       : new Vector3(serverPosition.x, remoteVehicleY(shooterShip), serverPosition.z);
@@ -7743,11 +7758,12 @@ function getServerTorpedoLaunch(system, snapshot) {
       tubeSide: 1,
       blendUntil: time + airDroppedTorpedoFallSeconds,
       blendDuration: airDroppedTorpedoFallSeconds,
-      showMuzzleEffect: false
+      showMuzzleEffect: false,
+      sourceVehicleType: "scout-plane"
     };
   }
 
-  if (isOwnTorpedo && boat?.root?.position && distance2D(boat.root.position, serverPosition) < 35) {
+  if (isOwnTorpedo && isFreshShipLaunch && boat?.root?.position && distance2D(boat.root.position, serverPosition) < 35) {
     const tubeSide = system.nextTube === 0 ? -1 : 1;
     system.nextTube = 1 - system.nextTube;
 
@@ -7781,8 +7797,13 @@ function getServerTorpedoLaunch(system, snapshot) {
       muzzlePosition,
       tubeSide,
       blendUntil: time + 0.35,
-      showMuzzleEffect: true
+      showMuzzleEffect: true,
+      sourceVehicleType: null
     };
+  }
+
+  if (isAirDropped) {
+    document.body.dataset.serverTorpedoLaunch = "air-drop-restored";
   }
 
   return {
@@ -7793,7 +7814,8 @@ function getServerTorpedoLaunch(system, snapshot) {
     muzzlePosition: serverPosition,
     tubeSide: 1,
     blendUntil: 0,
-    showMuzzleEffect: false
+    showMuzzleEffect: false,
+    sourceVehicleType: isAirDropped ? "scout-plane" : null
   };
 }
 
@@ -7803,9 +7825,15 @@ function fallbackServerTorpedoSpeed(launch) {
     : shipTorpedoBaseSpeed;
 }
 
-function applyServerTorpedoSnapshot(visual, snapshot, snapshotClientTime = time) {
+function getServerTorpedoAge(snapshot, snapshotServerTime = null) {
+  if (!Number.isFinite(snapshot?.firedAt)) return 0;
+  if (!Number.isFinite(snapshotServerTime)) return 0;
+  return Math.max(0, snapshotServerTime - snapshot.firedAt);
+}
+
+function applyServerTorpedoSnapshot(visual, snapshot, snapshotReceivedAt = time) {
   visual.serverPosition = new Vector3(snapshot.x, 0.05, snapshot.z);
-  visual.serverSnapshotTime = snapshotClientTime;
+  visual.serverSnapshotTime = snapshotReceivedAt;
   visual.heading = Number.isFinite(snapshot.heading) ? snapshot.heading : visual.heading;
   visual.forward = getForwardVector(visual.heading);
   visual.speed = Number.isFinite(snapshot.speed) ? snapshot.speed : visual.speed;
@@ -7822,7 +7850,7 @@ function applyServerTorpedoSnapshot(visual, snapshot, snapshotClientTime = time)
       distance: Number(visualDistance.toFixed(2)),
       visualPosition: summarizeVector(visual.root.position),
       serverPosition: summarizeVector(visual.serverPosition),
-      snapshotClientTime: Number(snapshotClientTime.toFixed(2)),
+      snapshotReceivedAt: Number(snapshotReceivedAt.toFixed(2)),
       snapshotT: Number.isFinite(snapshot.t) ? Number(snapshot.t.toFixed(2)) : null
     });
   }
@@ -8147,11 +8175,13 @@ function createLaunchPuff(system, position, heading, tubeSide) {
   const right = getRightVector(heading);
 
   for (let i = 0; i < 9; i += 1) {
-    const patch = MeshBuilder.CreateBox(`torpedo_puff_${system.nextId}_${i}`, {
-      width: 0.2 + i * 0.034,
-      height: 0.018,
-      depth: 0.28 + i * 0.05
-    }, system.scene);
+    const patch = createJaggedSurfacePatch(
+      `torpedo_puff_${system.nextId}_${i}`,
+      system.scene,
+      0.22 + i * 0.04,
+      0.28 + i * 0.06,
+      system.nextId * 29 + i * 13
+    );
     patch.parent = system.root;
     patch.material = system.materials.foam;
     patch.position.copyFrom(
