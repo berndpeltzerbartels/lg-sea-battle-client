@@ -271,8 +271,8 @@ document.body.dataset.serverBombs = String(Array.isArray(gameState.bombs) ? game
 const selectedVehicleType = urlParams.get("vehicle") ?? readStoredValue("vehicleType");
 const scoutPlaneMode = gameState.sessionId === scoutPlaneSetupId || selectedVehicleType === "scout-plane";
 if (scoutPlaneMode) {
-  scene.fogStart = 180;
-  scene.fogEnd = 1800;
+  scene.fogStart = 240;
+  scene.fogEnd = 2400;
 }
 const playerId = playerLogin.playerId;
 const playerTeamId = getRequestedPlayerTeamId(gameState.ships, playerLogin.teamId);
