@@ -4067,7 +4067,11 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, headi
   }
 
   const playerPoint = clampInstrumentPoint(worldToMapPoint(playerPosition, bounds, width, height, scale), width, height, 6);
-  drawMapShipMarker(ctx, playerPoint.x, playerPoint.y, "#f7fbff", heading);
+  drawMapUnitMarker(ctx, playerPoint.x, playerPoint.y, {
+    teamId: playerTeamId,
+    controlledBy: playerId,
+    vehicleType: scoutPlaneMode ? "scout-plane" : "torpedo-boat"
+  }, heading);
 
   if (mapSectorValue) mapSectorValue.textContent = formatMapSector(playerPosition);
   if (mapCoordinateValue) mapCoordinateValue.textContent = `${formatWorldCoordinate(playerPosition)}\n${formatMapBounds(bounds)}\nZoom x${zoomScale}`;
@@ -4139,7 +4143,7 @@ function drawDebugMapShips(ctx, bounds, width, height, scale) {
       continue;
     }
     const point = worldToMapPoint(position, bounds, width, height, scale);
-    drawMapShipMarker(ctx, point.x, point.y, mapShipColor(ship), Number.isFinite(ship.heading) ? ship.heading : 0, 5.5);
+    drawMapUnitMarker(ctx, point.x, point.y, ship, Number.isFinite(ship.heading) ? ship.heading : 0);
     drawMapShipLabel(ctx, createShipDesignation(ship), point.x + 7, point.y, mapShipColor(ship));
     visibleShips += 1;
   }
@@ -4799,6 +4803,15 @@ function drawMapShipMarker(ctx, x, y, color, markerHeading, size = 7) {
   ctx.closePath();
   ctx.stroke();
   ctx.fill();
+}
+
+function drawMapUnitMarker(ctx, x, y, ship, markerHeading) {
+  const color = mapShipColor(ship);
+  if (getShipVehicleType(ship) === "scout-plane") {
+    drawRadarPlaneMarker(ctx, x, y, color, markerHeading);
+  } else {
+    drawRadarShipMarker(ctx, x, y, color, markerHeading);
+  }
 }
 
 function drawMapShipLabel(ctx, label, x, y, color) {
