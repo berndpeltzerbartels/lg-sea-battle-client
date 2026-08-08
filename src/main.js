@@ -2745,7 +2745,7 @@ function setupResetGameControl(button) {
 function openHostSpecialMenu() {
   const debugLabel = debugMapEnabled ? "Debug-Karte aus" : "Debug-Karte an";
   const markerLabel = debugMarkerMapEnabled ? "Marker-Karte aus" : "Marker-Karte an";
-  const choice = window.prompt(`Spezialmenue: 1 = ${debugLabel}, 2 = Spiel neu starten, 3 = ${markerLabel}`, "1");
+  const choice = window.prompt(`Spezialmenue: 1 = ${debugLabel}, 2 = Spiel neu starten, 3 = ${markerLabel}, 8 = Seitenansicht Sandbox`, "1");
   if (choice === null) return;
   const normalized = choice.trim().toLowerCase();
   if (normalized === "1" || normalized === "debug" || normalized === "karte") {
@@ -2758,6 +2758,10 @@ function openHostSpecialMenu() {
   }
   if (normalized === "3" || normalized === "marker" || normalized === "punkte") {
     toggleDebugMarkerMap();
+    return;
+  }
+  if (normalized === "8" || normalized === "side-view-sandbox" || normalized === "sandbox" || normalized === "seitenansicht") {
+    requestHostGameReset("side-view-sandbox");
   }
 }
 
@@ -2830,10 +2834,10 @@ function toggleDebugMarkerMap() {
   }
 }
 
-async function requestHostGameReset() {
+async function requestHostGameReset(forcedSetupId = null) {
   const adminKey = window.prompt("Host key");
   if (!adminKey) return;
-  const setupId = promptGameSetupId();
+  const setupId = forcedSetupId ?? promptGameSetupId();
   if (setupId === null) return;
 
   try {
