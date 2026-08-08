@@ -9491,23 +9491,11 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
   const deckMaterial = teamMaterials.deck;
   const tubeMaterial = teamMaterials.hull;
 
-  const hull = createTaperedHull(`${name}_hull`, scene, [
-    { z: -4.05, width: 0.88, top: 0.66, bottom: 0.08 },
-    { z: -2.3, width: 1.56, top: 0.76, bottom: 0.08 },
-    { z: -1.35, width: 1.62, top: 0.76, bottom: 0.12 },
-    { z: 2.45, width: 1.18, top: 0.76, bottom: 0.02 },
-    { z: 3.65, width: 0.18, top: 0.66, bottom: 0.0 }
-  ]);
+  const hull = createTorpedoBoatBody(`${name}_hull`, scene);
   hull.parent = root;
   hull.material = hullMaterial;
 
-  const deck = createTaperedDeck(`${name}_foredeck`, scene, [
-    { z: -3.72, width: 0.74, y: 0.82 },
-    { z: -2.3, width: 1.24, y: 0.82 },
-    { z: -1.08, width: 1.28, y: 0.82 },
-    { z: 2.45, width: 1.04, y: 0.82 },
-    { z: 3.32, width: 0.26, y: 0.82 }
-  ]);
+  const deck = createTaperedDeck(`${name}_foredeck`, scene, getTorpedoBoatDeckSections(0.826));
   deck.parent = root;
   deck.material = deckMaterial;
 
@@ -10040,12 +10028,17 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = 
   const root = new TransformNode(name, scene);
   const teamMaterials = getShipTeamMaterials(materials, teamId);
   const hullMaterial = teamMaterials.hull;
+  const deckMaterial = teamMaterials.deck;
   const cabinMaterial = teamMaterials.cabin;
   const funnelMaterial = teamMaterials.funnel;
 
   const body = createEnemyBoatBody(`${name}_body`, scene);
   body.parent = root;
   body.material = hullMaterial;
+
+  const deck = createTaperedDeck(`${name}_deck`, scene, getTorpedoBoatDeckSections(0.766));
+  deck.parent = root;
+  deck.material = deckMaterial;
 
   const bridgeBase = MeshBuilder.CreateBox(`${name}_bridge_base`, { width: 0.96, height: 0.28, depth: 1.05 }, scene);
   bridgeBase.parent = root;
@@ -10173,13 +10166,11 @@ function createWakeRibbon(name, scene, material, parent, startX, startZ, endX, e
 }
 
 function createEnemyBoatBody(name, scene) {
-  const sections = [
-    { z: -4.05, topWidth: 0.78, chineWidth: 0.62, top: 0.52, chine: 0.24, keel: 0.02 },
-    { z: -2.3, topWidth: 1.22, chineWidth: 1.02, top: 0.66, chine: 0.2, keel: -0.03 },
-    { z: 2.55, topWidth: 1.12, chineWidth: 0.86, top: 0.66, chine: 0.18, keel: -0.04 },
-    { z: 3.55, topWidth: 0.48, chineWidth: 0.32, top: 0.58, chine: 0.14, keel: -0.02 },
-    { z: 4.45, topWidth: 0.08, chineWidth: 0.04, top: 0.5, chine: 0.11, keel: 0.02 }
-  ];
+  return createTorpedoBoatBody(name, scene);
+}
+
+function createTorpedoBoatBody(name, scene) {
+  const sections = getTorpedoBoatHullSections();
   const positions = [];
   const indices = [];
 
@@ -10210,6 +10201,26 @@ function createEnemyBoatBody(name, scene) {
   indices.push(last, last + 4, last + 2, last, last + 3, last + 4, last, last + 1, last + 3);
 
   return createMeshFromData(name, scene, positions, indices);
+}
+
+function getTorpedoBoatHullSections() {
+  return [
+    { z: -4.05, topWidth: 0.88, chineWidth: 0.62, top: 0.66, chine: 0.24, keel: 0.02 },
+    { z: -2.3, topWidth: 1.56, chineWidth: 1.08, top: 0.76, chine: 0.2, keel: -0.03 },
+    { z: -1.35, topWidth: 1.62, chineWidth: 1.14, top: 0.76, chine: 0.18, keel: -0.04 },
+    { z: 2.45, topWidth: 1.18, chineWidth: 0.86, top: 0.76, chine: 0.16, keel: -0.02 },
+    { z: 3.65, topWidth: 0.18, chineWidth: 0.08, top: 0.76, chine: 0.11, keel: 0.02 }
+  ];
+}
+
+function getTorpedoBoatDeckSections(y = 0.82) {
+  return [
+    { z: -3.72, width: 0.74, y },
+    { z: -2.3, width: 1.24, y },
+    { z: -1.08, width: 1.28, y },
+    { z: 2.45, width: 1.04, y },
+    { z: 3.32, width: 0.26, y }
+  ];
 }
 
 // Legacy full-ship prototype kept only for comparison while the enemy model evolves.
