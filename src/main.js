@@ -195,7 +195,7 @@ const flakPitchFastSpeed = 0.19;
 const flakPitchVeryFastSpeed = 0.27;
 const flakPitchMaxSpeed = 0.34;
 const flakPitchExtremeSpeed = 0.46;
-const flakFireCooldownSeconds = 0.075;
+const flakFireCooldownSeconds = 0.065;
 const flakProjectileSpeed = 241.3;
 const flakProjectileGravity = 9;
 const flakProjectileLifetime = 8.0;
@@ -8031,9 +8031,11 @@ function getServerBombLaunch(snapshot, serverPosition) {
         ? snapshot.heading
         : 0;
   const sourcePosition = sourceRoot.position.clone();
-  const start = sourcePosition
-    .add(getForwardVector(heading).scale(bombDropForwardOffset))
-    .add(new Vector3(0, bombVisualLaunchVerticalOffset, 0));
+  const start = new Vector3(
+    serverPosition.x,
+    sourcePosition.y + bombVisualLaunchVerticalOffset,
+    serverPosition.z
+  );
   const closeEnough = distance2D(start, serverPosition) < 28 && Math.abs(start.y - serverPosition.y) < 1.2;
   return {
     start: closeEnough ? start : serverPosition,
