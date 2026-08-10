@@ -236,7 +236,7 @@ const weaponAlignYawSpeed = 1.55;
 const weaponAlignPitchSpeed = 0.62;
 const weaponAlignFlatFlakPitch = 0;
 const weaponAlignAirDefenseFlakPitch = 18 * Math.PI / 180;
-const weaponAlignFlatCannonPitch = 5 * Math.PI / 180;
+const weaponAlignFlatCannonPitch = 0;
 const weaponAlignAirDefenseCannonPitch = 20 * Math.PI / 180;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
@@ -3159,10 +3159,16 @@ function createKillFeedMarker(teamId, vehicleType) {
 
 function createUnitMarker(teamId, vehicleType) {
   const marker = document.createElement("i");
-  const teamClass = getTeamDefinition(teamId)?.className ?? "unknown";
+  const teamClass = getRelativeUnitMarkerTeamClass(teamId);
   marker.className = `unit-marker unit-marker-${teamClass} unit-marker-${vehicleType === "scout-plane" ? "plane" : "ship"}`;
   marker.setAttribute("aria-hidden", "true");
   return marker;
+}
+
+function getRelativeUnitMarkerTeamClass(teamId) {
+  const normalizedTeamId = sanitizeTeamId(teamId);
+  if (!normalizedTeamId) return "unknown";
+  return normalizedTeamId === playerTeamId ? "friendly" : "enemy";
 }
 
 function isHumanController(controller) {

@@ -1660,6 +1660,14 @@ body.big-map .map-meta span {
   background: #ff6b4a;
 }
 
+.unit-marker-friendly {
+  background: #7fd7ff;
+}
+
+.unit-marker-enemy {
+  background: #ff6b4a;
+}
+
 .unit-marker-green {
   background: #75d28d;
 }
