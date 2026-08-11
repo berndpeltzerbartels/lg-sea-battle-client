@@ -8088,9 +8088,9 @@ function updateServerBombVisuals(system, dt, now) {
       const duration = visual.launchBlendDuration || 0.24;
       const t = 1 - clamp((visual.launchBlendUntil - now) / duration, 0, 1);
       const eased = easeInOutCubic(t);
-      visual.root.position.x = visual.launchStart.x + (projected.x - visual.launchStart.x) * eased;
+      visual.root.position.x = visual.launchStart.x;
       visual.root.position.y = visual.launchStart.y + (projectedY - visual.launchStart.y) * eased;
-      visual.root.position.z = visual.launchStart.z + (projected.z - visual.launchStart.z) * eased;
+      visual.root.position.z = visual.launchStart.z;
       visual.root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2, visual.heading, 0);
       return;
     }
