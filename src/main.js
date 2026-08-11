@@ -3359,6 +3359,7 @@ async function requestPlayerTorpedoFire() {
     turnVelocity,
     engineOrder,
     rudderDegrees: Math.round(rudderDegrees),
+    tubeSide: torpedoSystem.nextTube === 0 ? -1 : 1,
     clientTime: performance.now() / 1000
   };
   sendClientGameEvent("torpedo-fire-request", {
