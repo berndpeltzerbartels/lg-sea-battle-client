@@ -431,6 +431,14 @@
       </div>
       <div class="telegraph" aria-hidden="true">
         <div class="telegraph-title">Engine</div>
+        <div class="telegraph-speed-readout">
+          <span id="telegraphSpeedValue">0.0</span>
+          <small>kn</small>
+        </div>
+        <div class="telegraph-key-hints" aria-hidden="true">
+          <span><kbd class="shift-hint">Shift</kbd><kbd>↑</kbd></span>
+          <span><kbd class="shift-hint">Shift</kbd><kbd>↓</kbd></span>
+        </div>
         <div id="telegraphScale" class="telegraph-scale"></div>
       </div>
       <div class="rudder" aria-hidden="true">
@@ -440,6 +448,10 @@
           <span class="rudder-mark rudder-mark-center">0</span>
           <span class="rudder-mark rudder-mark-starboard">S 35</span>
           <div id="rudderIndicator" class="rudder-indicator"></div>
+        </div>
+        <div class="rudder-key-hints" aria-hidden="true">
+          <span><kbd class="shift-hint">Shift</kbd><kbd>←</kbd></span>
+          <span><kbd class="shift-hint">Shift</kbd><kbd>→</kbd></span>
         </div>
         <strong id="rudderValue">0°</strong>
       </div>
@@ -456,12 +468,20 @@
       <div class="weapon-elevation cannon-elevation" aria-hidden="true">
         <div class="flak-elevation-title">EL</div>
         <div class="flak-elevation-gauge">
-          <span class="flak-elevation-mark flak-elevation-mark-high">31</span>
-          <span class="flak-elevation-mark flak-elevation-mark-mid">15</span>
+          <span class="flak-elevation-mark flak-elevation-mark-high">45</span>
+          <span class="flak-elevation-mark flak-elevation-mark-mid">23</span>
           <span class="flak-elevation-mark flak-elevation-mark-low">0</span>
           <div id="cannonElevationIndicator" class="flak-elevation-indicator"></div>
         </div>
         <strong id="cannonElevationValue">0°</strong>
+      </div>
+      <div class="weapon-aim-hints" aria-hidden="true">
+        <div class="weapon-aim-ring">
+          <kbd class="weapon-aim-up">↑</kbd>
+          <kbd class="weapon-aim-left">←</kbd>
+          <kbd class="weapon-aim-right">→</kbd>
+          <kbd class="weapon-aim-down">↓</kbd>
+        </div>
       </div>
       <button id="mobileFireButton" class="mobile-fire-button" type="button" aria-label="Fire torpedo">Fire</button>
     </div>

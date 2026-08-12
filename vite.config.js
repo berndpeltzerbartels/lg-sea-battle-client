@@ -22,7 +22,25 @@ const clientBuildInfo = {
 
 export default defineConfig({
   base: "/sea-battle/",
+  server: {
+    proxy: {
+      "/game": "http://localhost:8080"
+    }
+  },
   plugins: [
+    {
+      name: "sea-battle-dev-entry-routes",
+      configureServer(server) {
+        server.middlewares.use((request, _response, next) => {
+          const rawUrl = request.url ?? "";
+          const [path, query = ""] = rawUrl.split("?");
+          if (path === "/app" || path === "/start.html" || path === "/debug/side-view-sandbox") {
+            request.url = `/sea-battle/${query ? `?${query}` : ""}`;
+          }
+          next();
+        });
+      }
+    },
     {
       name: "sea-battle-build-info",
       transformIndexHtml(html) {
