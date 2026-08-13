@@ -122,6 +122,20 @@ const legacyTeamAliases = new Map([
   ["khaki", "sand"],
   ["kaki", "sand"]
 ]);
+const shipFleetMaterialPalettes = {
+  light: {
+    body: { diffuse: [0.62, 0.63, 0.62], specular: [0.11, 0.12, 0.12] }
+  },
+  dark: {
+    body: { diffuse: [0.2, 0.24, 0.26], specular: [0.045, 0.055, 0.06] }
+  },
+  green: {
+    body: { diffuse: [0.2, 0.34, 0.25], specular: [0.06, 0.08, 0.06] }
+  },
+  sand: {
+    body: { diffuse: [0.5, 0.44, 0.31], specular: [0.1, 0.08, 0.05] }
+  }
+};
 const worldMetersPerUnit = 20;
 const killFeedLimit = 5;
 const torpedoLogLimit = 40;
@@ -164,7 +178,6 @@ const scoutPlaneHitMargin = 1.1;
 const bombGravity = 14.0;
 const bombDropForwardOffset = 0.6;
 const bombDropVerticalOffset = 0.65;
-const bombVisualLaunchVerticalOffset = -0.62;
 const bombsPerDrop = 12;
 const bombReleaseIntervalSeconds = 0.12;
 const bombPatternLateralSpacing = 0.18;
@@ -230,6 +243,7 @@ const cannonPitchFastSpeed = 0.11;
 const cannonPitchVeryFastSpeed = 0.19;
 const cannonPitchMaxSpeed = 0.28;
 const cannonPitchExtremeSpeed = 0.38;
+const weaponHeadingHoldMaxDelta = 0.28;
 const playerCannonSightYOffset = 0.08;
 const playerCannonEyeZ = -0.08;
 const cannonFireCooldownSeconds = 1.0;
@@ -286,6 +300,9 @@ const scoutPlaneMode = gameState.sessionId === scoutPlaneSetupId || selectedVehi
 if (scoutPlaneMode) {
   scene.fogStart = 240;
   scene.fogEnd = 2400;
+}
+if (sideViewSandboxMode) {
+  scene.fogMode = Scene.FOGMODE_NONE;
 }
 const playerId = playerLogin.playerId;
 const playerTeamId = getRequestedPlayerTeamId(gameState.ships, playerLogin.teamId);
@@ -345,9 +362,19 @@ sun.diffuse = new Color3(0.66, 0.74, 0.82);
 sun.specular = new Color3(0.38, 0.48, 0.58);
 
 const ambient = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
-ambient.intensity = 0.34;
-ambient.diffuse = new Color3(0.48, 0.58, 0.68);
-ambient.groundColor = new Color3(0.14, 0.17, 0.19);
+ambient.intensity = 0.42;
+ambient.diffuse = new Color3(0.52, 0.62, 0.72);
+ambient.groundColor = new Color3(0.2, 0.23, 0.25);
+if (sideViewSandboxMode) {
+  sun.direction = new Vector3(-0.55, -0.7, -0.45);
+  sun.position = new Vector3(55, 70, 45);
+  sun.intensity = 1.12;
+  sun.diffuse = new Color3(0.95, 0.93, 0.86);
+  sun.specular = new Color3(0.35, 0.35, 0.3);
+  ambient.intensity = 0.12;
+  ambient.diffuse = new Color3(0.52, 0.56, 0.58);
+  ambient.groundColor = new Color3(0.04, 0.045, 0.05);
+}
 
 const worldLimit = 5000;
 const ocean = MeshBuilder.CreateGround("ocean", { width: 2300, height: 2300, subdivisions: 160 }, scene);
@@ -1104,7 +1131,9 @@ scene.onBeforeRenderObservable.add(() => {
     const steer = rudderDegrees / maxRudderDegrees;
     const targetTurnVelocity = steer * turnStrength * rudderGrip;
     turnVelocity += (targetTurnVelocity - turnVelocity) * Math.min(1, dt * (scoutPlaneMode ? 1.75 : 2.0));
+    const previousHeading = heading;
     heading += turnVelocity * dt;
+    holdWeaponWorldHeading(previousHeading, heading);
     forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
 
     const previousPosition = boat.root.position.clone();
@@ -1455,6 +1484,19 @@ function updatePlayerCannonMount() {
   }
   document.body.dataset.cannonYaw = String(Math.round(normalizeAngle(cannonYaw) * 180 / Math.PI));
   document.body.dataset.cannonPitch = String(Math.round(cannonPitch * 180 / Math.PI));
+}
+
+function holdWeaponWorldHeading(previousHeading, nextHeading) {
+  if (!Number.isFinite(previousHeading) || !Number.isFinite(nextHeading) || scoutPlaneMode || torpedoScopeActive) return;
+  const headingDelta = clamp(getSignedAngularDistance(nextHeading, previousHeading), -weaponHeadingHoldMaxDelta, weaponHeadingHoldMaxDelta);
+  if (Math.abs(headingDelta) < 0.00001) return;
+
+  if (flakViewActive) {
+    flakYaw = normalizeAngle(flakYaw - headingDelta);
+  }
+  if (cannonViewActive) {
+    cannonYaw = clamp(cannonYaw - headingDelta, -cannonYawLimit, cannonYawLimit);
+  }
 }
 
 function changeFlakPitch(direction) {
@@ -4174,7 +4216,9 @@ function applyPlayerServerTarget(dt) {
 
   boat.root.position.x = correctedPosition.x;
   boat.root.position.z = correctedPosition.z;
+  const previousHeading = heading;
   heading = correctedHeading;
+  holdWeaponWorldHeading(previousHeading, heading);
   speed = prediction.speed;
   turnVelocity = correctedTurnRate;
   const correctionDecay = Math.min(1, dt * 8.0);
@@ -5428,8 +5472,8 @@ function findRadarTargetLineObstruction(playerPosition, firingHeading, contacts,
 function pointHitsRadarShipHull(point, contact) {
   const heading = Number.isFinite(contact.heading) ? contact.heading : 0;
   const local = getEnemyHitLocalPoint(point, contact.position, heading);
-  if (local.forward < -4.05 || local.forward > 4.45) return false;
-  return Math.abs(local.right) <= getEnemyHullHalfWidthAt(local.forward) + 0.35;
+  if (!isForwardInsideTorpedoBoatHull(local.forward, 0.35)) return false;
+  return Math.abs(local.right) <= getTorpedoBoatHullTopHalfWidthAt(local.forward) + 0.35;
 }
 
 function drawRadarOwnHeadingMarker(ctx, centerX, centerY) {
@@ -6688,20 +6732,22 @@ function ownBoatFlakHitArea(point) {
     return "critical";
   }
   const deckClearance = getTorpedoBoatDeckY(point.z) + 0.025;
-  if (point.y >= 0.1 && point.y <= deckClearance && point.z >= -4.23 && point.z <= 4.63 && absRight <= ownBoatHullHalfWidthAt(point.z) + 0.18) {
+  if (point.y >= 0.1 && point.y <= deckClearance && isForwardInsideTorpedoBoatHull(point.z, 0.18) && absRight <= getTorpedoBoatHullTopHalfWidthAt(point.z) + 0.18) {
     return "surface";
   }
   return "miss";
 }
 
-function ownBoatHullHalfWidthAt(forward) {
-  const sections = [
-    { z: -4.05, halfWidth: 0.39 },
-    { z: -2.3, halfWidth: 0.61 },
-    { z: 1.55, halfWidth: 0.66 },
-    { z: 3.25, halfWidth: 0.31 },
-    { z: 4.45, halfWidth: 0.04 }
-  ];
+function isForwardInsideTorpedoBoatHull(forward, margin = 0) {
+  const sections = torpedoBoatHullSections();
+  return forward >= sections[0].z - margin && forward <= sections[sections.length - 1].z + margin;
+}
+
+function getTorpedoBoatHullTopHalfWidthAt(forward) {
+  const sections = torpedoBoatHullSections().map((section) => ({
+    z: section.z,
+    halfWidth: section.topWidth * 0.5
+  }));
   if (forward <= sections[0].z) return sections[0].halfWidth;
   for (let index = 0; index < sections.length - 1; index += 1) {
     const current = sections[index];
@@ -8460,36 +8506,24 @@ function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
 }
 
 function getServerBombLaunch(snapshot, serverPosition) {
-  const shipId = snapshot.shipId;
-  const ship = shipId ? serverShipsById.get(shipId) : null;
-  const motion = shipId ? enemyMotions.find((candidate) => candidate.id === shipId) : null;
-  const sourceRoot = shipId === playerServerShipId || shipId === pendingPlayerServerShip?.id
-    ? boat?.root
-    : motion?.root;
-  const vehicleType = ship?.vehicleType ?? motion?.vehicleType;
-  if (vehicleType !== "scout-plane" || !sourceRoot?.position) {
+  const launchPosition = getServerBombLaunchPosition(snapshot);
+  if (!launchPosition) {
     return { start: serverPosition, blendUntil: 0, blendDuration: 0 };
   }
 
-  const heading = Number.isFinite(motion?.heading)
-    ? motion.heading
-    : Number.isFinite(ship?.heading)
-      ? ship.heading
-      : Number.isFinite(snapshot.heading)
-        ? snapshot.heading
-        : 0;
-  const sourcePosition = sourceRoot.position.clone();
-  const start = new Vector3(
-    serverPosition.x,
-    sourcePosition.y + bombVisualLaunchVerticalOffset,
-    serverPosition.z
-  );
-  const closeEnough = distance2D(start, serverPosition) < 28 && Math.abs(start.y - serverPosition.y) < 1.2;
+  const stillAtLaunch = distance2D(launchPosition, serverPosition) < 0.75 && Math.abs(launchPosition.y - serverPosition.y) < 0.75;
   return {
-    start: closeEnough ? start : serverPosition,
-    blendUntil: closeEnough ? time + 0.24 : 0,
-    blendDuration: closeEnough ? 0.24 : 0
+    start: stillAtLaunch ? launchPosition : serverPosition,
+    blendUntil: 0,
+    blendDuration: 0
   };
+}
+
+function getServerBombLaunchPosition(snapshot) {
+  if (!Number.isFinite(snapshot.launchX) || !Number.isFinite(snapshot.launchY) || !Number.isFinite(snapshot.launchZ)) {
+    return null;
+  }
+  return new Vector3(snapshot.launchX, snapshot.launchY, snapshot.launchZ);
 }
 
 function applyServerBombSnapshot(visual, snapshot, snapshotClientTime = time) {
@@ -9086,26 +9120,7 @@ function getEnemyHitLocalPoint(point, enemyPosition, enemyHeading) {
 }
 
 function getEnemyHullHalfWidthAt(forward) {
-  const sections = [
-    { z: -4.05, halfWidth: 0.39 },
-    { z: -2.3, halfWidth: 0.61 },
-    { z: 1.55, halfWidth: 0.66 },
-    { z: 3.25, halfWidth: 0.31 },
-    { z: 4.45, halfWidth: 0.04 }
-  ];
-
-  if (forward <= sections[0].z) return sections[0].halfWidth;
-
-  for (let i = 0; i < sections.length - 1; i += 1) {
-    const current = sections[i];
-    const next = sections[i + 1];
-    if (forward <= next.z) {
-      const t = (forward - current.z) / (next.z - current.z);
-      return current.halfWidth + (next.halfWidth - current.halfWidth) * t;
-    }
-  }
-
-  return sections[sections.length - 1].halfWidth;
+  return getTorpedoBoatHullTopHalfWidthAt(forward);
 }
 
 function updateTorpedoWake(torpedo, visible, time) {
@@ -9482,6 +9497,27 @@ function easeInOutCubic(value) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
+function createFleetPartMaterial(scene, fleetId, part, palette) {
+  const material = new StandardMaterial(`${fleetId}_party_${part}_material`, scene);
+  material.diffuseColor = new Color3(...palette.diffuse);
+  material.specularColor = new Color3(...palette.specular);
+  if (palette.emissive) {
+    material.emissiveColor = new Color3(...palette.emissive);
+  }
+  material.backFaceCulling = true;
+  return material;
+}
+
+function createFleetMaterials(scene, fleetId, palette) {
+  const bodyMaterial = createFleetPartMaterial(scene, fleetId, "body", palette.body);
+  return {
+    hull: bodyMaterial,
+    deck: bodyMaterial,
+    cabin: bodyMaterial,
+    funnel: bodyMaterial
+  };
+}
+
 function createMaterials(scene) {
   const water = new StandardMaterial("water_material", scene);
   water.diffuseColor = new Color3(0.18, 0.36, 0.4);
@@ -9554,105 +9590,11 @@ function createMaterials(scene) {
   darkBridgeWindow.specularColor = new Color3(0.18, 0.28, 0.36);
   darkBridgeWindow.backFaceCulling = false;
 
-  const lightHull = new StandardMaterial("light_party_hull_material", scene);
-  lightHull.diffuseColor = new Color3(0.56, 0.56, 0.55);
-  lightHull.specularColor = new Color3(0.16, 0.17, 0.17);
-  lightHull.backFaceCulling = false;
-
-  const lightDeck = new StandardMaterial("light_party_deck_material", scene);
-  lightDeck.diffuseColor = new Color3(0.6, 0.6, 0.59);
-  lightDeck.specularColor = new Color3(0.17, 0.18, 0.18);
-  lightDeck.backFaceCulling = false;
-
-  const lightCabin = new StandardMaterial("light_party_cabin_material", scene);
-  lightCabin.diffuseColor = new Color3(0.68, 0.68, 0.67);
-  lightCabin.specularColor = new Color3(0.19, 0.2, 0.2);
-  lightCabin.backFaceCulling = false;
-
-  const lightFunnel = new StandardMaterial("light_party_funnel_material", scene);
-  lightFunnel.diffuseColor = new Color3(0.54, 0.55, 0.55);
-  lightFunnel.specularColor = new Color3(0.15, 0.16, 0.16);
-  lightFunnel.backFaceCulling = false;
-
-  const playerLightHull = new StandardMaterial("player_light_hull_material", scene);
-  playerLightHull.diffuseColor = new Color3(0.56, 0.56, 0.55);
-  playerLightHull.specularColor = new Color3(0.16, 0.17, 0.17);
-  playerLightHull.backFaceCulling = false;
-
-  const playerLightDeck = new StandardMaterial("player_light_deck_material", scene);
-  playerLightDeck.diffuseColor = new Color3(0.6, 0.6, 0.59);
-  playerLightDeck.specularColor = new Color3(0.17, 0.18, 0.18);
-  playerLightDeck.backFaceCulling = false;
-
-  const playerLightCabin = new StandardMaterial("player_light_cabin_material", scene);
-  playerLightCabin.diffuseColor = new Color3(0.68, 0.68, 0.67);
-  playerLightCabin.specularColor = new Color3(0.19, 0.2, 0.2);
-  playerLightCabin.backFaceCulling = false;
-
-  const playerLightFunnel = new StandardMaterial("player_light_funnel_material", scene);
-  playerLightFunnel.diffuseColor = new Color3(0.54, 0.55, 0.55);
-  playerLightFunnel.specularColor = new Color3(0.15, 0.16, 0.16);
-  playerLightFunnel.backFaceCulling = false;
-
-  const darkHull = new StandardMaterial("dark_party_hull_material", scene);
-  darkHull.diffuseColor = new Color3(0.1, 0.13, 0.15);
-  darkHull.specularColor = new Color3(0.045, 0.055, 0.065);
-  darkHull.backFaceCulling = false;
-
-  const darkDeck = new StandardMaterial("dark_party_deck_material", scene);
-  darkDeck.diffuseColor = new Color3(0.085, 0.11, 0.13);
-  darkDeck.specularColor = new Color3(0.035, 0.045, 0.055);
-  darkDeck.backFaceCulling = false;
-
-  const darkCabin = new StandardMaterial("dark_party_cabin_material", scene);
-  darkCabin.diffuseColor = new Color3(0.135, 0.165, 0.185);
-  darkCabin.specularColor = new Color3(0.065, 0.08, 0.09);
-  darkCabin.backFaceCulling = false;
-
-  const darkFunnel = new StandardMaterial("dark_party_funnel_material", scene);
-  darkFunnel.diffuseColor = new Color3(0.08, 0.1, 0.115);
-  darkFunnel.specularColor = new Color3(0.035, 0.04, 0.045);
-  darkFunnel.backFaceCulling = false;
-
-  const greenHull = new StandardMaterial("green_party_hull_material", scene);
-  greenHull.diffuseColor = new Color3(0.18, 0.3, 0.23);
-  greenHull.specularColor = new Color3(0.06, 0.08, 0.06);
-  greenHull.backFaceCulling = false;
-
-  const greenDeck = new StandardMaterial("green_party_deck_material", scene);
-  greenDeck.diffuseColor = new Color3(0.2, 0.34, 0.25);
-  greenDeck.specularColor = new Color3(0.06, 0.08, 0.06);
-  greenDeck.backFaceCulling = false;
-
-  const greenCabin = new StandardMaterial("green_party_cabin_material", scene);
-  greenCabin.diffuseColor = new Color3(0.26, 0.4, 0.3);
-  greenCabin.specularColor = new Color3(0.08, 0.1, 0.08);
-  greenCabin.backFaceCulling = false;
-
-  const greenFunnel = new StandardMaterial("green_party_funnel_material", scene);
-  greenFunnel.diffuseColor = new Color3(0.15, 0.25, 0.19);
-  greenFunnel.specularColor = new Color3(0.05, 0.06, 0.05);
-  greenFunnel.backFaceCulling = false;
-
-  const sandHull = new StandardMaterial("sand_party_hull_material", scene);
-  sandHull.diffuseColor = new Color3(0.45, 0.39, 0.28);
-  sandHull.specularColor = new Color3(0.1, 0.08, 0.05);
-  sandHull.backFaceCulling = false;
-
-  const sandDeck = new StandardMaterial("sand_party_deck_material", scene);
-  sandDeck.diffuseColor = new Color3(0.5, 0.44, 0.31);
-  sandDeck.specularColor = new Color3(0.1, 0.08, 0.05);
-  sandDeck.backFaceCulling = false;
-
-  const sandCabin = new StandardMaterial("sand_party_cabin_material", scene);
-  sandCabin.diffuseColor = new Color3(0.58, 0.51, 0.37);
-  sandCabin.specularColor = new Color3(0.12, 0.1, 0.06);
-  sandCabin.backFaceCulling = false;
-
-  const sandFunnel = new StandardMaterial("sand_party_funnel_material", scene);
-  sandFunnel.diffuseColor = new Color3(0.42, 0.36, 0.26);
-  sandFunnel.specularColor = new Color3(0.08, 0.07, 0.05);
-  sandFunnel.backFaceCulling = false;
+  const lightFleetMaterials = createFleetMaterials(scene, "light", shipFleetMaterialPalettes.light);
+  const playerLightFleetMaterials = createFleetMaterials(scene, "player_light", shipFleetMaterialPalettes.light);
+  const darkFleetMaterials = createFleetMaterials(scene, "dark", shipFleetMaterialPalettes.dark);
+  const greenFleetMaterials = createFleetMaterials(scene, "green", shipFleetMaterialPalettes.green);
+  const sandFleetMaterials = createFleetMaterials(scene, "sand", shipFleetMaterialPalettes.sand);
 
   const foam = new StandardMaterial("foam_material", scene);
   foam.diffuseColor = new Color3(0.84, 0.91, 0.94);
@@ -9755,26 +9697,26 @@ function createMaterials(scene) {
     glass,
     lightBridgeWindow,
     darkBridgeWindow,
-    lightHull,
-    lightDeck,
-    lightCabin,
-    lightFunnel,
-    playerLightHull,
-    playerLightDeck,
-    playerLightCabin,
-    playerLightFunnel,
-    darkHull,
-    darkDeck,
-    darkCabin,
-    darkFunnel,
-    greenHull,
-    greenDeck,
-    greenCabin,
-    greenFunnel,
-    sandHull,
-    sandDeck,
-    sandCabin,
-    sandFunnel,
+    lightHull: lightFleetMaterials.hull,
+    lightDeck: lightFleetMaterials.deck,
+    lightCabin: lightFleetMaterials.cabin,
+    lightFunnel: lightFleetMaterials.funnel,
+    playerLightHull: playerLightFleetMaterials.hull,
+    playerLightDeck: playerLightFleetMaterials.deck,
+    playerLightCabin: playerLightFleetMaterials.cabin,
+    playerLightFunnel: playerLightFleetMaterials.funnel,
+    darkHull: darkFleetMaterials.hull,
+    darkDeck: darkFleetMaterials.deck,
+    darkCabin: darkFleetMaterials.cabin,
+    darkFunnel: darkFleetMaterials.funnel,
+    greenHull: greenFleetMaterials.hull,
+    greenDeck: greenFleetMaterials.deck,
+    greenCabin: greenFleetMaterials.cabin,
+    greenFunnel: greenFleetMaterials.funnel,
+    sandHull: sandFleetMaterials.hull,
+    sandDeck: sandFleetMaterials.deck,
+    sandCabin: sandFleetMaterials.cabin,
+    sandFunnel: sandFleetMaterials.funnel,
     foam,
     volcanicSmoke,
     volcanicSmokeWarm,
@@ -9975,22 +9917,6 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
   deck.material = deckMaterial;
   const superstructureMeshes = createTorpedoBoatSuperstructure(scene, materials, root, name, teamMaterials, true);
 
-  const flakDeckView = new TransformNode(`${name}_flak_deck_view`, scene);
-  flakDeckView.parent = root;
-  flakDeckView.setEnabled(false);
-
-  const flakViewPlatform = MeshBuilder.CreateCylinder(`${name}_flak_view_platform`, {
-    diameter: 0.68,
-    height: 0.045,
-    tessellation: 28
-  }, scene);
-  flakViewPlatform.parent = flakDeckView;
-  flakViewPlatform.position.y = getTorpedoBoatDeckY(playerSternFlakZ) + 0.024;
-  flakViewPlatform.position.z = playerSternFlakZ;
-  flakViewPlatform.material = deckMaterial;
-
-  createTorpedoBoatSuperstructure(scene, materials, flakDeckView, `${name}_flak_view`, teamMaterials, false);
-
   for (let i = 0; i < 2; i += 1) {
     const tube = MeshBuilder.CreateCylinder(`${name}_torpedo_tube_${i}`, {
       diameter: 0.14,
@@ -10039,8 +9965,8 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
     root,
     bowCannon,
     sternFlak,
-    flakDeckView,
-    flakViewHiddenMeshes: superstructureMeshes.concat(sternFlak.viewHiddenMeshes ?? []),
+    flakDeckView: null,
+    flakViewHiddenMeshes: sternFlak.viewHiddenMeshes ?? [],
     cannonViewHiddenMeshes: bowCannon.viewHiddenMeshes ?? [],
     bridgeViewHiddenMeshes: superstructureMeshes.filter((mesh) => (
       mesh.name.includes("_bridge_base")
@@ -10231,7 +10157,7 @@ function createTaperedHull(name, scene, sections) {
   const last = (sections.length - 1) * 4;
   pushQuad(indices, last, last + 1, last + 3, last + 2);
 
-  return createMeshFromData(name, scene, positions, indices);
+  return createMeshFromData(name, scene, positions, indices, { reverseFaces: true });
 }
 
 function createTaperedDeck(name, scene, sections) {
@@ -10249,10 +10175,10 @@ function createTaperedDeck(name, scene, sections) {
   for (let i = 0; i < sections.length - 1; i += 1) {
     const a = i * 2;
     const b = (i + 1) * 2;
-    pushQuad(indices, a, a + 1, b + 1, b);
+    pushOrientedQuad(indices, positions, a, a + 1, b + 1, b, Vector3.Up());
   }
 
-  return createMeshFromData(name, scene, positions, indices);
+  return createMeshFromData(name, scene, positions, indices, { reverseFaces: true });
 }
 
 function torpedoBoatHullSections() {
@@ -10318,17 +10244,21 @@ function createBoatHullMesh(name, scene) {
   for (let i = 0; i < sections.length - 1; i += 1) {
     const a = i * 5;
     const b = (i + 1) * 5;
-    pushQuad(indices, a, a + 2, b + 2, b);
-    pushQuad(indices, a + 1, b + 1, b + 3, a + 3);
-    pushQuad(indices, a + 2, a + 4, b + 4, b + 2);
-    pushQuad(indices, a + 3, b + 3, b + 4, a + 4);
+    pushOrientedQuad(indices, positions, a, a + 2, b + 2, b, new Vector3(-1, 0, 0));
+    pushOrientedQuad(indices, positions, a + 1, b + 1, b + 3, a + 3, new Vector3(1, 0, 0));
+    pushOrientedQuad(indices, positions, a + 2, a + 4, b + 4, b + 2, new Vector3(-1, -0.2, 0));
+    pushOrientedQuad(indices, positions, a + 3, b + 3, b + 4, a + 4, new Vector3(1, -0.2, 0));
   }
 
-  indices.push(0, 2, 4, 0, 4, 3, 0, 3, 1);
+  pushOrientedTriangle(indices, positions, 0, 2, 4, new Vector3(0, 0, -1));
+  pushOrientedTriangle(indices, positions, 0, 4, 3, new Vector3(0, 0, -1));
+  pushOrientedTriangle(indices, positions, 0, 3, 1, new Vector3(0, 0, -1));
   const last = (sections.length - 1) * 5;
-  indices.push(last, last + 4, last + 2, last, last + 3, last + 4, last, last + 1, last + 3);
+  pushOrientedTriangle(indices, positions, last, last + 4, last + 2, new Vector3(0, 0, 1));
+  pushOrientedTriangle(indices, positions, last, last + 3, last + 4, new Vector3(0, 0, 1));
+  pushOrientedTriangle(indices, positions, last, last + 1, last + 3, new Vector3(0, 0, 1));
 
-  return createMeshFromData(name, scene, positions, indices);
+  return createMeshFromData(name, scene, positions, indices, { reverseFaces: true });
 }
 
 function createBoatDeckMesh(name, scene) {
@@ -10347,10 +10277,10 @@ function createBoatDeckMesh(name, scene) {
   for (let i = 0; i < sections.length - 1; i += 1) {
     const a = i * 2;
     const b = (i + 1) * 2;
-    pushQuad(indices, a, a + 1, b + 1, b);
+    pushOrientedQuad(indices, positions, a, a + 1, b + 1, b, Vector3.Up());
   }
 
-  return createMeshFromData(name, scene, positions, indices);
+  return createMeshFromData(name, scene, positions, indices, { reverseFaces: true });
 }
 
 function createDeckFittedBox(name, scene, width, height, depth, z, extra = -0.004) {
@@ -10360,38 +10290,59 @@ function createDeckFittedBox(name, scene, width, height, depth, z, extra = -0.00
   const backBottomY = getTorpedoBoatDeckY(backZ) + extra;
   const frontBottomY = getTorpedoBoatDeckY(frontZ) + extra;
   const topY = Math.max(backBottomY, frontBottomY) + height;
-  const positions = [
-    -halfWidth, backBottomY, backZ,
-    halfWidth, backBottomY, backZ,
-    -halfWidth, frontBottomY, frontZ,
-    halfWidth, frontBottomY, frontZ,
-    -halfWidth, topY, backZ,
-    halfWidth, topY, backZ,
-    -halfWidth, topY, frontZ,
-    halfWidth, topY, frontZ
-  ];
-  const indices = [];
-  pushQuad(indices, 4, 5, 7, 6);
-  pushQuad(indices, 0, 2, 6, 4);
-  pushQuad(indices, 1, 5, 7, 3);
-  pushQuad(indices, 0, 4, 5, 1);
-  pushQuad(indices, 2, 3, 7, 6);
-  pushQuad(indices, 0, 1, 3, 2);
-
-  const mesh = createMeshFromData(name, scene, positions, indices);
+  const mesh = createBoxMeshFromCorners(name, scene, {
+    minX: -halfWidth,
+    maxX: halfWidth,
+    backBottomY,
+    frontBottomY,
+    topY,
+    backZ,
+    frontZ
+  });
   mesh.metadata = { ...(mesh.metadata ?? {}), deckTopY: topY };
   return mesh;
 }
 
 function createDeckStandingBox(name, scene, width, height, depth, z, extra = -0.004) {
+  const halfWidth = width * 0.5;
   const backZ = z - depth * 0.5;
   const frontZ = z + depth * 0.5;
   const bottomY = Math.min(getTorpedoBoatDeckY(backZ), getTorpedoBoatDeckY(frontZ)) + extra;
-  const mesh = MeshBuilder.CreateBox(name, { width, height, depth }, scene);
-  mesh.position.y = bottomY + height * 0.5;
-  mesh.position.z = z;
-  mesh.metadata = { ...(mesh.metadata ?? {}), deckTopY: bottomY + height };
+  const topY = bottomY + height;
+  const mesh = createBoxMeshFromCorners(name, scene, {
+    minX: -halfWidth,
+    maxX: halfWidth,
+    backBottomY: bottomY,
+    frontBottomY: bottomY,
+    topY,
+    backZ,
+    frontZ
+  });
+  mesh.metadata = { ...(mesh.metadata ?? {}), deckTopY: topY };
   return mesh;
+}
+
+function createBoxMeshFromCorners(name, scene, bounds) {
+  const { minX, maxX, backBottomY, frontBottomY, topY, backZ, frontZ } = bounds;
+  const positions = [
+    minX, backBottomY, backZ,
+    maxX, backBottomY, backZ,
+    minX, frontBottomY, frontZ,
+    maxX, frontBottomY, frontZ,
+    minX, topY, backZ,
+    maxX, topY, backZ,
+    minX, topY, frontZ,
+    maxX, topY, frontZ
+  ];
+  const indices = [];
+  pushOrientedQuad(indices, positions, 4, 5, 7, 6, Vector3.Up());
+  pushOrientedQuad(indices, positions, 0, 2, 6, 4, new Vector3(-1, 0, 0));
+  pushOrientedQuad(indices, positions, 1, 5, 7, 3, new Vector3(1, 0, 0));
+  pushOrientedQuad(indices, positions, 0, 4, 5, 1, new Vector3(0, 0, -1));
+  pushOrientedQuad(indices, positions, 2, 3, 7, 6, new Vector3(0, 0, 1));
+  pushOrientedQuad(indices, positions, 0, 1, 3, 2, Vector3.Down());
+
+  return createMeshFromData(name, scene, positions, indices, { flatShaded: true, reverseFaces: true });
 }
 
 function createShipDesignationPlates(scene, parent, name, designation) {
@@ -10468,20 +10419,28 @@ function createTorpedoBoatSuperstructure(scene, materials, parent, name, teamMat
   meshes.push(bridgeBase);
 
   const bridgeHouseHeight = 0.2898;
-  const bridgeHouse = MeshBuilder.CreateBox(`${name}_bridge_house`, {
-    width: 0.72,
-    height: bridgeHouseHeight,
-    depth: 0.46
-  }, scene);
+  const bridgeHouseWidth = 0.72;
+  const bridgeHouseDepth = 0.46;
+  const bridgeHouseZ = 0.72;
+  const bridgeHouseBottomY = bridgeBase.metadata.deckTopY;
+  const bridgeHouseTopY = bridgeHouseBottomY + bridgeHouseHeight;
+  const bridgeHouse = createBoxMeshFromCorners(`${name}_bridge_house`, scene, {
+    minX: -bridgeHouseWidth * 0.5,
+    maxX: bridgeHouseWidth * 0.5,
+    backBottomY: bridgeHouseBottomY,
+    frontBottomY: bridgeHouseBottomY,
+    topY: bridgeHouseTopY,
+    backZ: bridgeHouseZ - bridgeHouseDepth * 0.5,
+    frontZ: bridgeHouseZ + bridgeHouseDepth * 0.5
+  });
   bridgeHouse.parent = parent;
-  bridgeHouse.position.y = bridgeBase.metadata.deckTopY + bridgeHouseHeight * 0.5;
-  bridgeHouse.position.z = 0.72;
   bridgeHouse.material = cabinMaterial;
   meshes.push(bridgeHouse);
 
   if (includeWindows) {
     const windowHeight = 0.074;
     const windowWidth = 0.078;
+    const windowDepth = 0.012;
     const windowGap = 0.032;
     const windowCount = 5;
     const windowMaterial = getBridgeWindowMaterial(materials, teamMaterials);
@@ -10489,12 +10448,12 @@ function createTorpedoBoatSuperstructure(scene, materials, parent, name, teamMat
       const window = MeshBuilder.CreateBox(`${name}_bridge_window_${i}`, {
         width: windowWidth,
         height: windowHeight,
-        depth: 0.028
+        depth: windowDepth
       }, scene);
       window.parent = parent;
       window.position.x = (i - (windowCount - 1) * 0.5) * (windowWidth + windowGap);
-      window.position.y = bridgeHouse.position.y + bridgeHouseHeight * 0.12;
-      window.position.z = bridgeHouse.position.z + 0.46 * 0.5 + 0.012;
+      window.position.y = bridgeHouseBottomY + bridgeHouseHeight * 0.62;
+      window.position.z = bridgeHouseZ + bridgeHouseDepth * 0.5 - windowDepth * 0.5 + 0.003;
       window.material = windowMaterial;
       meshes.push(window);
     }
@@ -10525,18 +10484,62 @@ function pushQuad(indices, a, b, c, d) {
   indices.push(a, b, c, a, c, d);
 }
 
-function createMeshFromData(name, scene, positions, indices) {
+function pushOrientedQuad(indices, positions, a, b, c, d, expectedNormal) {
+  if (quadNormalDot(positions, a, b, c, expectedNormal) < 0) {
+    pushQuad(indices, a, d, c, b);
+  } else {
+    pushQuad(indices, a, b, c, d);
+  }
+}
+
+function pushOrientedTriangle(indices, positions, a, b, c, expectedNormal) {
+  if (quadNormalDot(positions, a, b, c, expectedNormal) < 0) {
+    indices.push(a, c, b);
+  } else {
+    indices.push(a, b, c);
+  }
+}
+
+function quadNormalDot(positions, a, b, c, expectedNormal) {
+  const ax = positions[a * 3];
+  const ay = positions[a * 3 + 1];
+  const az = positions[a * 3 + 2];
+  const ux = positions[b * 3] - ax;
+  const uy = positions[b * 3 + 1] - ay;
+  const uz = positions[b * 3 + 2] - az;
+  const vx = positions[c * 3] - ax;
+  const vy = positions[c * 3 + 1] - ay;
+  const vz = positions[c * 3 + 2] - az;
+  const nx = uy * vz - uz * vy;
+  const ny = uz * vx - ux * vz;
+  const nz = ux * vy - uy * vx;
+  return nx * expectedNormal.x + ny * expectedNormal.y + nz * expectedNormal.z;
+}
+
+function createMeshFromData(name, scene, positions, indices, options = {}) {
   const mesh = new Mesh(name, scene);
+  const meshIndices = options.reverseFaces ? reverseTriangleWinding(indices) : indices;
   const normals = [];
-  VertexData.ComputeNormals(positions, indices, normals);
+  VertexData.ComputeNormals(positions, meshIndices, normals);
 
   const vertexData = new VertexData();
   vertexData.positions = positions;
-  vertexData.indices = indices;
+  vertexData.indices = meshIndices;
   vertexData.normals = normals;
   vertexData.applyToMesh(mesh);
+  if (options.flatShaded) {
+    mesh.convertToFlatShadedMesh();
+  }
 
   return mesh;
+}
+
+function reverseTriangleWinding(indices) {
+  const reversed = [];
+  for (let index = 0; index < indices.length; index += 3) {
+    reversed.push(indices[index], indices[index + 2], indices[index + 1]);
+  }
+  return reversed;
 }
 
 function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2.35, isPlayer = false) {
@@ -10640,7 +10643,7 @@ function createSlottedFlakDome(name, scene, scale) {
     }
   }
 
-  return createMeshFromData(name, scene, positions, indices);
+  return createMeshFromData(name, scene, positions, indices, { reverseFaces: true });
 }
 
 function createOpenFlakTurretWall(name, scene, scale) {
