@@ -8574,6 +8574,7 @@ function applyServerBombSnapshot(visual, snapshot, snapshotClientTime = time) {
 }
 
 function updateServerBombVisuals(system, dt, now) {
+  const finishedBombs = [];
   system.serverVisuals.forEach((visual) => {
     const forward = getForwardVector(visual.heading);
     const snapshotAge = Math.max(0, now - (visual.serverSnapshotTime ?? now));
@@ -8600,8 +8601,22 @@ function updateServerBombVisuals(system, dt, now) {
     visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 4.5);
     visual.root.position.y += (projectedY - visual.root.position.y) * Math.min(1, dt * 2);
     visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 4.5);
-    visual.root.position.y = Math.max(0, visual.root.position.y);
+    if (visual.root.position.y <= 0) {
+      const impactKey = `visual-water:${visual.id}`;
+      if (!system.serverImpactIds.has(impactKey)) {
+        system.serverImpactIds.add(impactKey);
+        createHitChurn(torpedoSystem, new Vector3(visual.root.position.x, 0.05, visual.root.position.z), visual.heading);
+      }
+      finishedBombs.push(visual.id);
+      return;
+    }
     visual.root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2, visual.heading, 0);
+  });
+  finishedBombs.forEach((id) => {
+    const visual = system.serverVisuals.get(id);
+    if (!visual) return;
+    disposeServerBombVisual(visual);
+    system.serverVisuals.delete(id);
   });
 }
 
@@ -8668,7 +8683,7 @@ function renderServerBombImpacts(impacts) {
     );
     bombSystem.hits += 1;
     torpedoSystem.hits += 1;
-    createHitChurn(torpedoSystem, position, heading);
+    createHitChurn(torpedoSystem, position, Number.isFinite(impact.heading) ? impact.heading : 0);
   });
 
   if (bombSystem.serverImpactIds.size > 120) {
