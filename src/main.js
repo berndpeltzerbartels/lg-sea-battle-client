@@ -1630,11 +1630,11 @@ function getPlayerCameraSetup(forward) {
 function getBridgeWindowCameraLocalPosition() {
   const bridgeBaseZ = 0.64;
   const bridgeBaseDepth = 0.76;
-  const bridgeBaseHeight = 0.414;
+  const bridgeBaseHeight = 0.315;
   const bridgeHouseZ = 0.72;
   const bridgeHouseDepth = 0.46;
-  const bridgeHouseHeight = 0.2898;
-  const bridgeWindowYOffset = 0.02;
+  const bridgeHouseHeight = 0.22;
+  const bridgeWindowYOffset = 0.015;
   const bridgeBaseBackBottomY = getTorpedoBoatDeckY(bridgeBaseZ - bridgeBaseDepth * 0.5) - 0.004;
   const bridgeBaseFrontBottomY = getTorpedoBoatDeckY(bridgeBaseZ + bridgeBaseDepth * 0.5) - 0.004;
   const bridgeBaseTopY = Math.max(bridgeBaseBackBottomY, bridgeBaseFrontBottomY) + bridgeBaseHeight;
@@ -10482,20 +10482,20 @@ function createTorpedoBoatSuperstructure(scene, materials, parent, name, teamMat
   const funnelMaterial = teamMaterials.funnel;
   const meshes = [];
 
-  const aftDeckhouse = createDeckFittedBox(`${name}_aft_deckhouse`, scene, 0.92, 0.18, 0.58, -0.02);
+  const aftDeckhouse = createDeckFittedBox(`${name}_aft_deckhouse`, scene, 0.72, 0.15, 0.48, -0.02);
   aftDeckhouse.parent = parent;
   aftDeckhouse.material = cabinMaterial;
   meshes.push(aftDeckhouse);
 
-  const bridgeBase = createDeckFittedBox(`${name}_bridge_base`, scene, 0.82, 0.414, 0.76, 0.64);
+  const bridgeBase = createDeckFittedBox(`${name}_bridge_base`, scene, 0.68, 0.315, 0.62, 0.64);
   bridgeBase.parent = parent;
   bridgeBase.material = cabinMaterial;
   meshes.push(bridgeBase);
 
-  const bridgeHouseHeight = 0.2898;
-  const bridgeHouseWidth = 0.72;
-  const bridgeHouseDepth = 0.46;
-  const bridgeHouseZ = 0.72;
+  const bridgeHouseHeight = 0.22;
+  const bridgeHouseWidth = 0.56;
+  const bridgeHouseDepth = 0.34;
+  const bridgeHouseZ = 0.7;
   const bridgeHouseBottomY = bridgeBase.metadata.deckTopY;
   const bridgeHouseTopY = bridgeHouseBottomY + bridgeHouseHeight;
   const bridgeHouse = createBoxMeshFromCorners(`${name}_bridge_house`, scene, {
@@ -10512,11 +10512,11 @@ function createTorpedoBoatSuperstructure(scene, materials, parent, name, teamMat
   meshes.push(bridgeHouse);
 
   if (includeWindows) {
-    const windowHeight = 0.074;
-    const windowWidth = 0.078;
+    const windowHeight = 0.058;
+    const windowWidth = 0.072;
     const windowDepth = 0.012;
-    const windowGap = 0.032;
-    const windowCount = 5;
+    const windowGap = 0.022;
+    const windowCount = 4;
     const windowMaterial = getBridgeWindowMaterial(materials, teamMaterials);
     for (let i = 0; i < windowCount; i += 1) {
       const window = MeshBuilder.CreateBox(`${name}_bridge_window_${i}`, {
@@ -10533,20 +10533,20 @@ function createTorpedoBoatSuperstructure(scene, materials, parent, name, teamMat
     }
   }
 
-  const funnelBaseHeight = 0.34;
-  const funnelBase = createDeckStandingBox(`${name}_funnel_base`, scene, 0.64, funnelBaseHeight, 0.76, -0.5);
+  const funnelBaseHeight = 0.28;
+  const funnelBase = createDeckStandingBox(`${name}_funnel_base`, scene, 0.58, funnelBaseHeight, 0.58, -0.5);
   funnelBase.parent = parent;
   funnelBase.material = cabinMaterial;
   meshes.push(funnelBase);
 
   const funnel = MeshBuilder.CreateCylinder(`${name}_funnel`, {
-    diameterTop: 0.31,
-    diameterBottom: 0.39,
-    height: 0.9,
+    diameterTop: 0.34,
+    diameterBottom: 0.44,
+    height: 1.02,
     tessellation: 12
   }, scene);
   funnel.parent = parent;
-  funnel.position.y = funnelBase.metadata.deckTopY + 0.45 - 0.001;
+  funnel.position.y = funnelBase.metadata.deckTopY + 0.51 - 0.001;
   funnel.position.z = -0.44;
   funnel.material = funnelMaterial;
   meshes.push(funnel);
