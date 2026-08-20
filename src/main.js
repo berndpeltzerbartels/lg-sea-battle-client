@@ -160,7 +160,6 @@ const scoutPlaneHitMargin = 1.1;
 const bombGravity = 14.0;
 const bombDropForwardOffset = 0.6;
 const bombDropVerticalOffset = 0.65;
-const bombVisualLaunchVerticalOffset = -0.62;
 const bombsPerDrop = 12;
 const bombReleaseIntervalSeconds = 0.12;
 const bombPatternLateralSpacing = 0.18;
@@ -3359,6 +3358,7 @@ async function requestPlayerTorpedoFire() {
     turnVelocity,
     engineOrder,
     rudderDegrees: Math.round(rudderDegrees),
+    tubeSide: torpedoSystem.nextTube === 0 ? -1 : 1,
     clientTime: performance.now() / 1000
   };
   sendClientGameEvent("torpedo-fire-request", {
@@ -3409,6 +3409,7 @@ function summarizeFireRequest(request) {
     turnVelocity: Number(request.turnVelocity.toFixed(4)),
     engineOrder: request.engineOrder,
     rudderDegrees: request.rudderDegrees,
+    tubeSide: request.tubeSide,
     clientTime: Number(request.clientTime.toFixed(3))
   };
 }
@@ -7799,8 +7800,10 @@ function getServerTorpedoLaunch(system, snapshot, snapshotServerTime = null) {
   }
 
   if (isOwnTorpedo && isFreshShipLaunch && boat?.root?.position && distance2D(boat.root.position, serverPosition) < 35) {
-    const tubeSide = system.nextTube === 0 ? -1 : 1;
-    system.nextTube = 1 - system.nextTube;
+    const tubeSide = Number.isFinite(snapshot.tubeSide) && snapshot.tubeSide !== 0
+      ? Math.sign(snapshot.tubeSide)
+      : system.nextTube === 0 ? -1 : 1;
+    system.nextTube = tubeSide < 0 ? 1 : 0;
 
     const launchHeading = Number.isFinite(heading) ? heading : 0;
     const forward = getForwardVector(launchHeading);
@@ -7969,7 +7972,7 @@ function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
     Number.isFinite(snapshot.y) ? snapshot.y : 0,
     Number.isFinite(snapshot.z) ? snapshot.z : 0
   );
-  const launch = getServerBombLaunch(snapshot, serverPosition);
+  const launch = getServerBombLaunch(snapshot, serverPosition, snapshotClientTime);
   root.position.copyFrom(launch.start);
   root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2, Number.isFinite(snapshot.heading) ? snapshot.heading : 0, 0);
 
@@ -8017,37 +8020,24 @@ function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
   return visual;
 }
 
-function getServerBombLaunch(snapshot, serverPosition) {
-  const shipId = snapshot.shipId;
-  const ship = shipId ? serverShipsById.get(shipId) : null;
-  const motion = shipId ? enemyMotions.find((candidate) => candidate.id === shipId) : null;
-  const sourceRoot = shipId === playerServerShipId || shipId === pendingPlayerServerShip?.id
-    ? boat?.root
-    : motion?.root;
-  const vehicleType = ship?.vehicleType ?? motion?.vehicleType;
-  if (vehicleType !== "scout-plane" || !sourceRoot?.position) {
+function getServerBombLaunch(snapshot, serverPosition, snapshotClientTime = time) {
+  const start = getServerBombLaunchPosition(snapshot);
+  if (!start) {
     return { start: serverPosition, blendUntil: 0, blendDuration: 0 };
   }
-
-  const heading = Number.isFinite(motion?.heading)
-    ? motion.heading
-    : Number.isFinite(ship?.heading)
-      ? ship.heading
-      : Number.isFinite(snapshot.heading)
-        ? snapshot.heading
-        : 0;
-  const sourcePosition = sourceRoot.position.clone();
-  const start = new Vector3(
-    serverPosition.x,
-    sourcePosition.y + bombVisualLaunchVerticalOffset,
-    serverPosition.z
-  );
-  const closeEnough = distance2D(start, serverPosition) < 28 && Math.abs(start.y - serverPosition.y) < 1.2;
+  const needsIntroBlend = distance2D(start, serverPosition) > 0.05 || Math.abs(start.y - serverPosition.y) > 0.05;
   return {
-    start: closeEnough ? start : serverPosition,
-    blendUntil: closeEnough ? time + 0.24 : 0,
-    blendDuration: closeEnough ? 0.24 : 0
+    start,
+    blendUntil: needsIntroBlend ? snapshotClientTime + 0.24 : 0,
+    blendDuration: needsIntroBlend ? 0.24 : 0
   };
+}
+
+function getServerBombLaunchPosition(snapshot) {
+  if (!Number.isFinite(snapshot.launchX) || !Number.isFinite(snapshot.launchY) || !Number.isFinite(snapshot.launchZ)) {
+    return null;
+  }
+  return new Vector3(snapshot.launchX, snapshot.launchY, snapshot.launchZ);
 }
 
 function applyServerBombSnapshot(visual, snapshot, snapshotClientTime = time) {
@@ -8088,9 +8078,9 @@ function updateServerBombVisuals(system, dt, now) {
       const duration = visual.launchBlendDuration || 0.24;
       const t = 1 - clamp((visual.launchBlendUntil - now) / duration, 0, 1);
       const eased = easeInOutCubic(t);
-      visual.root.position.x = visual.launchStart.x;
+      visual.root.position.x = visual.launchStart.x + (projected.x - visual.launchStart.x) * eased;
       visual.root.position.y = visual.launchStart.y + (projectedY - visual.launchStart.y) * eased;
-      visual.root.position.z = visual.launchStart.z;
+      visual.root.position.z = visual.launchStart.z + (projected.z - visual.launchStart.z) * eased;
       visual.root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2, visual.heading, 0);
       return;
     }
