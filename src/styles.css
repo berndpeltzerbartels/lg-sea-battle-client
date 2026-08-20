@@ -1013,7 +1013,7 @@ body[data-cannon-view="active"] .cannon-scope {
   left: 50%;
   top: 50%;
   z-index: 1;
-  width: min(58vw, 560px);
+  width: 58vw;
   aspect-ratio: 1;
   transform: translate(-50%, -50%);
   border: 2px solid rgb(8 15 18 / 82%);
@@ -1255,6 +1255,79 @@ body.debug-marker-map .map-control {
 
 .debug-map-marker-actions button:hover {
   background: rgb(255 139 128 / 22%);
+}
+
+.side-view-camera-panel {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 8;
+  display: grid;
+  width: min(280px, calc(100vw - 36px));
+  gap: 8px;
+  padding: 12px;
+  box-sizing: border-box;
+  border: 1px solid rgb(155 229 223 / 34%);
+  border-radius: 8px;
+  background: rgb(5 27 40 / 72%);
+  box-shadow: 0 12px 38px rgb(1 15 24 / 26%);
+  backdrop-filter: blur(7px);
+  color: rgb(247 251 255 / 88%);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  pointer-events: auto;
+}
+
+.side-view-camera-title {
+  color: #9be5df;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.side-view-camera-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.side-view-camera-mode button {
+  height: 24px;
+  border: 1px solid rgb(155 229 223 / 36%);
+  border-radius: 6px;
+  background: rgb(6 28 41 / 56%);
+  color: rgb(247 251 255 / 82%);
+  font: inherit;
+  cursor: pointer;
+}
+
+.side-view-camera-mode button.active {
+  border-color: #ff7448;
+  background: rgb(255 116 72 / 18%);
+  color: #fff7f3;
+}
+
+.side-view-camera-panel label {
+  display: grid;
+  grid-template-columns: 64px 42px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.side-view-camera-panel output {
+  color: #c7dce3;
+  text-align: right;
+}
+
+.side-view-camera-panel input[type="range"] {
+  width: 100%;
+  accent-color: #9be5df;
+}
+
+.side-view-camera-hint {
+  color: rgb(199 220 227 / 74%);
+  font-size: 9px;
+  line-height: 1.25;
 }
 
 body.big-map .nav-panel {
@@ -1899,6 +1972,10 @@ body[data-player-vehicle="scout-plane"] .boat-speed-readout {
   margin-bottom: 10px;
 }
 
+body:not([data-player-vehicle="scout-plane"]) .boat-speed-readout {
+  display: none;
+}
+
 body[data-player-vehicle="scout-plane"] .altimeter {
   display: grid;
 }
@@ -1927,7 +2004,7 @@ body[data-player-vehicle="scout-plane"] .altimeter {
 }
 
 .depth-gauge {
-  display: grid;
+  display: none;
   grid-template-columns: 16px 1fr;
   align-items: center;
   gap: 8px;
@@ -1986,7 +2063,7 @@ body[data-player-vehicle="scout-plane"] .altimeter {
   position: absolute;
   right: 24px;
   bottom: 24px;
-  width: 132px;
+  width: 146px;
   padding: 12px 12px 11px;
   border: 1px solid rgb(255 255 255 / 32%);
   border-radius: 8px;
@@ -1997,12 +2074,90 @@ body[data-player-vehicle="scout-plane"] .altimeter {
 }
 
 .telegraph-title {
-  margin-bottom: 8px;
+  margin-bottom: 5px;
   font-size: 11px;
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
   color: #9be5df;
+}
+
+.telegraph-speed-readout {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-bottom: 9px;
+  color: #ffffff;
+  line-height: 1;
+}
+
+.telegraph-speed-readout span {
+  min-width: 42px;
+  font-size: 25px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.telegraph-speed-readout small {
+  color: rgb(247 251 255 / 78%);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.telegraph-key-hints,
+.rudder-key-hints {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  color: rgb(247 251 255 / 72%);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.telegraph-key-hints {
+  margin: -3px 0 8px;
+}
+
+.rudder-key-hints {
+  margin-top: 7px;
+}
+
+.telegraph-key-hints span,
+.rudder-key-hints span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.telegraph-key-hints kbd,
+.rudder-key-hints kbd,
+.weapon-aim-ring kbd {
+  display: inline-grid;
+  min-width: 17px;
+  height: 15px;
+  place-items: center;
+  padding: 0 3px;
+  border: 1px solid rgb(155 229 223 / 46%);
+  border-radius: 4px;
+  background: rgb(155 229 223 / 12%);
+  color: rgb(247 251 255 / 84%);
+  font: inherit;
+  line-height: 1;
+}
+
+.telegraph-key-hints .shift-hint,
+.rudder-key-hints .shift-hint {
+  display: none !important;
+  min-width: 30px;
+  color: #9be5df;
+  font-size: 8px;
+}
+
+body[data-steering-modifier="shift"] .telegraph-key-hints .shift-hint,
+body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
+  display: inline-grid !important;
 }
 
 .telegraph-scale {
@@ -2149,7 +2304,7 @@ body[data-player-vehicle="scout-plane"] .altimeter {
 
 .rudder strong {
   display: block;
-  margin-top: 8px;
+  margin-top: 7px;
   color: #ffffff;
   font-size: 10px;
   font-weight: 800;
@@ -2176,6 +2331,66 @@ body[data-player-vehicle="scout-plane"] .altimeter {
 body[data-flak-view="active"] .flak-elevation,
 body[data-cannon-view="active"] .cannon-elevation {
   display: block;
+}
+
+.weapon-aim-hints {
+  position: absolute;
+  left: calc(50% + 142px);
+  bottom: 33px;
+  display: none;
+  width: 52px;
+  height: 52px;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+body[data-flak-view="active"] .weapon-aim-hints,
+body[data-cannon-view="active"] .weapon-aim-hints {
+  display: block;
+}
+
+.weapon-aim-ring {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border: 1px solid rgb(155 229 223 / 42%);
+  border-radius: 50%;
+  background:
+    linear-gradient(to right, transparent 49%, rgb(155 229 223 / 28%) 49% 51%, transparent 51%),
+    linear-gradient(to bottom, transparent 49%, rgb(155 229 223 / 28%) 49% 51%, transparent 51%),
+    rgb(5 27 40 / 26%);
+  box-shadow: 0 10px 28px rgb(1 15 24 / 18%);
+}
+
+.weapon-aim-ring kbd {
+  position: absolute;
+  min-width: 17px;
+  height: 15px;
+  padding: 0;
+  background: rgb(5 27 40 / 56%);
+  color: #9be5df;
+  font-size: 11px;
+  transform: translate(-50%, -50%);
+}
+
+.weapon-aim-up {
+  left: 50%;
+  top: 7px;
+}
+
+.weapon-aim-down {
+  left: 50%;
+  top: 45px;
+}
+
+.weapon-aim-left {
+  left: 8px;
+  top: 50%;
+}
+
+.weapon-aim-right {
+  left: 44px;
+  top: 50%;
 }
 
 .flak-elevation-title {
@@ -2443,13 +2658,36 @@ body[data-cannon-view="active"] .cannon-elevation {
   .telegraph {
     right: 10px;
     bottom: 92px;
-    width: 118px;
+    width: 132px;
     padding: 9px;
   }
 
   .telegraph-title {
     margin-bottom: 6px;
     font-size: 9px;
+  }
+
+  .telegraph-speed-readout {
+    margin-bottom: 7px;
+  }
+
+  .telegraph-speed-readout span {
+    min-width: 34px;
+    font-size: 20px;
+  }
+
+  .telegraph-key-hints,
+  .rudder-key-hints {
+    font-size: 8px;
+    gap: 5px;
+  }
+
+  .telegraph-key-hints kbd,
+  .rudder-key-hints kbd,
+  .weapon-aim-ring kbd {
+    min-width: 15px;
+    height: 13px;
+    padding: 0 3px;
   }
 
   .telegraph-scale {
@@ -2478,6 +2716,26 @@ body[data-cannon-view="active"] .cannon-elevation {
   .rudder-gauge {
     height: 34px;
     touch-action: none;
+  }
+
+  .weapon-aim-hints {
+    left: calc(50% + 128px);
+    bottom: 23px;
+    width: 48px;
+    height: 48px;
+  }
+
+  .weapon-aim-ring {
+    width: 48px;
+    height: 48px;
+  }
+
+  .weapon-aim-down {
+    top: 41px;
+  }
+
+  .weapon-aim-right {
+    left: 40px;
   }
 
   .mobile-fire-button {
