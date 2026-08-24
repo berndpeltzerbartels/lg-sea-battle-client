@@ -35,6 +35,7 @@ const engine = new Engine(canvas, true, {
 const scene = new Scene(engine);
 document.body.dataset.appStarted = "true";
 const urlParams = new URLSearchParams(location.search);
+const scenarioTestMode = urlParams.get("scenarioTest") === "1";
 const directSideViewSandboxRequested = urlParams.get("setup") === "8"
   || urlParams.get("sandbox") === "side-view"
   || location.pathname.endsWith("/debug/side-view-sandbox");
@@ -213,9 +214,10 @@ const flakPitchVeryFastSpeed = 0.27;
 const flakPitchMaxSpeed = 0.34;
 const flakPitchExtremeSpeed = 0.46;
 const flakFireCooldownSeconds = 0.055;
-const flakProjectileSpeed = 241.3;
+const flakProjectileSpeed = 275;
 const flakProjectileGravity = 9;
 const flakProjectileLifetime = 8.0;
+const flakProjectileMaxVisualScale = 3.15;
 const flakDemoFireIntervalSeconds = 0.25;
 const flakBarrelLength = 1.62;
 const flakBarrelCenterZ = 0.22;
@@ -247,9 +249,12 @@ const weaponHeadingHoldMaxDelta = 0.28;
 const playerCannonSightYOffset = 0.08;
 const playerCannonEyeZ = -0.08;
 const cannonFireCooldownSeconds = 1.0;
-const cannonProjectileSpeed = 950;
+const cannonProjectileSpeed = 1000;
 const cannonProjectileGravity = 9.8;
 const cannonProjectileLifetime = 7.0;
+const cannonProjectileMaxVisualScale = 2.05;
+const cannonBarrelRecoilDistance = 0.16;
+const cannonBarrelRecoilDuration = 0.34;
 const weaponAlignYawSpeed = 1.55;
 const weaponAlignPitchSpeed = 0.62;
 const weaponAlignFlatFlakPitch = 0;
@@ -341,6 +346,7 @@ document.body.dataset.debugMap = String(debugMapEnabled);
 document.body.dataset.debugMarkerMap = String(debugMarkerMapEnabled);
 document.body.dataset.sideViewSandbox = String(sideViewSandboxMode);
 document.body.dataset.bridgeViewWidth = bridgeViewWidth.toFixed(2);
+installScenarioTestHooks();
 updateFleetStatus(gameState.ships, gameState.destroyedShipsByTeam);
 updatePlayerList(gameState.ships);
 updatePlayerTorpedoStock(playerTorpedoesRemaining);
@@ -957,6 +963,7 @@ let measuredSpeedSample = {
 };
 let performanceTelemetry = createPerformanceTelemetry();
 let httpRequestsInFlight = 0;
+let nextWorldDeltaEventTime = 0;
 let rightMouseRudderActive = false;
 let rightMouseRudderStartX = 0;
 let rightMouseRudderStartDegrees = 0;
@@ -1105,6 +1112,7 @@ scene.onBeforeRenderObservable.add(() => {
   updateWeaponAlignment(dt);
   updatePlayerFlakMount();
   updatePlayerCannonMount();
+  updateCannonBarrelRecoil(boat.bowCannon, time);
 
   if (!scoutPlaneMode && playerActive && heldEngineDirection !== 0 && time >= nextEngineHoldChangeTime) {
     changeEngineOrder(heldEngineDirection);
@@ -1248,6 +1256,7 @@ scene.onBeforeRenderObservable.add(() => {
   updateVolcanoPlumes(volcanoPlumes, time);
   updateNavigationLights(navigationLights, time, boat.root.position);
   enemyMotions.forEach((enemyMotion) => updateEnemyMotion(enemyMotion, dt, time, boat.root.position, blockedWaters));
+  enemyMotions.forEach((enemyMotion) => updateCannonBarrelRecoil(enemyMotion.boat?.bowCannon, time));
   updateScoutPlaneFlakDemo(enemyMotions.concat(flakDemoMotions), time);
   updateEnemyFireControl(torpedoSystem, enemyMotions, boat.root.position, blockedWaters, time);
   updateServerTorpedoVisuals(torpedoSystem, dt, time);
@@ -2473,6 +2482,7 @@ function flushPerformanceTelemetry(now) {
   const elapsed = Math.max(0.001, now - performanceTelemetry.lastFlushAt);
   const reportStartedWallTime = performanceTelemetry.startedWallTime;
   const reportEndedWallTime = Date.now();
+  const worldDeltas = collectWorldDeltaDiagnostics();
   const report = {
     playerId,
     teamId: playerTeamId,
@@ -2556,6 +2566,7 @@ function flushPerformanceTelemetry(now) {
     maxPerformanceHttpMs: Number(performanceTelemetry.performanceHttpMaxMs.toFixed(2))
   };
 
+  maybeReportLargeWorldDelta(worldDeltas);
   sendPerformanceReport(report);
   performanceTelemetry = createPerformanceTelemetry();
   performanceTelemetry.startedAt = now;
@@ -2577,6 +2588,70 @@ function sendPerformanceReport(report) {
       finishPerformanceRequest();
     }
   );
+}
+
+function collectWorldDeltaDiagnostics() {
+  const ownShip = playerServerShipId ? serverShipsById.get(playerServerShipId) : null;
+  const ownShipDelta = ownShip
+    ? distance2D(boat.root.position, { x: ownShip.x, z: ownShip.z })
+    : -1;
+  const torpedoDelta = collectVisualDelta(torpedoSystem.serverVisuals);
+  const bombDelta = collectVisualDelta(bombSystem.serverVisuals, true);
+  const worst = [
+    { kind: "ship", delta: ownShipDelta, id: ownShip?.id ?? "", visual: summarizeVector(boat.root.position), server: ownShip ? { x: round2(ownShip.x), y: round2(ownShip.y ?? 0), z: round2(ownShip.z) } : null },
+    { kind: "torpedo", ...torpedoDelta },
+    { kind: "bomb", ...bombDelta }
+  ].filter((entry) => Number.isFinite(entry.delta) && entry.delta >= 0);
+
+  return {
+    ownShipDelta: round2(ownShipDelta),
+    torpedoVisualMaxDelta: round2(torpedoDelta.delta),
+    bombVisualMaxDelta: round2(bombDelta.delta),
+    maxDelta: Math.max(0, ...worst.map((entry) => entry.delta)),
+    summary: stringifyClientEventDetails({
+      serverT: Number.isFinite(lastServerSnapshotTime) ? round2(lastServerSnapshotTime) : null,
+      ship: worst.find((entry) => entry.kind === "ship") ?? null,
+      torpedo: torpedoDelta,
+      bomb: bombDelta
+    })
+  };
+}
+
+function collectVisualDelta(visuals, includeHeight = false) {
+  let result = { id: "", delta: -1, visual: null, server: null };
+  visuals?.forEach?.((visual, id) => {
+    if (!visual?.root?.position || !visual?.serverPosition) return;
+    const delta = includeHeight
+      ? Vector3.Distance(visual.root.position, visual.serverPosition)
+      : distance2D(visual.root.position, visual.serverPosition);
+    if (!Number.isFinite(delta) || delta <= result.delta) return;
+    result = {
+      id: String(id),
+      delta,
+      visual: summarizeVector(visual.root.position),
+      server: summarizeVector(visual.serverPosition)
+    };
+  });
+  return {
+    ...result,
+    delta: round2(result.delta)
+  };
+}
+
+function maybeReportLargeWorldDelta(worldDeltas) {
+  if (!worldDeltas || !Number.isFinite(worldDeltas.maxDelta) || worldDeltas.maxDelta < 8) return;
+  if (time < nextWorldDeltaEventTime) return;
+  nextWorldDeltaEventTime = time + 10;
+  sendClientGameEvent("world-delta", {
+    ownShipDelta: worldDeltas.ownShipDelta,
+    torpedoVisualMaxDelta: worldDeltas.torpedoVisualMaxDelta,
+    bombVisualMaxDelta: worldDeltas.bombVisualMaxDelta,
+    summary: worldDeltas.summary
+  });
+}
+
+function round2(value) {
+  return Number.isFinite(value) ? Number(value.toFixed(2)) : -1;
 }
 
 function sendClientGameEvent(event, details = {}) {
@@ -6565,6 +6640,7 @@ function firePlayerCannon() {
   }
 
   nextCannonFireTime = time + cannonFireCooldownSeconds;
+  triggerCannonBarrelRecoil(boat.bowCannon, time);
   createCannonProjectile(cannonSystem, shot.position, shot.velocity, shot.direction);
   createCannonMuzzleBlast(cannonSystem, shot.muzzle, shot.direction);
   reportPlayerCannonShot(shot);
@@ -6572,6 +6648,131 @@ function firePlayerCannon() {
   document.body.dataset.cannonShots = String(cannonSystem.nextId - 1);
   document.body.dataset.cannonReload = cannonFireCooldownSeconds.toFixed(1);
   document.body.dataset.cannonReloading = "true";
+}
+
+function installScenarioTestHooks() {
+  if (!scenarioTestMode) return;
+
+  window.seaBattleScenarioTest = {
+    setStation(station) {
+      setBattleStation(String(station ?? "bridge"));
+      return stationSnapshot();
+    },
+    aimCannonAt(target) {
+      return aimPlayerCannonAtWorldPoint(target);
+    },
+    async fireCannonAt(target) {
+      setBattleStation("cannon");
+      const aim = aimPlayerCannonAtWorldPoint(target);
+      document.body.dataset.cannonFireSync = "";
+      firePlayerCannon();
+      return {
+        aim,
+        station: stationSnapshot(),
+        fire: document.body.dataset.cannonFire ?? ""
+      };
+    },
+    async state() {
+      const response = await fetch(getGameStateEndpoint(), { cache: "no-store" });
+      return response.json();
+    }
+  };
+  document.body.dataset.scenarioTest = "ready";
+}
+
+function stationSnapshot() {
+  return {
+    flak: flakViewActive,
+    cannon: cannonViewActive,
+    torpedo: torpedoScopeActive
+  };
+}
+
+function aimPlayerCannonAtWorldPoint(target) {
+  if (!boat?.bowCannon?.elevationRoot) {
+    throw new Error("Player cannon is not available");
+  }
+  const worldTarget = new Vector3(
+    Number(target?.x ?? 0),
+    Number(target?.y ?? 0),
+    Number(target?.z ?? 0)
+  );
+  if (![worldTarget.x, worldTarget.y, worldTarget.z].every(Number.isFinite)) {
+    throw new Error("Cannon target must contain finite x/y/z values");
+  }
+
+  for (let correction = 0; correction < 3; correction += 1) {
+    const yawShot = getPlayerCannonShot();
+    const yawOrigin = yawShot?.muzzle ?? boat.bowCannon.elevationRoot.getAbsolutePosition();
+    const desiredWorldYaw = Math.atan2(worldTarget.x - yawOrigin.x, worldTarget.z - yawOrigin.z);
+    cannonYaw = clamp(normalizeAngle(desiredWorldYaw - heading), -cannonYawLimit, cannonYawLimit);
+    updatePlayerCannonMount();
+
+    cannonPitch = bestCannonPitchForWorldPoint(worldTarget);
+    updatePlayerCannonMount();
+  }
+
+  const shot = getPlayerCannonShot();
+  const miss = shot?.direction
+    ? distancePointToRay(worldTarget, shot.position, shot.direction)
+    : null;
+  const result = {
+    target: { x: worldTarget.x, y: worldTarget.y, z: worldTarget.z },
+    yaw: cannonYaw,
+    pitch: cannonPitch,
+    miss: Number.isFinite(miss) ? miss : null,
+    shot: shot
+      ? {
+        position: { x: shot.position.x, y: shot.position.y, z: shot.position.z },
+        muzzle: { x: shot.muzzle.x, y: shot.muzzle.y, z: shot.muzzle.z },
+        direction: { x: shot.direction.x, y: shot.direction.y, z: shot.direction.z }
+      }
+      : null
+  };
+  document.body.dataset.scenarioCannonAim = JSON.stringify(result);
+  return result;
+}
+
+function bestCannonPitchForWorldPoint(worldTarget) {
+  let low = cannonMinPitch;
+  let high = cannonMaxPitch;
+  let bestPitch = cannonPitch;
+  let bestError = Number.POSITIVE_INFINITY;
+
+  for (let step = 0; step < 18; step += 1) {
+    const mid = (low + high) / 2;
+    cannonPitch = mid;
+    updatePlayerCannonMount();
+
+    const shot = getPlayerCannonShot();
+    const signedError = shot ? signedRayVerticalMiss(worldTarget, shot.position, shot.direction) : 0;
+    const absError = Math.abs(signedError);
+    if (absError < bestError) {
+      bestError = absError;
+      bestPitch = mid;
+    }
+
+    if (signedError > 0) {
+      high = mid;
+    } else {
+      low = mid;
+    }
+  }
+  return clamp(bestPitch, cannonMinPitch, cannonMaxPitch);
+}
+
+function distancePointToRay(point, origin, direction) {
+  const toPoint = point.subtract(origin);
+  const along = Math.max(0, Vector3.Dot(toPoint, direction));
+  const closest = origin.add(direction.scale(along));
+  return Vector3.Distance(point, closest);
+}
+
+function signedRayVerticalMiss(point, origin, direction) {
+  const toPoint = point.subtract(origin);
+  const along = Math.max(0, Vector3.Dot(toPoint, direction));
+  const closest = origin.add(direction.scale(along));
+  return closest.y - point.y;
 }
 
 function getPlayerCannonShot() {
@@ -6598,6 +6799,31 @@ function getCannonShotFromModel(cannon, baseHeading = 0, baseSpeed = 0) {
     direction,
     velocity: direction.scale(cannonProjectileSpeed).add(getForwardVector(baseHeading).scale(baseSpeed))
   };
+}
+
+function triggerCannonBarrelRecoil(cannon, now) {
+  if (!cannon?.barrel) return;
+  cannon.recoilStart = now;
+}
+
+function updateCannonBarrelRecoil(cannon, now) {
+  if (!cannon?.barrel || !Number.isFinite(cannon.barrelBaseZ)) return;
+  if (!Number.isFinite(cannon.recoilStart)) {
+    cannon.barrel.position.z = cannon.barrelBaseZ;
+    return;
+  }
+
+  const t = (now - cannon.recoilStart) / cannonBarrelRecoilDuration;
+  if (t >= 1) {
+    cannon.recoilStart = null;
+    cannon.barrel.position.z = cannon.barrelBaseZ;
+    return;
+  }
+
+  const recoil = t < 0.24
+    ? t / 0.24
+    : Math.pow(1 - (t - 0.24) / 0.76, 2);
+  cannon.barrel.position.z = cannon.barrelBaseZ - cannonBarrelRecoilDistance * recoil;
 }
 
 function cannonShotWouldHitOwnBoat(shot) {
@@ -6934,7 +7160,7 @@ function createCannonProjectile(system, position, velocity, direction) {
 
 function createFlakMuzzleFlash(system, position, direction) {
   const flash = MeshBuilder.CreateSphere(`flak_muzzle_flash_${system.nextId}`, {
-    diameter: 0.14,
+    diameter: 0.24,
     segments: 10
   }, system.scene);
   flash.parent = system.root;
@@ -6944,15 +7170,16 @@ function createFlakMuzzleFlash(system, position, direction) {
   const light = new PointLight(`${flash.name}_light`, flash.position.clone(), system.scene);
   light.diffuse = new Color3(1.0, 0.76, 0.42);
   light.specular = new Color3(1.0, 0.78, 0.5);
-  light.intensity = 0.85;
-  light.range = 14;
+  light.intensity = 2.0;
+  light.range = 28;
 
   system.flashes.push({
     mesh: flash,
     light,
     origin: flash.position.clone(),
     age: 0,
-    lifetime: 0.12,
+    lifetime: 0.16,
+    lightIntensity: 2.0,
     direction: direction.clone()
   });
 }
@@ -6960,7 +7187,7 @@ function createFlakMuzzleFlash(system, position, direction) {
 function createCannonMuzzleBlast(system, position, direction) {
   const flashId = system.nextId;
   const flash = MeshBuilder.CreateSphere(`cannon_muzzle_flash_${flashId}`, {
-    diameter: 0.42,
+    diameter: 0.68,
     segments: 12
   }, system.scene);
   flash.parent = system.root;
@@ -6971,15 +7198,16 @@ function createCannonMuzzleBlast(system, position, direction) {
   const light = new PointLight(`${flash.name}_light`, flash.position.clone(), system.scene);
   light.diffuse = new Color3(1.0, 0.78, 0.42);
   light.specular = new Color3(1.0, 0.86, 0.62);
-  light.intensity = 2.15;
-  light.range = 30;
+  light.intensity = 4.4;
+  light.range = 58;
 
   system.flashes.push({
     mesh: flash,
     light,
     origin: flash.position.clone(),
     age: 0,
-    lifetime: 0.18,
+    lifetime: 0.24,
+    lightIntensity: 4.4,
     direction: direction.clone()
   });
 
@@ -7134,6 +7362,7 @@ function updateFlakSystem(system, dt, now) {
     }
 
     const pulse = 0.72 + Math.sin(now * 80 + projectile.age * 13) * 0.18;
+    projectile.core.scaling.setAll(getProjectileVisibilityScale(projectile.position, flakProjectileMaxVisualScale));
     projectile.core.visibility = pulse;
     projectile.samplePositions.unshift(projectile.position.clone());
     projectile.samplePositions = projectile.samplePositions.slice(0, projectile.trail.length + 1);
@@ -7164,10 +7393,10 @@ function updateFlakSystem(system, dt, now) {
     }
     const fade = 1 - t;
     flash.mesh.visibility = fade;
-    flash.mesh.scaling.setAll(1 + t * 1.6);
-    flash.mesh.position.copyFrom(flash.origin.add(flash.direction.scale(t * 0.35)));
+    flash.mesh.scaling.setAll(1 + t * 2.35);
+    flash.mesh.position.copyFrom(flash.origin.add(flash.direction.scale(t * 0.7)));
     flash.light.position.copyFrom(flash.mesh.position);
-    flash.light.intensity = 0.85 * fade;
+    flash.light.intensity = (flash.lightIntensity ?? 0.85) * fade;
     return true;
   });
 
@@ -7209,6 +7438,7 @@ function updateCannonSystem(system, dt, now, landZones) {
     }
 
     const pulse = 0.82 + Math.sin(now * 46 + projectile.age * 11) * 0.1;
+    projectile.core.scaling.setAll(getProjectileVisibilityScale(projectile.position, cannonProjectileMaxVisualScale));
     projectile.core.visibility = pulse;
     projectile.samplePositions.unshift(projectile.position.clone());
     projectile.samplePositions = projectile.samplePositions.slice(0, projectile.trail.length + 1);
@@ -7233,10 +7463,10 @@ function updateCannonSystem(system, dt, now, landZones) {
     }
     const fade = 1 - t;
     flash.mesh.visibility = fade;
-    flash.mesh.scaling.setAll(1 + t * 2.2);
-    flash.mesh.position.copyFrom(flash.origin.add(flash.direction.scale(t * 0.55)));
+    flash.mesh.scaling.setAll(1 + t * 3.05);
+    flash.mesh.position.copyFrom(flash.origin.add(flash.direction.scale(t * 1.05)));
     flash.light.position.copyFrom(flash.mesh.position);
-    flash.light.intensity = 2.15 * fade;
+    flash.light.intensity = (flash.lightIntensity ?? 2.15) * fade;
     return true;
   });
 
@@ -7244,6 +7474,12 @@ function updateCannonSystem(system, dt, now, landZones) {
   document.body.dataset.cannonProjectiles = String(system.active.length);
   document.body.dataset.cannonReload = Math.max(0, nextCannonFireTime - now).toFixed(1);
   document.body.dataset.cannonReloading = nextCannonFireTime > now ? "true" : "false";
+}
+
+function getProjectileVisibilityScale(position, maxScale) {
+  const distance = Vector3.Distance(camera.position, position);
+  const t = clamp((distance - 220) / 1280, 0, 1);
+  return 1 + t * (maxScale - 1);
 }
 
 function getCannonProjectileImpact(projectile, landZones) {
@@ -7866,6 +8102,7 @@ function createRemoteMuzzleEffectForProjectile(snapshot) {
   );
   const direction = shot?.direction ?? fallbackDirection;
   if (isCannonProjectile) {
+    triggerCannonBarrelRecoil(motion.boat?.bowCannon, time);
     createCannonMuzzleBlast(cannonSystem, muzzle, direction);
   } else {
     createFlakMuzzleFlash(flakSystem, muzzle, direction);
@@ -10677,6 +10914,8 @@ function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2
   return {
     mount,
     elevationRoot,
+    barrel,
+    barrelBaseZ: barrel.position.z,
     muzzleZ: barrel.position.z + barrelLength * 0.5,
     viewHiddenMeshes: isPlayer ? [platform, turretBase, turretRoof, barrel] : []
   };
