@@ -201,29 +201,33 @@ const flakHoldFastDelaySeconds = 0.85;
 const flakHoldVeryFastDelaySeconds = 1.35;
 const flakHoldMaxDelaySeconds = 2.05;
 const flakHoldExtremeDelaySeconds = 2.75;
-const flakYawFineSpeed = 0.105;
-const flakYawMediumSpeed = 0.18;
-const flakYawFastSpeed = 0.34;
-const flakYawVeryFastSpeed = 0.48;
-const flakYawMaxSpeed = 0.62;
+const flakYawFineSpeed = 0.07;
+const flakYawMediumSpeed = 0.22;
+const flakYawFastSpeed = 0.37;
+const flakYawVeryFastSpeed = 0.52;
+const flakYawMaxSpeed = 0.67;
 const flakYawExtremeSpeed = 0.82;
-const flakPitchFineSpeed = 0.055;
-const flakPitchMediumSpeed = 0.095;
-const flakPitchFastSpeed = 0.19;
-const flakPitchVeryFastSpeed = 0.27;
-const flakPitchMaxSpeed = 0.34;
+const flakPitchFineSpeed = 0.04;
+const flakPitchMediumSpeed = 0.124;
+const flakPitchFastSpeed = 0.208;
+const flakPitchVeryFastSpeed = 0.292;
+const flakPitchMaxSpeed = 0.376;
 const flakPitchExtremeSpeed = 0.46;
-const flakFireCooldownSeconds = 0.055;
-const flakProjectileSpeed = 275;
+const flakFireCooldownSeconds = 0.048;
+const flakProjectileSpeed = 348;
 const flakProjectileGravity = 9;
 const flakProjectileLifetime = 8.0;
-const flakProjectileMaxVisualScale = 3.15;
+const flakProjectileMaxVisualScale = 4.65;
+const flakProjectileLightBudget = 5;
 const flakDemoFireIntervalSeconds = 0.25;
 const flakBarrelLength = 1.62;
 const flakBarrelCenterZ = 0.22;
+const flakSightYOffsetFactor = 0.14;
+const flakEyeZFactor = 0.02;
+const flakSightTargetZ = 72;
 const playerSternFlakScale = 0.54;
-const playerFlakSightYOffset = 0.16 * playerSternFlakScale;
-const playerFlakEyeZ = 0.02 * playerSternFlakScale;
+const playerFlakSightYOffset = flakSightYOffsetFactor * playerSternFlakScale;
+const playerFlakEyeZ = flakEyeZFactor * playerSternFlakScale;
 const cannonMinPitch = -0.035;
 const cannonMaxPitch = 45 * Math.PI / 180;
 const cannonPitchStepRadians = 0.004;
@@ -233,26 +237,27 @@ const cannonHoldFastDelaySeconds = 0.68;
 const cannonHoldVeryFastDelaySeconds = 1.08;
 const cannonHoldMaxDelaySeconds = 1.64;
 const cannonHoldExtremeDelaySeconds = 2.2;
-const cannonYawFineSpeed = 0.016;
-const cannonYawMediumSpeed = 0.052;
-const cannonYawFastSpeed = 0.16;
-const cannonYawVeryFastSpeed = 0.28;
-const cannonYawMaxSpeed = 0.42;
+const cannonYawFineSpeed = 0.011;
+const cannonYawMediumSpeed = 0.125;
+const cannonYawFastSpeed = 0.239;
+const cannonYawVeryFastSpeed = 0.352;
+const cannonYawMaxSpeed = 0.466;
 const cannonYawExtremeSpeed = 0.58;
-const cannonPitchFineSpeed = 0.011;
-const cannonPitchMediumSpeed = 0.036;
-const cannonPitchFastSpeed = 0.11;
-const cannonPitchVeryFastSpeed = 0.19;
-const cannonPitchMaxSpeed = 0.28;
+const cannonPitchFineSpeed = 0.008;
+const cannonPitchMediumSpeed = 0.082;
+const cannonPitchFastSpeed = 0.156;
+const cannonPitchVeryFastSpeed = 0.23;
+const cannonPitchMaxSpeed = 0.304;
 const cannonPitchExtremeSpeed = 0.38;
 const weaponHeadingHoldMaxDelta = 0.28;
 const playerCannonSightYOffset = 0.08;
 const playerCannonEyeZ = -0.08;
 const cannonFireCooldownSeconds = 1.0;
-const cannonProjectileSpeed = 1000;
+const cannonProjectileSpeed = 1265;
 const cannonProjectileGravity = 9.8;
 const cannonProjectileLifetime = 7.0;
-const cannonProjectileMaxVisualScale = 2.05;
+const cannonProjectileMaxVisualScale = 2.85;
+const cannonProjectileLightBudget = 3;
 const cannonBarrelRecoilDistance = 0.16;
 const cannonBarrelRecoilDuration = 0.34;
 const weaponAlignYawSpeed = 1.55;
@@ -1224,8 +1229,8 @@ scene.onBeforeRenderObservable.add(() => {
     : (torpedoScopeActive && !scoutPlaneMode
     ? 0
     : (flakViewActive && !scoutPlaneMode
-      ? 0.24
-      : (cannonViewActive && !scoutPlaneMode ? 0.18 : bridgeViewStabilization)));
+      ? 0.16
+      : (cannonViewActive && !scoutPlaneMode ? 0.12 : bridgeViewStabilization)));
   const bob = (Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035) * shipStabilization;
   if (playerActive) {
     boat.root.position.y = scoutPlaneMode
@@ -1304,7 +1309,7 @@ scene.onBeforeRenderObservable.add(() => {
   camera.minZ = (cannonViewActive || flakViewActive || torpedoScopeActive) ? 0.03 : (bombBayViewActive ? 0.2 : (scoutPlaneMode ? 1.5 : 0.2));
   camera.fov = sideViewSandboxMode
     ? debugOrbitFov
-    : (cannonViewActive ? 0.34 : (torpedoScopeActive ? 0.42 : (bombBayViewActive ? getBombBayFov() : (scoutPlaneMode ? 1.02 : (bridgeInteriorViewActive ? bridgeViewWidth : 0.78)))));
+    : (cannonViewActive ? 0.34 : (flakViewActive ? 0.64 : (torpedoScopeActive ? 0.42 : (bombBayViewActive ? getBombBayFov() : (scoutPlaneMode ? 1.02 : (bridgeInteriorViewActive ? bridgeViewWidth : 0.78))))));
   cameraPosition.copyFrom(desiredCameraPosition.add(shakeOffset));
   cameraTarget.copyFrom(desiredTarget);
   camera.position.copyFrom(cameraPosition);
@@ -1586,7 +1591,7 @@ function getPlayerCameraSetup(forward) {
       worldMatrix
     );
     const target = Vector3.TransformCoordinates(
-      new Vector3(0, playerFlakSightYOffset, 72),
+      new Vector3(0, playerFlakSightYOffset, flakSightTargetZ),
       worldMatrix
     );
     return {
@@ -7005,9 +7010,11 @@ function getFlakShotFromElevationRoot(elevationRoot, scale, target, baseVelocity
   const worldMatrix = elevationRoot.computeWorldMatrix(true);
   const muzzleZ = (flakBarrelCenterZ + flakBarrelLength * 0.5) * scale;
   const barrelY = 0;
+  const sightY = flakSightYOffsetFactor * scale;
   const muzzle = Vector3.TransformCoordinates(new Vector3(0, barrelY, muzzleZ), worldMatrix);
-  const aimTarget = target ?? Vector3.TransformCoordinates(new Vector3(0, barrelY, 14), worldMatrix);
-  const direction = aimTarget.subtract(muzzle).normalize();
+  const sightOrigin = Vector3.TransformCoordinates(new Vector3(0, sightY, flakEyeZFactor * scale), worldMatrix);
+  const sightTarget = target ?? Vector3.TransformCoordinates(new Vector3(0, sightY, flakSightTargetZ), worldMatrix);
+  const direction = sightTarget.subtract(target ? muzzle : sightOrigin).normalize();
 
   return {
     position: muzzle.add(direction.scale(0.08)),
@@ -7019,7 +7026,7 @@ function getFlakShotFromElevationRoot(elevationRoot, scale, target, baseVelocity
 
 function createSpreadFlakShot(shot, seed) {
   const sideSpread = (stableUnitNoise(seed * 2 + 11) - 0.5) * 0.022;
-  const verticalSpread = (stableUnitNoise(seed * 2 + 37) - 0.5) * 0.012;
+  const verticalSpread = 0;
   const velocity = spreadFlakVelocity(shot.velocity, sideSpread, verticalSpread);
   const direction = velocity.lengthSquared() > 0.0001 ? velocity.normalizeToNew() : shot.direction.clone();
   return {
@@ -7071,15 +7078,15 @@ function createFlakProjectile(system, position, velocity, direction, options = {
   core.material = system.materials.flakTracer;
 
   const trail = [];
-  const trailSegments = options.trailSegments ?? 0;
+  const trailSegments = options.trailSegments ?? 1;
   for (let i = 0; i < trailSegments; i += 1) {
     const segment = MeshBuilder.CreateSphere(`${root.name}_trail_${i}`, {
-      diameter: 0.16 - i * 0.018,
+      diameter: 0.17 - i * 0.018,
       segments: 8
     }, system.scene);
     segment.parent = system.root;
     segment.material = system.materials.flakTracerTrail;
-    segment.position.copyFrom(position.add(direction.scale(-0.18 - i * 0.28)));
+    segment.position.copyFrom(position.add(direction.scale(-0.16 - i * 0.22)));
     trail.push(segment);
   }
 
@@ -7102,7 +7109,7 @@ function createFlakProjectile(system, position, velocity, direction, options = {
     age: 0,
     lifetime: flakProjectileLifetime,
     direction: direction.clone(),
-    samplePositions: Array.from({ length: trailSegments + 1 }, (_, index) => position.add(direction.scale(-0.18 - index * 0.28)))
+    samplePositions: Array.from({ length: trailSegments + 1 }, (_, index) => position.add(direction.scale(-0.16 - index * 0.22)))
   });
   return system.active[system.active.length - 1];
 }
@@ -7120,7 +7127,7 @@ function createCannonProjectile(system, position, velocity, direction) {
     segments: 12
   }, system.scene);
   core.parent = root;
-  core.material = system.materials.flakTracer;
+  core.material = system.materials.cannonTracer ?? system.materials.flakTracer;
 
   const trail = [];
   for (let i = 0; i < 4; i += 1) {
@@ -7129,7 +7136,7 @@ function createCannonProjectile(system, position, velocity, direction) {
       segments: 8
     }, system.scene);
     segment.parent = system.root;
-    segment.material = system.materials.flakTracerTrail;
+    segment.material = system.materials.cannonTracerTrail ?? system.materials.flakTracerTrail;
     segment.position.copyFrom(position.add(direction.scale(-0.28 - i * 0.42)));
     trail.push(segment);
   }
@@ -7341,6 +7348,17 @@ function handleLocalProjectileScoutPlaneHit(system, projectile, hit, weaponType,
   disposeFlakProjectile(projectile);
 }
 
+function updateProjectileLightBudget(system, maxEnabledLights) {
+  const litProjectiles = system.active
+    .filter((projectile) => !projectile.disposed && projectile.light)
+    .sort((a, b) => a.age - b.age)
+    .slice(0, maxEnabledLights);
+  const litIds = new Set(litProjectiles.map((projectile) => projectile.id));
+  system.active.forEach((projectile) => {
+    projectile.light?.setEnabled?.(litIds.has(projectile.id));
+  });
+}
+
 function updateFlakSystem(system, dt, now) {
   system.active = system.active.filter((projectile) => {
     projectile.age += dt;
@@ -7370,13 +7388,14 @@ function updateFlakSystem(system, dt, now) {
       const sample = projectile.samplePositions[index + 1] ?? projectile.previousPosition;
       segment.position.copyFrom(sample);
       const fade = Math.max(0.16, pulse - index * 0.16);
-      segment.scaling.setAll(1 - index * 0.1);
+      segment.scaling.setAll(getProjectileVisibilityScale(sample, flakProjectileMaxVisualScale * 0.82) * (1 - index * 0.12));
       segment.visibility = fade;
     });
     projectile.light.position.copyFrom(projectile.position);
     projectile.light.intensity = 0.45 + pulse * 0.45;
     return true;
   });
+  updateProjectileLightBudget(system, flakProjectileLightBudget);
   system.serverVisuals.forEach((projectile, id) => {
     if (projectile.disposed) {
       system.serverVisuals.delete(id);
@@ -7446,12 +7465,13 @@ function updateCannonSystem(system, dt, now, landZones) {
       const sample = projectile.samplePositions[index + 1] ?? projectile.previousPosition;
       segment.position.copyFrom(sample);
       segment.visibility = Math.max(0.14, pulse - index * 0.24);
-      segment.scaling.setAll(1 - index * 0.16);
+      segment.scaling.setAll(getProjectileVisibilityScale(sample, cannonProjectileMaxVisualScale * 0.78) * (1 - index * 0.16));
     });
     projectile.light.position.copyFrom(projectile.position);
     projectile.light.intensity = 0.55 + pulse * 0.55;
     return true;
   });
+  updateProjectileLightBudget(system, cannonProjectileLightBudget);
 
   system.flashes = system.flashes.filter((flash) => {
     flash.age += dt;
@@ -8063,12 +8083,12 @@ function createServerFlakProjectile(system, snapshot, snapshotClientTime = time,
   );
   const direction = velocity.lengthSquared() > 0.0001 ? velocity.normalizeToNew() : Vector3.Forward();
   const visual = createFlakProjectile(system, position, velocity, direction, {
-    trailSegments: isCannonProjectile ? 4 : 0
+    trailSegments: isCannonProjectile ? 4 : 1
   });
   visual.serverId = snapshot.id;
   visual.weaponType = isCannonProjectile ? "cannon" : "flak";
   if (isCannonProjectile) {
-    emphasizeServerCannonProjectile(visual);
+    emphasizeServerCannonProjectile(visual, system.materials);
   }
   visual.age = Math.max(0, snapshotClientTime - (Number.isFinite(snapshot.firedAt) ? snapshot.firedAt : snapshotClientTime));
   system.serverVisuals.set(visualId, visual);
@@ -8076,9 +8096,11 @@ function createServerFlakProjectile(system, snapshot, snapshotClientTime = time,
   return visual;
 }
 
-function emphasizeServerCannonProjectile(visual) {
+function emphasizeServerCannonProjectile(visual, materials) {
+  visual.core.material = materials.cannonTracer ?? visual.core.material;
   visual.core?.scaling?.setAll(2.1);
   visual.trail?.forEach((segment, index) => {
+    segment.material = materials.cannonTracerTrail ?? segment.material;
     segment.scaling.setAll(1.85 - index * 0.18);
   });
   if (visual.light) {
@@ -9918,16 +9940,29 @@ function createMaterials(scene) {
 
   const flakTracer = new StandardMaterial("flak_tracer_material", scene);
   flakTracer.diffuseColor = new Color3(0.96, 0.98, 1.0);
-  flakTracer.emissiveColor = new Color3(0.86, 0.96, 1.08);
-  flakTracer.specularColor = new Color3(0.95, 0.98, 1.0);
+  flakTracer.emissiveColor = new Color3(1.18, 1.3, 1.42);
+  flakTracer.specularColor = new Color3(1.0, 1.0, 1.0);
   flakTracer.disableLighting = true;
 
   const flakTracerTrail = new StandardMaterial("flak_tracer_trail_material", scene);
   flakTracerTrail.diffuseColor = new Color3(0.86, 0.94, 1.0);
-  flakTracerTrail.emissiveColor = new Color3(0.52, 0.7, 0.9);
+  flakTracerTrail.emissiveColor = new Color3(0.68, 0.88, 1.12);
   flakTracerTrail.specularColor = new Color3(0.65, 0.75, 0.9);
   flakTracerTrail.alpha = 0.68;
   flakTracerTrail.disableLighting = true;
+
+  const cannonTracer = new StandardMaterial("cannon_tracer_material", scene);
+  cannonTracer.diffuseColor = new Color3(0.98, 1.0, 1.0);
+  cannonTracer.emissiveColor = new Color3(1.45, 1.52, 1.58);
+  cannonTracer.specularColor = new Color3(1.0, 1.0, 1.0);
+  cannonTracer.disableLighting = true;
+
+  const cannonTracerTrail = new StandardMaterial("cannon_tracer_trail_material", scene);
+  cannonTracerTrail.diffuseColor = new Color3(0.92, 0.97, 1.0);
+  cannonTracerTrail.emissiveColor = new Color3(0.88, 1.02, 1.18);
+  cannonTracerTrail.specularColor = new Color3(0.85, 0.92, 1.0);
+  cannonTracerTrail.alpha = 0.7;
+  cannonTracerTrail.disableLighting = true;
 
   const flakFlash = new StandardMaterial("flak_flash_material", scene);
   flakFlash.diffuseColor = new Color3(0.96, 0.98, 1.0);
@@ -10003,6 +10038,8 @@ function createMaterials(scene) {
     explosionCore,
     flakTracer,
     flakTracerTrail,
+    cannonTracer,
+    cannonTracerTrail,
     flakFlash,
     beaconGlow,
     beaconBeam,
@@ -11079,7 +11116,7 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   muzzle.position.y = barrelHalfLength;
   muzzle.material = metalMaterial;
 
-  const sightYOffset = 0.14 * scale;
+  const sightYOffset = flakSightYOffsetFactor * scale;
   const sightZ = 0.9 * scale;
   const sight = MeshBuilder.CreateTorus(`${name}_flak_ring_sight`, {
     diameter: 0.13 * scale,
