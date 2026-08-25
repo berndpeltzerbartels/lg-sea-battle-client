@@ -9,7 +9,12 @@
     "preview": "vite preview --host 0.0.0.0",
     "game-server": "node server/dev-server.js",
     "test": "node --test \"server/**/*.test.js\"",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:projectiles": "SEA_BATTLE_BASE_URL=${SEA_BATTLE_BASE_URL:-http://localhost:5174} playwright test tests/e2e/projectile-hit-accuracy.spec.js",
+    "test:e2e:projectiles:extended": "SEA_BATTLE_PROJECTILE_EXTENDED=1 SEA_BATTLE_BASE_URL=${SEA_BATTLE_BASE_URL:-http://localhost:5174} playwright test tests/e2e/projectile-hit-accuracy.spec.js",
+    "test:e2e:projectiles:headed": "SEA_BATTLE_BASE_URL=${SEA_BATTLE_BASE_URL:-http://localhost:5174} playwright test tests/e2e/projectile-hit-accuracy.spec.js --headed",
+    "test:e2e:projectiles:report": "SEA_BATTLE_PROJECTILE_EXTENDED=1 SEA_BATTLE_BASE_URL=${SEA_BATTLE_BASE_URL:-http://localhost:5174} playwright test tests/e2e/projectile-hit-accuracy.spec.js --reporter=html",
+    "test:e2e:show-report": "playwright show-report"
   },
   "dependencies": {
     "@babylonjs/core": "^8.13.0",
