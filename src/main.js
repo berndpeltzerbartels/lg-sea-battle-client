@@ -138,6 +138,9 @@ const shipFleetMaterialPalettes = {
   }
 };
 const worldMetersPerUnit = 20;
+const torpedoBoatVisualScale = 4;
+const scoutPlaneVisualScale = 2;
+const shipGunVisualScale = torpedoBoatVisualScale;
 const killFeedLimit = 5;
 const torpedoLogLimit = 40;
 const shipTorpedoBaseSpeed = 24;
@@ -1622,8 +1625,8 @@ function getPlayerCameraSetup(forward) {
 
   if (!scoutPlaneMode) {
     const bridgeWindow = getBridgeWindowCameraLocalPosition();
-    const position = transformLocalShipPointWithoutTilt(bridgeWindow.position);
-    const target = transformLocalShipPointWithoutTilt(bridgeWindow.target);
+    const position = transformLocalShipPointWithoutTilt(bridgeWindow.position, torpedoBoatVisualScale);
+    const target = transformLocalShipPointWithoutTilt(bridgeWindow.target, torpedoBoatVisualScale);
     return { position, target };
   }
 
@@ -1661,13 +1664,13 @@ function getBridgeWindowCameraLocalPosition() {
   };
 }
 
-function transformLocalShipPointWithoutTilt(localPoint) {
+function transformLocalShipPointWithoutTilt(localPoint, visualScale = 1) {
   const right = new Vector3(Math.cos(heading), 0, -Math.sin(heading));
   const forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
   return boat.root.position
-    .add(right.scale(localPoint.x))
-    .add(new Vector3(0, localPoint.y, 0))
-    .add(forward.scale(localPoint.z));
+    .add(right.scale(localPoint.x * visualScale))
+    .add(new Vector3(0, localPoint.y * visualScale, 0))
+    .add(forward.scale(localPoint.z * visualScale));
 }
 
 function getDebugOrbitCameraSetup() {
@@ -7071,7 +7074,7 @@ function createFlakProjectile(system, position, velocity, direction, options = {
   root.position.copyFrom(position);
 
   const core = MeshBuilder.CreateSphere(`${root.name}_core`, {
-    diameter: 0.2,
+    diameter: 0.2 * shipGunVisualScale,
     segments: 10
   }, system.scene);
   core.parent = root;
@@ -7081,12 +7084,12 @@ function createFlakProjectile(system, position, velocity, direction, options = {
   const trailSegments = options.trailSegments ?? 1;
   for (let i = 0; i < trailSegments; i += 1) {
     const segment = MeshBuilder.CreateSphere(`${root.name}_trail_${i}`, {
-      diameter: 0.17 - i * 0.018,
+      diameter: (0.17 - i * 0.018) * shipGunVisualScale,
       segments: 8
     }, system.scene);
     segment.parent = system.root;
     segment.material = system.materials.flakTracerTrail;
-    segment.position.copyFrom(position.add(direction.scale(-0.16 - i * 0.22)));
+    segment.position.copyFrom(position.add(direction.scale((-0.16 - i * 0.22) * shipGunVisualScale)));
     trail.push(segment);
   }
 
@@ -7094,7 +7097,7 @@ function createFlakProjectile(system, position, velocity, direction, options = {
   light.diffuse = new Color3(0.96, 0.98, 1.0);
   light.specular = new Color3(0.9, 0.96, 1.0);
   light.intensity = 1.25;
-  light.range = 32;
+  light.range = 32 * Math.sqrt(shipGunVisualScale);
 
   system.active.push({
     id,
@@ -7123,7 +7126,7 @@ function createCannonProjectile(system, position, velocity, direction) {
   root.position.copyFrom(position);
 
   const core = MeshBuilder.CreateSphere(`${root.name}_core`, {
-    diameter: 0.68,
+    diameter: 0.68 * shipGunVisualScale,
     segments: 12
   }, system.scene);
   core.parent = root;
@@ -7132,12 +7135,12 @@ function createCannonProjectile(system, position, velocity, direction) {
   const trail = [];
   for (let i = 0; i < 4; i += 1) {
     const segment = MeshBuilder.CreateSphere(`${root.name}_trail_${i}`, {
-      diameter: 0.48 - i * 0.06,
+      diameter: (0.48 - i * 0.06) * shipGunVisualScale,
       segments: 8
     }, system.scene);
     segment.parent = system.root;
     segment.material = system.materials.cannonTracerTrail ?? system.materials.flakTracerTrail;
-    segment.position.copyFrom(position.add(direction.scale(-0.28 - i * 0.42)));
+    segment.position.copyFrom(position.add(direction.scale((-0.28 - i * 0.42) * shipGunVisualScale)));
     trail.push(segment);
   }
 
@@ -7145,7 +7148,7 @@ function createCannonProjectile(system, position, velocity, direction) {
   light.diffuse = new Color3(0.96, 0.98, 1.0);
   light.specular = new Color3(0.9, 0.96, 1.0);
   light.intensity = 3.15;
-  light.range = 66;
+  light.range = 66 * Math.sqrt(shipGunVisualScale);
 
   system.active.push({
     id,
@@ -7167,18 +7170,18 @@ function createCannonProjectile(system, position, velocity, direction) {
 
 function createFlakMuzzleFlash(system, position, direction) {
   const flash = MeshBuilder.CreateSphere(`flak_muzzle_flash_${system.nextId}`, {
-    diameter: 0.24,
+    diameter: 0.24 * shipGunVisualScale,
     segments: 10
   }, system.scene);
   flash.parent = system.root;
   flash.material = system.materials.flakFlash;
-  flash.position.copyFrom(position.add(direction.scale(0.08)));
+  flash.position.copyFrom(position.add(direction.scale(0.08 * shipGunVisualScale)));
 
   const light = new PointLight(`${flash.name}_light`, flash.position.clone(), system.scene);
   light.diffuse = new Color3(1.0, 0.76, 0.42);
   light.specular = new Color3(1.0, 0.78, 0.5);
   light.intensity = 2.0;
-  light.range = 28;
+  light.range = 28 * Math.sqrt(shipGunVisualScale);
 
   system.flashes.push({
     mesh: flash,
@@ -7194,19 +7197,19 @@ function createFlakMuzzleFlash(system, position, direction) {
 function createCannonMuzzleBlast(system, position, direction) {
   const flashId = system.nextId;
   const flash = MeshBuilder.CreateSphere(`cannon_muzzle_flash_${flashId}`, {
-    diameter: 0.68,
+    diameter: 0.68 * shipGunVisualScale,
     segments: 12
   }, system.scene);
   flash.parent = system.root;
   flash.material = system.materials.flakFlash;
-  flash.position.copyFrom(position.add(direction.scale(0.18)));
+  flash.position.copyFrom(position.add(direction.scale(0.18 * shipGunVisualScale)));
   flash.isPickable = false;
 
   const light = new PointLight(`${flash.name}_light`, flash.position.clone(), system.scene);
   light.diffuse = new Color3(1.0, 0.78, 0.42);
   light.specular = new Color3(1.0, 0.86, 0.62);
   light.intensity = 4.4;
-  light.range = 58;
+  light.range = 58 * Math.sqrt(shipGunVisualScale);
 
   system.flashes.push({
     mesh: flash,
@@ -7220,15 +7223,15 @@ function createCannonMuzzleBlast(system, position, direction) {
 
   for (let index = 0; index < 4; index += 1) {
     const puff = MeshBuilder.CreateSphere(`cannon_muzzle_smoke_${flashId}_${index}`, {
-      diameter: 0.34 + index * 0.055,
+      diameter: (0.34 + index * 0.055) * shipGunVisualScale,
       segments: 10
     }, system.scene);
     puff.parent = system.root;
     puff.material = system.materials.volcanicSmoke;
-    puff.position.copyFrom(position.add(direction.scale(0.12 + index * 0.12)).add(new Vector3(
-      (stableUnitNoise(flashId + index * 13) - 0.5) * 0.18,
-      (stableUnitNoise(flashId + index * 17) - 0.5) * 0.12,
-      (stableUnitNoise(flashId + index * 19) - 0.5) * 0.18
+    puff.position.copyFrom(position.add(direction.scale((0.12 + index * 0.12) * shipGunVisualScale)).add(new Vector3(
+      (stableUnitNoise(flashId + index * 13) - 0.5) * 0.18 * shipGunVisualScale,
+      (stableUnitNoise(flashId + index * 17) - 0.5) * 0.12 * shipGunVisualScale,
+      (stableUnitNoise(flashId + index * 19) - 0.5) * 0.18 * shipGunVisualScale
     )));
     puff.isPickable = false;
     system.airHitEffects.push({
@@ -7236,10 +7239,10 @@ function createCannonMuzzleBlast(system, position, direction) {
       age: 0,
       lifetime: 0.82 + index * 0.07,
       origin: puff.position.clone(),
-      velocity: direction.scale(0.62 + index * 0.14).add(new Vector3(0, 0.2 + index * 0.035, 0)),
+      velocity: direction.scale((0.62 + index * 0.14) * shipGunVisualScale).add(new Vector3(0, (0.2 + index * 0.035) * shipGunVisualScale, 0)),
       gravity: 0.02,
-      baseScale: new Vector3(0.34, 0.28, 0.34),
-      grow: new Vector3(1.18, 0.82, 1.18),
+      baseScale: new Vector3(0.34, 0.28, 0.34).scale(shipGunVisualScale),
+      grow: new Vector3(1.18, 0.82, 1.18).scale(shipGunVisualScale),
       alpha: 0.26
     });
   }
@@ -10216,6 +10219,7 @@ function getPlayerShipTeamMaterials(materials, teamId) {
 // otherwise every client would incorrectly see its own party as the light one.
 function createPlayerBow(scene, materials, name = "player_bow", teamId = "light", designation = "") {
   const root = new TransformNode(name, scene);
+  root.scaling.setAll(torpedoBoatVisualScale);
   const teamMaterials = getPlayerShipTeamMaterials(materials, teamId);
   const hullMaterial = teamMaterials.hull;
   const deckMaterial = teamMaterials.deck;
@@ -10294,6 +10298,7 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
 
 function createScoutPlane(scene, materials, name = "scout_plane", teamId = "light", isPlayer = false) {
   const root = new TransformNode(name, scene);
+  root.scaling.setAll(scoutPlaneVisualScale);
   const teamMaterials = isPlayer ? getPlayerShipTeamMaterials(materials, teamId) : getShipTeamMaterials(materials, teamId);
   const bodyMaterial = createScoutPlaneMaterial(scene, `${name}_body_material`, teamMaterials.cabin.diffuseColor, 1);
   const wingMaterial = createScoutPlaneMaterial(scene, `${name}_wing_material`, teamMaterials.hull.diffuseColor, 1);
@@ -11168,6 +11173,7 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
 // Low-poly external ship model for opponents. Keep it cheap: enemies may appear in groups later.
 function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = "dark", designation = "", hasFlak = false) {
   const root = new TransformNode(name, scene);
+  root.scaling.setAll(torpedoBoatVisualScale);
   const teamMaterials = getShipTeamMaterials(materials, teamId);
   const hullMaterial = teamMaterials.hull;
   const deckMaterial = teamMaterials.deck;
