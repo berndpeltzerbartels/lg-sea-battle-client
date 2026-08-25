@@ -19,12 +19,13 @@ const clientBuildInfo = {
   buildTime,
   commit: gitCommit()
 };
+const apiTarget = process.env.SEA_BATTLE_API_URL ?? "http://localhost:8080";
 
 export default defineConfig({
   base: "/sea-battle/",
   server: {
     proxy: {
-      "/game": "http://localhost:8080"
+      "/game": apiTarget
     }
   },
   plugins: [

@@ -255,7 +255,7 @@ const playerCannonEyeZ = -0.08;
 const cannonFireCooldownSeconds = 1.0;
 const cannonProjectileSpeed = 1265;
 const cannonProjectileGravity = 9.8;
-const cannonProjectileLifetime = 7.0;
+const cannonProjectileLifetime = 18.0;
 const cannonProjectileMaxVisualScale = 2.85;
 const cannonProjectileLightBudget = 3;
 const cannonBarrelRecoilDistance = 0.16;
@@ -6677,6 +6677,31 @@ function installScenarioTestHooks() {
         fire: document.body.dataset.cannonFire ?? ""
       };
     },
+    aimFlakAt(target) {
+      return aimPlayerFlakAtWorldPoint(target);
+    },
+    async fireFlakAt(target) {
+      setBattleStation("flak");
+      const aim = aimPlayerFlakAtWorldPoint(target);
+      document.body.dataset.flakFireSync = "";
+      firePlayerFlak();
+      return {
+        aim,
+        station: stationSnapshot(),
+        fire: document.body.dataset.flakFire ?? ""
+      };
+    },
+    async fireTorpedo() {
+      setBattleStation("bridge");
+      document.body.dataset.fireTorpedoSync = "";
+      const before = await window.seaBattleScenarioTest.state();
+      await requestPlayerTorpedoFire();
+      return {
+        beforeTorpedoes: Array.isArray(before?.torpedoes) ? before.torpedoes.length : null,
+        station: stationSnapshot(),
+        fire: document.body.dataset.fireTorpedoSync ?? ""
+      };
+    },
     async state() {
       const response = await fetch(getGameStateEndpoint(), { cache: "no-store" });
       return response.json();
@@ -6718,8 +6743,8 @@ function aimPlayerCannonAtWorldPoint(target) {
   }
 
   const shot = getPlayerCannonShot();
-  const miss = shot?.direction
-    ? distancePointToRay(worldTarget, shot.position, shot.direction)
+  const miss = shot?.velocity
+    ? distancePointToProjectileArc(worldTarget, shot.position, shot.velocity, cannonProjectileGravity)
     : null;
   const result = {
     target: { x: worldTarget.x, y: worldTarget.y, z: worldTarget.z },
@@ -6744,13 +6769,13 @@ function bestCannonPitchForWorldPoint(worldTarget) {
   let bestPitch = cannonPitch;
   let bestError = Number.POSITIVE_INFINITY;
 
-  for (let step = 0; step < 18; step += 1) {
+  for (let step = 0; step < 22; step += 1) {
     const mid = (low + high) / 2;
     cannonPitch = mid;
     updatePlayerCannonMount();
 
     const shot = getPlayerCannonShot();
-    const signedError = shot ? signedRayVerticalMiss(worldTarget, shot.position, shot.direction) : 0;
+    const signedError = shot ? signedProjectileVerticalMiss(worldTarget, shot.position, shot.velocity, cannonProjectileGravity) : 0;
     const absError = Math.abs(signedError);
     if (absError < bestError) {
       bestError = absError;
@@ -6780,11 +6805,113 @@ function signedRayVerticalMiss(point, origin, direction) {
   return closest.y - point.y;
 }
 
+function projectileTimeClosestToHorizontalPoint(point, origin, velocity) {
+  const dx = point.x - origin.x;
+  const dz = point.z - origin.z;
+  const horizontalSpeedSq = velocity.x * velocity.x + velocity.z * velocity.z;
+  if (horizontalSpeedSq <= 0.000001) return 0;
+  return Math.max(0, (dx * velocity.x + dz * velocity.z) / horizontalSpeedSq);
+}
+
+function signedProjectileVerticalMiss(point, origin, velocity, gravity) {
+  const t = projectileTimeClosestToHorizontalPoint(point, origin, velocity);
+  const y = origin.y + velocity.y * t - 0.5 * gravity * t * t;
+  return y - point.y;
+}
+
+function distancePointToProjectileArc(point, origin, velocity, gravity) {
+  const t = projectileTimeClosestToHorizontalPoint(point, origin, velocity);
+  const closest = new Vector3(
+    origin.x + velocity.x * t,
+    origin.y + velocity.y * t - 0.5 * gravity * t * t,
+    origin.z + velocity.z * t
+  );
+  return Vector3.Distance(point, closest);
+}
+
 function getPlayerCannonShot() {
   const shot = getCannonShotFromModel(boat.bowCannon, heading, speed);
   return shot
     ? { ...shot, weaponYaw: cannonYaw, weaponPitch: cannonPitch }
     : null;
+}
+
+function aimPlayerFlakAtWorldPoint(target) {
+  const mount = boat?.sternFlak?.mount;
+  const elevationRoot = boat?.sternFlak?.elevationRoot;
+  if (!mount || !elevationRoot || !mount.parent) {
+    throw new Error("Player flak is not available");
+  }
+  const worldTarget = new Vector3(
+    Number(target?.x ?? 0),
+    Number(target?.y ?? 0),
+    Number(target?.z ?? 0)
+  );
+  if (![worldTarget.x, worldTarget.y, worldTarget.z].every(Number.isFinite)) {
+    throw new Error("Flak target must contain finite x/y/z values");
+  }
+
+  const parentMatrix = mount.parent.computeWorldMatrix(true).clone();
+  parentMatrix.invert();
+  const localTarget = Vector3.TransformCoordinates(worldTarget, parentMatrix).subtract(mount.position);
+  flakYaw = normalizeAngle(Math.atan2(localTarget.x, localTarget.z));
+  const horizontalDistance = Math.hypot(localTarget.x, localTarget.z);
+  flakPitch = clamp(
+    Math.atan2(localTarget.y - elevationRoot.position.y, horizontalDistance),
+    flakMinPitch,
+    flakMaxPitch
+  );
+  updatePlayerFlakMount();
+  flakPitch = bestFlakPitchForWorldPoint(worldTarget);
+  updatePlayerFlakMount();
+
+  const shot = getPlayerFlakShot();
+  const miss = shot?.velocity
+    ? distancePointToProjectileArc(worldTarget, shot.position, shot.velocity, flakProjectileGravity)
+    : null;
+  const result = {
+    target: { x: worldTarget.x, y: worldTarget.y, z: worldTarget.z },
+    yaw: flakYaw,
+    pitch: flakPitch,
+    miss: Number.isFinite(miss) ? miss : null,
+    shot: shot
+      ? {
+        position: { x: shot.position.x, y: shot.position.y, z: shot.position.z },
+        muzzle: { x: shot.muzzle.x, y: shot.muzzle.y, z: shot.muzzle.z },
+        direction: { x: shot.direction.x, y: shot.direction.y, z: shot.direction.z }
+      }
+      : null
+  };
+  document.body.dataset.scenarioFlakAim = JSON.stringify(result);
+  return result;
+}
+
+function bestFlakPitchForWorldPoint(worldTarget) {
+  let low = flakMinPitch;
+  let high = flakMaxPitch;
+  let bestPitch = flakPitch;
+  let bestError = Number.POSITIVE_INFINITY;
+
+  for (let step = 0; step < 22; step += 1) {
+    const mid = (low + high) / 2;
+    flakPitch = mid;
+    updatePlayerFlakMount();
+
+    const shot = getPlayerFlakShot();
+    const signedError = shot ? signedProjectileVerticalMiss(worldTarget, shot.position, shot.velocity, flakProjectileGravity) : 0;
+    const absError = Math.abs(signedError);
+    if (absError < bestError) {
+      bestError = absError;
+      bestPitch = mid;
+    }
+
+    if (signedError > 0) {
+      high = mid;
+    } else {
+      low = mid;
+    }
+  }
+  return clamp(bestPitch, flakMinPitch, flakMaxPitch);
 }
 
 function getCannonShotFromModel(cannon, baseHeading = 0, baseSpeed = 0) {
