@@ -48,6 +48,8 @@ document.body.dataset.bigMap = String(bigMapEnabled);
 document.body.classList.toggle("debug-marker-map", debugMarkerMapEnabled);
 document.body.dataset.hideBeach = String(hideBeachDebug);
 const torpedoBoatModelWaterlineY = -0.2;
+const torpedoBoatBowBulwarkHeight = 0.095;
+const torpedoBoatBowBulwarkRimWidth = 0.038;
 const enemyTorpedoBoatBobAmplitude = 0.025;
 const enemyBowWakeSurfaceY = -torpedoBoatModelWaterlineY + 0.018;
 const enemyBowWakeFullSpeed = 15.5;
@@ -247,7 +249,7 @@ const flakSightTargetZ = 72;
 const playerSternFlakScale = 0.54;
 const playerFlakSightYOffset = flakSightYOffsetFactor * playerSternFlakScale;
 const playerFlakEyeZ = flakEyeZFactor * playerSternFlakScale;
-const cannonMinPitch = -0.035;
+const cannonMinPitch = -0.087;
 const cannonMaxPitch = 45 * Math.PI / 180;
 const cannonYawLimit = 2.62;
 const cannonHoldMediumDelaySeconds = 0.24;
@@ -10889,7 +10891,7 @@ function getTorpedoBoatDeckY(z) {
 }
 
 function getTorpedoBoatBowBulwarkLift(z) {
-  const lift = 0.13;
+  const lift = torpedoBoatBowBulwarkHeight;
   const rampAngle = 67.5 * Math.PI / 180;
   const aftDropEndZ = 2.42;
   const flatFrontStartZ = aftDropEndZ + lift / Math.tan(rampAngle);
@@ -10967,7 +10969,7 @@ function createBoatBowBulwarkCapMesh(name, scene) {
     const start = positions.length / 3;
     sections.forEach((section) => {
       const halfWidth = section.topWidth * 0.5;
-      const rimWidth = Math.min(0.065, halfWidth * 0.55);
+      const rimWidth = Math.min(torpedoBoatBowBulwarkRimWidth, halfWidth * 0.55);
       const outerX = side * halfWidth;
       const innerX = side * Math.max(0, halfWidth - rimWidth);
       const topY = section.top + getTorpedoBoatBowBulwarkLift(section.z);
