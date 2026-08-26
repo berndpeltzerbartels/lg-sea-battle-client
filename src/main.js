@@ -50,6 +50,7 @@ document.body.dataset.hideBeach = String(hideBeachDebug);
 const torpedoBoatWaterlineY = -0.2;
 const enemyTorpedoBoatBobAmplitude = 0.025;
 const enemyBowWakeSurfaceY = -torpedoBoatWaterlineY + 0.018;
+const gameConfig = await loadGameConfig();
 scene.clearColor = new Color4(0.38, 0.5, 0.6, 1);
 scene.fogMode = Scene.FOGMODE_LINEAR;
 scene.fogColor = new Color3(0.35, 0.46, 0.54);
@@ -139,9 +140,10 @@ const shipFleetMaterialPalettes = {
   }
 };
 const worldMetersPerUnit = 20;
-const torpedoBoatVisualScale = 4;
-const scoutPlaneVisualScale = 2;
-const shipGunVisualScale = torpedoBoatVisualScale;
+const vehicleScale = gameConfig.vehicleScale;
+const torpedoBoatVisualScale = vehicleScale.torpedoBoat;
+const scoutPlaneVisualScale = vehicleScale.scoutPlane;
+const shipGunVisualScale = vehicleScale.torpedoBoat;
 const killFeedLimit = 5;
 const torpedoLogLimit = 40;
 const shipTorpedoBaseSpeed = 24;
@@ -217,7 +219,7 @@ const flakPitchVeryFastSpeed = 0.292;
 const flakPitchMaxSpeed = 0.376;
 const flakPitchExtremeSpeed = 0.46;
 const flakFireCooldownSeconds = 0.044;
-const flakProjectileSpeed = 418;
+const flakProjectileSpeed = 418 * torpedoBoatVisualScale;
 const flakProjectileGravity = 9;
 const flakProjectileLifetime = 8.0;
 const flakProjectileMaxVisualScale = 4.65;
@@ -261,7 +263,7 @@ const cannonSightLevels = [
   { label: "IV", fov: 0.105, startSpeedFactor: 0.36, rampFactor: 1.45 }
 ];
 const cannonFireCooldownSeconds = 1.0;
-const cannonProjectileSpeed = 1455;
+const cannonProjectileSpeed = 1455 * torpedoBoatVisualScale;
 const cannonProjectileGravity = 9.8;
 const cannonProjectileLifetime = 18.0;
 const cannonProjectileMaxVisualScale = 2.85;
@@ -2923,6 +2925,41 @@ function updateGlobalMouseRudder(event) {
   if (!rightMouseRudderActive || playerDamageState !== "active" || (event.buttons & 2) === 0) return;
   const dragDegrees = (event.clientX - rightMouseRudderStartX) * 0.22;
   rudderDegrees = clamp(rightMouseRudderStartDegrees + dragDegrees, -maxRudderDegrees, maxRudderDegrees);
+}
+
+async function loadGameConfig() {
+  const fallback = {
+    vehicleScale: {
+      torpedoBoat: 3,
+      scoutPlane: 1.5
+    }
+  };
+  if (directSideViewSandboxRequested) {
+    return fallback;
+  }
+
+  const endpoint = gameEndpoint("/game/config");
+  try {
+    const response = await fetch(endpoint, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`status ${response.status}`);
+    }
+    const payload = await response.json();
+    return {
+      vehicleScale: {
+        torpedoBoat: positiveNumber(payload?.vehicleScale?.torpedoBoat, fallback.vehicleScale.torpedoBoat),
+        scoutPlane: positiveNumber(payload?.vehicleScale?.scoutPlane, fallback.vehicleScale.scoutPlane)
+      }
+    };
+  } catch (error) {
+    console.warn("[sea-battle] game config unavailable, using local fallback", { endpoint, message: error.message });
+    return fallback;
+  }
+}
+
+function positiveNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
 async function loadWorldLandmasses() {
@@ -7477,9 +7514,9 @@ function pointHitsScoutPlaneMotion(position, motion) {
   const planePosition = motion.root.position;
   const dx = position.x - planePosition.x;
   const dz = position.z - planePosition.z;
-  const right = dx * Math.cos(motion.heading) - dz * Math.sin(motion.heading);
-  const forward = dx * Math.sin(motion.heading) + dz * Math.cos(motion.heading);
-  const vertical = position.y - planePosition.y;
+  const right = (dx * Math.cos(motion.heading) - dz * Math.sin(motion.heading)) / scoutPlaneVisualScale;
+  const forward = (dx * Math.sin(motion.heading) + dz * Math.cos(motion.heading)) / scoutPlaneVisualScale;
+  const vertical = (position.y - planePosition.y) / scoutPlaneVisualScale;
   const bank = clamp(motion.visualBank ?? 0, -0.72, 0.72);
   const cosBank = Math.cos(bank);
   const sinBank = Math.sin(bank);
@@ -9569,13 +9606,13 @@ function pointHitsEnemyHull(point, enemyMotion, radius) {
   const hit = getEnemyHitLocalPoint(point, enemyMotion.root.position, enemyMotion.heading);
   const stern = -4.05;
   const bow = 4.45;
-  const lengthPadding = 0.18;
+  const lengthPadding = 0.18 + radius / torpedoBoatVisualScale;
 
   if (hit.forward < stern - lengthPadding || hit.forward > bow + lengthPadding) {
     return false;
   }
 
-  const halfWidth = getEnemyHullHalfWidthAt(hit.forward) + radius;
+  const halfWidth = getEnemyHullHalfWidthAt(hit.forward) + radius / torpedoBoatVisualScale;
   return Math.abs(hit.right) <= halfWidth;
 }
 
@@ -9598,8 +9635,8 @@ function getEnemyHitLocalPoint(point, enemyPosition, enemyHeading) {
   const dz = point.z - enemyPosition.z;
 
   return {
-    right: dx * Math.cos(enemyHeading) - dz * Math.sin(enemyHeading),
-    forward: dx * Math.sin(enemyHeading) + dz * Math.cos(enemyHeading)
+    right: (dx * Math.cos(enemyHeading) - dz * Math.sin(enemyHeading)) / torpedoBoatVisualScale,
+    forward: (dx * Math.sin(enemyHeading) + dz * Math.cos(enemyHeading)) / torpedoBoatVisualScale
   };
 }
 
