@@ -165,6 +165,9 @@ const enemyTorpedoAimJitterRadians = 0.035;
 const enemyTargetingRange = 945;
 const engineHoldInitialDelaySeconds = 0.22;
 const engineHoldRepeatSeconds = 0.1;
+const torpedoBoatTrimStartSpeed = 5.5;
+const torpedoBoatTrimFullSpeed = 12.4;
+const torpedoBoatMaxTrimPitch = -0.035;
 const mouseWheelEngineStep = 100;
 const scoutPlaneSetupId = "scout-plane";
 const scoutPlaneCruiseAltitude = 20;
@@ -1259,8 +1262,9 @@ scene.onBeforeRenderObservable.add(() => {
     boat.root.position.y = scoutPlaneMode
       ? scoutPlaneAltitude
       : torpedoBoatWaterlineY + bob;
+    const torpedoBoatTrimPitch = scoutPlaneMode ? 0 : getTorpedoBoatTrimPitch(speed);
     boat.root.rotationQuaternion = Quaternion.FromEulerAngles(
-      scoutPlaneMode ? scoutPlanePitch : Math.sin(time * 2.6) * 0.025 * shipStabilization,
+      scoutPlaneMode ? scoutPlanePitch : torpedoBoatTrimPitch + Math.sin(time * 2.6) * 0.025 * shipStabilization,
       heading,
       scoutPlaneMode ? -turnVelocity * 2.8 : (-turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018) * shipStabilization
     );
@@ -6185,12 +6189,14 @@ function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
   const forward = new Vector3(Math.sin(motion.heading), 0, Math.cos(motion.heading));
   motion.root.position.addInPlace(forward.scale(motion.speed * dt));
   motion.root.position.y = torpedoBoatWaterlineY + Math.sin(time * 1.6 + 1.9) * enemyTorpedoBoatBobAmplitude;
+  const trimPitch = getTorpedoBoatTrimPitch(motion.speed);
+  const roll = -motion.turnVelocity * 0.42 + motion.rollImpulse + Math.sin(time * 1.4) * 0.01;
   motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
-    Math.sin(time * 1.9 + 0.8) * 0.015,
+    trimPitch + Math.sin(time * 1.9 + 0.8) * 0.015,
     motion.heading,
-    -motion.turnVelocity * 0.42 + motion.rollImpulse + Math.sin(time * 1.4) * 0.01
+    roll
   );
-  updateEnemyBowWake(motion.bowWake, motion.speed, time, dt);
+  updateEnemyBowWake(motion.bowWake, motion.speed, time, dt, trimPitch, roll);
 
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
   document.body.dataset.enemyEngineOrder = engineOrders[motion.engineOrder].label;
@@ -6225,12 +6231,14 @@ function updateServerEnemyMotion(motion, dt, time) {
     updateScoutPlaneVisual(motion, Math.max(6, Math.abs(motion.speed)), time);
   } else {
     motion.root.position.y = torpedoBoatWaterlineY + Math.sin(time * 1.6 + 1.9) * enemyTorpedoBoatBobAmplitude;
+    const trimPitch = getTorpedoBoatTrimPitch(motion.speed);
+    const roll = Math.sin(time * 1.4) * 0.01;
     motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
-      Math.sin(time * 1.9 + 0.8) * 0.015,
+      trimPitch + Math.sin(time * 1.9 + 0.8) * 0.015,
       motion.heading,
-      Math.sin(time * 1.4) * 0.01
+      roll
     );
-    updateEnemyBowWake(motion.bowWake, motion.speed, time, dt);
+    updateEnemyBowWake(motion.bowWake, motion.speed, time, dt, trimPitch, roll);
   }
 
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
@@ -6586,7 +6594,7 @@ function getPlayerSinkSide(hitPosition, playerPosition, playerHeading) {
   return right >= 0 ? -1 : 1;
 }
 
-function updateEnemyBowWake(wake, speed, time, dt = 1 / 60) {
+function updateEnemyBowWake(wake, speed, time, dt = 1 / 60, trimPitch = 0, roll = 0) {
   if (!wake) return;
 
   const forwardSpeed = Math.max(0, speed);
@@ -6596,6 +6604,8 @@ function updateEnemyBowWake(wake, speed, time, dt = 1 / 60) {
   const strength = wake.strength;
   const wakeLift = strength * 0.018;
   wake.root.setEnabled(strength > 0.04);
+  wake.root.rotation.x = -trimPitch;
+  wake.root.rotation.z = -roll;
 
   wake.segments.forEach((segment, index) => {
     const pulse = 0.92 + Math.sin(time * 2.1 + index * 0.7) * 0.05;
@@ -6620,6 +6630,11 @@ function getVisibleWakeRows(strength) {
   if (strength >= 0.36) return 3;
   if (strength >= 0.16) return 2;
   return 1;
+}
+
+function getTorpedoBoatTrimPitch(speedValue) {
+  const forwardSpeed = Math.max(0, speedValue);
+  return -smoothstep(torpedoBoatTrimStartSpeed, torpedoBoatTrimFullSpeed, forwardSpeed) * Math.abs(torpedoBoatMaxTrimPitch);
 }
 
 function createTorpedoSystem(scene, materials, parent) {
