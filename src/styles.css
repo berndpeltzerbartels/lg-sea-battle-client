@@ -2342,6 +2342,41 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
   pointer-events: none;
 }
 
+.cannon-elevation {
+  width: 106px;
+}
+
+.cannon-elevation .flak-elevation-title,
+.cannon-elevation .flak-elevation-gauge,
+.cannon-elevation > strong {
+  width: 52px;
+}
+
+.cannon-sight-readout {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 5px;
+  align-items: center;
+  min-width: 44px;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid rgb(155 229 223 / 32%);
+  border-radius: 5px;
+  background: rgb(5 27 40 / 44%);
+  color: rgb(247 251 255 / 76%);
+  font: 800 8px/1 Inter, Arial, sans-serif;
+  text-transform: uppercase;
+}
+
+.cannon-sight-readout strong {
+  margin: 0;
+  color: #ffffff;
+  font-size: 10px;
+}
+
 body[data-flak-view="active"] .flak-elevation,
 body[data-cannon-view="active"] .cannon-elevation {
   display: block;
@@ -2476,7 +2511,7 @@ body[data-cannon-view="active"] .weapon-aim-hints {
   transform: translateY(50%);
 }
 
-.weapon-elevation strong {
+.weapon-elevation > strong {
   display: block;
   margin-top: 6px;
   color: #ffffff;
