@@ -147,8 +147,8 @@ const torpedoBoatVisualScale = vehicleScale.torpedoBoat;
 const scoutPlaneVisualScale = vehicleScale.scoutPlane;
 const shipGunVisualScale = vehicleScale.torpedoBoat;
 const torpedoSpeedScale = Math.sqrt(torpedoBoatVisualScale);
-const torpedoVisualScale = torpedoBoatVisualScale;
-const torpedoWakeVisualScale = torpedoVisualScale;
+const torpedoVisualScale = 1.5;
+const torpedoWakeVisualScale = torpedoBoatVisualScale * 0.75;
 const torpedoBoatWaterlineY = torpedoBoatModelWaterlineY * torpedoBoatVisualScale;
 const torpedoBoatSinkDepth = torpedoBoatModelSinkDepth * torpedoBoatVisualScale;
 const killFeedLimit = 5;
@@ -8922,6 +8922,8 @@ function updateServerTorpedoVisuals(system, dt, now) {
     } else {
       if (visual.launchMode === "local-tube" && !visual.localTubeReleased) {
         visual.localTubeReleased = true;
+        visual.body?.setEnabled(false);
+        visual.nose?.setEnabled(false);
         if (visual.launchRunStart) {
           visual.root.position.copyFrom(visual.launchRunStart);
         }
@@ -8943,8 +8945,8 @@ function updateServerTorpedoVisuals(system, dt, now) {
       } else {
         if (visual.launchMode === "air-drop" && !visual.airDropSurfaced) {
           visual.airDropSurfaced = true;
-          visual.body?.setEnabled(true);
-          visual.nose?.setEnabled(true);
+          visual.body?.setEnabled(false);
+          visual.nose?.setEnabled(false);
           createAirDroppedTorpedoSurfaceWake(system, visual.root.position, visual.heading);
         }
         visual.root.position.y = 0.05;
@@ -8952,6 +8954,10 @@ function updateServerTorpedoVisuals(system, dt, now) {
       visual.root.rotationQuaternion = Quaternion.FromEulerAngles(0, visual.heading, 0);
     }
     visual.runDistance += step;
+    if (visual.launchMode === "server-position") {
+      visual.body?.setEnabled(false);
+      visual.nose?.setEnabled(false);
+    }
     updateTorpedoWake(visual, visual.root.position.y <= 0.08 && visual.airDropSurfaced !== false, now);
   });
 }
@@ -9400,6 +9406,8 @@ function updateTorpedoSystem(system, dt, time, enemyMotions, landZones, playerPo
 
     if (torpedo.runDistance === 0) {
       torpedo.root.position.copyFrom(torpedo.runStart);
+      torpedo.body?.setEnabled(false);
+      torpedo.nose?.setEnabled(false);
     }
 
     const step = torpedo.speed * dt;
@@ -10485,7 +10493,7 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
 
   for (let i = 0; i < 2; i += 1) {
     const tube = MeshBuilder.CreateCylinder(`${name}_torpedo_tube_${i}`, {
-      diameter: 0.14,
+      diameter: 0.168,
       height: 1.76,
       tessellation: 12
     }, scene);
@@ -10506,7 +10514,7 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
     }
 
     const cap = MeshBuilder.CreateCylinder(`${name}_tube_cap_${i}`, {
-      diameter: 0.17,
+      diameter: 0.204,
       height: 0.08,
       tessellation: 12
     }, scene);
@@ -11443,7 +11451,7 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = 
 
   for (let i = 0; i < 2; i += 1) {
     const tube = MeshBuilder.CreateCylinder(`${name}_tube_${i}`, {
-      diameter: 0.15,
+      diameter: 0.18,
       height: 1.76,
       tessellation: 10
     }, scene);
@@ -11605,7 +11613,7 @@ function createBoat(scene, materials, name = "boat") {
 
   for (let i = 0; i < 2; i += 1) {
     const tube = MeshBuilder.CreateCylinder(`${name}_torpedo_tube_${i}`, {
-      diameter: 0.17,
+      diameter: 0.204,
       height: 1.7,
       tessellation: 10
     }, scene);
