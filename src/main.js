@@ -149,8 +149,8 @@ const shipGunVisualScale = vehicleScale.torpedoBoat;
 const torpedoSpeedScale = Math.sqrt(torpedoBoatVisualScale);
 const torpedoVisualScale = 1.5;
 const torpedoWakeVisualScale = torpedoBoatVisualScale * 0.75;
-const torpedoNoseForwardOffset = 2.28 * torpedoVisualScale;
-const torpedoTailBackwardOffset = 1.92 * torpedoVisualScale;
+const torpedoNoseForwardOffset = 2.28 * torpedoBoatVisualScale;
+const torpedoTailBackwardOffset = 1.92 * torpedoBoatVisualScale;
 const torpedoBoatWaterlineY = torpedoBoatModelWaterlineY * torpedoBoatVisualScale;
 const torpedoBoatSinkDepth = torpedoBoatModelSinkDepth * torpedoBoatVisualScale;
 const killFeedLimit = 5;
@@ -9218,11 +9218,22 @@ function disposeServerTorpedoVisual(visual) {
 function createTorpedoWake(scene, materials, name) {
   const wake = [];
 
+  const bodyHint = MeshBuilder.CreateCylinder(`${name}_wake_body_hint`, {
+    diameter: 0.036 * torpedoBoatVisualScale,
+    height: (torpedoNoseForwardOffset + torpedoTailBackwardOffset) * 0.82,
+    tessellation: 10
+  }, scene);
+  bodyHint.rotation.x = Math.PI / 2;
+  bodyHint.material = materials.torpedoWakeBody;
+  bodyHint.metadata = { kind: "bodyHint" };
+  bodyHint.setEnabled(false);
+  wake.push(bodyHint);
+
   for (let side = -1; side <= 1; side += 2) {
     const head = MeshBuilder.CreateBox(`${name}_head_wake_${side}`, {
-      width: 0.052 * torpedoWakeVisualScale,
+      width: 0.036 * torpedoWakeVisualScale,
       height: 0.012,
-      depth: 0.48 * torpedoWakeVisualScale
+      depth: 0.62 * torpedoWakeVisualScale
     }, scene);
     head.material = materials.foam;
     head.metadata = { kind: "head", side };
@@ -9697,24 +9708,37 @@ function updateTorpedoWake(torpedo, visible, time) {
   torpedo.wake.forEach((segment, index) => {
     const kind = segment.metadata?.kind ?? "trail";
     const row = segment.metadata?.row ?? index;
-    segment.setEnabled(visible && (kind === "head" || row * 0.8 < torpedo.runDistance));
+    segment.setEnabled(visible && (kind === "head" || kind === "bodyHint" || row * 0.8 < torpedo.runDistance));
     if (!visible) return;
+
+    if (kind === "bodyHint") {
+      const hintCenterOffset = (torpedoNoseForwardOffset - torpedoTailBackwardOffset) * 0.5;
+      segment.position.copyFrom(
+        torpedo.root.position
+          .add(torpedo.forward.scale(hintCenterOffset))
+          .add(new Vector3(0, -0.018, 0))
+      );
+      segment.rotation.y = torpedo.heading;
+      segment.scaling.x = 1 + Math.sin(time * 5.5) * 0.04;
+      segment.scaling.z = 1;
+      return;
+    }
 
     if (kind === "head") {
       const side = segment.metadata?.side ?? 1;
       segment.position.copyFrom(
         torpedo.root.position
-          .add(torpedo.forward.scale(torpedoNoseForwardOffset + 0.24 * torpedoWakeVisualScale))
-          .add(getRightVector(torpedo.heading).scale(side * 0.105 * torpedoWakeVisualScale))
+          .add(torpedo.forward.scale(torpedoNoseForwardOffset + 0.34 * torpedoWakeVisualScale))
+          .add(getRightVector(torpedo.heading).scale(side * 0.086 * torpedoWakeVisualScale))
           .add(new Vector3(0, -0.032, 0))
       );
-      segment.rotation.y = torpedo.heading - side * 0.44 + Math.sin(time * 5.2 + side) * 0.025;
+      segment.rotation.y = torpedo.heading - side * 0.3 + Math.sin(time * 5.2 + side) * 0.018;
       segment.scaling.x = 1 + Math.sin(time * 6.4 + side) * 0.08;
       segment.scaling.z = 1;
       return;
     }
 
-    const distanceBehind = torpedoTailBackwardOffset + (0.42 + row * 0.58) * torpedoWakeVisualScale;
+    const distanceBehind = torpedoTailBackwardOffset + (0.72 + row * 0.58) * torpedoWakeVisualScale;
     segment.position.copyFrom(
       torpedo.root.position
         .subtract(torpedo.forward.scale(distanceBehind))
@@ -10187,6 +10211,12 @@ function createMaterials(scene) {
   foam.emissiveColor = new Color3(0.26, 0.29, 0.31);
   foam.specularColor = new Color3(0.03, 0.035, 0.04);
 
+  const torpedoWakeBody = new StandardMaterial("torpedo_wake_body_material", scene);
+  torpedoWakeBody.diffuseColor = new Color3(0.11, 0.18, 0.18);
+  torpedoWakeBody.emissiveColor = new Color3(0.01, 0.018, 0.018);
+  torpedoWakeBody.specularColor = new Color3(0.03, 0.045, 0.045);
+  torpedoWakeBody.alpha = 0.42;
+
   const volcanicSmoke = new StandardMaterial("volcanic_smoke_material", scene);
   volcanicSmoke.diffuseColor = new Color3(0.19, 0.21, 0.2);
   volcanicSmoke.emissiveColor = new Color3(0.03, 0.035, 0.03);
@@ -10317,6 +10347,7 @@ function createMaterials(scene) {
     sandCabin: sandFleetMaterials.cabin,
     sandFunnel: sandFleetMaterials.funnel,
     foam,
+    torpedoWakeBody,
     volcanicSmoke,
     volcanicSmokeWarm,
     volcanicGlow,
