@@ -50,6 +50,7 @@ document.body.dataset.hideBeach = String(hideBeachDebug);
 const torpedoBoatModelWaterlineY = -0.2;
 const enemyTorpedoBoatBobAmplitude = 0.025;
 const enemyBowWakeSurfaceY = -torpedoBoatModelWaterlineY + 0.018;
+const enemyBowWakeFullSpeed = 12.4;
 const gameConfig = await loadGameConfig();
 scene.clearColor = new Color4(0.38, 0.5, 0.6, 1);
 scene.fogMode = Scene.FOGMODE_LINEAR;
@@ -6575,31 +6576,33 @@ function getPlayerSinkSide(hitPosition, playerPosition, playerHeading) {
 function updateEnemyBowWake(wake, speed, time) {
   if (!wake) return;
 
-  const strength = clamp(Math.abs(speed) / 8, 0, 1);
-  wake.root.setEnabled(strength > 0.08);
+  const forwardSpeed = Math.max(0, speed);
+  const strength = smoothstep(0.9, enemyBowWakeFullSpeed, forwardSpeed);
+  const wakeLift = strength * 0.018;
+  wake.root.setEnabled(strength > 0.04);
 
   wake.segments.forEach((segment, index) => {
-    const pulse = 0.88 + Math.sin(time * 3.2 + index * 0.7) * 0.08;
+    const pulse = 0.92 + Math.sin(time * 2.1 + index * 0.7) * 0.05;
     const visible = segment.metadata.row <= getVisibleWakeRows(strength);
     segment.setEnabled(visible);
-    segment.scaling.x = 1.35 + strength * 1.85 + segment.metadata.row * 0.12;
-    segment.scaling.z = (0.82 + strength * 0.62) * pulse;
-    segment.position.y = enemyBowWakeSurfaceY + Math.sin(time * 2.8 + index) * 0.005;
+    segment.scaling.x = 0.82 + strength * 0.78 + segment.metadata.row * 0.06;
+    segment.scaling.z = (0.72 + strength * 0.34) * pulse;
+    segment.position.y = enemyBowWakeSurfaceY + wakeLift + Math.sin(time * 2.0 + index) * 0.003;
   });
 
   wake.churn.forEach((patch, index) => {
-    const pulse = 0.75 + Math.sin(time * 4.1 + index * 1.7) * 0.16;
-    patch.scaling.x = (0.65 + strength * 1.05) * pulse;
-    patch.scaling.z = 0.55 + strength * 1.2;
-    patch.position.y = enemyBowWakeSurfaceY + Math.sin(time * 3.6 + index) * 0.006;
+    const pulse = 0.82 + Math.sin(time * 2.6 + index * 1.7) * 0.08;
+    patch.scaling.x = (0.48 + strength * 0.42) * pulse;
+    patch.scaling.z = 0.42 + strength * 0.45;
+    patch.position.y = enemyBowWakeSurfaceY + wakeLift + Math.sin(time * 2.4 + index) * 0.004;
   });
 }
 
 function getVisibleWakeRows(strength) {
-  if (strength >= 0.52) return 5;
-  if (strength >= 0.38) return 4;
-  if (strength >= 0.24) return 3;
-  if (strength >= 0.12) return 2;
+  if (strength >= 0.78) return 5;
+  if (strength >= 0.58) return 4;
+  if (strength >= 0.36) return 3;
+  if (strength >= 0.16) return 2;
   return 1;
 }
 
@@ -11447,10 +11450,10 @@ function createEnemyBowWake(scene, materials, parent, name) {
 
   for (let side = -1; side <= 1; side += 2) {
     for (let i = 0; i < 5; i += 1) {
-      const startX = side * (0.22 + i * 0.1);
-      const startZ = 4.48 - i * 0.12;
-      const endX = side * (1.1 + i * 0.5);
-      const endZ = 3.76 - i * 0.38;
+      const startX = side * (0.07 + i * 0.045);
+      const startZ = 3.7 - i * 0.04;
+      const endX = side * (0.48 + i * 0.22);
+      const endZ = 3.28 - i * 0.25;
       const segment = createWakeRibbon(`${name}_bow_wake_${side}_${i}`, scene, materials.foam, root, startX, startZ, endX, endZ);
       segment.metadata = { row: i + 1 };
       segments.push(segment);
@@ -11465,10 +11468,10 @@ function createEnemyBowWake(scene, materials, parent, name) {
     }, scene);
     patch.parent = root;
     patch.material = materials.foam;
-    patch.position.x = (i - 1.5) * 0.12;
+    patch.position.x = (i - 1.5) * 0.075;
     patch.position.y = enemyBowWakeSurfaceY;
-    patch.position.z = 4.54 + i * 0.05;
-    patch.rotation.y = -0.28 + i * 0.18;
+    patch.position.z = 3.64 - i * 0.035;
+    patch.rotation.y = -0.2 + i * 0.13;
     churn.push(patch);
   }
 
@@ -11481,7 +11484,7 @@ function createWakeRibbon(name, scene, material, parent, startX, startZ, endX, e
   const dz = endZ - startZ;
   const length = Math.sqrt(dx * dx + dz * dz);
   const ribbon = MeshBuilder.CreateBox(name, {
-    width: 0.07,
+    width: 0.045,
     height: 0.012,
     depth: length
   }, scene);
