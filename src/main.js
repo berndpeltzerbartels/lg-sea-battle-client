@@ -10761,7 +10761,7 @@ function torpedoBoatHullSections() {
     { z: 2.469, topWidth: 0.849, chineWidth: 0.651, top: 0.74, chine: 0.119, keel: -0.019 },
     { z: 2.72, topWidth: 0.7, chineWidth: 0.52, top: 0.736, chine: 0.112, keel: -0.008 },
     { z: 3.18, topWidth: 0.42, chineWidth: 0.28, top: 0.73, chine: 0.1, keel: 0.01 },
-    { z: 3.68, topWidth: 0.02, chineWidth: 0.02, top: 0.73, chine: 0.1, keel: 0.04 }
+    { z: 3.68, topWidth: 0, chineWidth: 0, top: 0.73, chine: 0.1, keel: 0.04 }
   ];
 }
 
@@ -10833,10 +10833,10 @@ function createBoatDeckMesh(name, scene) {
   const indices = [];
 
   sections.forEach((section) => {
-    const halfWidth = Math.max(0.01, section.topWidth / 2 - 0.004);
+    const halfWidth = Math.max(0, section.topWidth / 2 - 0.001);
     positions.push(
-      -halfWidth, section.top + 0.004, section.z,
-      halfWidth, section.top + 0.004, section.z
+      -halfWidth, section.top + 0.0015, section.z,
+      halfWidth, section.top + 0.0015, section.z
     );
   });
 
