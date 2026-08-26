@@ -150,6 +150,7 @@ const torpedoSpeedScale = Math.sqrt(torpedoBoatVisualScale);
 const torpedoVisualScale = 1.5;
 const torpedoWakeVisualScale = torpedoBoatVisualScale * 0.75;
 const torpedoSternWakeSizeScale = 0.5;
+const torpedoBodyHintWidthScale = 2;
 const torpedoNoseForwardOffset = 2.28 * torpedoBoatVisualScale;
 const torpedoTailBackwardOffset = 1.92 * torpedoBoatVisualScale;
 const torpedoBoatWaterlineY = torpedoBoatModelWaterlineY * torpedoBoatVisualScale;
@@ -9220,7 +9221,7 @@ function createTorpedoWake(scene, materials, name) {
   const wake = [];
 
   const bodyHint = MeshBuilder.CreateCylinder(`${name}_wake_body_hint`, {
-    diameter: 0.036 * torpedoBoatVisualScale,
+    diameter: 0.036 * torpedoBoatVisualScale * torpedoBodyHintWidthScale,
     height: (torpedoNoseForwardOffset + torpedoTailBackwardOffset) * 0.82,
     tessellation: 10
   }, scene);
