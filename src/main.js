@@ -146,8 +146,9 @@ const vehicleScale = gameConfig.vehicleScale;
 const torpedoBoatVisualScale = vehicleScale.torpedoBoat;
 const scoutPlaneVisualScale = vehicleScale.scoutPlane;
 const shipGunVisualScale = vehicleScale.torpedoBoat;
-const torpedoSpeedScale = torpedoBoatVisualScale;
+const torpedoSpeedScale = Math.sqrt(torpedoBoatVisualScale);
 const torpedoVisualScale = torpedoBoatVisualScale;
+const torpedoWakeVisualScale = torpedoVisualScale;
 const torpedoBoatWaterlineY = torpedoBoatModelWaterlineY * torpedoBoatVisualScale;
 const torpedoBoatSinkDepth = torpedoBoatModelSinkDepth * torpedoBoatVisualScale;
 const killFeedLimit = 5;
@@ -9207,9 +9208,9 @@ function createTorpedoWake(scene, materials, name) {
 
   for (let i = 0; i < 9; i += 1) {
     const segment = MeshBuilder.CreateBox(`${name}_wake_${i}`, {
-      width: 0.08 + i * 0.018,
+      width: (0.08 + i * 0.018) * torpedoWakeVisualScale,
       height: 0.012,
-      depth: 0.58 + i * 0.08
+      depth: (0.58 + i * 0.08) * torpedoWakeVisualScale
     }, scene);
     segment.material = materials.foam;
     segment.setEnabled(false);
@@ -9668,7 +9669,7 @@ function updateTorpedoWake(torpedo, visible, time) {
     segment.setEnabled(visible && index * 0.8 < torpedo.runDistance);
     if (!visible) return;
 
-    const distanceBehind = 0.72 + index * 0.58;
+    const distanceBehind = (0.72 + index * 0.58) * torpedoWakeVisualScale;
     segment.position.copyFrom(
       torpedo.root.position
         .subtract(torpedo.forward.scale(distanceBehind))
