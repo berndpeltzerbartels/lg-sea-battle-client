@@ -149,6 +149,7 @@ const shipGunVisualScale = vehicleScale.torpedoBoat;
 const torpedoSpeedScale = Math.sqrt(torpedoBoatVisualScale);
 const torpedoVisualScale = 1.5;
 const torpedoWakeVisualScale = torpedoBoatVisualScale * 0.75;
+const torpedoSternWakeSizeScale = 0.5;
 const torpedoNoseForwardOffset = 2.28 * torpedoBoatVisualScale;
 const torpedoTailBackwardOffset = 1.92 * torpedoBoatVisualScale;
 const torpedoBoatWaterlineY = torpedoBoatModelWaterlineY * torpedoBoatVisualScale;
@@ -9243,9 +9244,9 @@ function createTorpedoWake(scene, materials, name) {
 
   for (let i = 0; i < 9; i += 1) {
     const segment = MeshBuilder.CreateBox(`${name}_wake_${i}`, {
-      width: (0.08 + i * 0.018) * torpedoWakeVisualScale,
+      width: (0.08 + i * 0.018) * torpedoWakeVisualScale * torpedoSternWakeSizeScale,
       height: 0.012,
-      depth: (0.58 + i * 0.08) * torpedoWakeVisualScale
+      depth: (0.58 + i * 0.08) * torpedoWakeVisualScale * torpedoSternWakeSizeScale
     }, scene);
     segment.material = materials.foam;
     segment.metadata = { kind: "trail", row: i };
