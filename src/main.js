@@ -50,7 +50,7 @@ document.body.dataset.hideBeach = String(hideBeachDebug);
 const torpedoBoatModelWaterlineY = -0.2;
 const enemyTorpedoBoatBobAmplitude = 0.025;
 const enemyBowWakeSurfaceY = -torpedoBoatModelWaterlineY + 0.018;
-const enemyBowWakeFullSpeed = 12.4;
+const enemyBowWakeFullSpeed = 15.5;
 const torpedoBoatModelSinkDepth = 2.35;
 const gameConfig = await loadGameConfig();
 scene.clearColor = new Color4(0.38, 0.5, 0.6, 1);
@@ -166,8 +166,8 @@ const enemyTargetingRange = 945;
 const engineHoldInitialDelaySeconds = 0.22;
 const engineHoldRepeatSeconds = 0.1;
 const torpedoBoatTrimStartSpeed = 5.5;
-const torpedoBoatTrimFullSpeed = 12.4;
-const torpedoBoatMaxTrimPitch = -0.035;
+const torpedoBoatTrimFullSpeed = 15.5;
+const torpedoBoatMaxTrimPitch = -0.052;
 const mouseWheelEngineStep = 100;
 const scoutPlaneSetupId = "scout-plane";
 const scoutPlaneCruiseAltitude = 20;
@@ -918,17 +918,26 @@ function isTextEditingElement(element) {
       || element.isContentEditable;
 }
 
-const engineOrders = [
-  { label: "Astern Full", shortLabel: "Full Ast", speed: -8.0 },
-  { label: "Astern Half", shortLabel: "Half Ast", speed: -2.2 },
-  { label: "Stop", speed: 0 },
-  { label: "Ahead Slow", shortLabel: "Slow", speed: 0.55 },
-  { label: "Ahead 1/3", shortLabel: "1/3", speed: 1.8 },
-  { label: "Ahead Half", shortLabel: "Half", speed: 3.8 },
-  { label: "Ahead 2/3", shortLabel: "2/3", speed: 6.4 },
-  { label: "Ahead Full", shortLabel: "Full", speed: 9.6 },
-  { label: "Flank", speed: 12.4 }
+const defaultEngineSpeeds = [-8.0, -2.2, 0, 0.69, 2.25, 4.75, 8.0, 12.0, 15.5];
+const engineOrderLabels = [
+  { label: "Astern Full", shortLabel: "Full Ast" },
+  { label: "Astern Half", shortLabel: "Half Ast" },
+  { label: "Stop" },
+  { label: "Ahead Slow", shortLabel: "Slow" },
+  { label: "Ahead 1/3", shortLabel: "1/3" },
+  { label: "Ahead Half", shortLabel: "Half" },
+  { label: "Ahead 2/3", shortLabel: "2/3" },
+  { label: "Ahead Full", shortLabel: "Full" },
+  { label: "Flank" }
 ];
+const engineSpeeds = Array.isArray(gameConfig.engineSpeeds) && gameConfig.engineSpeeds.length === engineOrderLabels.length
+  ? gameConfig.engineSpeeds
+  : defaultEngineSpeeds;
+const engineOrders = engineOrderLabels.map((order, index) => ({
+  ...order,
+  speed: Number.isFinite(Number(engineSpeeds[index])) ? Number(engineSpeeds[index]) : defaultEngineSpeeds[index]
+}));
+const maxTorpedoBoatForwardSpeed = Math.max(...engineOrders.map((order) => order.speed).filter((orderSpeed) => orderSpeed > 0));
 
 // Keep propulsion as discrete ship orders, not held-key throttle.
 // Later multiplayer can send this order index plus heading/speed instead of raw input.
@@ -1162,7 +1171,7 @@ scene.onBeforeRenderObservable.add(() => {
     const diveRatio = scoutPlaneMode ? clamp(-heldElevatorDirection, 0, 1) : 0;
     const maxForwardSpeed = scoutPlaneMode
       ? scoutPlaneMaxSpeed + (scoutPlaneMaxDiveSpeed - scoutPlaneMaxSpeed) * diveRatio
-      : 12.4;
+      : maxTorpedoBoatForwardSpeed;
     const engineTargetSpeed = engineOrders[engineOrder].speed;
     const targetSpeed = scoutPlaneMode
       ? scoutPlaneTargetSpeed + (scoutPlaneMaxDiveSpeed - scoutPlaneTargetSpeed) * diveRatio
@@ -2948,7 +2957,8 @@ async function loadGameConfig() {
     vehicleScale: {
       torpedoBoat: 3,
       scoutPlane: 1.5
-    }
+    },
+    engineSpeeds: [-8.0, -2.2, 0, 0.69, 2.25, 4.75, 8.0, 12.0, 15.5]
   };
   if (directSideViewSandboxRequested) {
     return fallback;
@@ -2965,12 +2975,23 @@ async function loadGameConfig() {
       vehicleScale: {
         torpedoBoat: positiveNumber(payload?.vehicleScale?.torpedoBoat, fallback.vehicleScale.torpedoBoat),
         scoutPlane: positiveNumber(payload?.vehicleScale?.scoutPlane, fallback.vehicleScale.scoutPlane)
-      }
+      },
+      engineSpeeds: engineSpeedArray(payload?.engineSpeeds, fallback.engineSpeeds)
     };
   } catch (error) {
     console.warn("[sea-battle] game config unavailable, using local fallback", { endpoint, message: error.message });
     return fallback;
   }
+}
+
+function engineSpeedArray(values, fallback) {
+  if (!Array.isArray(values) || values.length !== fallback.length) {
+    return fallback;
+  }
+  return values.map((value, index) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback[index];
+  });
 }
 
 function positiveNumber(value, fallback) {
