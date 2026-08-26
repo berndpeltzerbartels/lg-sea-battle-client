@@ -293,6 +293,7 @@ const openSeaFoamHeight = 0.007;
 const openSeaFoamLengthMin = 0.25;
 const openSeaFoamLengthVariance = 0.48;
 const performanceLoggingEnabled = urlParams.get("perf-log") === "1";
+const lighthouseVisualScale = 2;
 const centerPeakLighthouseLandNames = new Set(["far_east_bank", "north_watch_bank", "south_watch_bank", "eastern_delta_coast", "blackwater_basin"]);
 const lighthouseHeightOffsets = new Map([
   ["blackwater_basin", -1.2],
@@ -11934,8 +11935,8 @@ function createLighthouse(land, index, scene, materials, parent, visualEffects) 
 
 function lighthouseScaleFor(land) {
   const name = String(land.name ?? "");
-  if (name.includes("western")) return 1.18;
-  return 1.55;
+  const baseScale = name.includes("western") ? 1.18 : 1.55;
+  return baseScale * lighthouseVisualScale;
 }
 
 function isStripedLighthouse(land) {
