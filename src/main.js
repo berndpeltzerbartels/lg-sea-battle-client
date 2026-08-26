@@ -149,6 +149,8 @@ const shipGunVisualScale = vehicleScale.torpedoBoat;
 const torpedoSpeedScale = Math.sqrt(torpedoBoatVisualScale);
 const torpedoVisualScale = 1.5;
 const torpedoWakeVisualScale = torpedoBoatVisualScale * 0.75;
+const torpedoNoseForwardOffset = 2.28 * torpedoVisualScale;
+const torpedoTailBackwardOffset = 1.92 * torpedoVisualScale;
 const torpedoBoatWaterlineY = torpedoBoatModelWaterlineY * torpedoBoatVisualScale;
 const torpedoBoatSinkDepth = torpedoBoatModelSinkDepth * torpedoBoatVisualScale;
 const killFeedLimit = 5;
@@ -9702,17 +9704,17 @@ function updateTorpedoWake(torpedo, visible, time) {
       const side = segment.metadata?.side ?? 1;
       segment.position.copyFrom(
         torpedo.root.position
-          .add(torpedo.forward.scale(0.42 * torpedoWakeVisualScale))
+          .add(torpedo.forward.scale(torpedoNoseForwardOffset + 0.24 * torpedoWakeVisualScale))
           .add(getRightVector(torpedo.heading).scale(side * 0.105 * torpedoWakeVisualScale))
           .add(new Vector3(0, -0.032, 0))
       );
-      segment.rotation.y = torpedo.heading + side * 0.44 + Math.sin(time * 5.2 + side) * 0.025;
+      segment.rotation.y = torpedo.heading - side * 0.44 + Math.sin(time * 5.2 + side) * 0.025;
       segment.scaling.x = 1 + Math.sin(time * 6.4 + side) * 0.08;
       segment.scaling.z = 1;
       return;
     }
 
-    const distanceBehind = (2.35 + row * 0.58) * torpedoWakeVisualScale;
+    const distanceBehind = torpedoTailBackwardOffset + (0.42 + row * 0.58) * torpedoWakeVisualScale;
     segment.position.copyFrom(
       torpedo.root.position
         .subtract(torpedo.forward.scale(distanceBehind))
