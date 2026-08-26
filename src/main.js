@@ -51,6 +51,7 @@ const torpedoBoatModelWaterlineY = -0.2;
 const enemyTorpedoBoatBobAmplitude = 0.025;
 const enemyBowWakeSurfaceY = -torpedoBoatModelWaterlineY + 0.018;
 const enemyBowWakeFullSpeed = 12.4;
+const torpedoBoatModelSinkDepth = 2.35;
 const gameConfig = await loadGameConfig();
 scene.clearColor = new Color4(0.38, 0.5, 0.6, 1);
 scene.fogMode = Scene.FOGMODE_LINEAR;
@@ -146,6 +147,7 @@ const torpedoBoatVisualScale = vehicleScale.torpedoBoat;
 const scoutPlaneVisualScale = vehicleScale.scoutPlane;
 const shipGunVisualScale = vehicleScale.torpedoBoat;
 const torpedoBoatWaterlineY = torpedoBoatModelWaterlineY * torpedoBoatVisualScale;
+const torpedoBoatSinkDepth = torpedoBoatModelSinkDepth * torpedoBoatVisualScale;
 const killFeedLimit = 5;
 const torpedoLogLimit = 40;
 const shipTorpedoBaseSpeed = 24;
@@ -6180,7 +6182,7 @@ function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
     motion.heading,
     -motion.turnVelocity * 0.42 + motion.rollImpulse + Math.sin(time * 1.4) * 0.01
   );
-  updateEnemyBowWake(motion.bowWake, motion.speed, time);
+  updateEnemyBowWake(motion.bowWake, motion.speed, time, dt);
 
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
   document.body.dataset.enemyEngineOrder = engineOrders[motion.engineOrder].label;
@@ -6220,7 +6222,7 @@ function updateServerEnemyMotion(motion, dt, time) {
       motion.heading,
       Math.sin(time * 1.4) * 0.01
     );
-    updateEnemyBowWake(motion.bowWake, motion.speed, time);
+    updateEnemyBowWake(motion.bowWake, motion.speed, time, dt);
   }
 
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
@@ -6304,6 +6306,9 @@ function beginEnemySinking(motion, side, time) {
   motion.rollImpulse = motion.sinkSide * 0.5;
   motion.timers.forEach((timer) => window.clearTimeout(timer));
   motion.timers = [];
+  if (motion.bowWake) {
+    motion.bowWake.strength = 0;
+  }
   updateEnemyBowWake(motion.bowWake, 0, time);
 }
 
@@ -6319,9 +6324,9 @@ function updateEnemySinking(motion, dt, time) {
   const ease = easeInOutCubic(t);
   const roll = motion.sinkSide * (0.12 + ease * 1.45) + motion.rollImpulse;
   const pitch = -ease * 0.28 + Math.sin(time * 1.7) * (1 - t) * 0.025;
-  motion.root.position.y = motion.sinkStartY - ease * 2.35 + Math.sin(time * 3.1) * (1 - t) * 0.035;
+  motion.root.position.y = motion.sinkStartY - ease * torpedoBoatSinkDepth + Math.sin(time * 3.1) * (1 - t) * 0.035;
   motion.root.rotationQuaternion = Quaternion.FromEulerAngles(pitch, motion.heading, roll);
-  updateEnemyBowWake(motion.bowWake, 0, time);
+  updateEnemyBowWake(motion.bowWake, 0, time, dt);
 
   if (t >= 1) {
     motion.state = "sunk";
@@ -6392,7 +6397,7 @@ function updatePlayerSinking(playerBoat, now) {
   const ease = easeInOutCubic(t);
   const bob = Math.sin(now * 3.4) * (1 - t) * 0.05;
 
-  playerBoat.root.position.y = playerSinkStartY - ease * 2.25 + bob;
+  playerBoat.root.position.y = playerSinkStartY - ease * torpedoBoatSinkDepth + bob;
   playerBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(
     -ease * 0.32 + Math.sin(now * 1.8) * (1 - t) * 0.025,
     heading,
@@ -6573,11 +6578,14 @@ function getPlayerSinkSide(hitPosition, playerPosition, playerHeading) {
   return right >= 0 ? -1 : 1;
 }
 
-function updateEnemyBowWake(wake, speed, time) {
+function updateEnemyBowWake(wake, speed, time, dt = 1 / 60) {
   if (!wake) return;
 
   const forwardSpeed = Math.max(0, speed);
-  const strength = smoothstep(0.9, enemyBowWakeFullSpeed, forwardSpeed);
+  const targetStrength = smoothstep(0.25, enemyBowWakeFullSpeed, forwardSpeed);
+  const response = targetStrength > wake.strength ? 4.2 : 0.65;
+  wake.strength += (targetStrength - wake.strength) * Math.min(1, dt * response);
+  const strength = wake.strength;
   const wakeLift = strength * 0.018;
   wake.root.setEnabled(strength > 0.04);
 
@@ -11476,7 +11484,7 @@ function createEnemyBowWake(scene, materials, parent, name) {
   }
 
   root.setEnabled(false);
-  return { root, segments, churn };
+  return { root, segments, churn, strength: 0 };
 }
 
 function createWakeRibbon(name, scene, material, parent, startX, startZ, endX, endZ) {
