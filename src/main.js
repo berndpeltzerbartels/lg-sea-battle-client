@@ -9216,6 +9216,18 @@ function disposeServerTorpedoVisual(visual) {
 function createTorpedoWake(scene, materials, name) {
   const wake = [];
 
+  for (let side = -1; side <= 1; side += 2) {
+    const head = MeshBuilder.CreateBox(`${name}_head_wake_${side}`, {
+      width: 0.035 * torpedoWakeVisualScale,
+      height: 0.012,
+      depth: 0.34 * torpedoWakeVisualScale
+    }, scene);
+    head.material = materials.foam;
+    head.metadata = { kind: "head", side };
+    head.setEnabled(false);
+    wake.push(head);
+  }
+
   for (let i = 0; i < 9; i += 1) {
     const segment = MeshBuilder.CreateBox(`${name}_wake_${i}`, {
       width: (0.08 + i * 0.018) * torpedoWakeVisualScale,
@@ -9223,6 +9235,7 @@ function createTorpedoWake(scene, materials, name) {
       depth: (0.58 + i * 0.08) * torpedoWakeVisualScale
     }, scene);
     segment.material = materials.foam;
+    segment.metadata = { kind: "trail", row: i };
     segment.setEnabled(false);
     wake.push(segment);
   }
@@ -9680,18 +9693,34 @@ function getEnemyHullHalfWidthAt(forward) {
 
 function updateTorpedoWake(torpedo, visible, time) {
   torpedo.wake.forEach((segment, index) => {
-    segment.setEnabled(visible && index * 0.8 < torpedo.runDistance);
+    const kind = segment.metadata?.kind ?? "trail";
+    const row = segment.metadata?.row ?? index;
+    segment.setEnabled(visible && (kind === "head" || row * 0.8 < torpedo.runDistance));
     if (!visible) return;
 
-    const distanceBehind = (0.72 + index * 0.58) * torpedoWakeVisualScale;
+    if (kind === "head") {
+      const side = segment.metadata?.side ?? 1;
+      segment.position.copyFrom(
+        torpedo.root.position
+          .add(torpedo.forward.scale(0.2 * torpedoWakeVisualScale))
+          .add(getRightVector(torpedo.heading).scale(side * 0.075 * torpedoWakeVisualScale))
+          .add(new Vector3(0, -0.032, 0))
+      );
+      segment.rotation.y = torpedo.heading + side * 0.38 + Math.sin(time * 5.2 + side) * 0.025;
+      segment.scaling.x = 1 + Math.sin(time * 6.4 + side) * 0.08;
+      segment.scaling.z = 1;
+      return;
+    }
+
+    const distanceBehind = (0.72 + row * 0.58) * torpedoWakeVisualScale;
     segment.position.copyFrom(
       torpedo.root.position
         .subtract(torpedo.forward.scale(distanceBehind))
         .add(new Vector3(0, -0.035, 0))
     );
-    segment.rotation.y = torpedo.heading + Math.sin(time * 3.2 + index) * 0.035;
-    segment.scaling.x = 1 + index * 0.16;
-    segment.scaling.z = 1 + Math.sin(time * 4.5 + index) * 0.08;
+    segment.rotation.y = torpedo.heading + Math.sin(time * 3.2 + row) * 0.035;
+    segment.scaling.x = 1 + row * 0.16;
+    segment.scaling.z = 1 + Math.sin(time * 4.5 + row) * 0.08;
   });
 }
 
