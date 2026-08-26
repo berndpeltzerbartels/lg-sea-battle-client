@@ -47,9 +47,9 @@ document.body.classList.toggle("big-map", bigMapEnabled);
 document.body.dataset.bigMap = String(bigMapEnabled);
 document.body.classList.toggle("debug-marker-map", debugMarkerMapEnabled);
 document.body.dataset.hideBeach = String(hideBeachDebug);
-const torpedoBoatWaterlineY = -0.2;
+const torpedoBoatModelWaterlineY = -0.2;
 const enemyTorpedoBoatBobAmplitude = 0.025;
-const enemyBowWakeSurfaceY = -torpedoBoatWaterlineY + 0.018;
+const enemyBowWakeSurfaceY = -torpedoBoatModelWaterlineY + 0.018;
 const gameConfig = await loadGameConfig();
 scene.clearColor = new Color4(0.38, 0.5, 0.6, 1);
 scene.fogMode = Scene.FOGMODE_LINEAR;
@@ -144,6 +144,7 @@ const vehicleScale = gameConfig.vehicleScale;
 const torpedoBoatVisualScale = vehicleScale.torpedoBoat;
 const scoutPlaneVisualScale = vehicleScale.scoutPlane;
 const shipGunVisualScale = vehicleScale.torpedoBoat;
+const torpedoBoatWaterlineY = torpedoBoatModelWaterlineY * torpedoBoatVisualScale;
 const killFeedLimit = 5;
 const torpedoLogLimit = 40;
 const shipTorpedoBaseSpeed = 24;
@@ -6059,7 +6060,7 @@ function isScoutPlaneMotion(motion) {
 }
 
 function remoteVehicleY(ship) {
-  if (!isScoutPlaneShip(ship)) return 0.26;
+  if (!isScoutPlaneShip(ship)) return torpedoBoatWaterlineY;
   return Number.isFinite(ship?.y) ? ship.y : scoutPlaneCruiseAltitude;
 }
 
