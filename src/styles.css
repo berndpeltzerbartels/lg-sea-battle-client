@@ -2342,27 +2342,17 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
   pointer-events: none;
 }
 
-.cannon-elevation {
-  width: 106px;
-}
-
-.cannon-elevation .flak-elevation-title,
-.cannon-elevation .flak-elevation-gauge,
-.cannon-elevation > strong {
-  width: 52px;
-}
-
 .cannon-sight-readout {
   position: absolute;
-  right: 8px;
-  bottom: 6px;
-  display: flex;
-  gap: 4px;
+  left: 90px;
+  bottom: 0;
+  display: grid;
+  gap: 3px;
   align-items: center;
   justify-content: center;
-  min-width: 68px;
-  height: 18px;
-  padding: 0 6px;
+  width: 58px;
+  min-height: 36px;
+  padding: 5px 6px;
   border: 1px solid rgb(155 229 223 / 32%);
   border-radius: 5px;
   background: rgb(5 27 40 / 44%);
@@ -2378,13 +2368,14 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
 .cannon-sight-readout strong {
   margin: 0;
   color: #ffffff;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .cannon-sight-controls {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  justify-content: center;
+  gap: 4px;
   color: #ff9a6a;
   white-space: nowrap;
 }
