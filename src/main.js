@@ -146,13 +146,14 @@ const vehicleScale = gameConfig.vehicleScale;
 const torpedoBoatVisualScale = vehicleScale.torpedoBoat;
 const scoutPlaneVisualScale = vehicleScale.scoutPlane;
 const shipGunVisualScale = vehicleScale.torpedoBoat;
-const torpedoVisualScale = 1.5;
+const torpedoSpeedScale = torpedoBoatVisualScale;
+const torpedoVisualScale = torpedoBoatVisualScale;
 const torpedoBoatWaterlineY = torpedoBoatModelWaterlineY * torpedoBoatVisualScale;
 const torpedoBoatSinkDepth = torpedoBoatModelSinkDepth * torpedoBoatVisualScale;
 const killFeedLimit = 5;
 const torpedoLogLimit = 40;
-const shipTorpedoBaseSpeed = 24;
-const shipTorpedoSpeedGain = 0.35;
+const shipTorpedoBaseSpeed = 24 * torpedoSpeedScale;
+const shipTorpedoSpeedGain = 0.35 * torpedoSpeedScale;
 const airTorpedoSpeedFactor = 0.75;
 const enemyTorpedoFireArcRadians = 0.14;
 const enemyTorpedoAimJitterRadians = 0.035;
@@ -8418,18 +8419,19 @@ function firePlayerTorpedo(system, shipRoot, heading, turnVelocity, shipSpeed, n
   const forward = getForwardVector(launchHeading);
   const right = getRightVector(launchHeading);
   const tuning = torpedoLaunchDefaults;
-  const tubeX = tubeSide * tuning.tubeX;
-  const tubeStartZ = tuning.startZ;
-  const waterEntryZ = tuning.waterEntryZ;
-  const runStartZ = tuning.runStartZ;
+  const tubeX = tubeSide * tuning.tubeX * torpedoBoatVisualScale;
+  const tubeStartZ = tuning.startZ * torpedoBoatVisualScale;
+  const waterEntryZ = tuning.waterEntryZ * torpedoBoatVisualScale;
+  const runStartZ = tuning.runStartZ * torpedoBoatVisualScale;
+  const tubeStartY = tuning.startY * torpedoBoatVisualScale;
   const launchStart = shipRoot.position
     .add(right.scale(tubeX))
     .add(forward.scale(tubeStartZ))
-    .add(new Vector3(0, tuning.startY, 0));
+    .add(new Vector3(0, tubeStartY, 0));
   const muzzleEffectStart = shipRoot.position
     .add(right.scale(tubeX))
     .add(forward.scale(tubeStartZ))
-    .add(new Vector3(0, tuning.startY, 0));
+    .add(new Vector3(0, tubeStartY, 0));
   const launchEnd = shipRoot.position
     .add(right.scale(tubeX))
     .add(forward.scale(waterEntryZ))
@@ -8509,16 +8511,16 @@ function fireEnemyTorpedo(system, motion, targetPosition, now) {
   system.nextEnemyFireTime = now + 18;
 
   const launchStart = motion.root.position
-    .add(right.scale(tubeSide * 0.44))
-    .add(forward.scale(3.65))
-    .add(new Vector3(0, 0.42, 0));
+    .add(right.scale(tubeSide * 0.44 * torpedoBoatVisualScale))
+    .add(forward.scale(3.65 * torpedoBoatVisualScale))
+    .add(new Vector3(0, 0.42 * torpedoBoatVisualScale, 0));
   const launchEnd = motion.root.position
-    .add(right.scale(tubeSide * 0.44))
-    .add(forward.scale(4.35))
+    .add(right.scale(tubeSide * 0.44 * torpedoBoatVisualScale))
+    .add(forward.scale(4.35 * torpedoBoatVisualScale))
     .add(new Vector3(0, 0.04, 0));
   const runStart = motion.root.position
-    .add(right.scale(tubeSide * 0.44))
-    .add(forward.scale(4.65))
+    .add(right.scale(tubeSide * 0.44 * torpedoBoatVisualScale))
+    .add(forward.scale(4.65 * torpedoBoatVisualScale))
     .add(new Vector3(0, 0.05, 0));
 
   const root = new TransformNode(`enemy_torpedo_${system.nextId}`, system.scene);
@@ -8560,7 +8562,7 @@ function fireEnemyTorpedo(system, motion, targetPosition, now) {
     runStart,
     age: 0,
     runDistance: 0,
-    speed: 21 + Math.max(0, motion.speed) * 0.25,
+    speed: 21 * torpedoSpeedScale + Math.max(0, motion.speed) * 0.25 * torpedoSpeedScale,
     owner: "enemy",
     launchDuration: 0.24,
     maxRange: 520,
@@ -8776,7 +8778,7 @@ function getServerTorpedoLaunch(system, snapshot, snapshotServerTime = null) {
     const pendingTubeSide = system.pendingOwnTubeSide === -1 || system.pendingOwnTubeSide === 1
       ? system.pendingOwnTubeSide
       : null;
-    const inferredTubeSide = Math.abs(sideOffset) > tuning.tubeX * 0.35
+    const inferredTubeSide = Math.abs(sideOffset) > tuning.tubeX * torpedoBoatVisualScale * 0.35
       ? Math.sign(sideOffset)
       : (system.nextTube === 0 ? -1 : 1);
     const tubeSide = snapshotTubeSide ?? pendingTubeSide ?? inferredTubeSide;
@@ -8784,20 +8786,21 @@ function getServerTorpedoLaunch(system, snapshot, snapshotServerTime = null) {
       system.pendingOwnTubeSide = null;
     }
     system.nextTube = tubeSide < 0 ? 1 : 0;
-    const tubeX = tubeSide * tuning.tubeX;
-    const tubeStartZ = tuning.startZ;
-    const waterEntryZ = tuning.waterEntryZ;
+    const tubeX = tubeSide * tuning.tubeX * torpedoBoatVisualScale;
+    const tubeStartZ = tuning.startZ * torpedoBoatVisualScale;
+    const waterEntryZ = tuning.waterEntryZ * torpedoBoatVisualScale;
+    const tubeStartY = tuning.startY * torpedoBoatVisualScale;
     const start = boat.root.position
       .add(right.scale(tubeX))
       .add(forward.scale(tubeStartZ))
-      .add(new Vector3(0, tuning.startY, 0));
+      .add(new Vector3(0, tubeStartY, 0));
     const waterStart = boat.root.position
       .add(right.scale(tubeX))
       .add(forward.scale(waterEntryZ))
       .add(new Vector3(0, 0.05, 0));
     const runStart = boat.root.position
       .add(right.scale(tubeX))
-      .add(forward.scale(tuning.runStartZ))
+      .add(forward.scale(tuning.runStartZ * torpedoBoatVisualScale))
       .add(new Vector3(0, 0.05, 0));
     const puffPosition = boat.root.position
       .add(right.scale(tubeX))
@@ -8806,7 +8809,7 @@ function getServerTorpedoLaunch(system, snapshot, snapshotServerTime = null) {
     const muzzlePosition = boat.root.position
       .add(right.scale(tubeX))
       .add(forward.scale(tubeStartZ))
-      .add(new Vector3(0, tuning.startY, 0));
+      .add(new Vector3(0, tubeStartY, 0));
 
     document.body.dataset.ownServerTorpedoLaunch = "local";
     return {
