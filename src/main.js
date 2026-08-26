@@ -1062,7 +1062,7 @@ const playerRespawnPoints = createPlayerRespawnPoints(playerShips, initialPlayer
 const torpedoLaunchDefaults = {
   tubeX: 0.56,
   startZ: 2.26,
-  startY: 0.6,
+  startY: 0.76,
   waterEntryZ: 2.62,
   runStartZ: 2.88
 };
@@ -8514,7 +8514,7 @@ function fireEnemyTorpedo(system, motion, targetPosition, now) {
   const launchStart = motion.root.position
     .add(right.scale(tubeSide * 0.44 * torpedoBoatVisualScale))
     .add(forward.scale(3.65 * torpedoBoatVisualScale))
-    .add(new Vector3(0, 0.42 * torpedoBoatVisualScale, 0));
+    .add(new Vector3(0, 0.76 * torpedoBoatVisualScale, 0));
   const launchEnd = motion.root.position
     .add(right.scale(tubeSide * 0.44 * torpedoBoatVisualScale))
     .add(forward.scale(4.35 * torpedoBoatVisualScale))
@@ -11030,11 +11030,13 @@ function createTorpedoBoatSuperstructure(scene, materials, parent, name, teamMat
   meshes.push(bridgeHouse);
 
   if (includeWindows) {
-    const windowHeight = 0.074;
-    const windowWidth = 0.078;
+    const previousWindowHeight = 0.074;
+    const windowHeight = previousWindowHeight * 1.5;
+    const windowWidth = 0.15;
     const windowDepth = 0.012;
-    const windowGap = 0.032;
-    const windowCount = 5;
+    const windowGap = 0.075;
+    const windowCount = 3;
+    const windowTopY = bridgeHouseBottomY + bridgeHouseHeight * 0.62 + previousWindowHeight * 0.5;
     const windowMaterial = getBridgeWindowMaterial(materials, teamMaterials);
     for (let i = 0; i < windowCount; i += 1) {
       const window = MeshBuilder.CreateBox(`${name}_bridge_window_${i}`, {
@@ -11044,7 +11046,7 @@ function createTorpedoBoatSuperstructure(scene, materials, parent, name, teamMat
       }, scene);
       window.parent = parent;
       window.position.x = (i - (windowCount - 1) * 0.5) * (windowWidth + windowGap);
-      window.position.y = bridgeHouseBottomY + bridgeHouseHeight * 0.62;
+      window.position.y = windowTopY - windowHeight * 0.5;
       window.position.z = bridgeHouseZ + bridgeHouseDepth * 0.5 - windowDepth * 0.5 + 0.003;
       window.material = windowMaterial;
       meshes.push(window);
