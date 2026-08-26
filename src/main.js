@@ -8495,7 +8495,7 @@ function firePlayerTorpedo(system, shipRoot, heading, turnVelocity, shipSpeed, n
   system.nextId += 1;
   system.active.push(torpedo);
   createLaunchPuff(system, muzzlePuffPoint, launchHeading, tubeSide);
-  createMuzzleEffect(system, muzzleEffectStart, launchHeading, tubeSide);
+  createMuzzleEffect(system, muzzleEffectStart, launchHeading, tubeSide, shipSpeed);
   return true;
 }
 
@@ -8729,7 +8729,7 @@ function createServerTorpedoVisual(system, snapshot, snapshotReceivedAt = time, 
 
   if (launch.showMuzzleEffect) {
     createLaunchPuff(system, launch.puffPosition, launch.heading, launch.tubeSide);
-    createMuzzleEffect(system, launch.muzzlePosition, launch.heading, launch.tubeSide);
+    createMuzzleEffect(system, launch.muzzlePosition, launch.heading, launch.tubeSide, launch.sourceSpeed);
   }
   return visual;
 }
@@ -8764,7 +8764,8 @@ function getServerTorpedoLaunch(system, snapshot, snapshotServerTime = null) {
       blendUntil: time + airDroppedTorpedoFallSeconds,
       blendDuration: airDroppedTorpedoFallSeconds,
       showMuzzleEffect: false,
-      sourceVehicleType: "scout-plane"
+      sourceVehicleType: "scout-plane",
+      sourceSpeed: 0
     };
   }
 
@@ -8826,7 +8827,8 @@ function getServerTorpedoLaunch(system, snapshot, snapshotServerTime = null) {
       blendUntil: time + 0.35,
       blendDuration: 0.35,
       showMuzzleEffect: true,
-      sourceVehicleType: null
+      sourceVehicleType: null,
+      sourceSpeed: Math.max(0, Number.isFinite(shooterShip?.speed) ? shooterShip.speed : speed)
     };
   }
 
@@ -8843,7 +8845,8 @@ function getServerTorpedoLaunch(system, snapshot, snapshotServerTime = null) {
     tubeSide: 1,
     blendUntil: 0,
     showMuzzleEffect: false,
-    sourceVehicleType: isAirDropped ? "scout-plane" : null
+    sourceVehicleType: isAirDropped ? "scout-plane" : null,
+    sourceSpeed: 0
   };
 }
 
@@ -9248,10 +9251,11 @@ function createLaunchPuff(system, position, heading, tubeSide) {
   }
 }
 
-function createMuzzleEffect(system, position, heading, tubeSide) {
+function createMuzzleEffect(system, position, heading, tubeSide, sourceSpeed = 0) {
   const forward = getForwardVector(heading);
   const right = getRightVector(heading);
   const side = tubeSide < 0 ? -1 : 1;
+  const carriedForwardSpeed = Math.max(0, Number.isFinite(sourceSpeed) ? sourceSpeed : 0);
 
   for (let i = 0; i < 4; i += 1) {
     const seed = system.nextId * 43 + i * 17;
@@ -9277,10 +9281,11 @@ function createMuzzleEffect(system, position, heading, tubeSide) {
     system.muzzleEffects.push({
       mesh: steam,
       age: 0,
-      lifetime: 0.42 + stableUnitNoise(seed + 37) * 0.16,
+      lifetime: 0.28 + stableUnitNoise(seed + 37) * 0.1,
       seed: i + 1,
       kind: "steam",
       forward: forward.clone(),
+      carriedForwardSpeed,
       side
     });
   }
@@ -9352,7 +9357,7 @@ function updateTorpedoSystem(system, dt, time, enemyMotions, landZones, playerPo
       const grow = 1 + t * 1.25;
       effect.mesh.scaling.x = grow;
       effect.mesh.scaling.z = 1 + t * 1.65;
-      effect.mesh.position.addInPlace(effect.forward.scale(dt * (0.55 + effect.seed * 0.08)));
+      effect.mesh.position.addInPlace(effect.forward.scale(dt * ((effect.carriedForwardSpeed ?? 0) + 0.55 + effect.seed * 0.08)));
       effect.mesh.position.y += dt * (0.09 + effect.seed * 0.01);
       effect.mesh.rotation.y += dt * 0.18 * (effect.side || 1);
     } else {
