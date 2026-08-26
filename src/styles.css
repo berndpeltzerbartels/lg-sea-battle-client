@@ -2356,11 +2356,11 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
   position: absolute;
   right: 8px;
   bottom: 6px;
-  display: grid;
-  grid-template-columns: auto auto;
-  gap: 5px;
+  display: flex;
+  gap: 4px;
   align-items: center;
-  min-width: 44px;
+  justify-content: center;
+  min-width: 68px;
   height: 18px;
   padding: 0 6px;
   border: 1px solid rgb(155 229 223 / 32%);
@@ -2371,10 +2371,36 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
   text-transform: uppercase;
 }
 
+.cannon-sight-label {
+  color: #9be5df;
+}
+
 .cannon-sight-readout strong {
   margin: 0;
   color: #ffffff;
   font-size: 10px;
+}
+
+.cannon-sight-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #ff9a6a;
+  white-space: nowrap;
+}
+
+.cannon-sight-controls kbd {
+  display: inline-grid;
+  min-width: 13px;
+  height: 12px;
+  place-items: center;
+  padding: 0 3px;
+  border: 1px solid rgb(255 154 106 / 52%);
+  border-radius: 4px;
+  background: rgb(255 107 74 / 14%);
+  color: #ffd4c0;
+  font: inherit;
+  line-height: 1;
 }
 
 body[data-flak-view="active"] .flak-elevation,
