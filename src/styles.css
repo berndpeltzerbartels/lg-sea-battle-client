@@ -2342,6 +2342,58 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
   pointer-events: none;
 }
 
+.cannon-sight-readout {
+  position: absolute;
+  left: 90px;
+  bottom: 0;
+  display: grid;
+  gap: 3px;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  min-height: 36px;
+  padding: 5px 6px;
+  border: 1px solid rgb(155 229 223 / 32%);
+  border-radius: 5px;
+  background: rgb(5 27 40 / 44%);
+  color: rgb(247 251 255 / 76%);
+  font: 800 8px/1 Inter, Arial, sans-serif;
+  text-transform: uppercase;
+}
+
+.cannon-sight-label {
+  color: #9be5df;
+}
+
+.cannon-sight-readout strong {
+  margin: 0;
+  color: #ffffff;
+  font-size: 11px;
+}
+
+.cannon-sight-controls {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #ff9a6a;
+  white-space: nowrap;
+}
+
+.cannon-sight-controls kbd {
+  display: inline-grid;
+  min-width: 13px;
+  height: 12px;
+  place-items: center;
+  padding: 0 3px;
+  border: 1px solid rgb(255 154 106 / 52%);
+  border-radius: 4px;
+  background: rgb(255 107 74 / 14%);
+  color: #ffd4c0;
+  font: inherit;
+  line-height: 1;
+}
+
 body[data-flak-view="active"] .flak-elevation,
 body[data-cannon-view="active"] .cannon-elevation {
   display: block;
@@ -2476,7 +2528,7 @@ body[data-cannon-view="active"] .weapon-aim-hints {
   transform: translateY(50%);
 }
 
-.weapon-elevation strong {
+.weapon-elevation > strong {
   display: block;
   margin-top: 6px;
   color: #ffffff;

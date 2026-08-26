@@ -95,6 +95,7 @@ const flakElevationIndicator = document.getElementById("flakElevationIndicator")
 const flakElevationValue = document.getElementById("flakElevationValue");
 const cannonElevationIndicator = document.getElementById("cannonElevationIndicator");
 const cannonElevationValue = document.getElementById("cannonElevationValue");
+const cannonSightValue = document.getElementById("cannonSightValue");
 const sinkingWaterOverlay = document.getElementById("sinkingWaterOverlay");
 const planeHitFlash = document.getElementById("planeHitFlash");
 const fleetStatusRows = document.getElementById("fleetStatusRows");
@@ -198,26 +199,25 @@ const playerSternFlakZ = -2.92;
 const remoteSternFlakZ = -2.92;
 const flakMinPitch = -0.12;
 const flakMaxPitch = 1.18;
-const flakPitchStepRadians = 0.008;
 const flakHoldMediumDelaySeconds = 0.35;
 const flakHoldFastDelaySeconds = 0.85;
 const flakHoldVeryFastDelaySeconds = 1.35;
 const flakHoldMaxDelaySeconds = 2.05;
 const flakHoldExtremeDelaySeconds = 2.75;
-const flakYawFineSpeed = 0.07;
+const flakYawFineSpeed = 0.032;
 const flakYawMediumSpeed = 0.22;
 const flakYawFastSpeed = 0.37;
 const flakYawVeryFastSpeed = 0.52;
 const flakYawMaxSpeed = 0.67;
 const flakYawExtremeSpeed = 0.82;
-const flakPitchFineSpeed = 0.04;
+const flakPitchFineSpeed = 0.018;
 const flakPitchMediumSpeed = 0.124;
 const flakPitchFastSpeed = 0.208;
 const flakPitchVeryFastSpeed = 0.292;
 const flakPitchMaxSpeed = 0.376;
 const flakPitchExtremeSpeed = 0.46;
-const flakFireCooldownSeconds = 0.048;
-const flakProjectileSpeed = 348;
+const flakFireCooldownSeconds = 0.044;
+const flakProjectileSpeed = 418;
 const flakProjectileGravity = 9;
 const flakProjectileLifetime = 8.0;
 const flakProjectileMaxVisualScale = 4.65;
@@ -233,20 +233,19 @@ const playerFlakSightYOffset = flakSightYOffsetFactor * playerSternFlakScale;
 const playerFlakEyeZ = flakEyeZFactor * playerSternFlakScale;
 const cannonMinPitch = -0.035;
 const cannonMaxPitch = 45 * Math.PI / 180;
-const cannonPitchStepRadians = 0.004;
 const cannonYawLimit = 2.62;
 const cannonHoldMediumDelaySeconds = 0.24;
 const cannonHoldFastDelaySeconds = 0.68;
 const cannonHoldVeryFastDelaySeconds = 1.08;
 const cannonHoldMaxDelaySeconds = 1.64;
 const cannonHoldExtremeDelaySeconds = 2.2;
-const cannonYawFineSpeed = 0.011;
+const cannonYawFineSpeed = 0.0045;
 const cannonYawMediumSpeed = 0.125;
 const cannonYawFastSpeed = 0.239;
 const cannonYawVeryFastSpeed = 0.352;
 const cannonYawMaxSpeed = 0.466;
 const cannonYawExtremeSpeed = 0.58;
-const cannonPitchFineSpeed = 0.008;
+const cannonPitchFineSpeed = 0.0032;
 const cannonPitchMediumSpeed = 0.082;
 const cannonPitchFastSpeed = 0.156;
 const cannonPitchVeryFastSpeed = 0.23;
@@ -255,10 +254,16 @@ const cannonPitchExtremeSpeed = 0.38;
 const weaponHeadingHoldMaxDelta = 0.28;
 const playerCannonSightYOffset = 0.08;
 const playerCannonEyeZ = -0.08;
+const cannonSightLevels = [
+  { label: "I", fov: 0.34, startSpeedFactor: 1, rampFactor: 1 },
+  { label: "II", fov: 0.25, startSpeedFactor: 0.7, rampFactor: 1.14 },
+  { label: "III", fov: 0.18, startSpeedFactor: 0.52, rampFactor: 1.28 },
+  { label: "IV", fov: 0.105, startSpeedFactor: 0.36, rampFactor: 1.45 }
+];
 const cannonFireCooldownSeconds = 1.0;
-const cannonProjectileSpeed = 1265;
+const cannonProjectileSpeed = 1455;
 const cannonProjectileGravity = 9.8;
-const cannonProjectileLifetime = 7.0;
+const cannonProjectileLifetime = 18.0;
 const cannonProjectileMaxVisualScale = 2.85;
 const cannonProjectileLightBudget = 3;
 const cannonBarrelRecoilDistance = 0.16;
@@ -343,6 +348,7 @@ document.body.dataset.playerInitials = playerInitials;
 document.body.dataset.playerVehicle = scoutPlaneMode ? "scout-plane" : "torpedo-boat";
 document.body.dataset.flakView = "bridge";
 document.body.dataset.cannonView = "bridge";
+document.body.dataset.cannonSight = "I";
 document.body.dataset.bombBayView = "off";
 document.body.dataset.playerShipId = playerServerShipId ?? "pending";
 document.body.dataset.serverOwnShips = String(playerShips.length);
@@ -485,15 +491,17 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     return;
   }
+  if (playerActive && isCannonSightToggleKey(event) && !event.repeat) {
+    cycleCannonSightLevel();
+    event.preventDefault();
+    return;
+  }
   if (playerActive && isInputKey(event, "up")) {
     if (cannonViewActive && !event.shiftKey) {
       if (!event.repeat || heldCannonPitchDirection !== 1) {
         heldCannonPitchStartTime = time;
       }
       heldCannonPitchDirection = 1;
-      if (!event.repeat) {
-        changeCannonPitch(1);
-      }
       event.preventDefault();
       return;
     }
@@ -502,9 +510,6 @@ window.addEventListener("keydown", (event) => {
         heldFlakPitchStartTime = time;
       }
       heldFlakPitchDirection = 1;
-      if (!event.repeat) {
-        changeFlakPitch(1);
-      }
       event.preventDefault();
       return;
     }
@@ -533,9 +538,6 @@ window.addEventListener("keydown", (event) => {
         heldCannonPitchStartTime = time;
       }
       heldCannonPitchDirection = -1;
-      if (!event.repeat) {
-        changeCannonPitch(-1);
-      }
       event.preventDefault();
       return;
     }
@@ -544,9 +546,6 @@ window.addEventListener("keydown", (event) => {
         heldFlakPitchStartTime = time;
       }
       heldFlakPitchDirection = -1;
-      if (!event.repeat) {
-        changeFlakPitch(-1);
-      }
       event.preventDefault();
       return;
     }
@@ -808,6 +807,11 @@ window.addEventListener("wheel", (event) => {
     event.preventDefault();
     return;
   }
+  if (cannonViewActive) {
+    updateCannonSightFromWheel(event);
+    event.preventDefault();
+    return;
+  }
 
   mouseWheelEngineAccumulator -= event.deltaY;
   while (mouseWheelEngineAccumulator <= -mouseWheelEngineStep) {
@@ -937,6 +941,7 @@ let flakYaw = Math.PI;
 let flakPitch = 0;
 let cannonYaw = 0;
 let cannonPitch = 0.04;
+let cannonSightLevelIndex = 0;
 let weaponAlignTarget = null;
 let heldFlakDirection = 0;
 let heldFlakPitchDirection = 0;
@@ -950,6 +955,7 @@ let heldCannonPitchStartTime = 0;
 let nextCannonFireTime = 0;
 let mouseButtonMask = 0;
 let mouseWheelEngineAccumulator = 0;
+let mouseWheelCannonSightAccumulator = 0;
 let debugOrbitDragActive = false;
 let debugOrbitPointerId = null;
 let debugOrbitLastX = 0;
@@ -1101,7 +1107,7 @@ scene.onBeforeRenderObservable.add(() => {
   if (playerActive && cannonViewActive && heldCannonDirection !== 0) {
     cancelWeaponAlignment();
     cannonYaw = clamp(
-      cannonYaw + heldCannonDirection * getHeldWeaponSpeed(heldCannonStartTime, cannonYawFineSpeed, cannonYawMediumSpeed, cannonYawFastSpeed, cannonYawVeryFastSpeed, cannonYawMaxSpeed, cannonYawExtremeSpeed, cannonHoldTimings) * dt,
+      cannonYaw + heldCannonDirection * getHeldCannonSpeed(heldCannonStartTime, cannonYawFineSpeed, cannonYawExtremeSpeed) * dt,
       -cannonYawLimit,
       cannonYawLimit
     );
@@ -1109,7 +1115,7 @@ scene.onBeforeRenderObservable.add(() => {
   if (playerActive && cannonViewActive && heldCannonPitchDirection !== 0) {
     cancelWeaponAlignment();
     cannonPitch = clamp(
-      cannonPitch + heldCannonPitchDirection * getHeldWeaponSpeed(heldCannonPitchStartTime, cannonPitchFineSpeed, cannonPitchMediumSpeed, cannonPitchFastSpeed, cannonPitchVeryFastSpeed, cannonPitchMaxSpeed, cannonPitchExtremeSpeed, cannonHoldTimings) * dt,
+      cannonPitch + heldCannonPitchDirection * getHeldCannonSpeed(heldCannonPitchStartTime, cannonPitchFineSpeed, cannonPitchExtremeSpeed) * dt,
       cannonMinPitch,
       cannonMaxPitch
     );
@@ -1312,7 +1318,7 @@ scene.onBeforeRenderObservable.add(() => {
   camera.minZ = (cannonViewActive || flakViewActive || torpedoScopeActive) ? 0.03 : (bombBayViewActive ? 0.2 : (scoutPlaneMode ? 1.5 : 0.2));
   camera.fov = sideViewSandboxMode
     ? debugOrbitFov
-    : (cannonViewActive ? 0.34 : (flakViewActive ? 0.64 : (torpedoScopeActive ? 0.42 : (bombBayViewActive ? getBombBayFov() : (scoutPlaneMode ? 1.02 : (bridgeInteriorViewActive ? bridgeViewWidth : 0.78))))));
+    : (cannonViewActive ? getCannonFov() : (flakViewActive ? 0.64 : (torpedoScopeActive ? 0.42 : (bombBayViewActive ? getBombBayFov() : (scoutPlaneMode ? 1.02 : (bridgeInteriorViewActive ? bridgeViewWidth : 0.78))))));
   cameraPosition.copyFrom(desiredCameraPosition.add(shakeOffset));
   cameraTarget.copyFrom(desiredTarget);
   camera.position.copyFrom(cameraPosition);
@@ -1423,6 +1429,10 @@ function isRadarModeToggleKey(event) {
   return !scoutPlaneMode && (event.code === "KeyR" || event.key === "r" || event.key === "R");
 }
 
+function isCannonSightToggleKey(event) {
+  return cannonViewActive && !scoutPlaneMode && (event.code === "KeyZ" || event.key === "z" || event.key === "Z");
+}
+
 function toggleFlakView() {
   setBattleStation("flak");
 }
@@ -1434,6 +1444,10 @@ function toggleCannonView() {
 function setBattleStation(station) {
   flakViewActive = station === "flak";
   cannonViewActive = station === "cannon";
+  if (!cannonViewActive) {
+    setCannonSightLevel(0);
+  }
+  mouseWheelCannonSightAccumulator = 0;
   setTorpedoScope(station === "torpedo");
   heldFlakDirection = 0;
   heldFlakPitchDirection = 0;
@@ -1525,16 +1539,6 @@ function holdWeaponWorldHeading(previousHeading, nextHeading) {
   }
 }
 
-function changeFlakPitch(direction) {
-  cancelWeaponAlignment();
-  flakPitch = clamp(flakPitch + direction * flakPitchStepRadians, flakMinPitch, flakMaxPitch);
-}
-
-function changeCannonPitch(direction) {
-  cancelWeaponAlignment();
-  cannonPitch = clamp(cannonPitch + direction * cannonPitchStepRadians, cannonMinPitch, cannonMaxPitch);
-}
-
 function getHeldFlakSpeed(startTime, fineSpeed, mediumSpeed, fastSpeed, veryFastSpeed, maxSpeed, extremeSpeed) {
   return getHeldWeaponSpeed(startTime, fineSpeed, mediumSpeed, fastSpeed, veryFastSpeed, maxSpeed, extremeSpeed, flakHoldTimings);
 }
@@ -1556,13 +1560,21 @@ const cannonHoldTimings = {
 };
 
 function getHeldWeaponSpeed(startTime, fineSpeed, mediumSpeed, fastSpeed, veryFastSpeed, maxSpeed, extremeSpeed, timings) {
-  const heldSeconds = time - startTime;
-  if (heldSeconds >= timings.extreme) return extremeSpeed;
-  if (heldSeconds >= timings.max) return maxSpeed;
-  if (heldSeconds >= timings.veryFast) return veryFastSpeed;
-  if (heldSeconds >= timings.fast) return fastSpeed;
-  if (heldSeconds >= timings.medium) return mediumSpeed;
-  return fineSpeed;
+  return getContinuousHeldWeaponSpeed(startTime, fineSpeed, extremeSpeed, timings.extreme);
+}
+
+function getHeldCannonSpeed(startTime, fineSpeed, extremeSpeed) {
+  const sightLevel = currentCannonSightLevel();
+  const startSpeed = fineSpeed * sightLevel.startSpeedFactor;
+  const rampSeconds = cannonHoldTimings.extreme * sightLevel.rampFactor;
+  return getContinuousHeldWeaponSpeed(startTime, startSpeed, extremeSpeed, rampSeconds);
+}
+
+function getContinuousHeldWeaponSpeed(startTime, fineSpeed, maxSpeed, rampSeconds) {
+  const heldSeconds = Math.max(0, time - startTime);
+  const ratio = clamp(heldSeconds / Math.max(0.001, rampSeconds), 0, 1);
+  const eased = ratio * ratio * (3 - 2 * ratio);
+  return fineSpeed + (maxSpeed - fineSpeed) * eased;
 }
 
 function getPlayerCameraSetup(forward) {
@@ -2178,6 +2190,50 @@ function updateBattleStationButtons() {
   flakViewButton?.classList.toggle("is-active", flakViewActive);
   cannonViewButton?.classList.toggle("is-active", cannonViewActive);
   torpedoAidButton?.classList.toggle("is-active", torpedoScopeActive);
+  updateCannonSightDisplay();
+}
+
+function cycleCannonSightLevel() {
+  changeCannonSightLevel(1, true);
+}
+
+function changeCannonSightLevel(direction, wrap = false) {
+  const rawNextIndex = cannonSightLevelIndex + direction;
+  const nextIndex = wrap
+    ? (rawNextIndex + cannonSightLevels.length) % cannonSightLevels.length
+    : clamp(rawNextIndex, 0, cannonSightLevels.length - 1);
+  setCannonSightLevel(nextIndex);
+}
+
+function setCannonSightLevel(index) {
+  cannonSightLevelIndex = clamp(Math.round(index), 0, cannonSightLevels.length - 1);
+  document.body.dataset.cannonSight = currentCannonSightLevel().label;
+  updateBattleStationButtons();
+}
+
+function updateCannonSightDisplay() {
+  if (!cannonSightValue) return;
+  cannonSightValue.textContent = currentCannonSightLevel().label;
+}
+
+function getCannonFov() {
+  return currentCannonSightLevel().fov;
+}
+
+function currentCannonSightLevel() {
+  return cannonSightLevels[cannonSightLevelIndex] ?? cannonSightLevels[0];
+}
+
+function updateCannonSightFromWheel(event) {
+  mouseWheelCannonSightAccumulator += event.deltaY;
+  while (mouseWheelCannonSightAccumulator <= -mouseWheelEngineStep) {
+    changeCannonSightLevel(1);
+    mouseWheelCannonSightAccumulator += mouseWheelEngineStep;
+  }
+  while (mouseWheelCannonSightAccumulator >= mouseWheelEngineStep) {
+    changeCannonSightLevel(-1);
+    mouseWheelCannonSightAccumulator -= mouseWheelEngineStep;
+  }
 }
 
 function setupDebugMapTeleport(canvas) {
@@ -6680,6 +6736,31 @@ function installScenarioTestHooks() {
         fire: document.body.dataset.cannonFire ?? ""
       };
     },
+    aimFlakAt(target) {
+      return aimPlayerFlakAtWorldPoint(target);
+    },
+    async fireFlakAt(target) {
+      setBattleStation("flak");
+      const aim = aimPlayerFlakAtWorldPoint(target);
+      document.body.dataset.flakFireSync = "";
+      firePlayerFlak();
+      return {
+        aim,
+        station: stationSnapshot(),
+        fire: document.body.dataset.flakFire ?? ""
+      };
+    },
+    async fireTorpedo() {
+      setBattleStation("bridge");
+      document.body.dataset.fireTorpedoSync = "";
+      const before = await window.seaBattleScenarioTest.state();
+      await requestPlayerTorpedoFire();
+      return {
+        beforeTorpedoes: Array.isArray(before?.torpedoes) ? before.torpedoes.length : null,
+        station: stationSnapshot(),
+        fire: document.body.dataset.fireTorpedoSync ?? ""
+      };
+    },
     async state() {
       const response = await fetch(getGameStateEndpoint(), { cache: "no-store" });
       return response.json();
@@ -6721,8 +6802,8 @@ function aimPlayerCannonAtWorldPoint(target) {
   }
 
   const shot = getPlayerCannonShot();
-  const miss = shot?.direction
-    ? distancePointToRay(worldTarget, shot.position, shot.direction)
+  const miss = shot?.velocity
+    ? distancePointToProjectileArc(worldTarget, shot.position, shot.velocity, cannonProjectileGravity)
     : null;
   const result = {
     target: { x: worldTarget.x, y: worldTarget.y, z: worldTarget.z },
@@ -6747,13 +6828,13 @@ function bestCannonPitchForWorldPoint(worldTarget) {
   let bestPitch = cannonPitch;
   let bestError = Number.POSITIVE_INFINITY;
 
-  for (let step = 0; step < 18; step += 1) {
+  for (let step = 0; step < 22; step += 1) {
     const mid = (low + high) / 2;
     cannonPitch = mid;
     updatePlayerCannonMount();
 
     const shot = getPlayerCannonShot();
-    const signedError = shot ? signedRayVerticalMiss(worldTarget, shot.position, shot.direction) : 0;
+    const signedError = shot ? signedProjectileVerticalMiss(worldTarget, shot.position, shot.velocity, cannonProjectileGravity) : 0;
     const absError = Math.abs(signedError);
     if (absError < bestError) {
       bestError = absError;
@@ -6783,11 +6864,113 @@ function signedRayVerticalMiss(point, origin, direction) {
   return closest.y - point.y;
 }
 
+function projectileTimeClosestToHorizontalPoint(point, origin, velocity) {
+  const dx = point.x - origin.x;
+  const dz = point.z - origin.z;
+  const horizontalSpeedSq = velocity.x * velocity.x + velocity.z * velocity.z;
+  if (horizontalSpeedSq <= 0.000001) return 0;
+  return Math.max(0, (dx * velocity.x + dz * velocity.z) / horizontalSpeedSq);
+}
+
+function signedProjectileVerticalMiss(point, origin, velocity, gravity) {
+  const t = projectileTimeClosestToHorizontalPoint(point, origin, velocity);
+  const y = origin.y + velocity.y * t - 0.5 * gravity * t * t;
+  return y - point.y;
+}
+
+function distancePointToProjectileArc(point, origin, velocity, gravity) {
+  const t = projectileTimeClosestToHorizontalPoint(point, origin, velocity);
+  const closest = new Vector3(
+    origin.x + velocity.x * t,
+    origin.y + velocity.y * t - 0.5 * gravity * t * t,
+    origin.z + velocity.z * t
+  );
+  return Vector3.Distance(point, closest);
+}
+
 function getPlayerCannonShot() {
   const shot = getCannonShotFromModel(boat.bowCannon, heading, speed);
   return shot
     ? { ...shot, weaponYaw: cannonYaw, weaponPitch: cannonPitch }
     : null;
+}
+
+function aimPlayerFlakAtWorldPoint(target) {
+  const mount = boat?.sternFlak?.mount;
+  const elevationRoot = boat?.sternFlak?.elevationRoot;
+  if (!mount || !elevationRoot || !mount.parent) {
+    throw new Error("Player flak is not available");
+  }
+  const worldTarget = new Vector3(
+    Number(target?.x ?? 0),
+    Number(target?.y ?? 0),
+    Number(target?.z ?? 0)
+  );
+  if (![worldTarget.x, worldTarget.y, worldTarget.z].every(Number.isFinite)) {
+    throw new Error("Flak target must contain finite x/y/z values");
+  }
+
+  const parentMatrix = mount.parent.computeWorldMatrix(true).clone();
+  parentMatrix.invert();
+  const localTarget = Vector3.TransformCoordinates(worldTarget, parentMatrix).subtract(mount.position);
+  flakYaw = normalizeAngle(Math.atan2(localTarget.x, localTarget.z));
+  const horizontalDistance = Math.hypot(localTarget.x, localTarget.z);
+  flakPitch = clamp(
+    Math.atan2(localTarget.y - elevationRoot.position.y, horizontalDistance),
+    flakMinPitch,
+    flakMaxPitch
+  );
+  updatePlayerFlakMount();
+  flakPitch = bestFlakPitchForWorldPoint(worldTarget);
+  updatePlayerFlakMount();
+
+  const shot = getPlayerFlakShot();
+  const miss = shot?.velocity
+    ? distancePointToProjectileArc(worldTarget, shot.position, shot.velocity, flakProjectileGravity)
+    : null;
+  const result = {
+    target: { x: worldTarget.x, y: worldTarget.y, z: worldTarget.z },
+    yaw: flakYaw,
+    pitch: flakPitch,
+    miss: Number.isFinite(miss) ? miss : null,
+    shot: shot
+      ? {
+        position: { x: shot.position.x, y: shot.position.y, z: shot.position.z },
+        muzzle: { x: shot.muzzle.x, y: shot.muzzle.y, z: shot.muzzle.z },
+        direction: { x: shot.direction.x, y: shot.direction.y, z: shot.direction.z }
+      }
+      : null
+  };
+  document.body.dataset.scenarioFlakAim = JSON.stringify(result);
+  return result;
+}
+
+function bestFlakPitchForWorldPoint(worldTarget) {
+  let low = flakMinPitch;
+  let high = flakMaxPitch;
+  let bestPitch = flakPitch;
+  let bestError = Number.POSITIVE_INFINITY;
+
+  for (let step = 0; step < 22; step += 1) {
+    const mid = (low + high) / 2;
+    flakPitch = mid;
+    updatePlayerFlakMount();
+
+    const shot = getPlayerFlakShot();
+    const signedError = shot ? signedProjectileVerticalMiss(worldTarget, shot.position, shot.velocity, flakProjectileGravity) : 0;
+    const absError = Math.abs(signedError);
+    if (absError < bestError) {
+      bestError = absError;
+      bestPitch = mid;
+    }
+
+    if (signedError > 0) {
+      high = mid;
+    } else {
+      low = mid;
+    }
+  }
+  return clamp(bestPitch, flakMinPitch, flakMaxPitch);
 }
 
 function getCannonShotFromModel(cannon, baseHeading = 0, baseSpeed = 0) {
