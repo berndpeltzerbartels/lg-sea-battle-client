@@ -146,6 +146,7 @@ const vehicleScale = gameConfig.vehicleScale;
 const torpedoBoatVisualScale = vehicleScale.torpedoBoat;
 const scoutPlaneVisualScale = vehicleScale.scoutPlane;
 const shipGunVisualScale = vehicleScale.torpedoBoat;
+const torpedoVisualScale = 1.5;
 const torpedoBoatWaterlineY = torpedoBoatModelWaterlineY * torpedoBoatVisualScale;
 const torpedoBoatSinkDepth = torpedoBoatModelSinkDepth * torpedoBoatVisualScale;
 const killFeedLimit = 5;
@@ -8444,6 +8445,7 @@ function firePlayerTorpedo(system, shipRoot, heading, turnVelocity, shipSpeed, n
 
   const root = new TransformNode(`torpedo_${system.nextId}`, system.scene);
   root.parent = system.root;
+  root.scaling.setAll(torpedoVisualScale);
   root.position.copyFrom(launchStart);
   root.rotationQuaternion = Quaternion.FromEulerAngles(0, launchHeading, 0);
 
@@ -8521,6 +8523,7 @@ function fireEnemyTorpedo(system, motion, targetPosition, now) {
 
   const root = new TransformNode(`enemy_torpedo_${system.nextId}`, system.scene);
   root.parent = system.root;
+  root.scaling.setAll(torpedoVisualScale);
   root.position.copyFrom(launchStart);
   root.rotationQuaternion = Quaternion.FromEulerAngles(0, launchHeading, 0);
 
@@ -8644,6 +8647,7 @@ function renderServerTorpedoImpacts(impacts) {
 function createServerTorpedoVisual(system, snapshot, snapshotReceivedAt = time, snapshotServerTime = null) {
   const root = new TransformNode(`server_torpedo_${snapshot.id}`, system.scene);
   root.parent = system.root;
+  root.scaling.setAll(torpedoVisualScale);
   const launch = getServerTorpedoLaunch(system, snapshot, snapshotServerTime);
   root.position.copyFrom(launch.start);
   root.rotationQuaternion = Quaternion.FromEulerAngles(0, launch.heading, 0);
