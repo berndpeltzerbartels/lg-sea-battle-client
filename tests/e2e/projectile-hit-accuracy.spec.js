@@ -47,6 +47,34 @@ objects:
 2: plane, dark, scenario [orientation: 180°, speed: 0knt, height: 24m]
 `;
 
+const FLAK_FAST_BOAT_SCENARIO = `
+scenario: playwright-projectile-flak-fast-boat
+version: 9413
+cell: 30
+map:
+.......
+.1.....
+...2...
+.......
+objects:
+1: ship, light, bot [orientation: 90°, speed: 0knt]
+2: ship, dark, scenario [orientation: 270°, speed: 0knt]
+`;
+
+const FLAK_ASTERN_BOAT_SCENARIO = `
+scenario: playwright-projectile-flak-astern-boat
+version: 9414
+cell: 30
+map:
+.......
+...2...
+...1...
+.......
+objects:
+1: ship, light, bot [orientation: 0°, speed: 0knt]
+2: ship, dark, scenario [orientation: 180°, speed: 0knt]
+`;
+
 const CANNON_PLANE_HIT_SCENARIO = `
 scenario: playwright-projectile-cannon-plane
 version: 9412
@@ -71,6 +99,18 @@ map:
 objects:
 1: ship, light, bot [orientation: 90°, speed: 0knt]
 2: ship, dark, scenario [orientation: 270°, speed: 0knt]
+`;
+
+const AIR_TORPEDO_DROP_SCENARIO = `
+scenario: playwright-air-torpedo-drop
+version: 9415
+cell: 40
+map:
+........
+..1.....
+........
+objects:
+1: plane, light, bot [orientation: 90°, speed: 30knt, height: 160m]
 `;
 
 test('cannon hull-height shot hits the visible side of a ship', async ({ page, request }, testInfo) => {
@@ -128,13 +168,68 @@ test('flak can hit planes from different plane headings', async ({ page, request
     const scenario = FLAK_PLANE_HIT_SCENARIO.replace('orientation: 180°', `orientation: ${heading}°`);
     await openScenario(page, request, scenario, testInfo);
 
-    const target = await targetPoint(request, 'dark-F2', { y: 24 });
-    const shot = await fireFlakBurstAt(page, target, 6);
+    const shot = await fireFlakTrackingBurstAtVehicle(page, request, 'dark-F2', { y: 24 }, 6);
     expect(shot.fired).toBeGreaterThan(0);
     await captureFrames(page, testInfo, `flak-plane-${heading}`, 8, 120);
 
     await expectVehicleState(request, 'dark-F2', 'sunk', `flak should hit dark-F2 at heading ${heading}`);
   }
+});
+
+test('weapon view and projectile start stay on the visible weapon with and without trim', async ({ page, request }, testInfo) => {
+  const navigationStates = [
+    { label: 'standing', speed: 0, engineOrder: 2 },
+    { label: 'flank-trim', speed: 15.5, engineOrder: 8 }
+  ];
+
+  for (const navigationState of navigationStates) {
+    await openScenario(page, request, FLAK_FAST_BOAT_SCENARIO, testInfo);
+    await page.evaluate(({ speed, engineOrder }) => window.seaBattleScenarioTest.setPlayerNavigationState({
+      heading: Math.PI / 2,
+      speed,
+      engineOrder
+    }), navigationState);
+    await page.waitForTimeout(250);
+    const target = await targetPoint(request, 'dark-S2', { y: 0.42 });
+
+    for (const weapon of ['flak', 'cannon']) {
+      await page.evaluate(({ selectedWeapon, target }) => {
+        if (selectedWeapon === 'flak') {
+          return window.seaBattleScenarioTest.aimFlakAt(target);
+        }
+        return window.seaBattleScenarioTest.aimCannonAt(target);
+      }, { selectedWeapon: weapon, target });
+      const alignment = await page.evaluate((selectedWeapon) => (
+        window.seaBattleScenarioTest.weaponViewAlignment(selectedWeapon)
+      ), weapon);
+      await captureFrames(page, testInfo, `${weapon}-view-alignment-${navigationState.label}`, 1, 0);
+
+      expect(alignment, `${weapon} alignment should be available while ${navigationState.label}`).toBeTruthy();
+      expect(alignment.directionAngle, `${weapon} shot should follow the sight direction while ${navigationState.label}`).toBeLessThan(0.002);
+      expect(alignment.muzzleAhead, `${weapon} muzzle should be in front of the shooter camera while ${navigationState.label}`).toBeGreaterThan(0);
+      expect(alignment.muzzleDistanceFromSightLine, `${weapon} muzzle should stay close to the sight line while ${navigationState.label}`).toBeLessThan(0.5);
+      expect(alignment.visibleMuzzleDistance, `${weapon} projectile should start at the visible muzzle while ${navigationState.label}`).toBeLessThan(0.025);
+      expect(alignment.projectileStartDistance, `${weapon} projectile should start just beyond the muzzle while ${navigationState.label}`).toBeLessThan(0.15);
+      expect(alignment.visibleProjectileStartDistance, `${weapon} projectile start should stay attached to the visible muzzle while ${navigationState.label}`).toBeLessThan(0.16);
+    }
+  }
+});
+
+test('flak can sink a nearby ship directly astern', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, FLAK_ASTERN_BOAT_SCENARIO, testInfo);
+  await page.evaluate(() => window.seaBattleScenarioTest.setPlayerNavigationState({
+    heading: 0,
+    speed: 0,
+    engineOrder: 2
+  }));
+
+  const target = await targetPoint(request, 'dark-S2', { y: 0.42 });
+  const shot = await fireWeaponAt(page, 'flak', target);
+  await captureFrames(page, testInfo, 'flak-astern-ship-hit', 8, 120);
+
+  expect(shot.fire).toBe('ok');
+  expect(Math.abs(shot.aim?.miss ?? 99)).toBeLessThan(0.08);
+  await expectVehicleState(request, 'dark-S2', 'sunk', 'flak should sink a nearby ship directly astern');
 });
 
 extendedTest('flak plane-hit matrix is visible and works from several plane headings', async ({ page, request }, testInfo) => {
@@ -222,23 +317,98 @@ test('torpedo fired from the player ship hits a ship directly ahead', async ({ p
   await expectVehicleState(request, 'dark-S2', 'sunk', 'torpedo should sink dark-S2');
 });
 
-async function openScenario(page, request, scenario, testInfo) {
+test('air-dropped torpedo falls from plane height without snapping forward at water entry', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, AIR_TORPEDO_DROP_SCENARIO, testInfo, { vehicleType: 'scout-plane' });
+  await page.evaluate(() => window.seaBattleScenarioTest.setPlayerNavigationState({
+    x: 0,
+    y: 160,
+    z: 0,
+    heading: Math.PI / 2,
+    speed: 30,
+    verticalSpeed: 0,
+    engineOrder: 7
+  }));
+
+  const fire = await page.evaluate(() => window.seaBattleScenarioTest.fireTorpedo());
+  expect(fire.fire).toBe('ok');
+  await page.waitForFunction(() => window.seaBattleScenarioTest.airDropTorpedoVisuals().length > 0);
+
+  const first = (await page.evaluate(() => window.seaBattleScenarioTest.airDropTorpedoVisuals()))[0];
+  expect(first.startY).toBeGreaterThan(145);
+  await captureFrames(page, testInfo, 'air-torpedo-drop', 6, 220);
+
+  await page.waitForFunction(() => {
+    const visual = window.seaBattleScenarioTest.airDropTorpedoVisuals()[0];
+    return visual && visual.splashCreated;
+  }, { timeout: 6_000 });
+  const afterWater = (await page.evaluate(() => window.seaBattleScenarioTest.airDropTorpedoVisuals()))[0];
+
+  expect(afterWater.waterEntryJump).toBeLessThan(8);
+  expect(afterWater.runDistanceAtSplash).toBeLessThan(1);
+});
+
+test('ship wake follows actual speed while the engine is stopped', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, TORPEDO_HULL_HIT_SCENARIO, testInfo);
+
+  await page.evaluate(() => window.seaBattleScenarioTest.setEnemyWakeState('dark-S2', {
+    speed: 0,
+    engineOrder: 2
+  }));
+  await page.waitForTimeout(450);
+  const stopped = await page.evaluate(() => window.seaBattleScenarioTest.enemyWakeSnapshot('dark-S2'));
+
+  await page.evaluate(() => window.seaBattleScenarioTest.setEnemyWakeState('dark-S2', {
+    speed: 2,
+    engineOrder: 2
+  }));
+  await page.waitForTimeout(900);
+  const slowCoasting = await page.evaluate(() => window.seaBattleScenarioTest.enemyWakeSnapshot('dark-S2'));
+  await captureFrames(page, testInfo, 'wake-coasting-slow', 3, 160);
+
+  await page.evaluate(() => window.seaBattleScenarioTest.setEnemyWakeState('dark-S2', {
+    speed: 10,
+    engineOrder: 2
+  }));
+  await page.waitForTimeout(900);
+  const fastCoasting = await page.evaluate(() => window.seaBattleScenarioTest.enemyWakeSnapshot('dark-S2'));
+  await captureFrames(page, testInfo, 'wake-coasting-fast', 3, 160);
+
+  expect(stopped.strength).toBeLessThan(0.08);
+  expect(slowCoasting.wakeEnabled).toBe(true);
+  expect(slowCoasting.bowVisibility).toBeGreaterThan(0);
+  expect(slowCoasting.sternEdgeVisibility).toBeGreaterThan(0);
+  expect(slowCoasting.sternChurnVisibility).toBeGreaterThan(0);
+  expect(fastCoasting.strength).toBeGreaterThan(slowCoasting.strength);
+  expect(fastCoasting.bowVisibility).toBeGreaterThan(slowCoasting.bowVisibility);
+  expect(fastCoasting.sternEdgeVisibility).toBeGreaterThan(slowCoasting.sternEdgeVisibility);
+  expect(fastCoasting.sternChurnVisibility).toBeGreaterThan(slowCoasting.sternChurnVisibility);
+});
+
+async function openScenario(page, request, scenario, testInfo, options = {}) {
   await page.goto('/start.html');
-  await page.evaluate(() => {
+  await page.evaluate((vehicleType) => {
     window.localStorage.clear();
     window.sessionStorage.clear();
-  });
+    if (vehicleType) {
+      window.localStorage.setItem('vehicleType', vehicleType);
+    }
+  }, options.vehicleType ?? null);
   await resetScenario(request, scenario);
-  await ensureLoggedIn(page, testInfo);
+  await ensureLoggedIn(page, testInfo, options);
 
-  await page.goto('/app?scenarioTest=1');
+  await page.goto(appScenarioTestUrl(options));
   await expect(page.locator('#renderCanvas')).toBeVisible();
   await expect(page.locator('.login-card')).toHaveCount(0);
   await page.waitForFunction(() => window.seaBattleScenarioTest && document.body.dataset.playerShipId !== 'pending');
 }
 
-async function ensureLoggedIn(page, testInfo) {
-  await page.goto('/app?scenarioTest=1');
+function appScenarioTestUrl(options = {}) {
+  const vehicleSuffix = options.vehicleType ? `&vehicle=${encodeURIComponent(options.vehicleType)}` : '';
+  return `/app?scenarioTest=1${vehicleSuffix}`;
+}
+
+async function ensureLoggedIn(page, testInfo, options = {}) {
+  await page.goto(appScenarioTestUrl(options));
   const loginCard = page.locator('.login-card');
   if (!(await loginCard.isVisible({ timeout: 2_000 }).catch(() => false))) {
     return;
@@ -251,15 +421,24 @@ async function ensureLoggedIn(page, testInfo) {
   if (await email.count()) {
     await email.fill(`${alias.toLowerCase()}@playwright.test`);
   }
+  const vehicleType = loginCard.locator('input[name="vehicleType"]');
+  if (options.vehicleType && await vehicleType.count()) {
+    await vehicleType.evaluate((input, value) => {
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }, options.vehicleType);
+  }
   await loginCard.locator('select[name="team"]').selectOption('light');
   await loginCard.locator('button[type="submit"]').click();
   await expect(loginCard).toHaveCount(0);
 }
 
 function testAlias(testInfo) {
-  const serial = (loginCounter % 1296).toString(36).padStart(2, '0').toUpperCase();
+  const seed = Date.now() + process.pid + testInfo.workerIndex * 997 + testInfo.retry * 37 + loginCounter;
+  const serial = (seed % 1_679_616).toString(36).padStart(4, '0').toUpperCase();
   loginCounter += 1;
-  return `P${String(testInfo.workerIndex).slice(-1)}${String(testInfo.retry).slice(-1)}${serial}`;
+  return `P${serial}`;
 }
 
 async function resetScenario(request, scenario) {
@@ -296,6 +475,22 @@ async function fireFlakBurstAt(page, target, shots) {
   let lastResult = null;
   let fired = 0;
   for (let attempt = 0; attempt < shots * 3 && fired < shots; attempt += 1) {
+    lastResult = await fireWeaponAt(page, 'flak', target);
+    if (lastResult.fire === 'ok') {
+      fired += 1;
+    }
+    if (fired < shots) {
+      await page.waitForTimeout(120);
+    }
+  }
+  return { ...lastResult, fired };
+}
+
+async function fireFlakTrackingBurstAtVehicle(page, request, vehicleId, targetOverride, shots) {
+  let lastResult = null;
+  let fired = 0;
+  for (let attempt = 0; attempt < shots * 3 && fired < shots; attempt += 1) {
+    const target = await targetPoint(request, vehicleId, targetOverride);
     lastResult = await fireWeaponAt(page, 'flak', target);
     if (lastResult.fire === 'ok') {
       fired += 1;
@@ -368,7 +563,15 @@ async function gameState(request) {
 async function captureFrames(page, testInfo, prefix, count, delayMs) {
   for (let frame = 0; frame < count; frame += 1) {
     const path = testInfo.outputPath(`${prefix}-${String(frame).padStart(2, '0')}.png`);
-    await page.screenshot({ path, fullPage: false });
+    try {
+      await page.screenshot({ path, fullPage: false, timeout: 5_000 });
+    } catch (error) {
+      await testInfo.attach(`${prefix}-${String(frame).padStart(2, '0')}-screenshot-error`, {
+        body: String(error?.message ?? error),
+        contentType: 'text/plain'
+      });
+      return;
+    }
     await testInfo.attach(`${prefix}-${String(frame).padStart(2, '0')}`, {
       path,
       contentType: 'image/png'
