@@ -401,8 +401,15 @@ if (sideViewSandboxMode) {
 }
 
 const worldLimit = 5000;
-const ocean = MeshBuilder.CreateGround("ocean", { width: 2300, height: 2300, subdivisions: 160 }, scene);
+const oceanBaseSize = 2300;
+const oceanVisualSize = worldLimit * 2;
+const ocean = MeshBuilder.CreateGround("ocean", { width: oceanVisualSize, height: oceanVisualSize, subdivisions: 160 }, scene);
 ocean.material = materials.water;
+if (materials.water.diffuseTexture) {
+  const oceanTextureScale = oceanVisualSize / oceanBaseSize;
+  materials.water.diffuseTexture.uScale = 34 * oceanTextureScale;
+  materials.water.diffuseTexture.vScale = 34 * oceanTextureScale;
+}
 ocean.parent = world;
 const foam = createFoamPatches(scene, materials, world);
 const volcanoPlumes = [];
