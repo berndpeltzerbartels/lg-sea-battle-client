@@ -2116,7 +2116,6 @@ body[data-player-vehicle="scout-plane"] .speed {
   padding: 12px;
 }
 
-body[data-player-vehicle="scout-plane"] .torpedo-stock,
 body[data-player-vehicle="scout-plane"] .depth-gauge,
 body[data-player-vehicle="scout-plane"] .telegraph {
   display: none;
@@ -2132,29 +2131,6 @@ body:not([data-player-vehicle="scout-plane"]) .boat-speed-readout {
 
 body[data-player-vehicle="scout-plane"] .altimeter {
   display: grid;
-}
-
-.torpedo-stock {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.torpedo-stock small {
-  color: rgb(247 251 255 / 72%);
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.torpedo-stock strong {
-  margin-top: 0;
-  color: #ffffff;
-  font-size: 13px;
-  line-height: 1;
 }
 
 .depth-gauge {
