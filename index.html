@@ -309,14 +309,25 @@
       </div>
       <div class="nav-instrument nav-instrument-radar" aria-hidden="true">
         <div class="nav-title-row">
-          <div class="nav-title">Radar</div>
-          <div class="instrument-button-group">
-            <button id="radarRangeButton" class="instrument-button" type="button">Radar <kbd class="radar-hotkey radar-hotkey-normal">R</kbd></button>
-            <button id="targetRadarButton" class="instrument-button" type="button">Gefechtsradar <kbd class="radar-hotkey radar-hotkey-target">R</kbd></button>
-          </div>
+          <div class="nav-title">Gefechtsradar</div>
         </div>
         <canvas id="radarCanvas" width="300" height="300"></canvas>
         <small id="radarStatus">Clear</small>
+      </div>
+      <div class="plane-drop-sight-hint" aria-hidden="true">
+        <span>Torpedo sight</span>
+        <kbd>Z</kbd>
+      </div>
+      <div class="air-torpedo-sight-overlay" aria-hidden="true">
+        <div class="air-torpedo-sight-name">Torpedo sight</div>
+        <div class="air-torpedo-sight-line"></div>
+        <div class="air-torpedo-sight-horizon"></div>
+        <div class="air-torpedo-sight-ticks">
+          <span>RUN</span>
+          <span>8</span>
+          <span>4</span>
+          <span>ENTRY</span>
+        </div>
       </div>
       <div class="battle-station-panel" aria-label="Station wählen">
         <div class="battle-station-hull" aria-hidden="true">

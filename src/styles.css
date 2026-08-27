@@ -393,6 +393,10 @@ body.debug-marker-map {
   align-items: start;
 }
 
+body:not([data-debug-map="true"]) .nav-panel {
+  display: none;
+}
+
 .nav-instrument {
   padding: 9px;
   border: 1px solid rgb(255 255 255 / 30%);
@@ -505,6 +509,142 @@ body[data-torpedo-view="active"] .compass {
 .nav-instrument-radar canvas {
   height: auto;
   aspect-ratio: 1;
+}
+
+.plane-drop-sight-hint {
+  position: absolute;
+  left: 24px;
+  bottom: calc(34px + var(--radar-size));
+  display: none;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 7px;
+  border: 1px solid rgb(155 229 223 / 32%);
+  border-radius: 5px;
+  background: rgb(5 27 40 / 46%);
+  color: rgb(247 251 255 / 74%);
+  font: 800 8px/1 Inter, Arial, sans-serif;
+  text-transform: uppercase;
+  backdrop-filter: blur(7px);
+  pointer-events: none;
+}
+
+body[data-player-vehicle="scout-plane"] .plane-drop-sight-hint {
+  display: inline-flex;
+}
+
+body[data-bomb-bay-view="active"] .plane-drop-sight-hint {
+  border-color: rgb(255 154 106 / 58%);
+  background: rgb(36 23 20 / 54%);
+  color: #ffd4c0;
+}
+
+.plane-drop-sight-hint kbd {
+  display: inline-grid;
+  min-width: 14px;
+  height: 13px;
+  place-items: center;
+  padding: 0 3px;
+  border: 1px solid rgb(255 154 106 / 52%);
+  border-radius: 4px;
+  background: rgb(255 107 74 / 14%);
+  color: #ffd4c0;
+  font: inherit;
+  line-height: 1;
+}
+
+.air-torpedo-sight-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  pointer-events: none;
+  color: rgb(215 248 244 / 72%);
+  text-transform: uppercase;
+  font: 800 9px/1 Inter, Arial, sans-serif;
+}
+
+body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
+  display: block;
+}
+
+.air-torpedo-sight-name {
+  position: absolute;
+  left: 50%;
+  top: 16%;
+  padding: 4px 7px;
+  border: 1px solid rgb(215 248 244 / 24%);
+  border-radius: 4px;
+  background: rgb(3 21 31 / 22%);
+  transform: translateX(-50%);
+  letter-spacing: 0;
+}
+
+.air-torpedo-sight-line {
+  position: absolute;
+  left: 50%;
+  top: 20%;
+  width: 1px;
+  height: 62%;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgb(215 248 244 / 42%) 11%,
+    rgb(215 248 244 / 68%) 48%,
+    rgb(215 248 244 / 34%) 86%,
+    transparent
+  );
+}
+
+.air-torpedo-sight-line::before,
+.air-torpedo-sight-line::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 72px;
+  height: 1px;
+  background: rgb(215 248 244 / 50%);
+  transform: translateX(-50%);
+}
+
+.air-torpedo-sight-line::before {
+  top: 30%;
+}
+
+.air-torpedo-sight-line::after {
+  top: 66%;
+  width: 46px;
+}
+
+.air-torpedo-sight-horizon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22vw;
+  max-width: 360px;
+  min-width: 160px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(215 248 244 / 42%), transparent);
+  transform: translate(-50%, -50%);
+}
+
+.air-torpedo-sight-ticks {
+  position: absolute;
+  left: calc(50% + min(15vw, 230px));
+  top: 24%;
+  display: grid;
+  gap: 10vh;
+  color: rgb(215 248 244 / 54%);
+  text-align: left;
+}
+
+.air-torpedo-sight-ticks span::before {
+  content: "";
+  display: inline-block;
+  width: 18px;
+  height: 1px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: rgb(215 248 244 / 48%);
 }
 
 .battle-station-panel {
@@ -2232,6 +2372,11 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
   backdrop-filter: blur(7px);
   transform: translateX(-50%);
   pointer-events: auto;
+}
+
+body[data-hide-rudder-instrument="true"] .rudder {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .rudder-title {

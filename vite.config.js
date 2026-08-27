@@ -1,14 +1,20 @@
 import { resolve } from "node:path";
 import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 
 const packageJson = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
 const buildTime = new Date().toISOString();
 
 function gitCommit() {
-  try {
-    return execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
+    if (process.env.SEA_BATTLE_CLIENT_COMMIT) {
+        return process.env.SEA_BATTLE_CLIENT_COMMIT;
+    }
+    if (!existsSync(new URL("./.git", import.meta.url))) {
+        return "unknown";
+    }
+    try {
+        return execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
   } catch (ignored) {
     return "unknown";
   }
