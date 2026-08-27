@@ -4777,9 +4777,7 @@ function updateWeaponElevationGauge(indicator, valueElement, pitch, minPitch, ma
 }
 
 function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading, radarHeading = heading, options = {}) {
-  if (debugMapEnabled && !flakViewActive && !cannonViewActive && !bombBayViewActive) {
-    drawMapInstrument(mapCanvas, playerPosition, landZones, mapZoom, heading);
-  }
+  drawMapInstrument(mapCanvas, playerPosition, landZones, mapZoom, heading);
   if (!singleRadarMode) {
     updateAutomaticRadarMode(radarContacts, playerPosition);
   }
