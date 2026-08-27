@@ -1,10 +1,25 @@
 html,
 body {
-  --map-canvas-width: clamp(220px, 24vw, 390px);
-  --map-canvas-height: clamp(158px, 17.5vw, 280px);
+  --map-canvas-width: clamp(210px, 18vw, 300px);
   --map-meta-width: clamp(72px, 6vw, 104px);
-  --radar-size: clamp(220px, 24vw, 420px);
-  --compass-size: clamp(112px, 11vw, 168px);
+  --compass-size: clamp(92px, 8vw, 128px);
+  --instrument-panel-width: clamp(340px, 24vw, 430px);
+  --instrument-panel-padding: 14px;
+  --instrument-panel-gap: 10px;
+  --instrument-panel-inner-width: calc(var(--instrument-panel-width) - var(--instrument-panel-padding) * 2);
+  --control-panel-width: min(430px, calc(100vw - var(--view-left) - 44px));
+  --control-panel-height: 86px;
+  --battle-station-height: 78px;
+  --radar-size: calc(var(--instrument-panel-inner-width) - 20px);
+  --radar-panel-extra-height: 53px;
+  --map-panel-chrome-height: 92px;
+  --map-canvas-height: clamp(
+    72px,
+    calc(100vh - var(--instrument-panel-padding) * 2 - var(--radar-size) - var(--radar-panel-extra-height) - var(--battle-station-height) - var(--instrument-panel-gap) * 2 - var(--map-panel-chrome-height)),
+    220px
+  );
+  --map-panel-height: calc(var(--map-canvas-height) + var(--map-panel-chrome-height));
+  --view-left: var(--instrument-panel-width);
   width: 100%;
   height: 100%;
   margin: 0;
@@ -141,7 +156,11 @@ body.debug-marker-map {
 }
 
 #renderCanvas {
+  position: fixed;
+  left: var(--view-left);
+  top: 0;
   width: 100%;
+  width: calc(100% - var(--view-left));
   height: 100%;
   display: block;
   outline: none;
@@ -150,7 +169,7 @@ body.debug-marker-map {
 
 .sinking-water-overlay {
   position: fixed;
-  left: 0;
+  left: var(--view-left);
   right: 0;
   bottom: 0;
   z-index: 2;
@@ -166,7 +185,10 @@ body.debug-marker-map {
 
 .plane-hit-flash {
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: var(--view-left);
   z-index: 2;
   pointer-events: none;
   opacity: var(--plane-hit-flash-opacity, 0);
@@ -181,6 +203,20 @@ body.debug-marker-map {
   inset: 0;
   z-index: 3;
   pointer-events: none;
+}
+
+.hud::before {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--instrument-panel-width);
+  border-right: 1px solid rgb(155 229 223 / 24%);
+  background:
+    linear-gradient(180deg, rgb(8 34 48 / 96%), rgb(2 22 31 / 98%)),
+    rgb(5 27 40);
+  box-shadow: 16px 0 44px rgb(0 0 0 / 26%);
+  content: "";
 }
 
 .flak-hit-alert {
@@ -385,23 +421,26 @@ body.debug-marker-map {
 
 .nav-panel {
   position: absolute;
-  top: 22px;
-  left: 24px;
+  top: var(--instrument-panel-padding);
+  left: var(--instrument-panel-padding);
   display: grid;
-  grid-template-columns: calc(var(--map-canvas-width) + var(--map-meta-width) + 35px);
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   align-items: start;
+  width: calc(var(--instrument-panel-width) - var(--instrument-panel-padding) * 2);
+  height: var(--map-panel-height);
 }
 
 body:not([data-debug-map="true"]) .nav-panel {
-  display: none;
+  display: grid;
 }
 
 .nav-instrument {
+  box-sizing: border-box;
   padding: 9px;
   border: 1px solid rgb(255 255 255 / 30%);
   border-radius: 8px;
-  background: rgb(5 27 40 / 42%);
+  background: rgb(5 27 40 / 78%);
   box-shadow: 0 12px 38px rgb(1 15 24 / 22%);
   backdrop-filter: blur(7px);
   pointer-events: auto;
@@ -486,9 +525,10 @@ body:not([data-radar-mode="target"]) .radar-hotkey-target {
 
 .nav-instrument-radar {
   position: absolute;
-  left: 24px;
-  bottom: 24px;
-  width: var(--radar-size);
+  left: var(--instrument-panel-padding);
+  top: calc(var(--instrument-panel-padding) + var(--map-panel-height) + var(--instrument-panel-gap));
+  bottom: auto;
+  width: calc(var(--instrument-panel-width) - var(--instrument-panel-padding) * 2);
 }
 
 body[data-cannon-view="active"] .nav-instrument-radar {
@@ -507,14 +547,17 @@ body[data-torpedo-view="active"] .compass {
 }
 
 .nav-instrument-radar canvas {
+  width: 100%;
+  margin: 0 auto;
   height: auto;
   aspect-ratio: 1;
 }
 
 .plane-drop-sight-hint {
   position: absolute;
-  left: 24px;
-  bottom: calc(34px + var(--radar-size));
+  left: var(--instrument-panel-padding);
+  top: calc(var(--instrument-panel-padding) + var(--map-canvas-height) + var(--radar-size) + 108px);
+  bottom: auto;
   display: none;
   align-items: center;
   gap: 7px;
@@ -569,7 +612,7 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 
 .air-torpedo-sight-name {
   position: absolute;
-  left: 50%;
+  left: calc(var(--view-left) + (100vw - var(--view-left)) / 2);
   top: 16%;
   padding: 4px 7px;
   border: 1px solid rgb(215 248 244 / 24%);
@@ -581,7 +624,7 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 
 .air-torpedo-sight-line {
   position: absolute;
-  left: 50%;
+  left: calc(var(--view-left) + (100vw - var(--view-left)) / 2);
   top: 20%;
   width: 1px;
   height: 62%;
@@ -617,7 +660,7 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 
 .air-torpedo-sight-horizon {
   position: absolute;
-  left: 50%;
+  left: calc(var(--view-left) + (100vw - var(--view-left)) / 2);
   top: 50%;
   width: 22vw;
   max-width: 360px;
@@ -629,7 +672,7 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 
 .air-torpedo-sight-ticks {
   position: absolute;
-  left: calc(50% + min(15vw, 230px));
+  left: calc(var(--view-left) + (100vw - var(--view-left)) / 2 + min(15vw, 230px));
   top: 24%;
   display: grid;
   gap: 10vh;
@@ -649,17 +692,18 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 
 .battle-station-panel {
   position: absolute;
-  left: 24px;
-  bottom: calc(24px + var(--radar-size) + 58px);
-  width: calc(var(--radar-size) + 20px);
-  height: 128px;
+  left: var(--instrument-panel-padding);
+  top: calc(var(--instrument-panel-padding) + var(--map-panel-height) + var(--instrument-panel-gap) * 2 + var(--radar-size) + var(--radar-panel-extra-height));
+  bottom: auto;
+  width: calc(var(--instrument-panel-width) - var(--instrument-panel-padding) * 2);
+  height: var(--battle-station-height);
   box-sizing: border-box;
-  padding: 10px 12px;
+  padding: 6px 8px;
   border: 1px solid rgb(155 229 223 / 26%);
   border-radius: 8px;
   background:
     radial-gradient(ellipse at 72% 42%, rgb(255 107 74 / 8%), transparent 34%),
-    linear-gradient(180deg, rgb(6 34 48 / 72%), rgb(2 20 29 / 60%));
+    linear-gradient(180deg, rgb(6 34 48 / 88%), rgb(2 20 29 / 82%));
   box-shadow: 0 10px 26px rgb(1 15 24 / 20%);
   backdrop-filter: blur(7px);
   pointer-events: auto;
@@ -667,10 +711,10 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 
 .battle-station-hull {
   position: absolute;
-  left: 22px;
-  right: 22px;
-  top: 31px;
-  height: 40px;
+  left: 18px;
+  right: 18px;
+  top: 18px;
+  height: 25px;
   border: 1px solid rgb(155 229 223 / 22%);
   background:
     linear-gradient(180deg, rgb(250 255 255 / 14%), rgb(2 18 25 / 48%) 58%, rgb(0 0 0 / 38%)),
@@ -815,14 +859,14 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
   z-index: 1;
   display: grid;
   place-items: center;
-  min-width: 58px;
-  min-height: 34px;
-  padding: 3px 5px;
+  min-width: 52px;
+  min-height: 23px;
+  padding: 2px 5px;
   border: 1px solid transparent;
   border-radius: 7px;
   background: transparent;
   color: rgb(247 251 255 / 74%);
-  font: 800 8px/1.05 Inter, Arial, sans-serif;
+  font: 800 7px/1.05 Inter, Arial, sans-serif;
   letter-spacing: 0;
   text-align: center;
   text-transform: uppercase;
@@ -836,9 +880,9 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 }
 
 .battle-station kbd {
-  min-width: 14px;
+  min-width: 13px;
   margin-top: 2px;
-  padding: 1px 3px;
+  padding: 1px 2px;
   border: 1px solid rgb(247 251 255 / 22%);
   border-radius: 4px;
   background: rgb(247 251 255 / 8%);
@@ -878,25 +922,25 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 }
 
 .battle-station-cannon {
-  right: 13%;
-  top: 11px;
+  right: 12%;
+  top: 5px;
 }
 
 .battle-station-bridge {
   left: 37%;
-  top: 56px;
-  min-width: 84px;
+  top: 35px;
+  min-width: 78px;
 }
 
 .battle-station-flak {
   left: 7%;
-  top: 11px;
+  top: 5px;
 }
 
 .battle-station-torpedo-precision {
   right: 5%;
-  top: 51px;
-  min-width: 78px;
+  top: 35px;
+  min-width: 76px;
 }
 
 body[data-torpedo-view="active"] .battle-station-torpedo-precision {
@@ -924,13 +968,13 @@ body[data-player-vehicle="scout-plane"] .battle-station-panel {
   position: absolute;
   left: 10px;
   right: 10px;
-  bottom: 8px;
+  bottom: 4px;
   display: grid;
   grid-template-columns: auto 1fr 1.35fr;
-  gap: 6px;
+  gap: 5px;
   align-items: center;
   color: rgb(247 251 255 / 68%);
-  font: 800 8px/1 Inter, Arial, sans-serif;
+  font: 800 7px/1 Inter, Arial, sans-serif;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -985,12 +1029,12 @@ body[data-torpedo-view="active"] .torpedo-scope {
   inset: 0;
   z-index: 0;
   background:
-    radial-gradient(circle at 50% 47%, transparent 0 24%, rgb(1 8 10 / 10%) 38%, rgb(1 8 10 / 72%) 75%, rgb(0 0 0 / 92%) 100%);
+    radial-gradient(circle at calc(var(--view-left) + (100vw - var(--view-left)) / 2) 47%, transparent 0 24%, rgb(1 8 10 / 10%) 38%, rgb(1 8 10 / 72%) 75%, rgb(0 0 0 / 92%) 100%);
 }
 
 .torpedo-scope-glass {
   position: absolute;
-  left: 50%;
+  left: calc(var(--view-left) + (100vw - var(--view-left)) / 2);
   top: 51%;
   z-index: 1;
   width: min(54vw, 560px);
@@ -1145,12 +1189,12 @@ body[data-cannon-view="active"] .cannon-scope {
   inset: 0;
   z-index: 0;
   background:
-    radial-gradient(circle at 50% 50%, transparent 0 22%, rgb(1 8 10 / 12%) 34%, rgb(1 8 10 / 78%) 72%, rgb(0 0 0 / 92%) 100%);
+    radial-gradient(circle at calc(var(--view-left) + (100vw - var(--view-left)) / 2) 50%, transparent 0 22%, rgb(1 8 10 / 12%) 34%, rgb(1 8 10 / 78%) 72%, rgb(0 0 0 / 92%) 100%);
 }
 
 .cannon-scope-glass {
   position: absolute;
-  left: 50%;
+  left: calc(var(--view-left) + (100vw - var(--view-left)) / 2);
   top: 50%;
   z-index: 1;
   width: 58vw;
@@ -1268,13 +1312,13 @@ body[data-cannon-reloading="true"] .cannon-scope-glass::after {
 body[data-flak-view="active"] .nav-instrument-map,
 body[data-cannon-view="active"] .nav-instrument-map,
 body[data-bomb-bay-view="active"] .nav-instrument-map {
-  display: none;
+  display: block;
 }
 
 .map-control {
   display: grid;
-  grid-template-columns: 18px var(--map-canvas-width) var(--map-meta-width);
-  grid-template-rows: var(--map-canvas-height) 12px 18px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  grid-template-rows: var(--map-canvas-height) 12px 18px auto;
   gap: 7px;
   align-items: end;
   pointer-events: auto;
@@ -1285,7 +1329,7 @@ body.debug-marker-map .nav-panel {
 }
 
 body.debug-marker-map .map-control {
-  grid-template-columns: 18px var(--map-canvas-width) var(--map-meta-width) var(--map-marker-width);
+  grid-template-columns: 18px minmax(0, 1fr) var(--map-marker-width);
 }
 
 .map-row-labels {
@@ -1304,7 +1348,7 @@ body.debug-marker-map .map-control {
   grid-column: 2;
   grid-row: 2;
   position: relative;
-  width: var(--map-canvas-width);
+  width: 100%;
   color: rgb(216 236 242 / 70%);
   font-size: 9px;
   font-weight: 800;
@@ -1326,9 +1370,13 @@ body.debug-marker-map .map-control {
 }
 
 .map-meta {
+  grid-column: 2;
+  grid-row: 4;
+  grid-template-columns: auto 1fr;
   display: grid;
+  align-items: end;
   align-content: end;
-  gap: 6px;
+  gap: 6px 10px;
   color: rgb(247 251 255 / 72%);
   font-size: 10px;
   font-weight: 800;
@@ -1338,7 +1386,7 @@ body.debug-marker-map .map-control {
 
 .map-meta strong {
   color: #9be5df;
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1;
   letter-spacing: 0;
 }
@@ -1350,7 +1398,7 @@ body.debug-marker-map .map-control {
 }
 
 .debug-map-marker-panel {
-  grid-column: 4;
+  grid-column: 3;
   grid-row: 1 / 4;
   align-self: stretch;
   display: grid;
@@ -1518,7 +1566,7 @@ body.big-map .map-meta span {
 #mapCanvas {
   grid-column: 2;
   grid-row: 1;
-  width: var(--map-canvas-width);
+  width: 100%;
   height: var(--map-canvas-height);
   border-radius: 5px;
 }
@@ -1559,7 +1607,7 @@ body.big-map .map-meta span {
 .fleet-status {
   position: absolute;
   top: 22px;
-  left: 50%;
+  left: calc(var(--view-left) + (100vw - var(--view-left)) / 2);
   display: grid;
   grid-template-columns: repeat(4, minmax(78px, max-content));
   gap: 7px;
@@ -1625,11 +1673,10 @@ body.big-map .map-meta span {
 
 .player-list {
   position: absolute;
-  top: calc(34px + var(--compass-size));
-  right: 24px;
-  min-width: 212px;
-  max-width: 270px;
-  padding: 9px;
+  top: calc(30px + var(--compass-size));
+  right: 18px;
+  width: clamp(150px, 11vw, 190px);
+  padding: 7px;
   border: 1px solid rgb(255 255 255 / 30%);
   border-radius: 8px;
   background: rgb(5 27 40 / 42%);
@@ -1640,10 +1687,10 @@ body.big-map .map-meta span {
 .version-panel {
   position: absolute;
   top: 22px;
-  right: calc(34px + var(--compass-size));
+  right: calc(28px + var(--compass-size));
   display: grid;
   gap: 2px;
-  max-width: min(360px, calc(100vw - var(--compass-size) - 82px));
+  max-width: min(360px, calc(100vw - var(--view-left) - var(--compass-size) - 82px));
   padding: 7px 9px;
   border: 1px solid rgb(255 255 255 / 24%);
   border-radius: 8px;
@@ -1663,9 +1710,9 @@ body.big-map .map-meta span {
 }
 
 .player-list-title {
-  margin-bottom: 7px;
+  margin-bottom: 6px;
   color: #9be5df;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
@@ -1673,17 +1720,17 @@ body.big-map .map-meta span {
 
 .player-list-rows {
   display: grid;
-  gap: 5px;
+  gap: 4px;
 }
 
 .player-list-row {
   display: grid;
-  grid-template-columns: 14px minmax(42px, auto) 34px 28px 22px 38px;
-  gap: 7px;
+  grid-template-columns: 12px minmax(34px, auto) 28px 20px 18px 30px;
+  gap: 5px;
   align-items: center;
-  min-height: 24px;
+  min-height: 20px;
   color: rgb(247 251 255 / 78%);
-  font-size: 10px;
+  font-size: 8px;
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
@@ -1691,7 +1738,7 @@ body.big-map .map-meta span {
 
 .player-list-row strong {
   color: #ffffff;
-  font-size: 12px;
+  font-size: 10px;
   letter-spacing: 0;
 }
 
@@ -1705,14 +1752,14 @@ body.big-map .map-meta span {
 .player-list-row small {
   justify-self: end;
   color: #9be5df;
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 850;
 }
 
 .player-list-kills {
   justify-self: end;
   color: rgb(247 251 255 / 82%);
-  font-size: 10px;
+  font-size: 8px;
 }
 
 .player-list-marker {
@@ -1723,8 +1770,8 @@ body.big-map .map-meta span {
 .player-list-bearing {
   position: relative;
   justify-self: center;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border: 1px solid rgb(155 229 223 / 48%);
   border-radius: 50%;
   background: rgb(2 16 21 / 28%);
@@ -1737,7 +1784,7 @@ body.big-map .map-meta span {
   width: 0;
   height: 0;
   border-right: 3px solid transparent;
-  border-bottom: 12px solid #e8fffb;
+  border-bottom: 10px solid #e8fffb;
   border-left: 3px solid transparent;
   filter: drop-shadow(0 0 5px rgb(155 229 223 / 60%));
   content: "";
@@ -1779,22 +1826,22 @@ body.big-map .map-meta span {
 
 .player-list-empty {
   color: rgb(247 251 255 / 58%);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
 }
 
 .kill-feed {
-  margin-top: 9px;
-  padding-top: 8px;
+  margin-top: 7px;
+  padding-top: 7px;
   border-top: 1px solid rgb(155 229 223 / 20%);
 }
 
 .kill-feed-title {
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   color: rgb(155 229 223 / 82%);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 850;
   line-height: 1;
   text-transform: uppercase;
@@ -1802,19 +1849,19 @@ body.big-map .map-meta span {
 
 .kill-feed-rows {
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .kill-feed-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-columns: 19px minmax(0, 1fr);
   gap: 2px;
-  column-gap: 6px;
-  min-height: 22px;
-  padding: 3px 5px;
+  column-gap: 5px;
+  min-height: 19px;
+  padding: 2px 4px;
   border-radius: 5px;
   color: rgb(247 251 255 / 74%);
-  font-size: 10px;
+  font-size: 8px;
   font-weight: 780;
   line-height: 1.18;
   text-transform: uppercase;
@@ -1823,16 +1870,24 @@ body.big-map .map-meta span {
 .kill-feed-number {
   align-self: start;
   color: rgb(155 229 223 / 58%);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 900;
   line-height: 1.18;
-  min-width: 28px;
+  min-width: 19px;
   text-align: right;
 }
 
 .kill-feed-text {
   display: grid;
-  gap: 2px;
+  gap: 1px;
+  min-width: 0;
+}
+
+.kill-feed-parties {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 3px;
+  align-items: center;
   min-width: 0;
 }
 
@@ -1842,7 +1897,7 @@ body.big-map .map-meta span {
 
 .kill-feed-row strong {
   color: #ffffff;
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 900;
   letter-spacing: 0;
 }
@@ -1855,20 +1910,26 @@ body.big-map .map-meta span {
 }
 
 .kill-feed-detail {
-  gap: 3px;
+  color: rgb(247 251 255 / 58%);
+}
+
+.kill-feed-separator {
+  color: rgb(155 229 223 / 62%);
+  font-size: 8px;
+  font-weight: 900;
 }
 
 .unit-marker {
   flex: 0 0 auto;
   display: inline-block;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   background: #9be5df;
   filter: drop-shadow(0 0 4px rgb(155 229 223 / 34%));
 }
 
 .kill-feed-marker {
-  margin-right: 4px;
+  margin-right: 3px;
 }
 
 .unit-marker-ship {
@@ -1915,7 +1976,7 @@ body.big-map .map-meta span {
 
 .kill-feed-empty {
   color: rgb(247 251 255 / 48%);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
@@ -1963,15 +2024,19 @@ body.big-map .map-meta span {
 
 .speed {
   position: absolute;
-  left: calc(24px + var(--radar-size) + 26px);
-  bottom: 24px;
+  left: var(--instrument-panel-padding);
+  bottom: var(--instrument-panel-padding);
   min-width: 104px;
   padding: 13px 15px 12px;
   border: 1px solid rgb(255 255 255 / 32%);
   border-radius: 8px;
-  background: rgb(5 27 40 / 42%);
+  background: rgb(5 27 40 / 82%);
   box-shadow: 0 12px 38px rgb(1 15 24 / 22%);
   backdrop-filter: blur(7px);
+}
+
+body:not([data-player-vehicle="scout-plane"]) .speed {
+  display: none;
 }
 
 .boat-speed-readout span {
@@ -2112,12 +2177,13 @@ body.big-map .map-meta span {
 }
 
 body[data-player-vehicle="scout-plane"] .speed {
+  display: block;
   min-width: 116px;
   padding: 12px;
 }
 
 body[data-player-vehicle="scout-plane"] .depth-gauge,
-body[data-player-vehicle="scout-plane"] .telegraph {
+body[data-player-vehicle="scout-plane"] .ship-controls-panel {
   display: none;
 }
 
@@ -2189,23 +2255,44 @@ body[data-player-vehicle="scout-plane"] .altimeter {
   bottom: 75%;
 }
 
-.telegraph {
+.ship-controls-panel {
   position: absolute;
-  right: 24px;
-  bottom: 24px;
-  width: 146px;
-  padding: 12px 12px 11px;
+  left: calc(var(--view-left) + (100vw - var(--view-left)) / 2);
+  bottom: var(--instrument-panel-padding);
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr);
+  width: var(--control-panel-width);
+  height: var(--control-panel-height);
+  box-sizing: border-box;
+  overflow: hidden;
   border: 1px solid rgb(255 255 255 / 32%);
   border-radius: 8px;
-  background: rgb(5 27 40 / 42%);
+  background: rgb(5 27 40 / 82%);
   box-shadow: 0 12px 38px rgb(1 15 24 / 22%);
   backdrop-filter: blur(7px);
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.telegraph {
+  position: static;
+  width: auto;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px 9px;
+  border: 0;
+  border-right: 1px solid rgb(155 229 223 / 18%);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
   pointer-events: auto;
 }
 
 .telegraph-title {
   margin-bottom: 5px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
@@ -2213,24 +2300,37 @@ body[data-player-vehicle="scout-plane"] .altimeter {
 }
 
 .telegraph-speed-readout {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  margin-bottom: 9px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px 6px;
+  align-items: end;
+  margin-bottom: 5px;
   color: #ffffff;
   line-height: 1;
 }
 
+.telegraph-speed-readout strong {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .telegraph-speed-readout span {
-  min-width: 42px;
-  font-size: 25px;
+  min-width: 0;
+  font-size: 18px;
   font-weight: 900;
   letter-spacing: 0;
 }
 
 .telegraph-speed-readout small {
   color: rgb(247 251 255 / 78%);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 900;
 }
 
@@ -2240,14 +2340,14 @@ body[data-player-vehicle="scout-plane"] .altimeter {
   justify-content: space-between;
   gap: 6px;
   color: rgb(247 251 255 / 72%);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 900;
   line-height: 1;
   text-transform: uppercase;
 }
 
 .telegraph-key-hints {
-  margin: -3px 0 8px;
+  margin: 0;
 }
 
 .rudder-key-hints {
@@ -2265,8 +2365,8 @@ body[data-player-vehicle="scout-plane"] .altimeter {
 .rudder-key-hints kbd,
 .weapon-aim-ring kbd {
   display: inline-grid;
-  min-width: 17px;
-  height: 15px;
+  min-width: 15px;
+  height: 14px;
   place-items: center;
   padding: 0 3px;
   border: 1px solid rgb(155 229 223 / 46%);
@@ -2291,7 +2391,7 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
 }
 
 .telegraph-scale {
-  display: grid;
+  display: none;
   gap: 4px;
   cursor: ns-resize;
 }
@@ -2335,18 +2435,19 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
 }
 
 .rudder {
-  position: absolute;
-  left: 50%;
-  bottom: 24px;
-  width: 178px;
-  padding: 12px 10px 11px;
-  border: 1px solid rgb(255 255 255 / 32%);
-  border-radius: 8px;
-  background: rgb(5 27 40 / 42%);
-  box-shadow: 0 12px 38px rgb(1 15 24 / 22%);
+  position: static;
+  width: auto;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px 9px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   text-align: center;
-  backdrop-filter: blur(7px);
-  transform: translateX(-50%);
+  backdrop-filter: none;
+  transform: none;
   pointer-events: auto;
 }
 
@@ -2356,7 +2457,7 @@ body[data-hide-rudder-instrument="true"] .rudder {
 }
 
 .rudder-title {
-  margin-bottom: 8px;
+  margin-bottom: 5px;
   color: #9be5df;
   font-size: 10px;
   font-weight: 800;
@@ -2366,7 +2467,7 @@ body[data-hide-rudder-instrument="true"] .rudder {
 
 .rudder-gauge {
   position: relative;
-  height: 28px;
+  height: 24px;
   margin: 0 auto;
   border-bottom: 1px solid rgb(247 251 255 / 26%);
   cursor: ew-resize;
@@ -2439,7 +2540,7 @@ body[data-hide-rudder-instrument="true"] .rudder {
 
 .rudder strong {
   display: block;
-  margin-top: 7px;
+  margin-top: 5px;
   color: #ffffff;
   font-size: 10px;
   font-weight: 800;
@@ -2447,32 +2548,79 @@ body[data-hide-rudder-instrument="true"] .rudder {
   text-transform: uppercase;
 }
 
+@media (max-height: 735px) {
+  body {
+    --map-canvas-height: 0px;
+    --map-panel-height: 0px;
+  }
+
+  .nav-panel {
+    display: none !important;
+  }
+}
+
+@media (max-height: 620px) {
+  body {
+    --control-panel-height: 0px;
+  }
+
+  .ship-controls-panel {
+    display: none;
+  }
+}
+
+@media (max-width: 1320px), (max-height: 720px) {
+  .compass,
+  .player-list,
+  .version-panel {
+    display: none;
+  }
+}
+
+@media (max-width: 1160px) {
+  .weapon-aim-hints,
+  .weapon-elevation {
+    display: none !important;
+  }
+}
+
 .weapon-elevation {
   position: absolute;
-  left: calc(50% + 108px);
-  bottom: 24px;
+  left: calc(var(--view-left) + (100vw - var(--view-left)) / 2 + var(--control-panel-width) / 2 + var(--instrument-panel-gap));
+  bottom: var(--instrument-panel-padding);
   display: none;
   width: 52px;
-  padding: 9px 8px 8px;
+  height: var(--control-panel-height);
+  box-sizing: border-box;
+  padding: 7px 7px;
   border: 1px solid rgb(255 255 255 / 28%);
   border-radius: 8px;
-  background: rgb(5 27 40 / 38%);
+  background: rgb(5 27 40 / 82%);
   box-shadow: 0 12px 32px rgb(1 15 24 / 18%);
   text-align: center;
   backdrop-filter: blur(7px);
   pointer-events: none;
 }
 
+.cannon-elevation {
+  width: 118px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
+  gap: 2px 8px;
+  align-items: center;
+}
+
 .cannon-sight-readout {
-  position: absolute;
-  left: 90px;
-  bottom: 0;
+  position: static;
+  grid-column: 2;
+  grid-row: 1 / 4;
   display: grid;
   gap: 3px;
   align-items: center;
   justify-content: center;
-  width: 58px;
-  min-height: 36px;
+  width: auto;
+  height: 100%;
+  min-height: 0;
   padding: 5px 6px;
   border: 1px solid rgb(155 229 223 / 32%);
   border-radius: 5px;
@@ -2515,20 +2663,23 @@ body[data-hide-rudder-instrument="true"] .rudder {
   line-height: 1;
 }
 
-body[data-flak-view="active"] .flak-elevation,
-body[data-cannon-view="active"] .cannon-elevation {
+body[data-flak-view="active"] .flak-elevation {
   display: block;
+}
+
+body[data-cannon-view="active"] .cannon-elevation {
+  display: grid;
 }
 
 .weapon-aim-hints {
   position: absolute;
-  left: calc(50% + 142px);
-  bottom: 33px;
+  left: calc(var(--view-left) + (100vw - var(--view-left)) / 2 - var(--control-panel-width) / 2 - 62px);
+  bottom: calc(var(--instrument-panel-padding) + (var(--control-panel-height) - 52px) / 2);
   display: none;
   width: 52px;
   height: 52px;
   pointer-events: none;
-  transform: translateX(-50%);
+  transform: none;
 }
 
 body[data-flak-view="active"] .weapon-aim-hints,
@@ -2581,7 +2732,7 @@ body[data-cannon-view="active"] .weapon-aim-hints {
 }
 
 .flak-elevation-title {
-  margin-bottom: 5px;
+  margin-bottom: 4px;
   color: #9be5df;
   font-size: 9px;
   font-weight: 900;
@@ -2592,7 +2743,7 @@ body[data-cannon-view="active"] .weapon-aim-hints {
 .flak-elevation-gauge {
   position: relative;
   width: 24px;
-  height: 62px;
+  height: 32px;
   margin: 0 auto;
   border-left: 1px solid rgb(247 251 255 / 24%);
 }
@@ -2651,7 +2802,7 @@ body[data-cannon-view="active"] .weapon-aim-hints {
 
 .weapon-elevation > strong {
   display: block;
-  margin-top: 6px;
+  margin-top: 4px;
   color: #ffffff;
   font-size: 10px;
   font-weight: 900;
@@ -2676,6 +2827,22 @@ body[data-cannon-view="active"] .weapon-aim-hints {
   body {
     --radar-size: clamp(128px, 18vw, 168px);
     --compass-size: clamp(76px, 10vw, 94px);
+    --instrument-panel-width: 0px;
+    --view-left: 0px;
+  }
+
+  #renderCanvas {
+    left: 0;
+    width: 100%;
+  }
+
+  .hud::before {
+    display: none;
+  }
+
+  .sinking-water-overlay,
+  .plane-hit-flash {
+    left: 0;
   }
 
   .nav-panel {
@@ -2842,13 +3009,6 @@ body[data-cannon-view="active"] .weapon-aim-hints {
     display: none;
   }
 
-  .telegraph {
-    right: 10px;
-    bottom: 92px;
-    width: 132px;
-    padding: 9px;
-  }
-
   .telegraph-title {
     margin-bottom: 6px;
     font-size: 9px;
@@ -2887,12 +3047,8 @@ body[data-cannon-view="active"] .weapon-aim-hints {
     font-size: 9px;
   }
 
-  .rudder {
-    left: 50%;
-    bottom: 12px;
-    width: min(230px, 45vw);
-    padding: 9px 9px 8px;
-    transform: translateX(-50%);
+  .ship-controls-panel {
+    display: none;
   }
 
   .rudder-title {

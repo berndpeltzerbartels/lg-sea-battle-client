@@ -384,6 +384,23 @@ test('ship wake follows actual speed while the engine is stopped', async ({ page
   expect(fastCoasting.sternChurnVisibility).toBeGreaterThan(slowCoasting.sternChurnVisibility);
 });
 
+test('server position correction does not leave wake on a stopped ship', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, TORPEDO_HULL_HIT_SCENARIO, testInfo);
+
+  await page.evaluate(() => window.seaBattleScenarioTest.setEnemyServerWakeCorrectionState('dark-S2', {
+    offset: 24
+  }));
+  await page.waitForTimeout(900);
+  const corrected = await page.evaluate(() => window.seaBattleScenarioTest.enemyWakeSnapshot('dark-S2'));
+
+  expect(corrected.speed).toBeLessThan(0.04);
+  expect(corrected.serverSpeed).toBe(0);
+  expect(corrected.strength).toBeLessThan(0.08);
+  expect(corrected.wakeEnabled).toBe(false);
+  expect(corrected.sternEdgeVisibility).toBe(0);
+  expect(corrected.sternChurnVisibility).toBe(0);
+});
+
 async function openScenario(page, request, scenario, testInfo, options = {}) {
   await page.goto('/start.html');
   await page.evaluate((vehicleType) => {
