@@ -3889,6 +3889,17 @@ function renderKillFeed() {
     const text = document.createElement("div");
     text.className = "kill-feed-text";
 
+    const source = document.createElement("strong");
+    source.className = "kill-feed-party";
+    source.append(
+      createKillFeedMarker(event.sourceTeamId, event.sourceVehicleType),
+      document.createTextNode(event.sourceLabel)
+    );
+
+    const separator = document.createElement("span");
+    separator.className = "kill-feed-separator";
+    separator.textContent = ">";
+
     const victim = document.createElement("strong");
     victim.className = "kill-feed-party";
     victim.append(
@@ -3898,13 +3909,13 @@ function renderKillFeed() {
 
     const detail = document.createElement("span");
     detail.className = "kill-feed-detail";
-    detail.append(
-      document.createTextNode(`durch ${event.weaponLabel} von `),
-      createKillFeedMarker(event.sourceTeamId, event.sourceVehicleType),
-      document.createTextNode(event.sourceLabel)
-    );
+    detail.textContent = event.weaponLabel;
 
-    text.append(victim, detail);
+    const parties = document.createElement("div");
+    parties.className = "kill-feed-parties";
+    parties.append(source, separator, victim);
+
+    text.append(parties, detail);
     row.append(number, text);
     killFeedRows.append(row);
     event.highlight = false;
@@ -4841,7 +4852,7 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, headi
   if (!ctx || width < 2 || height < 2) return;
   const zoomIndex = clamp(Number(zoomControl?.value ?? 1), 0, mapZoomScales.length - 1);
   const zoomScale = mapZoomScales[zoomIndex];
-  const bounds = getCenteredMapBounds(playerPosition, zoomScale);
+  const bounds = getCenteredMapBounds(playerPosition, zoomScale, width / height);
   const scale = Math.min(width / (bounds.maxX - bounds.minX), height / (bounds.maxZ - bounds.minZ));
   lastMapViewport = { bounds, width, height, scale };
 
@@ -5950,14 +5961,16 @@ function formatWorldDistance(worldUnits) {
   return `${Math.round(meters)} m`;
 }
 
-function getCenteredMapBounds(position, zoomScale = 1) {
-  const size = mapTileSize * zoomScale;
+function getCenteredMapBounds(position, zoomScale = 1, aspectRatio = 1) {
+  const safeAspectRatio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1;
+  const height = mapTileSize * zoomScale;
+  const width = height * safeAspectRatio;
 
   return {
-    minX: position.x - size * 0.5,
-    maxX: position.x + size * 0.5,
-    minZ: position.z - size * 0.5,
-    maxZ: position.z + size * 0.5
+    minX: position.x - width * 0.5,
+    maxX: position.x + width * 0.5,
+    minZ: position.z - height * 0.5,
+    maxZ: position.z + height * 0.5
   };
 }
 

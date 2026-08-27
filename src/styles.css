@@ -2,7 +2,7 @@ html,
 body {
   --map-canvas-width: clamp(210px, 18vw, 300px);
   --map-meta-width: clamp(72px, 6vw, 104px);
-  --compass-size: clamp(112px, 11vw, 168px);
+  --compass-size: clamp(92px, 8vw, 128px);
   --instrument-panel-width: clamp(340px, 24vw, 430px);
   --instrument-panel-padding: 14px;
   --instrument-panel-gap: 10px;
@@ -1673,11 +1673,10 @@ body.big-map .map-meta span {
 
 .player-list {
   position: absolute;
-  top: calc(34px + var(--compass-size));
-  right: 24px;
-  min-width: 212px;
-  max-width: 270px;
-  padding: 9px;
+  top: calc(30px + var(--compass-size));
+  right: 18px;
+  width: clamp(150px, 11vw, 190px);
+  padding: 7px;
   border: 1px solid rgb(255 255 255 / 30%);
   border-radius: 8px;
   background: rgb(5 27 40 / 42%);
@@ -1688,7 +1687,7 @@ body.big-map .map-meta span {
 .version-panel {
   position: absolute;
   top: 22px;
-  right: calc(34px + var(--compass-size));
+  right: calc(28px + var(--compass-size));
   display: grid;
   gap: 2px;
   max-width: min(360px, calc(100vw - var(--view-left) - var(--compass-size) - 82px));
@@ -1711,9 +1710,9 @@ body.big-map .map-meta span {
 }
 
 .player-list-title {
-  margin-bottom: 7px;
+  margin-bottom: 6px;
   color: #9be5df;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
@@ -1721,17 +1720,17 @@ body.big-map .map-meta span {
 
 .player-list-rows {
   display: grid;
-  gap: 5px;
+  gap: 4px;
 }
 
 .player-list-row {
   display: grid;
-  grid-template-columns: 14px minmax(42px, auto) 34px 28px 22px 38px;
-  gap: 7px;
+  grid-template-columns: 12px minmax(34px, auto) 28px 20px 18px 30px;
+  gap: 5px;
   align-items: center;
-  min-height: 24px;
+  min-height: 20px;
   color: rgb(247 251 255 / 78%);
-  font-size: 10px;
+  font-size: 8px;
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
@@ -1739,7 +1738,7 @@ body.big-map .map-meta span {
 
 .player-list-row strong {
   color: #ffffff;
-  font-size: 12px;
+  font-size: 10px;
   letter-spacing: 0;
 }
 
@@ -1753,14 +1752,14 @@ body.big-map .map-meta span {
 .player-list-row small {
   justify-self: end;
   color: #9be5df;
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 850;
 }
 
 .player-list-kills {
   justify-self: end;
   color: rgb(247 251 255 / 82%);
-  font-size: 10px;
+  font-size: 8px;
 }
 
 .player-list-marker {
@@ -1771,8 +1770,8 @@ body.big-map .map-meta span {
 .player-list-bearing {
   position: relative;
   justify-self: center;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border: 1px solid rgb(155 229 223 / 48%);
   border-radius: 50%;
   background: rgb(2 16 21 / 28%);
@@ -1785,7 +1784,7 @@ body.big-map .map-meta span {
   width: 0;
   height: 0;
   border-right: 3px solid transparent;
-  border-bottom: 12px solid #e8fffb;
+  border-bottom: 10px solid #e8fffb;
   border-left: 3px solid transparent;
   filter: drop-shadow(0 0 5px rgb(155 229 223 / 60%));
   content: "";
@@ -1827,22 +1826,22 @@ body.big-map .map-meta span {
 
 .player-list-empty {
   color: rgb(247 251 255 / 58%);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
 }
 
 .kill-feed {
-  margin-top: 9px;
-  padding-top: 8px;
+  margin-top: 7px;
+  padding-top: 7px;
   border-top: 1px solid rgb(155 229 223 / 20%);
 }
 
 .kill-feed-title {
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   color: rgb(155 229 223 / 82%);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 850;
   line-height: 1;
   text-transform: uppercase;
@@ -1850,19 +1849,19 @@ body.big-map .map-meta span {
 
 .kill-feed-rows {
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .kill-feed-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-columns: 19px minmax(0, 1fr);
   gap: 2px;
-  column-gap: 6px;
-  min-height: 22px;
-  padding: 3px 5px;
+  column-gap: 5px;
+  min-height: 19px;
+  padding: 2px 4px;
   border-radius: 5px;
   color: rgb(247 251 255 / 74%);
-  font-size: 10px;
+  font-size: 8px;
   font-weight: 780;
   line-height: 1.18;
   text-transform: uppercase;
@@ -1871,16 +1870,24 @@ body.big-map .map-meta span {
 .kill-feed-number {
   align-self: start;
   color: rgb(155 229 223 / 58%);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 900;
   line-height: 1.18;
-  min-width: 28px;
+  min-width: 19px;
   text-align: right;
 }
 
 .kill-feed-text {
   display: grid;
-  gap: 2px;
+  gap: 1px;
+  min-width: 0;
+}
+
+.kill-feed-parties {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 3px;
+  align-items: center;
   min-width: 0;
 }
 
@@ -1890,7 +1897,7 @@ body.big-map .map-meta span {
 
 .kill-feed-row strong {
   color: #ffffff;
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 900;
   letter-spacing: 0;
 }
@@ -1903,20 +1910,26 @@ body.big-map .map-meta span {
 }
 
 .kill-feed-detail {
-  gap: 3px;
+  color: rgb(247 251 255 / 58%);
+}
+
+.kill-feed-separator {
+  color: rgb(155 229 223 / 62%);
+  font-size: 8px;
+  font-weight: 900;
 }
 
 .unit-marker {
   flex: 0 0 auto;
   display: inline-block;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   background: #9be5df;
   filter: drop-shadow(0 0 4px rgb(155 229 223 / 34%));
 }
 
 .kill-feed-marker {
-  margin-right: 4px;
+  margin-right: 3px;
 }
 
 .unit-marker-ship {
@@ -1963,7 +1976,7 @@ body.big-map .map-meta span {
 
 .kill-feed-empty {
   color: rgb(247 251 255 / 48%);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
@@ -2552,6 +2565,14 @@ body[data-hide-rudder-instrument="true"] .rudder {
   }
 
   .ship-controls-panel {
+    display: none;
+  }
+}
+
+@media (max-width: 1320px), (max-height: 720px) {
+  .compass,
+  .player-list,
+  .version-panel {
     display: none;
   }
 }
