@@ -290,7 +290,7 @@
             <div id="mapRowLabels" class="map-row-labels" aria-hidden="true"></div>
             <canvas id="mapCanvas" width="320" height="230"></canvas>
             <div id="mapColumnLabels" class="map-column-labels" aria-hidden="true"></div>
-            <input id="mapZoom" type="range" min="0" max="5" step="1" value="1" aria-label="Map zoom" />
+            <input id="mapZoom" type="range" min="0" max="5" step="1" value="0" aria-label="Map zoom" />
             <div class="map-meta">
               <strong id="mapSectorValue">--</strong>
               <span id="mapCoordinateValue">--</span>
@@ -439,6 +439,7 @@
       <div class="telegraph" aria-hidden="true">
         <div class="telegraph-title">Engine</div>
         <div class="telegraph-speed-readout">
+          <strong id="telegraphOrderValue">Stop</strong>
           <span id="telegraphSpeedValue">0.0</span>
           <small>kn</small>
         </div>

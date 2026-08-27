@@ -70,6 +70,7 @@ const depthValue = document.getElementById("depthValue");
 const depthGauge = document.querySelector(".depth-gauge");
 const engineValue = document.getElementById("engineValue");
 const telegraphSpeedValue = document.getElementById("telegraphSpeedValue");
+const telegraphOrderValue = document.getElementById("telegraphOrderValue");
 const telegraphScale = document.getElementById("telegraphScale");
 const compassPointer = document.getElementById("compassPointer");
 const compassHeading = document.getElementById("compassHeading");
@@ -560,6 +561,7 @@ window.addEventListener("keydown", (event) => {
     } else {
       heldEngineDirection = 1;
       if (!event.repeat) {
+        heldEngineStopGuardDirection = engineOrder === 2 ? 0 : 1;
         changeEngineOrder(1);
         nextEngineHoldChangeTime = time + engineHoldInitialDelaySeconds;
       } else {
@@ -596,6 +598,7 @@ window.addEventListener("keydown", (event) => {
     } else {
       heldEngineDirection = -1;
       if (!event.repeat) {
+        heldEngineStopGuardDirection = engineOrder === 2 ? 0 : -1;
         changeEngineOrder(-1);
         nextEngineHoldChangeTime = time + engineHoldInitialDelaySeconds;
       } else {
@@ -678,10 +681,12 @@ window.addEventListener("keyup", (event) => {
   if (isHudControlEvent(event)) return;
   if (event.code === "ShiftLeft" || event.code === "ShiftRight") {
     heldEngineDirection = 0;
+    heldEngineStopGuardDirection = 0;
     heldRudderDirection = 0;
   }
   if (isInputKey(event, "up") && heldEngineDirection > 0) {
     heldEngineDirection = 0;
+    heldEngineStopGuardDirection = 0;
     event.preventDefault();
   }
   if (isInputKey(event, "up") && heldFlakPitchDirection > 0) {
@@ -698,6 +703,7 @@ window.addEventListener("keyup", (event) => {
   }
   if (isInputKey(event, "down") && heldEngineDirection < 0) {
     heldEngineDirection = 0;
+    heldEngineStopGuardDirection = 0;
     event.preventDefault();
   }
   if (isInputKey(event, "down") && heldFlakPitchDirection < 0) {
@@ -966,6 +972,7 @@ let engineOrder = scoutPlaneMode ? 7 : 2;
 let turnVelocity = 0;
 let rudderDegrees = 0;
 let heldEngineDirection = 0;
+let heldEngineStopGuardDirection = 0;
 let heldElevatorDirection = 0;
 let scoutPlaneAltitude = scoutPlaneCruiseAltitude;
 let scoutPlaneVerticalSpeed = 0;
@@ -1180,7 +1187,9 @@ scene.onBeforeRenderObservable.add(() => {
   updateCannonBarrelRecoil(boat.bowCannon, time);
 
   if (!scoutPlaneMode && playerActive && heldEngineDirection !== 0 && time >= nextEngineHoldChangeTime) {
-    changeEngineOrder(heldEngineDirection);
+    if (!(engineOrder === 2 && heldEngineStopGuardDirection === heldEngineDirection)) {
+      changeEngineOrder(heldEngineDirection);
+    }
     nextEngineHoldChangeTime = time + engineHoldRepeatSeconds;
   }
 
@@ -1407,6 +1416,7 @@ scene.onBeforeRenderObservable.add(() => {
   const displayedSpeed = Math.abs(speed) < 0.08 ? 0 : Math.abs(speed);
   speedValue.textContent = displayedSpeed.toFixed(1);
   if (telegraphSpeedValue) telegraphSpeedValue.textContent = displayedSpeed.toFixed(1);
+  if (telegraphOrderValue) telegraphOrderValue.textContent = engineOrders[engineOrder].shortLabel ?? engineOrders[engineOrder].label;
   updateAltimeter(scoutPlaneAltitude);
   engineValue.textContent = engineOrders[engineOrder].label;
   updateTelegraphSteps(telegraphSteps, engineOrder);
