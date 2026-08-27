@@ -1,14 +1,20 @@
 import { resolve } from "node:path";
 import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 
 const packageJson = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
 const buildTime = new Date().toISOString();
 
 function gitCommit() {
-  try {
-    return execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
+    if (process.env.SEA_BATTLE_CLIENT_COMMIT) {
+        return process.env.SEA_BATTLE_CLIENT_COMMIT;
+    }
+    if (!existsSync(new URL("./.git", import.meta.url))) {
+        return "unknown";
+    }
+    try {
+        return execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
   } catch (ignored) {
     return "unknown";
   }
@@ -19,10 +25,29 @@ const clientBuildInfo = {
   buildTime,
   commit: gitCommit()
 };
+const apiTarget = process.env.SEA_BATTLE_API_URL ?? "http://localhost:8080";
 
 export default defineConfig({
   base: "/sea-battle/",
+  server: {
+    proxy: {
+      "/game": apiTarget
+    }
+  },
   plugins: [
+    {
+      name: "sea-battle-dev-entry-routes",
+      configureServer(server) {
+        server.middlewares.use((request, _response, next) => {
+          const rawUrl = request.url ?? "";
+          const [path, query = ""] = rawUrl.split("?");
+          if (path === "/app" || path === "/start.html" || path === "/debug/side-view-sandbox") {
+            request.url = `/sea-battle/${query ? `?${query}` : ""}`;
+          }
+          next();
+        });
+      }
+    },
     {
       name: "sea-battle-build-info",
       transformIndexHtml(html) {

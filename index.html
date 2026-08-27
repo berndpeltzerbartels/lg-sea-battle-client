@@ -266,11 +266,13 @@
   <body>
     <canvas id="renderCanvas"></canvas>
     <div id="sinkingWaterOverlay" class="sinking-water-overlay" aria-hidden="true"></div>
+    <div id="planeHitFlash" class="plane-hit-flash" aria-hidden="true"></div>
     <div class="mobile-orientation-hint" aria-hidden="true">
       <strong>Rotate device</strong>
       <span>Sea Battle is built for landscape play.</span>
     </div>
     <div class="hud">
+      <div id="flakHitAlert" class="flak-hit-alert" aria-live="polite">Flak Treffer</div>
       <div class="compass" aria-hidden="true">
         <div id="compassRose" class="compass-rose">
           <span>N</span>
@@ -288,18 +290,110 @@
             <div id="mapRowLabels" class="map-row-labels" aria-hidden="true"></div>
             <canvas id="mapCanvas" width="320" height="230"></canvas>
             <div id="mapColumnLabels" class="map-column-labels" aria-hidden="true"></div>
-            <input id="mapZoom" type="range" min="0" max="5" step="1" value="1" aria-label="Map zoom" />
+            <input id="mapZoom" type="range" min="0" max="5" step="1" value="2" aria-label="Map zoom" />
             <div class="map-meta">
               <strong id="mapSectorValue">--</strong>
               <span id="mapCoordinateValue">--</span>
+            </div>
+            <div id="debugMapMarkerPanel" class="debug-map-marker-panel" hidden>
+              <div class="debug-map-marker-title">Markers</div>
+              <textarea id="debugMapMarkerOutput" spellcheck="false" aria-label="Debug map markers"></textarea>
+              <div class="debug-map-marker-actions">
+                <button id="copyDebugMapMarkersButton" type="button">Copy</button>
+                <button id="undoDebugMapMarkerButton" type="button">Undo</button>
+                <button id="clearDebugMapMarkersButton" type="button">Clear</button>
+              </div>
             </div>
           </div>
         </div>
       </div>
       <div class="nav-instrument nav-instrument-radar" aria-hidden="true">
-        <div class="nav-title">Radar</div>
+        <div class="nav-title-row">
+          <div class="nav-title">Gefechtsradar</div>
+        </div>
         <canvas id="radarCanvas" width="300" height="300"></canvas>
         <small id="radarStatus">Clear</small>
+      </div>
+      <div class="plane-drop-sight-hint" aria-hidden="true">
+        <span>Torpedo sight</span>
+        <kbd>Z</kbd>
+      </div>
+      <div class="air-torpedo-sight-overlay" aria-hidden="true">
+        <div class="air-torpedo-sight-name">Torpedo sight</div>
+        <div class="air-torpedo-sight-line"></div>
+        <div class="air-torpedo-sight-horizon"></div>
+        <div class="air-torpedo-sight-ticks">
+          <span>RUN</span>
+          <span>8</span>
+          <span>4</span>
+          <span>ENTRY</span>
+        </div>
+      </div>
+      <div class="battle-station-panel" aria-label="Station wählen">
+        <div class="battle-station-hull" aria-hidden="true">
+          <span class="battle-station-bow"></span>
+          <span class="battle-station-deck"></span>
+          <span class="battle-station-cabin"></span>
+          <span class="battle-station-funnel"></span>
+          <span class="battle-station-tubes battle-station-tubes-port"></span>
+          <span class="battle-station-tubes battle-station-tubes-starboard"></span>
+          <span class="battle-station-cannon-mark"></span>
+          <span class="battle-station-bridge-mark"></span>
+          <span class="battle-station-flak-mark"></span>
+          <span class="battle-station-stern-mark"></span>
+        </div>
+        <button id="cannonViewButton" class="battle-station battle-station-cannon" type="button" aria-label="Kanone wählen">
+          <span>Kanone</span>
+          <kbd>C</kbd>
+        </button>
+        <button id="bridgeViewButton" class="battle-station battle-station-bridge" type="button" aria-label="Brücke wählen">
+          <span>Brücke</span>
+          <kbd>B</kbd>
+        </button>
+        <button id="torpedoAidButton" class="battle-station battle-station-torpedo-precision" type="button" aria-label="Torpedo-Präzision wählen">
+          <span>Torpedo Präzision</span>
+          <kbd>T</kbd>
+        </button>
+        <button id="flakViewButton" class="battle-station battle-station-flak" type="button" aria-label="Flak wählen">
+          <span>Flak</span>
+          <kbd>F</kbd>
+        </button>
+        <div class="align-weapons-group" aria-label="Geschütze ausrichten">
+          <span>Geschütze ausrichten:</span>
+          <button id="alignWeaponsButton" class="align-weapons-button align-weapons-flat" type="button">Flach <kbd>A</kbd></button>
+          <button id="alignAirDefenseButton" class="align-weapons-button align-weapons-air" type="button">Flugabwehr <kbd>⇧A</kbd></button>
+        </div>
+      </div>
+      <div class="cannon-scope" aria-hidden="true">
+        <div class="cannon-scope-vignette"></div>
+        <div class="cannon-scope-glass">
+          <span class="cannon-scope-line cannon-scope-line-horizontal"></span>
+          <span class="cannon-scope-line cannon-scope-line-vertical"></span>
+          <span class="cannon-scope-ring cannon-scope-ring-inner"></span>
+          <span class="cannon-scope-ring cannon-scope-ring-outer"></span>
+          <span class="cannon-scope-range cannon-scope-range-near"></span>
+          <span class="cannon-scope-range cannon-scope-range-mid"></span>
+          <span class="cannon-scope-range cannon-scope-range-far"></span>
+        </div>
+      </div>
+      <div class="torpedo-scope" aria-hidden="true">
+        <div class="torpedo-scope-vignette"></div>
+        <div class="torpedo-scope-glass">
+          <span class="torpedo-scope-line torpedo-scope-line-left"></span>
+          <span class="torpedo-scope-line torpedo-scope-line-right"></span>
+          <span class="torpedo-scope-line torpedo-scope-line-center"></span>
+          <span class="torpedo-scope-range torpedo-scope-range-near"></span>
+          <span class="torpedo-scope-range torpedo-scope-range-mid"></span>
+          <span class="torpedo-scope-range torpedo-scope-range-far"></span>
+          <span class="torpedo-scope-scale">
+            <span class="torpedo-scope-scale-title">Sek.</span>
+            <span class="torpedo-scope-scale-label torpedo-scope-scale-label-top">30</span>
+            <span class="torpedo-scope-scale-label torpedo-scope-scale-label-midtop">20</span>
+            <span class="torpedo-scope-scale-label torpedo-scope-scale-label-near">10</span>
+            <span class="torpedo-scope-scale-label torpedo-scope-scale-label-midbottom">10</span>
+            <span class="torpedo-scope-scale-label torpedo-scope-scale-label-bottom">20</span>
+          </span>
+        </div>
       </div>
       <div id="fleetStatusRows" class="fleet-status" aria-hidden="true"></div>
       <div class="version-panel" aria-hidden="true">
@@ -309,15 +403,29 @@
       <div class="player-list" aria-hidden="true">
         <div class="player-list-title">Players</div>
         <div id="playerListRows" class="player-list-rows"></div>
+        <div class="kill-feed">
+          <div class="kill-feed-title">Abschüsse</div>
+          <div id="killFeedRows" class="kill-feed-rows"></div>
+        </div>
         <button id="resetGameButton" class="reset-game-button" type="button">Restart</button>
       </div>
       <div class="speed">
-        <span id="speedValue">0.0</span>
-        <small>kn</small>
-        <strong id="engineValue">Stop</strong>
-        <div class="torpedo-stock">
-          <small>Torp</small>
-          <strong id="torpedoStockValue">--</strong>
+        <div class="boat-speed-readout">
+          <span id="speedValue">0.0</span>
+          <small>kn</small>
+          <strong id="engineValue">Stop</strong>
+        </div>
+        <div class="altimeter" aria-hidden="true">
+          <div class="altimeter-dial">
+            <span class="altimeter-mark altimeter-mark-top">0</span>
+            <span class="altimeter-mark altimeter-mark-right">5</span>
+            <span class="altimeter-mark altimeter-mark-bottom">10</span>
+            <span class="altimeter-mark altimeter-mark-left">15</span>
+            <i id="altimeterThousandsHand" class="altimeter-hand altimeter-hand-thousands"></i>
+            <i id="altimeterHundredsHand" class="altimeter-hand altimeter-hand-hundreds"></i>
+            <b></b>
+          </div>
+          <strong>ALT <span id="altitudeValue">--</span> m</strong>
         </div>
         <div class="depth-gauge" style="--depth-ratio: 0">
           <div class="depth-gauge-track">
@@ -328,19 +436,70 @@
           <strong id="depthValue">Deep</strong>
         </div>
       </div>
-      <div class="telegraph" aria-hidden="true">
-        <div class="telegraph-title">Engine</div>
-        <div id="telegraphScale" class="telegraph-scale"></div>
-      </div>
-      <div class="rudder" aria-hidden="true">
-        <div class="rudder-title">Rudder</div>
-        <div class="rudder-gauge">
-          <span class="rudder-mark rudder-mark-port">P 35</span>
-          <span class="rudder-mark rudder-mark-center">0</span>
-          <span class="rudder-mark rudder-mark-starboard">S 35</span>
-          <div id="rudderIndicator" class="rudder-indicator"></div>
+      <div class="ship-controls-panel" aria-hidden="true">
+        <div class="telegraph">
+          <div class="telegraph-title">Engine</div>
+          <div class="telegraph-speed-readout">
+            <strong id="telegraphOrderValue">Stop</strong>
+            <span id="telegraphSpeedValue">0.0</span>
+            <small>kn</small>
+          </div>
+          <div class="telegraph-key-hints" aria-hidden="true">
+            <span><kbd class="shift-hint">Shift</kbd><kbd>↑</kbd></span>
+            <span><kbd class="shift-hint">Shift</kbd><kbd>↓</kbd></span>
+          </div>
+          <div id="telegraphScale" class="telegraph-scale"></div>
         </div>
-        <strong id="rudderValue">0°</strong>
+        <div class="rudder" aria-hidden="true">
+          <div class="rudder-title">Rudder</div>
+          <div class="rudder-gauge">
+            <span class="rudder-mark rudder-mark-port">P 35</span>
+            <span class="rudder-mark rudder-mark-center">0</span>
+            <span class="rudder-mark rudder-mark-starboard">S 35</span>
+            <div id="rudderIndicator" class="rudder-indicator"></div>
+          </div>
+          <div class="rudder-key-hints" aria-hidden="true">
+            <span><kbd class="shift-hint">Shift</kbd><kbd>←</kbd></span>
+            <span><kbd class="shift-hint">Shift</kbd><kbd>→</kbd></span>
+          </div>
+          <strong id="rudderValue">0°</strong>
+        </div>
+      </div>
+      <div class="weapon-elevation flak-elevation" aria-hidden="true">
+        <div class="flak-elevation-title">EL</div>
+        <div class="flak-elevation-gauge">
+          <span class="flak-elevation-mark flak-elevation-mark-high">70</span>
+          <span class="flak-elevation-mark flak-elevation-mark-mid">35</span>
+          <span class="flak-elevation-mark flak-elevation-mark-low">0</span>
+          <div id="flakElevationIndicator" class="flak-elevation-indicator"></div>
+        </div>
+        <strong id="flakElevationValue">0°</strong>
+      </div>
+      <div class="weapon-elevation cannon-elevation" aria-hidden="true">
+        <div class="flak-elevation-title">EL</div>
+        <div class="flak-elevation-gauge">
+          <span class="flak-elevation-mark flak-elevation-mark-high">45</span>
+          <span class="flak-elevation-mark flak-elevation-mark-mid">23</span>
+          <span class="flak-elevation-mark flak-elevation-mark-low">0</span>
+          <div id="cannonElevationIndicator" class="flak-elevation-indicator"></div>
+        </div>
+        <strong id="cannonElevationValue">0°</strong>
+        <div class="cannon-sight-readout" aria-hidden="true">
+          <span class="cannon-sight-label">Sight</span>
+          <strong id="cannonSightValue">I</strong>
+          <span class="cannon-sight-controls">
+            <kbd>Z</kbd>
+            <span>Wheel</span>
+          </span>
+        </div>
+      </div>
+      <div class="weapon-aim-hints" aria-hidden="true">
+        <div class="weapon-aim-ring">
+          <kbd class="weapon-aim-up">↑</kbd>
+          <kbd class="weapon-aim-left">←</kbd>
+          <kbd class="weapon-aim-right">→</kbd>
+          <kbd class="weapon-aim-down">↓</kbd>
+        </div>
       </div>
       <button id="mobileFireButton" class="mobile-fire-button" type="button" aria-label="Fire torpedo">Fire</button>
     </div>

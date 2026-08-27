@@ -7,7 +7,7 @@ import { PointLight } from "@babylonjs/core/Lights/pointLight";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
-import { Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
@@ -15,6 +15,7 @@ import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import "@babylonjs/core/Meshes/Builders/boxBuilder";
 import "@babylonjs/core/Meshes/Builders/cylinderBuilder";
 import "@babylonjs/core/Meshes/Builders/groundBuilder";
+import "@babylonjs/core/Meshes/Builders/sphereBuilder";
 import "@babylonjs/core/Meshes/Builders/torusBuilder";
 import "@babylonjs/core/Shaders/default.fragment";
 import "@babylonjs/core/Shaders/default.vertex";
@@ -24,6 +25,7 @@ import "@babylonjs/core/Materials/Textures/dynamicTexture";
 import "./styles.css";
 
 const canvas = document.getElementById("renderCanvas");
+prepareGameFocus(canvas);
 const engine = new Engine(canvas, true, {
   preserveDrawingBuffer: false,
   stencil: false,
@@ -33,23 +35,42 @@ const engine = new Engine(canvas, true, {
 const scene = new Scene(engine);
 document.body.dataset.appStarted = "true";
 const urlParams = new URLSearchParams(location.search);
+const scenarioTestMode = urlParams.get("scenarioTest") === "1";
+const directSideViewSandboxRequested = urlParams.get("setup") === "8"
+  || urlParams.get("sandbox") === "side-view"
+  || location.pathname.endsWith("/debug/side-view-sandbox");
 let debugMapEnabled = urlParams.get("debug") === "1";
+let debugMarkerMapEnabled = debugMapEnabled && urlParams.get("markers") === "1";
 let bigMapEnabled = debugMapEnabled && urlParams.get("bigMap") !== "0";
+const hideBeachDebug = urlParams.get("hide-beach") === "1";
 document.body.classList.toggle("big-map", bigMapEnabled);
 document.body.dataset.bigMap = String(bigMapEnabled);
-const torpedoBoatWaterlineY = -0.2;
+document.body.classList.toggle("debug-marker-map", debugMarkerMapEnabled);
+document.body.dataset.hideBeach = String(hideBeachDebug);
+const torpedoBoatModelWaterlineY = -0.2;
+const torpedoBoatBowBulwarkHeight = 0.0475;
+const torpedoBoatBowBulwarkRimWidth = 0.019;
+const torpedoBoatSternBulwarkHeight = 0.095;
+const torpedoBoatSternBulwarkRimWidth = torpedoBoatBowBulwarkRimWidth;
 const enemyTorpedoBoatBobAmplitude = 0.025;
-const enemyBowWakeSurfaceY = -torpedoBoatWaterlineY + 0.018;
+const enemyBowWakeSurfaceY = -torpedoBoatModelWaterlineY + 0.018;
+const enemyBowWakeFullSpeed = 15.5;
+const torpedoBoatModelSinkDepth = 2.35;
+const gameConfig = await loadGameConfig();
 scene.clearColor = new Color4(0.38, 0.5, 0.6, 1);
-scene.fogMode = Scene.FOGMODE_LINEAR;
+scene.fogMode = Scene.FOGMODE_EXP2;
 scene.fogColor = new Color3(0.35, 0.46, 0.54);
-scene.fogStart = 82;
-scene.fogEnd = 650;
+scene.fogDensity = 0.00135;
 
 const speedValue = document.getElementById("speedValue");
+const altitudeValue = document.getElementById("altitudeValue");
+const altimeterHundredsHand = document.getElementById("altimeterHundredsHand");
+const altimeterThousandsHand = document.getElementById("altimeterThousandsHand");
 const depthValue = document.getElementById("depthValue");
 const depthGauge = document.querySelector(".depth-gauge");
 const engineValue = document.getElementById("engineValue");
+const telegraphSpeedValue = document.getElementById("telegraphSpeedValue");
+const telegraphOrderValue = document.getElementById("telegraphOrderValue");
 const telegraphScale = document.getElementById("telegraphScale");
 const compassPointer = document.getElementById("compassPointer");
 const compassHeading = document.getElementById("compassHeading");
@@ -59,14 +80,35 @@ const mapRowLabels = document.getElementById("mapRowLabels");
 const mapColumnLabels = document.getElementById("mapColumnLabels");
 const mapSectorValue = document.getElementById("mapSectorValue");
 const mapCoordinateValue = document.getElementById("mapCoordinateValue");
+const debugMapMarkerPanel = document.getElementById("debugMapMarkerPanel");
+const debugMapMarkerOutput = document.getElementById("debugMapMarkerOutput");
+const copyDebugMapMarkersButton = document.getElementById("copyDebugMapMarkersButton");
+const undoDebugMapMarkerButton = document.getElementById("undoDebugMapMarkerButton");
+const clearDebugMapMarkersButton = document.getElementById("clearDebugMapMarkersButton");
 const radarCanvas = document.getElementById("radarCanvas");
 const radarStatus = document.getElementById("radarStatus");
+const radarRangeButton = document.getElementById("radarRangeButton");
+const targetRadarButton = document.getElementById("targetRadarButton");
+const flakViewButton = document.getElementById("flakViewButton");
+const cannonViewButton = document.getElementById("cannonViewButton");
+const bridgeViewButton = document.getElementById("bridgeViewButton");
+const alignWeaponsButton = document.getElementById("alignWeaponsButton");
+const alignAirDefenseButton = document.getElementById("alignAirDefenseButton");
+const torpedoAidButton = document.getElementById("torpedoAidButton");
+const flakHitAlert = document.getElementById("flakHitAlert");
 const rudderIndicator = document.getElementById("rudderIndicator");
 const rudderValue = document.getElementById("rudderValue");
+const flakElevationIndicator = document.getElementById("flakElevationIndicator");
+const flakElevationValue = document.getElementById("flakElevationValue");
+const cannonElevationIndicator = document.getElementById("cannonElevationIndicator");
+const cannonElevationValue = document.getElementById("cannonElevationValue");
+const cannonSightValue = document.getElementById("cannonSightValue");
 const sinkingWaterOverlay = document.getElementById("sinkingWaterOverlay");
+const planeHitFlash = document.getElementById("planeHitFlash");
 const fleetStatusRows = document.getElementById("fleetStatusRows");
 const torpedoStockValue = document.getElementById("torpedoStockValue");
 const playerListRows = document.getElementById("playerListRows");
+const killFeedRows = document.getElementById("killFeedRows");
 const resetGameButton = document.getElementById("resetGameButton");
 const mobileFireButton = document.getElementById("mobileFireButton");
 const clientVersionValue = document.getElementById("clientVersionValue");
@@ -89,23 +131,200 @@ const legacyTeamAliases = new Map([
   ["khaki", "sand"],
   ["kaki", "sand"]
 ]);
+const shipFleetMaterialPalettes = {
+  light: {
+    body: { diffuse: [0.62, 0.63, 0.62], specular: [0.11, 0.12, 0.12] }
+  },
+  dark: {
+    body: { diffuse: [0.2, 0.24, 0.26], specular: [0.045, 0.055, 0.06] }
+  },
+  green: {
+    body: { diffuse: [0.2, 0.34, 0.25], specular: [0.06, 0.08, 0.06] }
+  },
+  sand: {
+    body: { diffuse: [0.5, 0.44, 0.31], specular: [0.1, 0.08, 0.05] }
+  }
+};
 const worldMetersPerUnit = 20;
+const vehicleScale = gameConfig.vehicleScale;
+const torpedoBoatVisualScale = vehicleScale.torpedoBoat;
+const scoutPlaneVisualScale = vehicleScale.scoutPlane;
+const shipGunVisualScale = vehicleScale.torpedoBoat;
+const torpedoSpeedScale = Math.sqrt(torpedoBoatVisualScale);
+const torpedoVisualScale = 1.0;
+const torpedoThicknessScale = 1.55;
+const torpedoWakeVisualScale = torpedoBoatVisualScale * 0.75;
+const torpedoSternWakeSizeScale = 0.5;
+const torpedoSternWakeLengthScale = 0.5;
+const torpedoBodyHintWidthScale = 2;
+const torpedoBodyLength = 2.35;
+const torpedoNoseLength = 0.28;
+const torpedoNoseForwardOffset = torpedoBodyLength * 0.5 + torpedoNoseLength;
+const torpedoTailBackwardOffset = torpedoBodyLength * 0.5;
+const torpedoBoatWaterlineY = torpedoBoatModelWaterlineY * torpedoBoatVisualScale;
+const torpedoBoatSinkDepth = torpedoBoatModelSinkDepth * torpedoBoatVisualScale;
+const killFeedLimit = 5;
 const torpedoLogLimit = 40;
+const torpedoSpeedAdjustment = 0.8;
+const shipTorpedoBaseSpeed = 24 * torpedoSpeedScale * torpedoSpeedAdjustment;
+const shipTorpedoSpeedGain = 0.35 * torpedoSpeedScale * torpedoSpeedAdjustment;
+const airTorpedoSpeedFactor = 0.75;
 const enemyTorpedoFireArcRadians = 0.14;
 const enemyTorpedoAimJitterRadians = 0.035;
 const enemyTargetingRange = 945;
 const engineHoldInitialDelaySeconds = 0.22;
 const engineHoldRepeatSeconds = 0.1;
+const torpedoBoatTrimStartSpeed = 5.5;
+const torpedoBoatTrimFullSpeed = 15.5;
+const torpedoBoatMaxTrimPitch = -0.052;
 const mouseWheelEngineStep = 100;
+const scoutPlaneSetupId = "scout-plane";
+const scoutPlaneAltitudeScale = 2.5;
+const scoutPlaneCruiseAltitude = 20 * scoutPlaneAltitudeScale;
+const scoutPlaneMinAltitude = 3 * scoutPlaneAltitudeScale;
+const scoutPlaneMaxAltitude = 200 * scoutPlaneAltitudeScale;
+const scoutPlaneCruiseSpeed = 21.75;
+const scoutPlaneMinSpeed = 11.25;
+const scoutPlaneMaxSpeed = 29.25;
+const scoutPlaneMaxDiveSpeed = 43.5;
+const scoutPlaneSpeedStep = 2.25;
+const scoutPlaneMaxClimbRate = 20.0;
+const scoutPlaneMaxDiveRate = 34.0;
+const scoutPlaneMaxPitch = 0.55;
+const scoutPlanePulloutAltitude = 3.0;
+const scoutPlanePulloutStartAltitude = 8.0;
+const scoutPlaneFlakSmokeSeconds = 1.65;
+const scoutPlaneFlakRespawnSeconds = 3.35;
+const scoutPlaneFlakSmokeIntervalSeconds = 0.12;
+const scoutPlaneHitFuselageHalfWidth = 0.55;
+const scoutPlaneHitHalfLength = 3.5;
+const scoutPlaneHitWingHalfWidth = 4.15;
+const scoutPlaneHitWingForwardMin = -0.45;
+const scoutPlaneHitWingForwardMax = 0.95;
+const scoutPlaneHitTailHalfWidth = 1.45;
+const scoutPlaneHitTailForwardMin = -2.85;
+const scoutPlaneHitTailForwardMax = -2.1;
+const scoutPlaneHitVerticalHalfHeight = 1.15;
+const scoutPlaneHitMargin = 1.1;
+const bombGravity = 14.0;
+const bombDropForwardOffset = 0.6;
+const bombDropVerticalOffset = 0.65;
+const bombsPerDrop = 12;
+const bombReleaseIntervalSeconds = 0.12;
+const bombPatternLateralSpacing = 0.18;
+const bombPatternHeadingJitter = 0.008;
+const bombPatternSpeedJitter = 1.1;
+const bombSightArmLength = 4.2;
+const bombBayWideFov = 1.2;
+const bombBayZoomFov = 0.84;
+const bombBayImpactFocusExtraSeconds = 1.5;
+const airTorpedoSightReleaseOffset = 10;
+const airTorpedoSightRunSeconds = 7.5;
+const airTorpedoSightMinRunDistance = 150;
+const airTorpedoSightMaxRunDistance = 360;
+const scoutPlaneExperimentShowAllFlak = true;
+const scoutPlaneExperimentFlakDemo = urlParams.get("flak-demo") === "1";
+const flakHitboxDebugEnabled = urlParams.get("flak-hitbox") === "1";
+const playerSternFlakZ = -2.92;
+const remoteSternFlakZ = -2.92;
+const flakMinPitch = -0.12;
+const flakMaxPitch = 1.18;
+const flakHoldMediumDelaySeconds = 0.35;
+const flakHoldFastDelaySeconds = 0.85;
+const flakHoldVeryFastDelaySeconds = 1.35;
+const flakHoldMaxDelaySeconds = 2.05;
+const flakHoldExtremeDelaySeconds = 2.75;
+const flakYawFineSpeed = 0.032;
+const flakYawMediumSpeed = 0.22;
+const flakYawFastSpeed = 0.37;
+const flakYawVeryFastSpeed = 0.52;
+const flakYawMaxSpeed = 0.67;
+const flakYawExtremeSpeed = 0.82;
+const flakPitchFineSpeed = 0.018;
+const flakPitchMediumSpeed = 0.124;
+const flakPitchFastSpeed = 0.208;
+const flakPitchVeryFastSpeed = 0.292;
+const flakPitchMaxSpeed = 0.376;
+const flakPitchExtremeSpeed = 0.46;
+const flakFireCooldownSeconds = 0.044;
+const flakProjectileSpeed = 418 * torpedoBoatVisualScale;
+const flakProjectileGravity = 9;
+const flakProjectileLifetime = 8.0;
+const flakProjectileMaxVisualScale = 4.65;
+const flakProjectileLightBudget = 5;
+const flakDemoFireIntervalSeconds = 0.25;
+const flakBarrelLength = 1.62;
+const flakBarrelCenterZ = 0.22;
+const flakSightYOffsetFactor = 0.14;
+const flakEyeZFactor = 0.02;
+const flakSightTargetZ = 72;
+const playerSternFlakScale = 0.54;
+const playerFlakSightYOffset = flakSightYOffsetFactor * playerSternFlakScale;
+const playerFlakEyeZ = flakEyeZFactor * playerSternFlakScale;
+const cannonMinPitch = -0.087;
+const cannonMaxPitch = 45 * Math.PI / 180;
+const cannonYawLimit = 2.62;
+const cannonHoldMediumDelaySeconds = 0.24;
+const cannonHoldFastDelaySeconds = 0.68;
+const cannonHoldVeryFastDelaySeconds = 1.08;
+const cannonHoldMaxDelaySeconds = 1.64;
+const cannonHoldExtremeDelaySeconds = 2.2;
+const cannonYawFineSpeed = 0.0045;
+const cannonYawMediumSpeed = 0.125;
+const cannonYawFastSpeed = 0.239;
+const cannonYawVeryFastSpeed = 0.352;
+const cannonYawMaxSpeed = 0.466;
+const cannonYawExtremeSpeed = 0.58;
+const cannonPitchFineSpeed = 0.0032;
+const cannonPitchMediumSpeed = 0.082;
+const cannonPitchFastSpeed = 0.156;
+const cannonPitchVeryFastSpeed = 0.23;
+const cannonPitchMaxSpeed = 0.304;
+const cannonPitchExtremeSpeed = 0.38;
+const weaponHeadingHoldMaxDelta = 0.28;
+const playerCannonSightYOffset = 0.08;
+const playerCannonEyeZ = -0.08;
+const cannonSightLevels = [
+  { label: "I", fov: 0.34, startSpeedFactor: 1, rampFactor: 1 },
+  { label: "II", fov: 0.25, startSpeedFactor: 0.7, rampFactor: 1.14 },
+  { label: "III", fov: 0.18, startSpeedFactor: 0.52, rampFactor: 1.28 },
+  { label: "IV", fov: 0.105, startSpeedFactor: 0.36, rampFactor: 1.45 }
+];
+const cannonFireCooldownSeconds = 1.0;
+const cannonProjectileSpeed = 1455 * torpedoBoatVisualScale;
+const cannonProjectileGravity = 9.8;
+const cannonProjectileLifetime = 18.0;
+const cannonProjectileMaxVisualScale = 2.85;
+const cannonProjectileLightBudget = 3;
+const cannonBarrelRecoilDistance = 0.16;
+const cannonBarrelRecoilDuration = 0.34;
+const weaponAlignYawSpeed = 1.55;
+const weaponAlignPitchSpeed = 0.62;
+const weaponAlignFlatFlakPitch = 0;
+const weaponAlignAirDefenseFlakPitch = 18 * Math.PI / 180;
+const weaponAlignFlatCannonPitch = 0;
+const weaponAlignAirDefenseCannonPitch = 20 * Math.PI / 180;
 const testPlayerInvulnerable = false;
 const openSeaFoamEnabled = true;
-const performanceLoggingEnabled = true;
+const openSeaFoamDriftSpeed = 0.48;
+const openSeaFoamRandomDrift = 0.16;
+const openSeaFoamWidthMin = 0.014;
+const openSeaFoamWidthVariance = 0.01;
+const openSeaFoamHeight = 0.007;
+const openSeaFoamLengthMin = 0.25;
+const openSeaFoamLengthVariance = 0.48;
+const performanceLoggingEnabled = urlParams.get("perf-log") === "1";
+const lighthouseVisualScale = 2;
 const centerPeakLighthouseLandNames = new Set(["far_east_bank", "north_watch_bank", "south_watch_bank", "eastern_delta_coast", "blackwater_basin"]);
 const lighthouseHeightOffsets = new Map([
   ["blackwater_basin", -1.2],
   ["eastern_delta_coast", -0.45]
 ]);
 let lastMapViewport = null;
+let debugRespawnCandidates = [];
+let debugRespawnCandidatesLoaded = false;
+let debugMapMarkers = [];
+let debugMapMarkersEdited = false;
 const clientBuildInfo = window.__SEA_BATTLE_CLIENT_VERSION__ ?? { version: "dev", commit: "local" };
 updateBuildInfoPanel(clientBuildInfo, null);
 loadServerBuildInfo()
@@ -113,6 +332,7 @@ loadServerBuildInfo()
   .catch((error) => updateBuildInfoPanel(clientBuildInfo, { version: "unavailable", commit: error.message }));
 const playerLogin = await requirePlayerLogin();
 const playerInitials = playerLogin.initials;
+await requireRegisteredGameSession(playerLogin);
 const worldLandmasses = await loadWorldLandmasses();
 document.body.dataset.worldSource = "server";
 document.body.dataset.worldLandmasses = String(worldLandmasses.length);
@@ -121,12 +341,31 @@ document.body.dataset.gameStateSource = "server";
 document.body.dataset.serverGameState = gameState.state;
 document.body.dataset.serverShips = String(gameState.ships.length);
 document.body.dataset.serverTorpedoes = String(gameState.torpedoes.length);
-const playerId = getLocalPlayerId(playerInitials);
+document.body.dataset.serverBombs = String(Array.isArray(gameState.bombs) ? gameState.bombs.length : 0);
+const sideViewSandboxMode = directSideViewSandboxRequested || gameState.sessionId === "side-view-sandbox";
+const bridgeViewWidth = clamp(Number(urlParams.get("bridgeViewWidth") ?? "0.86"), 0.42, 0.9);
+const sideViewCameraFovDefault = clamp(Number(urlParams.get("viewFov") ?? "0.78"), 0.28, 1.2);
+const sideViewCameraDistanceDefault = clamp(Number(urlParams.get("viewDistance") ?? "11"), -32, 32);
+const sideViewCameraHeightDefault = clamp(Number(urlParams.get("viewHeight") ?? "0.72"), -0.2, 3.2);
+const sideViewCameraModeDefault = urlParams.get("viewMode") === "ship" ? "ship" : "orbit";
+const sideViewCameraXDefault = clamp(Number(urlParams.get("viewX") ?? "0"), -3.2, 3.2);
+const sideViewCameraZDefault = clamp(Number(urlParams.get("viewZ") ?? "0.5"), -5.2, 5.2);
+const sideViewCameraYawDefault = clamp(Number(urlParams.get("viewYaw") ?? "0"), -180, 180);
+const selectedVehicleType = urlParams.get("vehicle") ?? readStoredValue("vehicleType");
+const scoutPlaneMode = gameState.sessionId === scoutPlaneSetupId || selectedVehicleType === "scout-plane";
+if (scoutPlaneMode) {
+  scene.fogDensity = 0.0008;
+}
+if (sideViewSandboxMode) {
+  scene.fogMode = Scene.FOGMODE_NONE;
+}
+const playerId = playerLogin.playerId;
 const playerTeamId = getRequestedPlayerTeamId(gameState.ships, playerLogin.teamId);
 const playerShips = getTeamShips(gameState.ships, playerTeamId);
 const enemyShips = getEnemyShips(gameState.ships, playerTeamId);
-const initialPlayerSpawn = applyRequestedTestSpawn(createPlayerSpawn(playerShips, playerId), worldLandmasses);
+const initialPlayerSpawn = createPlayerSpawn(playerShips, playerId);
 let playerServerShipId = initialPlayerSpawn.shipId;
+const initialPlayerShip = gameState.ships.find((ship) => ship.id === playerServerShipId);
 let playerBearingPosition = initialPlayerSpawn.position;
 let heading = initialPlayerSpawn.heading;
 let fleetTotals = getFleetCounts(gameState.ships);
@@ -136,6 +375,11 @@ let playerTorpedoesRemaining = Number.isFinite(initialPlayerSpawn.torpedoesRemai
 document.body.dataset.playerTeam = playerTeamId;
 document.body.dataset.playerId = playerId;
 document.body.dataset.playerInitials = playerInitials;
+document.body.dataset.playerVehicle = scoutPlaneMode ? "scout-plane" : "torpedo-boat";
+document.body.dataset.flakView = "bridge";
+document.body.dataset.cannonView = "bridge";
+document.body.dataset.cannonSight = "I";
+document.body.dataset.bombBayView = "off";
 document.body.dataset.playerShipId = playerServerShipId ?? "pending";
 document.body.dataset.serverOwnShips = String(playerShips.length);
 document.body.dataset.serverEnemyShips = String(enemyShips.length);
@@ -143,12 +387,21 @@ document.body.dataset.testPlayerInvulnerable = String(testPlayerInvulnerable);
 document.body.dataset.openSeaFoam = String(openSeaFoamEnabled);
 document.body.dataset.performanceLogging = String(performanceLoggingEnabled);
 document.body.dataset.debugMap = String(debugMapEnabled);
+document.body.dataset.debugMarkerMap = String(debugMarkerMapEnabled);
+document.body.dataset.sideViewSandbox = String(sideViewSandboxMode);
+document.body.dataset.bridgeViewWidth = bridgeViewWidth.toFixed(2);
+installScenarioTestHooks();
 updateFleetStatus(gameState.ships, gameState.destroyedShipsByTeam);
 updatePlayerList(gameState.ships);
 updatePlayerTorpedoStock(playerTorpedoesRemaining);
 setupResetGameControl(resetGameButton);
 setupMapZoomControl(mapZoom);
+setupDebugMapMarkerPanel();
 setupDebugMapTeleport(mapCanvas);
+updateDebugMapMarkerPanel();
+if (debugMapEnabled) {
+  loadDebugRespawnCandidates();
+}
 
 const clientCapability = createClientCapabilitySnapshot(engine, canvas);
 const renderQuality = applyRenderQuality(engine, clientCapability);
@@ -166,13 +419,30 @@ sun.diffuse = new Color3(0.66, 0.74, 0.82);
 sun.specular = new Color3(0.38, 0.48, 0.58);
 
 const ambient = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
-ambient.intensity = 0.34;
-ambient.diffuse = new Color3(0.48, 0.58, 0.68);
-ambient.groundColor = new Color3(0.055, 0.085, 0.1);
+ambient.intensity = 0.42;
+ambient.diffuse = new Color3(0.52, 0.62, 0.72);
+ambient.groundColor = new Color3(0.2, 0.23, 0.25);
+if (sideViewSandboxMode) {
+  sun.direction = new Vector3(-0.55, -0.7, -0.45);
+  sun.position = new Vector3(55, 70, 45);
+  sun.intensity = 1.12;
+  sun.diffuse = new Color3(0.95, 0.93, 0.86);
+  sun.specular = new Color3(0.35, 0.35, 0.3);
+  ambient.intensity = 0.12;
+  ambient.diffuse = new Color3(0.52, 0.56, 0.58);
+  ambient.groundColor = new Color3(0.04, 0.045, 0.05);
+}
 
 const worldLimit = 5000;
-const ocean = MeshBuilder.CreateGround("ocean", { width: 2300, height: 2300, subdivisions: 160 }, scene);
+const oceanBaseSize = 2300;
+const oceanVisualSize = worldLimit * 2;
+const ocean = MeshBuilder.CreateGround("ocean", { width: oceanVisualSize, height: oceanVisualSize, subdivisions: 160 }, scene);
 ocean.material = materials.water;
+if (materials.water.diffuseTexture) {
+  const oceanTextureScale = oceanVisualSize / oceanBaseSize;
+  materials.water.diffuseTexture.uScale = 34 * oceanTextureScale;
+  materials.water.diffuseTexture.vScale = 34 * oceanTextureScale;
+}
 ocean.parent = world;
 const foam = createFoamPatches(scene, materials, world);
 const volcanoPlumes = [];
@@ -184,41 +454,176 @@ if (renderQuality.visualEffects !== "low") {
   navigationLights.push(...createNavigationLights(worldLandmasses, scene, materials, world, renderQuality.visualEffects));
 }
 
-const boat = createPlayerBow(scene, materials, "player_bow", playerTeamId);
+const boat = scoutPlaneMode
+  ? createScoutPlane(scene, materials, "player_scout_plane", playerTeamId, true)
+  : createPlayerBow(
+    scene,
+    materials,
+    "player_bow",
+    playerTeamId,
+    initialPlayerShip ? createShipDesignation(initialPlayerShip) : ""
+  );
 boat.root.position.copyFrom(initialPlayerSpawn.position);
+if (scoutPlaneMode) {
+  boat.root.position.y = scoutPlaneCruiseAltitude;
+}
 
 // Until SSE arrives, backend ships seed the visual fleet and local motion keeps them inspectable.
-const enemyMotions = createEnemyFleet(scene, materials, getOtherServerShips(gameState.ships, playerServerShipId));
+const enemyMotions = createEnemyFleet(
+  scene,
+  materials,
+  sideViewSandboxMode ? [] : getOtherServerShips(gameState.ships, playerServerShipId)
+);
+const flakDemoMotions = scoutPlaneMode && scoutPlaneExperimentFlakDemo
+  ? createStaticFlakDemoFleet(scene, materials, world, boat.root.position, heading)
+  : [];
+document.body.dataset.flakDemo = scoutPlaneMode && scoutPlaneExperimentFlakDemo ? "1" : "0";
+document.body.dataset.flakDemoStaticBoats = String(flakDemoMotions.length);
 document.body.dataset.meshCount = String(scene.meshes.length);
 
 const camera = new FreeCamera("follow_camera", new Vector3(0, 7, -13), scene);
 camera.minZ = 0.2;
 camera.maxZ = 4200;
-camera.fov = 0.78;
+camera.fov = scoutPlaneMode ? 1.02 : 0.78;
 scene.activeCamera = camera;
 
 window.addEventListener("keydown", (event) => {
+  if (isStartupErrorVisible() || isSystemShortcutEvent(event)) return;
   if (isHudControlEvent(event)) return;
   document.body.dataset.lastKey = formatInputEvent(event);
   const playerActive = playerDamageState === "active";
 
+  if (playerActive && isFlakViewToggleKey(event) && !event.repeat) {
+    setBattleStation("flak");
+    event.preventDefault();
+    return;
+  }
+  if (playerActive && isCannonViewToggleKey(event) && !event.repeat) {
+    setBattleStation("cannon");
+    event.preventDefault();
+    return;
+  }
+  if (playerActive && isBridgeViewKey(event) && !event.repeat) {
+    setBattleStation("bridge");
+    event.preventDefault();
+    return;
+  }
+  if (playerActive && isTorpedoScopeToggleKey(event) && !event.repeat) {
+    setBattleStation("torpedo");
+    event.preventDefault();
+    return;
+  }
+  if (playerActive && isAlignWeaponsKey(event) && !event.repeat) {
+    alignWeaponsForBridge(event.shiftKey ? "air-defense" : "flat");
+    event.preventDefault();
+    return;
+  }
+  if (playerActive && isBombBayViewToggleKey(event) && !event.repeat) {
+    toggleBombBayView();
+    event.preventDefault();
+    return;
+  }
+  if (!singleRadarMode && playerActive && isRadarModeToggleKey(event) && !event.repeat) {
+    setRadarMode(radarMode === "target" ? "radar" : "target");
+    event.preventDefault();
+    return;
+  }
+  if (playerActive && isCannonSightToggleKey(event) && !event.repeat) {
+    cycleCannonSightLevel();
+    event.preventDefault();
+    return;
+  }
   if (playerActive && isInputKey(event, "up")) {
-    heldEngineDirection = 1;
-    if (!event.repeat) {
-      changeEngineOrder(1);
-      nextEngineHoldChangeTime = time + engineHoldInitialDelaySeconds;
+    if (cannonViewActive && !event.shiftKey) {
+      if (!event.repeat || heldCannonPitchDirection !== 1) {
+        heldCannonPitchStartTime = time;
+      }
+      heldCannonPitchDirection = 1;
+      event.preventDefault();
+      return;
+    }
+    if (flakViewActive && !event.shiftKey) {
+      if (!event.repeat || heldFlakPitchDirection !== 1) {
+        heldFlakPitchStartTime = time;
+      }
+      heldFlakPitchDirection = 1;
+      event.preventDefault();
+      return;
+    }
+    if (scoutPlaneMode) {
+      if (event.shiftKey) {
+        heldElevatorDirection = -1;
+      } else {
+        if (!event.repeat) {
+          changeScoutPlaneTargetSpeed(1);
+        }
+      }
+    } else {
+      heldEngineDirection = 1;
+      if (!event.repeat) {
+        heldEngineStopGuardDirection = engineOrder === 2 ? 0 : 1;
+        changeEngineOrder(1);
+        nextEngineHoldChangeTime = time + engineHoldInitialDelaySeconds;
+      } else {
+        nextEngineHoldChangeTime = Math.min(nextEngineHoldChangeTime, time);
+      }
     }
     event.preventDefault();
   }
   if (playerActive && isInputKey(event, "down")) {
-    heldEngineDirection = -1;
-    if (!event.repeat) {
-      changeEngineOrder(-1);
-      nextEngineHoldChangeTime = time + engineHoldInitialDelaySeconds;
+    if (cannonViewActive && !event.shiftKey) {
+      if (!event.repeat || heldCannonPitchDirection !== -1) {
+        heldCannonPitchStartTime = time;
+      }
+      heldCannonPitchDirection = -1;
+      event.preventDefault();
+      return;
+    }
+    if (flakViewActive && !event.shiftKey) {
+      if (!event.repeat || heldFlakPitchDirection !== -1) {
+        heldFlakPitchStartTime = time;
+      }
+      heldFlakPitchDirection = -1;
+      event.preventDefault();
+      return;
+    }
+    if (scoutPlaneMode) {
+      if (event.shiftKey) {
+        heldElevatorDirection = 1;
+      } else {
+        if (!event.repeat) {
+          changeScoutPlaneTargetSpeed(-1);
+        }
+      }
+    } else {
+      heldEngineDirection = -1;
+      if (!event.repeat) {
+        heldEngineStopGuardDirection = engineOrder === 2 ? 0 : -1;
+        changeEngineOrder(-1);
+        nextEngineHoldChangeTime = time + engineHoldInitialDelaySeconds;
+      } else {
+        nextEngineHoldChangeTime = Math.min(nextEngineHoldChangeTime, time);
+      }
     }
     event.preventDefault();
   }
   if (playerActive && isInputKey(event, "left")) {
+    if (cannonViewActive && !event.shiftKey) {
+      if (!event.repeat || heldCannonDirection !== -1) {
+        heldCannonStartTime = time;
+      }
+      heldCannonDirection = -1;
+      event.preventDefault();
+      return;
+    }
+    if (flakViewActive && !event.shiftKey) {
+      if (!event.repeat || heldFlakDirection !== -1) {
+        heldFlakStartTime = time;
+      }
+      heldFlakDirection = -1;
+      event.preventDefault();
+      return;
+    }
     heldRudderDirection = -1;
     if (!event.repeat) {
       rudderDegrees = stepRudderDegrees(rudderDegrees, -1);
@@ -229,6 +634,22 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
   }
   if (playerActive && isInputKey(event, "right")) {
+    if (cannonViewActive && !event.shiftKey) {
+      if (!event.repeat || heldCannonDirection !== 1) {
+        heldCannonStartTime = time;
+      }
+      heldCannonDirection = 1;
+      event.preventDefault();
+      return;
+    }
+    if (flakViewActive && !event.shiftKey) {
+      if (!event.repeat || heldFlakDirection !== 1) {
+        heldFlakStartTime = time;
+      }
+      heldFlakDirection = 1;
+      event.preventDefault();
+      return;
+    }
     heldRudderDirection = 1;
     if (!event.repeat) {
       rudderDegrees = stepRudderDegrees(rudderDegrees, 1);
@@ -239,32 +660,96 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
   }
   if (playerActive && isTorpedoFireKey(event) && !event.repeat) {
-    requestPlayerTorpedoFire();
+    if (flakViewActive) {
+      heldFlakFire = true;
+      firePlayerFlak();
+      event.preventDefault();
+      return;
+    }
+    if (cannonViewActive) {
+      firePlayerCannon();
+      event.preventDefault();
+      return;
+    }
+    requestPlayerWeaponFire();
     event.preventDefault();
   }
 });
 
 window.addEventListener("keyup", (event) => {
+  if (isStartupErrorVisible() || isSystemShortcutEvent(event)) return;
   if (isHudControlEvent(event)) return;
+  if (event.code === "ShiftLeft" || event.code === "ShiftRight") {
+    heldEngineDirection = 0;
+    heldEngineStopGuardDirection = 0;
+    heldRudderDirection = 0;
+  }
   if (isInputKey(event, "up") && heldEngineDirection > 0) {
     heldEngineDirection = 0;
+    heldEngineStopGuardDirection = 0;
+    event.preventDefault();
+  }
+  if (isInputKey(event, "up") && heldFlakPitchDirection > 0) {
+    heldFlakPitchDirection = 0;
+    event.preventDefault();
+  }
+  if (isInputKey(event, "up") && heldCannonPitchDirection > 0) {
+    heldCannonPitchDirection = 0;
+    event.preventDefault();
+  }
+  if (isInputKey(event, "up") && heldElevatorDirection < 0) {
+    heldElevatorDirection = 0;
     event.preventDefault();
   }
   if (isInputKey(event, "down") && heldEngineDirection < 0) {
     heldEngineDirection = 0;
+    heldEngineStopGuardDirection = 0;
+    event.preventDefault();
+  }
+  if (isInputKey(event, "down") && heldFlakPitchDirection < 0) {
+    heldFlakPitchDirection = 0;
+    event.preventDefault();
+  }
+  if (isInputKey(event, "down") && heldCannonPitchDirection < 0) {
+    heldCannonPitchDirection = 0;
+    event.preventDefault();
+  }
+  if (isInputKey(event, "down") && heldElevatorDirection > 0) {
+    heldElevatorDirection = 0;
     event.preventDefault();
   }
   if (isInputKey(event, "left") && heldRudderDirection < 0) {
     heldRudderDirection = 0;
     event.preventDefault();
   }
+  if (isInputKey(event, "left") && heldFlakDirection < 0) {
+    heldFlakDirection = 0;
+    event.preventDefault();
+  }
+  if (isInputKey(event, "left") && heldCannonDirection < 0) {
+    heldCannonDirection = 0;
+    event.preventDefault();
+  }
   if (isInputKey(event, "right") && heldRudderDirection > 0) {
     heldRudderDirection = 0;
+    event.preventDefault();
+  }
+  if (isInputKey(event, "right") && heldFlakDirection > 0) {
+    heldFlakDirection = 0;
+    event.preventDefault();
+  }
+  if (isInputKey(event, "right") && heldCannonDirection > 0) {
+    heldCannonDirection = 0;
+    event.preventDefault();
+  }
+  if (isTorpedoFireKey(event) && heldFlakFire) {
+    heldFlakFire = false;
     event.preventDefault();
   }
 });
 
 window.addEventListener("mousedown", (event) => {
+  if (isStartupErrorVisible()) return;
   if (isHudControlEvent(event)) return;
   if (fireMouseTorpedo(event.button)) {
     event.preventDefault();
@@ -273,7 +758,15 @@ window.addEventListener("mousedown", (event) => {
 });
 
 window.addEventListener("pointerdown", (event) => {
+  if (isStartupErrorVisible()) return;
   if (isHudControlEvent(event)) return;
+  focusGameCanvas();
+  if (startDebugOrbitCameraDrag(event)) {
+    mouseButtonMask = event.buttons;
+    event.target?.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+    return;
+  }
   if (startGlobalMouseRudder(event)) {
     mouseButtonMask = event.buttons;
     event.target?.setPointerCapture?.(event.pointerId);
@@ -282,6 +775,7 @@ window.addEventListener("pointerdown", (event) => {
 });
 
 window.addEventListener("mouseup", (event) => {
+  if (isStartupErrorVisible()) return;
   if (isHudControlEvent(event)) return;
   if (stopGlobalMouseRudder(event.button)) {
     mouseButtonMask = event.buttons;
@@ -290,7 +784,14 @@ window.addEventListener("mouseup", (event) => {
 });
 
 window.addEventListener("pointerup", (event) => {
+  if (isStartupErrorVisible()) return;
   if (isHudControlEvent(event)) return;
+  if (stopDebugOrbitCameraDrag(event)) {
+    mouseButtonMask = event.buttons;
+    event.target?.releasePointerCapture?.(event.pointerId);
+    event.preventDefault();
+    return;
+  }
   if (stopGlobalMouseRudder(event.button)) {
     mouseButtonMask = event.buttons;
     event.target?.releasePointerCapture?.(event.pointerId);
@@ -300,33 +801,59 @@ window.addEventListener("pointerup", (event) => {
 
 window.addEventListener("pointermove", (event) => {
   mouseButtonMask = event.buttons;
+  if (updateDebugOrbitCameraDrag(event)) {
+    event.preventDefault();
+    return;
+  }
   updateGlobalMouseRudder(event);
 });
 
 window.addEventListener("pointercancel", () => {
   mouseButtonMask = 0;
+  debugOrbitDragActive = false;
+  debugOrbitPointerId = null;
   rightMouseRudderActive = false;
+  heldElevatorDirection = 0;
 });
 
 window.addEventListener("blur", () => {
   mouseButtonMask = 0;
+  debugOrbitDragActive = false;
+  debugOrbitPointerId = null;
   rightMouseRudderActive = false;
+  heldElevatorDirection = 0;
 });
 
 window.addEventListener("contextmenu", (event) => {
+  if (isStartupErrorVisible()) return;
   if (playerDamageState === "active") {
     event.preventDefault();
   }
 });
 
 window.addEventListener("auxclick", (event) => {
+  if (isStartupErrorVisible()) return;
   if (isMouseTorpedoButton(event.button)) {
     event.preventDefault();
   }
 });
 
 window.addEventListener("wheel", (event) => {
+  if (isStartupErrorVisible()) return;
   if (playerDamageState !== "active") return;
+  if (updateDebugOrbitCameraZoom(event)) {
+    event.preventDefault();
+    return;
+  }
+  if (scoutPlaneMode) {
+    event.preventDefault();
+    return;
+  }
+  if (cannonViewActive) {
+    updateCannonSightFromWheel(event);
+    event.preventDefault();
+    return;
+  }
 
   mouseWheelEngineAccumulator -= event.deltaY;
   while (mouseWheelEngineAccumulator <= -mouseWheelEngineStep) {
@@ -340,30 +867,161 @@ window.addEventListener("wheel", (event) => {
   event.preventDefault();
 }, { passive: false });
 
-const engineOrders = [
-  { label: "Astern Full", shortLabel: "Full Ast", speed: -4.2 },
-  { label: "Astern Half", shortLabel: "Half Ast", speed: -2.2 },
-  { label: "Stop", speed: 0 },
-  { label: "Ahead Slow", shortLabel: "Slow", speed: 0.55 },
-  { label: "Ahead 1/3", shortLabel: "1/3", speed: 1.8 },
-  { label: "Ahead Half", shortLabel: "Half", speed: 3.8 },
-  { label: "Ahead 2/3", shortLabel: "2/3", speed: 6.4 },
-  { label: "Ahead Full", shortLabel: "Full", speed: 9.6 },
-  { label: "Flank", speed: 12.4 }
+window.addEventListener("pageshow", focusGameCanvas);
+window.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    focusGameCanvas();
+  }
+});
+
+function prepareGameFocus(renderCanvas) {
+  if (!renderCanvas) return;
+  renderCanvas.tabIndex = -1;
+  requestAnimationFrame(focusGameCanvas);
+  setTimeout(focusGameCanvas, 0);
+}
+
+function focusGameCanvas() {
+  if (!canvas || document.hidden) return;
+  const active = document.activeElement;
+  if (active && active !== document.body && active !== canvas && isTextEditingElement(active)) {
+    return;
+  }
+  canvas.focus({ preventScroll: true });
+}
+
+function startDebugOrbitCameraDrag(event) {
+  if (!sideViewSandboxMode || event.button !== 0 || event.target !== canvas) return false;
+  debugOrbitDragActive = true;
+  debugOrbitPointerId = event.pointerId;
+  debugOrbitLastX = event.clientX;
+  debugOrbitLastY = event.clientY;
+  return true;
+}
+
+function updateDebugOrbitCameraDrag(event) {
+  if (!debugOrbitDragActive || event.pointerId !== debugOrbitPointerId) return false;
+  const dx = event.clientX - debugOrbitLastX;
+  const dy = event.clientY - debugOrbitLastY;
+  debugOrbitLastX = event.clientX;
+  debugOrbitLastY = event.clientY;
+  if (debugCameraMode === "ship") {
+    debugShipCameraYaw = wrapDegrees(debugShipCameraYaw + dx * 0.18);
+    debugOrbitPitch = clamp(debugOrbitPitch - dy * 0.006, -0.42, 0.9);
+  } else {
+    debugOrbitYaw -= dx * 0.008;
+    debugOrbitPitch = clamp(debugOrbitPitch - dy * 0.006, -0.08, 1.32);
+  }
+  updateSideViewCameraControls();
+  updateSideViewCameraUrl();
+  return true;
+}
+
+function stopDebugOrbitCameraDrag(event) {
+  if (!debugOrbitDragActive || event.pointerId !== debugOrbitPointerId) return false;
+  debugOrbitDragActive = false;
+  debugOrbitPointerId = null;
+  return true;
+}
+
+function updateDebugOrbitCameraZoom(event) {
+  if (!sideViewSandboxMode) return false;
+  if (debugCameraMode === "ship") {
+    debugShipCameraZ = clamp(debugShipCameraZ + event.deltaY * 0.006, -5.2, 5.2);
+  } else {
+    debugOrbitRadius = clamp(debugOrbitRadius + event.deltaY * 0.012, -32, 32);
+  }
+  updateSideViewCameraControls();
+  updateSideViewCameraUrl();
+  return true;
+}
+
+function isTextEditingElement(element) {
+  return element instanceof HTMLInputElement
+      || element instanceof HTMLTextAreaElement
+      || element instanceof HTMLSelectElement
+      || element.isContentEditable;
+}
+
+const defaultEngineSpeeds = [-8.0, -2.2, 0, 0.69, 2.25, 4.75, 8.0, 12.0, 15.5];
+const engineOrderLabels = [
+  { label: "Astern Full", shortLabel: "Full Ast" },
+  { label: "Astern Half", shortLabel: "Half Ast" },
+  { label: "Stop" },
+  { label: "Ahead Slow", shortLabel: "Slow" },
+  { label: "Ahead 1/3", shortLabel: "1/3" },
+  { label: "Ahead Half", shortLabel: "Half" },
+  { label: "Ahead 2/3", shortLabel: "2/3" },
+  { label: "Ahead Full", shortLabel: "Full" },
+  { label: "Flank" }
 ];
+const engineSpeeds = Array.isArray(gameConfig.engineSpeeds) && gameConfig.engineSpeeds.length === engineOrderLabels.length
+  ? gameConfig.engineSpeeds
+  : defaultEngineSpeeds;
+const engineOrders = engineOrderLabels.map((order, index) => ({
+  ...order,
+  speed: Number.isFinite(Number(engineSpeeds[index])) ? Number(engineSpeeds[index]) : defaultEngineSpeeds[index]
+}));
+const maxTorpedoBoatForwardSpeed = Math.max(...engineOrders.map((order) => order.speed).filter((orderSpeed) => orderSpeed > 0));
 
 // Keep propulsion as discrete ship orders, not held-key throttle.
 // Later multiplayer can send this order index plus heading/speed instead of raw input.
-let speed = 0;
-let engineOrder = 2;
+let speed = scoutPlaneMode ? scoutPlaneCruiseSpeed : 0;
+let scoutPlaneTargetSpeed = scoutPlaneCruiseSpeed;
+let engineOrder = scoutPlaneMode ? 7 : 2;
 let turnVelocity = 0;
 let rudderDegrees = 0;
 let heldEngineDirection = 0;
+let heldEngineStopGuardDirection = 0;
+let heldElevatorDirection = 0;
+let scoutPlaneAltitude = scoutPlaneCruiseAltitude;
+let scoutPlaneVerticalSpeed = 0;
+let scoutPlanePitch = 0;
 let nextEngineHoldChangeTime = 0;
 let heldRudderDirection = 0;
 let nextRudderHoldChangeTime = 0;
+let flakViewActive = false;
+let cannonViewActive = false;
+let torpedoScopeActive = false;
+let bombBayViewActive = false;
+let bombBayImpactFocus = null;
+const singleRadarMode = true;
+const RADAR_MODE_OVERRIDE_MS = 10000;
+let radarMode = "radar";
+let radarModeOverride = null;
+let radarModeOverrideUntil = 0;
+let flakYaw = Math.PI;
+let flakPitch = 0;
+let cannonYaw = 0;
+let cannonPitch = 0.04;
+let cannonSightLevelIndex = 0;
+let weaponAlignTarget = null;
+let heldFlakDirection = 0;
+let heldFlakPitchDirection = 0;
+let heldFlakStartTime = 0;
+let heldFlakPitchStartTime = 0;
+let heldFlakFire = false;
+let heldCannonDirection = 0;
+let heldCannonPitchDirection = 0;
+let heldCannonStartTime = 0;
+let heldCannonPitchStartTime = 0;
+let nextCannonFireTime = 0;
 let mouseButtonMask = 0;
 let mouseWheelEngineAccumulator = 0;
+let mouseWheelCannonSightAccumulator = 0;
+let debugOrbitDragActive = false;
+let debugOrbitPointerId = null;
+let debugOrbitLastX = 0;
+let debugOrbitLastY = 0;
+let debugOrbitYaw = Math.PI / 2;
+let debugOrbitPitch = 0.26;
+let debugOrbitRadius = sideViewCameraDistanceDefault;
+let debugOrbitTargetY = sideViewCameraHeightDefault;
+let debugOrbitFov = sideViewCameraFovDefault;
+let debugCameraMode = sideViewCameraModeDefault;
+let debugShipCameraX = sideViewCameraXDefault;
+let debugShipCameraZ = sideViewCameraZDefault;
+let debugShipCameraYaw = sideViewCameraYawDefault;
 let measuredSpeedSample = {
   time: 0,
   x: initialPlayerSpawn.position.x,
@@ -372,6 +1030,7 @@ let measuredSpeedSample = {
 };
 let performanceTelemetry = createPerformanceTelemetry();
 let httpRequestsInFlight = 0;
+let nextWorldDeltaEventTime = 0;
 let rightMouseRudderActive = false;
 let rightMouseRudderStartX = 0;
 let rightMouseRudderStartDegrees = 0;
@@ -385,6 +1044,22 @@ let playerDamageState = "active";
 let playerSinkStartTime = 0;
 let playerSinkStartY = 0;
 let playerSinkSide = -1;
+let lastFlakHitId = "";
+let flakHitAlertUntil = 0;
+let damageNotificationIds = new Set();
+let killFeedEventIds = new Set();
+let killFeedEvents = [];
+let killFeedShipLabels = new Map();
+let nextKillFeedNumber = 1;
+let reportedLocalPlaneHitIds = new Set();
+let radarTorpedoSnapshots = Array.isArray(gameState.torpedoes) ? gameState.torpedoes : [];
+let scoutPlaneFlakHitStartTime = 0;
+let scoutPlaneFlakHitExploded = false;
+let nextScoutPlaneFlakSmokeTime = 0;
+let scoutPlaneFlakHitHeading = 0;
+let scoutPlaneFlakHitSpeed = scoutPlaneMinSpeed;
+let planeHitFlashUntil = 0;
+let planeHitFlashStart = 0;
 let playerRespawnIndex = 0;
 let pendingPlayerServerShip = null;
 let playerServerTarget = null;
@@ -397,31 +1072,56 @@ let remoteCorrectionSamples = 0;
 let remoteCorrectionTotal = 0;
 let remoteCorrectionMax = 0;
 let playerServerSnapshotReceived = false;
-let serverRadarReady = false;
-let serverRadarContacts = [];
-let serverRadarObserverPosition = null;
-let serverRadarObserverHeading = null;
-let serverRadarRange = 945;
+const radarWorldScale = 2.5;
+const clientRadarRange = 945 * radarWorldScale;
+const combatRadarRangeFactor = 0.62;
+const scoutPlaneRadarRangeFactor = 1.5;
+const radarRangeFactors = {
+  near: combatRadarRangeFactor,
+  far: scoutPlaneRadarRangeFactor
+};
+if (!singleRadarMode) {
+  setupRadarRangeControl(radarRangeButton);
+  setupTargetRadarControl(targetRadarButton);
+}
+setupBridgeViewControl(bridgeViewButton);
+setupFlakViewControl(flakViewButton);
+setupCannonViewControl(cannonViewButton);
+setupAlignWeaponsControl(alignWeaponsButton);
+setupAlignWeaponsControl(alignAirDefenseButton, "air-defense");
+setupTorpedoAidControl(torpedoAidButton);
+setupSideViewCameraTuner();
 let serverShipsById = indexShipsById(gameState.ships);
 let serverClockOffset = Number.isFinite(gameState.t) ? -gameState.t : null;
+let lastServerSnapshotTime = Number.isFinite(gameState.t) ? gameState.t : null;
 let gameEventSource = null;
 let gameEventSourceReady = false;
 let lastGameStreamMessageAt = 0;
 let debugTeleportPending = false;
 let fireTorpedoRequestInFlight = false;
+let dropBombRequestInFlight = false;
 const maxRudderDegrees = 35;
-const rudderStepDegrees = 3;
+const rudderStepDegrees = 2;
 const rudderHoldInitialDelaySeconds = 0.22;
 const rudderHoldDegreesPerSecond = 60;
 const maxSimulationFrameSeconds = 0.12;
 boat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
 const playerRespawnPoints = createPlayerRespawnPoints(playerShips, initialPlayerSpawn);
 const torpedoLaunchDefaults = {
-  tubeX: 0.66,
-  startZ: 2.45,
-  startY: 0.6
+  tubeX: 0.56,
+  startZ: 2.26,
+  startY: 0.76,
+  waterEntryZ: 2.62,
+  runStartZ: 2.88
 };
+const airDroppedTorpedoFallSeconds = 1.55;
+const airDroppedTorpedoMaxVisualFallSeconds = 4.2;
+const airDroppedTorpedoSubmergedDistance = 20;
+const serverTorpedoFreshLaunchSeconds = 0.55;
 const torpedoSystem = createTorpedoSystem(scene, materials, world);
+const bombSystem = createBombSystem(scene, materials, world);
+const flakSystem = createFlakSystem(scene, materials, world);
+const cannonSystem = createCannonSystem(scene, materials, world);
 connectGameEventStream();
 
 const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
@@ -430,6 +1130,7 @@ setupRudderDragControl(document.querySelector(".rudder-gauge"));
 setupMobileFireButton(mobileFireButton);
 updateFleetStatus(gameState.ships, gameState.destroyedShipsByTeam);
 updatePlayerList(gameState.ships, gameState.killsByPlayer);
+updateKillFeedFromSnapshot(gameState);
 updatePlayerTorpedoStock(playerTorpedoesRemaining);
 enemyMotions
   .filter((enemyMotion) => !enemyMotion.isServerControlled)
@@ -449,9 +1150,46 @@ scene.onBeforeRenderObservable.add(() => {
       maxRudderDegrees
     );
   }
+  if (playerActive && flakViewActive && heldFlakDirection !== 0) {
+    cancelWeaponAlignment();
+    flakYaw = normalizeAngle(flakYaw + heldFlakDirection * getHeldFlakSpeed(heldFlakStartTime, flakYawFineSpeed, flakYawMediumSpeed, flakYawFastSpeed, flakYawVeryFastSpeed, flakYawMaxSpeed, flakYawExtremeSpeed) * dt);
+  }
+  if (playerActive && flakViewActive && heldFlakPitchDirection !== 0) {
+    cancelWeaponAlignment();
+    flakPitch = clamp(
+      flakPitch + heldFlakPitchDirection * getHeldFlakSpeed(heldFlakPitchStartTime, flakPitchFineSpeed, flakPitchMediumSpeed, flakPitchFastSpeed, flakPitchVeryFastSpeed, flakPitchMaxSpeed, flakPitchExtremeSpeed) * dt,
+      flakMinPitch,
+      flakMaxPitch
+    );
+  }
+  if (playerActive && cannonViewActive && heldCannonDirection !== 0) {
+    cancelWeaponAlignment();
+    cannonYaw = clamp(
+      cannonYaw + heldCannonDirection * getHeldCannonSpeed(heldCannonStartTime, cannonYawFineSpeed, cannonYawExtremeSpeed) * dt,
+      -cannonYawLimit,
+      cannonYawLimit
+    );
+  }
+  if (playerActive && cannonViewActive && heldCannonPitchDirection !== 0) {
+    cancelWeaponAlignment();
+    cannonPitch = clamp(
+      cannonPitch + heldCannonPitchDirection * getHeldCannonSpeed(heldCannonPitchStartTime, cannonPitchFineSpeed, cannonPitchExtremeSpeed) * dt,
+      cannonMinPitch,
+      cannonMaxPitch
+    );
+  }
+  if (playerActive && flakViewActive && heldFlakFire) {
+    firePlayerFlak();
+  }
+  updateWeaponAlignment(dt);
+  updatePlayerFlakMount();
+  updatePlayerCannonMount();
+  updateCannonBarrelRecoil(boat.bowCannon, time);
 
-  if (playerActive && heldEngineDirection !== 0 && time >= nextEngineHoldChangeTime) {
-    changeEngineOrder(heldEngineDirection);
+  if (!scoutPlaneMode && playerActive && heldEngineDirection !== 0 && time >= nextEngineHoldChangeTime) {
+    if (!(engineOrder === 2 && heldEngineStopGuardDirection === heldEngineDirection)) {
+      changeEngineOrder(heldEngineDirection);
+    }
     nextEngineHoldChangeTime = time + engineHoldRepeatSeconds;
   }
 
@@ -461,18 +1199,30 @@ scene.onBeforeRenderObservable.add(() => {
   let nextWaterSafety = waterSafety;
 
   if (playerActive) {
-    const maxForwardSpeed = 12.4;
+    if (scoutPlaneMode) {
+      engineOrder = 7;
+    }
+    const diveRatio = scoutPlaneMode ? clamp(-heldElevatorDirection, 0, 1) : 0;
+    const maxForwardSpeed = scoutPlaneMode
+      ? scoutPlaneMaxSpeed + (scoutPlaneMaxDiveSpeed - scoutPlaneMaxSpeed) * diveRatio
+      : maxTorpedoBoatForwardSpeed;
     const engineTargetSpeed = engineOrders[engineOrder].speed;
-    const targetSpeed = engineTargetSpeed > 0 ? Math.min(engineTargetSpeed, maxForwardSpeed) : engineTargetSpeed;
-    const response = Math.abs(targetSpeed) > Math.abs(speed) ? 0.45 : 0.75;
+    const targetSpeed = scoutPlaneMode
+      ? scoutPlaneTargetSpeed + (scoutPlaneMaxDiveSpeed - scoutPlaneTargetSpeed) * diveRatio
+      : engineTargetSpeed > 0
+      ? Math.min(engineTargetSpeed, maxForwardSpeed)
+      : engineTargetSpeed;
+    const response = scoutPlaneMode ? 1.1 : (Math.abs(targetSpeed) > Math.abs(speed) ? 0.45 : 0.42);
     speed += (targetSpeed - speed) * Math.min(1, dt * response);
 
-    const turnStrength = speed >= 0 ? 0.24 : -0.16;
-    const rudderGrip = clamp(Math.abs(speed) / 4.2, 0, 1);
+    const turnStrength = scoutPlaneMode ? 0.26 : (speed >= 0 ? 0.24 : -0.16);
+    const rudderGrip = scoutPlaneMode ? clamp(Math.abs(speed) / 7.2, 0.24, 1) : clamp(Math.abs(speed) / 4.2, 0, 1);
     const steer = rudderDegrees / maxRudderDegrees;
     const targetTurnVelocity = steer * turnStrength * rudderGrip;
-    turnVelocity += (targetTurnVelocity - turnVelocity) * Math.min(1, dt * 2.0);
+    turnVelocity += (targetTurnVelocity - turnVelocity) * Math.min(1, dt * (scoutPlaneMode ? 1.75 : 2.0));
+    const previousHeading = heading;
     heading += turnVelocity * dt;
+    holdWeaponWorldHeading(previousHeading, heading);
     forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
 
     const previousPosition = boat.root.position.clone();
@@ -484,7 +1234,7 @@ scene.onBeforeRenderObservable.add(() => {
     const movementSafety = nextWaterSafety.isBlocked
       ? getShipMovementWaterSafety(boat.root.position, heading, speed, blockedWaters)
       : nextWaterSafety;
-    if (movementSafety.isBlocked) {
+    if (!scoutPlaneMode && movementSafety.isBlocked) {
       boat.root.position.copyFrom(previousPosition);
 
       // Grounding stops the ship, but a tiny escape nudge prevents numeric edge-locking.
@@ -496,38 +1246,101 @@ scene.onBeforeRenderObservable.add(() => {
       speed = engineOrders[engineOrder].speed < 0 ? Math.min(speed, -1.2) : 0;
       turnVelocity *= 0.4;
     }
+
+    if (scoutPlaneMode) {
+      const pulloutRatio = heldElevatorDirection < 0
+        ? smoothstep(scoutPlanePulloutAltitude, scoutPlanePulloutStartAltitude, scoutPlaneAltitude)
+        : 1;
+      const effectiveElevatorDirection = heldElevatorDirection < 0
+        ? heldElevatorDirection * pulloutRatio
+        : heldElevatorDirection;
+      const targetPitch = -effectiveElevatorDirection * scoutPlaneMaxPitch;
+      scoutPlanePitch += (targetPitch - scoutPlanePitch) * Math.min(1, dt * 2.4);
+      const targetVerticalSpeed = effectiveElevatorDirection < 0
+        ? effectiveElevatorDirection * scoutPlaneMaxDiveRate
+        : effectiveElevatorDirection * scoutPlaneMaxClimbRate;
+      scoutPlaneVerticalSpeed += (targetVerticalSpeed - scoutPlaneVerticalSpeed) * Math.min(1, dt * 1.35);
+      scoutPlaneAltitude = clamp(
+        scoutPlaneAltitude + scoutPlaneVerticalSpeed * dt,
+        scoutPlaneMinAltitude,
+        scoutPlaneMaxAltitude
+      );
+      if (
+        (scoutPlaneAltitude <= scoutPlaneMinAltitude && scoutPlaneVerticalSpeed < 0) ||
+        (scoutPlaneAltitude >= scoutPlaneMaxAltitude && scoutPlaneVerticalSpeed > 0)
+      ) {
+        scoutPlaneVerticalSpeed = 0;
+      }
+    }
   } else {
     heldRudderDirection = 0;
+    heldElevatorDirection = 0;
+    heldFlakDirection = 0;
+    heldFlakPitchDirection = 0;
+    heldCannonDirection = 0;
+    heldCannonPitchDirection = 0;
     engineOrder = 2;
     speed *= Math.max(0, 1 - dt * 1.7);
     turnVelocity *= Math.max(0, 1 - dt * 2.0);
     rudderDegrees += (0 - rudderDegrees) * Math.min(1, dt * 1.8);
+    scoutPlaneVerticalSpeed *= Math.max(0, 1 - dt * 2.0);
+    scoutPlanePitch += (0 - scoutPlanePitch) * Math.min(1, dt * 2.2);
   }
 
-  const bob = Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035;
+  const bridgeViewStabilization = !scoutPlaneMode
+    && !flakViewActive
+    && !cannonViewActive
+    && !torpedoScopeActive
+    ? 0.35
+    : 1;
+  const shipStabilization = sideViewSandboxMode
+    ? 0
+    : (torpedoScopeActive && !scoutPlaneMode
+    ? 0
+    : (flakViewActive && !scoutPlaneMode
+      ? 0.16
+      : (cannonViewActive && !scoutPlaneMode ? 0.12 : bridgeViewStabilization)));
+  const bob = (Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035) * shipStabilization;
   if (playerActive) {
-    boat.root.position.y = torpedoBoatWaterlineY + bob;
+    boat.root.position.y = scoutPlaneMode
+      ? scoutPlaneAltitude
+      : torpedoBoatWaterlineY + bob;
+    const torpedoBoatTrimPitch = scoutPlaneMode ? 0 : getTorpedoBoatTrimPitch(speed);
     boat.root.rotationQuaternion = Quaternion.FromEulerAngles(
-      Math.sin(time * 2.6) * 0.025,
+      scoutPlaneMode ? scoutPlanePitch : torpedoBoatTrimPitch + Math.sin(time * 2.6) * 0.025 * shipStabilization,
       heading,
-      -turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018
+      scoutPlaneMode ? -turnVelocity * 2.8 : (-turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018) * shipStabilization
     );
-  } else {
+    if (scoutPlaneMode) {
+      updateScoutPlaneVisual(boat, speed, time);
+    }
+  } else if (playerDamageState === "sinking") {
     updatePlayerSinking(boat, time);
+  } else if (playerDamageState === "air-hit") {
+    updateScoutPlaneFlakHitSequence(boat, time, dt);
   }
+  boat.root.setEnabled(!torpedoScopeActive);
   ocean.position.x = boat.root.position.x;
   ocean.position.z = boat.root.position.z;
 
-  materials.water.diffuseTexture.uOffset += dt * 0.01;
-  materials.water.diffuseTexture.vOffset += dt * 0.018;
+  materials.water.diffuseTexture.uOffset += dt * 0.0065;
+  materials.water.diffuseTexture.vOffset += dt * 0.0115;
   if (openSeaFoamEnabled) {
     updateFoamPatches(foam, boat.root.position, time, blockedWaters);
   }
   updateVolcanoPlumes(volcanoPlumes, time);
   updateNavigationLights(navigationLights, time, boat.root.position);
   enemyMotions.forEach((enemyMotion) => updateEnemyMotion(enemyMotion, dt, time, boat.root.position, blockedWaters));
+  enemyMotions.forEach((enemyMotion) => updateCannonBarrelRecoil(enemyMotion.boat?.bowCannon, time));
+  updateScoutPlaneFlakDemo(enemyMotions.concat(flakDemoMotions), time);
   updateEnemyFireControl(torpedoSystem, enemyMotions, boat.root.position, blockedWaters, time);
   updateServerTorpedoVisuals(torpedoSystem, dt, time);
+  updateServerBombVisuals(bombSystem, dt, time);
+  updateBombSightMarker(bombSystem, forward);
+  updateFlakSystem(flakSystem, dt, time);
+  updateCannonSystem(cannonSystem, dt, time, blockedWaters);
+  updateFlakHitAlert(time);
+  updatePlaneHitFlash(time);
   syncMultiplayerState(time);
   const torpedoResult = updateTorpedoSystem(torpedoSystem, dt, time, enemyMotions, blockedWaters, boat.root.position);
   if (torpedoResult.playerHit && playerDamageState === "active") {
@@ -537,7 +1350,7 @@ scene.onBeforeRenderObservable.add(() => {
     if (testPlayerInvulnerable) {
       document.body.dataset.playerDamageState = "invulnerable-hit";
     } else {
-      beginPlayerSinking(torpedoResult.playerHitPosition, time);
+      beginPlayerSinking(torpedoResult.playerHitPosition, time, "Abgeschossen durch Torpedo");
     }
   }
 
@@ -551,29 +1364,48 @@ scene.onBeforeRenderObservable.add(() => {
     turnVelocity *= 0.25;
   }
 
-  // Fixed bridge camera: it follows the ship immediately so acceleration never reveals the rear model.
-  const cameraDistance = 0.65;
-  const cameraHeight = 1.22;
-  const desiredCameraPosition = boat.root.position
-    .subtract(forward.scale(cameraDistance))
-    .add(new Vector3(0, cameraHeight, 0));
-  const desiredTarget = boat.root.position.add(forward.scale(24.0)).add(new Vector3(0, 0.78, 0));
+  const cameraSetup = getPlayerCameraSetup(forward);
+  const desiredCameraPosition = cameraSetup.position;
+  const desiredTarget = cameraSetup.target;
   const shakeOffset = getRamShakeOffset(heading, ramShake, time);
   ramShake = Math.max(0, ramShake - dt * 2.6);
+  const bridgeInteriorViewActive = !sideViewSandboxMode
+    && !scoutPlaneMode
+    && !flakViewActive
+    && !cannonViewActive
+    && !torpedoScopeActive
+    && !bombBayViewActive;
 
+  camera.minZ = (cannonViewActive || flakViewActive || torpedoScopeActive) ? 0.03 : (bombBayViewActive ? 0.2 : (scoutPlaneMode ? 1.5 : 0.2));
+  camera.fov = sideViewSandboxMode
+    ? debugOrbitFov
+    : (cannonViewActive ? getCannonFov() : (flakViewActive ? 0.64 : (torpedoScopeActive ? 0.42 : (bombBayViewActive ? getBombBayFov() : (scoutPlaneMode ? 1.02 : (bridgeInteriorViewActive ? bridgeViewWidth : 0.78))))));
   cameraPosition.copyFrom(desiredCameraPosition.add(shakeOffset));
   cameraTarget.copyFrom(desiredTarget);
   camera.position.copyFrom(cameraPosition);
   camera.setTarget(desiredTarget);
-  camera.rotation.x = -Math.abs(camera.rotation.x);
+  if (!sideViewSandboxMode && !scoutPlaneMode && !flakViewActive && !cannonViewActive) {
+    camera.rotation.x = -Math.abs(camera.rotation.x);
+  }
+  boat.flakDeckView?.setEnabled(flakViewActive);
+  boat.flakViewHiddenMeshes?.forEach((mesh) => mesh.setEnabled(!flakViewActive));
+  boat.cannonViewHiddenMeshes?.forEach((mesh) => mesh.setEnabled(!cannonViewActive));
+  boat.bridgeViewHiddenMeshes?.forEach((mesh) => mesh.setEnabled(!bridgeInteriorViewActive));
+  updateTorpedoViewState();
   document.body.dataset.camera = `${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)}`;
   document.body.dataset.frameMs = (rawFrameSeconds * 1000).toFixed(1);
   document.body.dataset.simulationMs = (dt * 1000).toFixed(1);
   document.body.dataset.cameraRotation = `${camera.rotation.x.toFixed(2)},${camera.rotation.y.toFixed(2)},${camera.rotation.z.toFixed(2)}`;
   document.body.dataset.activeCamera = scene.activeCamera?.name ?? "none";
   document.body.dataset.boat = `${boat.root.position.x.toFixed(1)},${boat.root.position.y.toFixed(1)},${boat.root.position.z.toFixed(1)}`;
+  document.body.dataset.scoutPlaneAltitude = scoutPlaneMode ? scoutPlaneAltitude.toFixed(1) : "";
+  document.body.dataset.scoutPlaneTargetSpeed = scoutPlaneMode ? scoutPlaneTargetSpeed.toFixed(1) : "";
+  document.body.dataset.scoutPlanePitch = scoutPlaneMode ? scoutPlanePitch.toFixed(3) : "";
+  document.body.dataset.scoutPlaneVerticalSpeed = scoutPlaneMode ? scoutPlaneVerticalSpeed.toFixed(2) : "";
+  document.body.dataset.hideRudderInstrument = scoutPlaneMode && !bombBayViewActive ? "true" : "false";
   document.body.dataset.engineOrder = engineOrders[engineOrder].label;
   document.body.dataset.rudderDegrees = String(Math.round(rudderDegrees));
+  updateSteeringModifierHint();
   document.body.dataset.torpedoes = String(torpedoSystem.active.length);
   document.body.dataset.torpedoHits = String(torpedoSystem.hits);
   document.body.dataset.playerHits = String(playerHits);
@@ -583,16 +1415,24 @@ scene.onBeforeRenderObservable.add(() => {
 
   const displayedSpeed = Math.abs(speed) < 0.08 ? 0 : Math.abs(speed);
   speedValue.textContent = displayedSpeed.toFixed(1);
+  if (telegraphSpeedValue) telegraphSpeedValue.textContent = displayedSpeed.toFixed(1);
+  if (telegraphOrderValue) telegraphOrderValue.textContent = engineOrders[engineOrder].shortLabel ?? engineOrders[engineOrder].label;
+  updateAltimeter(scoutPlaneAltitude);
   engineValue.textContent = engineOrders[engineOrder].label;
   updateTelegraphSteps(telegraphSteps, engineOrder);
   updateMeasuredSpeed(boat.root.position, time);
-  depthValue.textContent = nextWaterSafety.isBlocked ? "Ground" : "Sea";
-  depthGauge?.style.setProperty("--depth-ratio", "1");
+  depthValue.textContent = scoutPlaneMode ? "Air" : (nextWaterSafety.isBlocked ? "Ground" : "Sea");
+  depthGauge?.style.setProperty("--depth-ratio", scoutPlaneMode ? "0" : "1");
   document.body.dataset.measuredSpeed = measuredSpeedSample.speed.toFixed(2);
   compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
   if (compassHeading) compassHeading.textContent = `HDG ${formatHeadingDegrees(heading)}`;
   updateRudderGauge(rudderIndicator, rudderValue, rudderDegrees);
-  updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, getRadarContacts(enemyMotions), blockedWaters, heading);
+  updateWeaponElevationGauge(flakElevationIndicator, flakElevationValue, flakPitch, flakMinPitch, flakMaxPitch);
+  updateWeaponElevationGauge(cannonElevationIndicator, cannonElevationValue, cannonPitch, cannonMinPitch, cannonMaxPitch);
+  const radarContacts = getRadarContacts(enemyMotions);
+  updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, radarContacts, blockedWaters, heading, heading, {
+    flakLookHeading: !scoutPlaneMode ? normalizeAngle(heading + (flakViewActive ? flakYaw : (cannonViewActive ? cannonYaw : 0))) : null
+  });
   flushPerformanceTelemetry(time);
 });
 
@@ -614,6 +1454,531 @@ function isInputKey(event, name) {
     left: code === "ArrowLeft" || keyCode === 37,
     right: code === "ArrowRight" || keyCode === 39
   }[name];
+}
+
+function isFlakViewToggleKey(event) {
+  return !scoutPlaneMode && (event.code === "KeyF" || event.key === "f" || event.key === "F");
+}
+
+function isSystemShortcutEvent(event) {
+  return event.metaKey || event.ctrlKey;
+}
+
+function isStartupErrorVisible() {
+  return Boolean(document.body?.dataset?.startupError);
+}
+
+function isCannonViewToggleKey(event) {
+  return !scoutPlaneMode && (event.code === "KeyC" || event.key === "c" || event.key === "C");
+}
+
+function isBridgeViewKey(event) {
+  return !scoutPlaneMode && (event.code === "KeyB" || event.key === "b" || event.key === "B");
+}
+
+function isTorpedoScopeToggleKey(event) {
+  return !scoutPlaneMode && (event.code === "KeyT" || event.key === "t" || event.key === "T");
+}
+
+function isAlignWeaponsKey(event) {
+  return !scoutPlaneMode && (event.code === "KeyA" || event.key === "a" || event.key === "A");
+}
+
+function isBombBayViewToggleKey(event) {
+  return scoutPlaneMode && (event.code === "KeyZ" || event.key === "z" || event.key === "Z");
+}
+
+function isRadarModeToggleKey(event) {
+  return !scoutPlaneMode && (event.code === "KeyR" || event.key === "r" || event.key === "R");
+}
+
+function isCannonSightToggleKey(event) {
+  return cannonViewActive && !scoutPlaneMode && (event.code === "KeyZ" || event.key === "z" || event.key === "Z");
+}
+
+function toggleFlakView() {
+  setBattleStation("flak");
+}
+
+function toggleCannonView() {
+  setBattleStation("cannon");
+}
+
+function setBattleStation(station) {
+  flakViewActive = station === "flak";
+  cannonViewActive = station === "cannon";
+  if (!cannonViewActive) {
+    setCannonSightLevel(0);
+  }
+  mouseWheelCannonSightAccumulator = 0;
+  setTorpedoScope(station === "torpedo");
+  heldFlakDirection = 0;
+  heldFlakPitchDirection = 0;
+  heldFlakStartTime = time;
+  heldFlakPitchStartTime = time;
+  heldFlakFire = false;
+  heldRudderDirection = 0;
+  heldEngineDirection = 0;
+  heldElevatorDirection = 0;
+  heldCannonDirection = 0;
+  heldCannonPitchDirection = 0;
+  heldCannonStartTime = time;
+  heldCannonPitchStartTime = time;
+  rightMouseRudderActive = false;
+  document.body.dataset.flakView = flakViewActive ? "active" : "bridge";
+  document.body.dataset.cannonView = cannonViewActive ? "active" : "bridge";
+  updateSteeringModifierHint();
+  updateTorpedoViewState();
+  updateBattleStationButtons();
+}
+
+function updateSteeringModifierHint() {
+  document.body.dataset.steeringModifier = (flakViewActive || cannonViewActive) ? "shift" : "none";
+}
+
+function updateTorpedoViewState() {
+  if (torpedoScopeActive && (scoutPlaneMode || flakViewActive || cannonViewActive || bombBayViewActive || playerDamageState !== "active")) {
+    setTorpedoScope(false);
+  }
+  const active = torpedoScopeActive && !scoutPlaneMode && !flakViewActive && !cannonViewActive && !bombBayViewActive && playerDamageState === "active";
+  document.body.dataset.torpedoView = active ? "active" : "hidden";
+}
+
+function setTorpedoScope(active) {
+  torpedoScopeActive = Boolean(active) && !scoutPlaneMode && !flakViewActive && !cannonViewActive && !bombBayViewActive && playerDamageState === "active";
+  document.body.dataset.torpedoView = torpedoScopeActive ? "active" : "hidden";
+}
+
+function toggleBombBayView() {
+  bombBayViewActive = !bombBayViewActive;
+  if (bombBayViewActive) {
+    setTorpedoScope(false);
+  }
+  heldElevatorDirection = 0;
+  rightMouseRudderActive = false;
+  document.body.dataset.bombBayView = bombBayViewActive ? "active" : "off";
+  updateTorpedoViewState();
+}
+
+function changeScoutPlaneTargetSpeed(direction) {
+  scoutPlaneTargetSpeed = clamp(
+    scoutPlaneTargetSpeed + direction * scoutPlaneSpeedStep,
+    scoutPlaneMinSpeed,
+    scoutPlaneMaxSpeed
+  );
+  document.body.dataset.scoutPlaneTargetSpeed = scoutPlaneTargetSpeed.toFixed(1);
+}
+
+function updatePlayerFlakMount() {
+  if (!boat.sternFlak?.mount) return;
+  boat.sternFlak.mount.rotation.y = flakYaw;
+  if (boat.sternFlak.elevationRoot) {
+    boat.sternFlak.elevationRoot.rotation.x = -flakPitch;
+  }
+  document.body.dataset.flakYaw = String(Math.round(normalizeAngle(flakYaw) * 180 / Math.PI));
+  document.body.dataset.flakPitch = String(Math.round(flakPitch * 180 / Math.PI));
+}
+
+function updatePlayerCannonMount() {
+  if (!boat.bowCannon?.mount) return;
+  boat.bowCannon.mount.rotation.y = cannonYaw;
+  if (boat.bowCannon.elevationRoot) {
+    boat.bowCannon.elevationRoot.rotation.x = -cannonPitch;
+  }
+  document.body.dataset.cannonYaw = String(Math.round(normalizeAngle(cannonYaw) * 180 / Math.PI));
+  document.body.dataset.cannonPitch = String(Math.round(cannonPitch * 180 / Math.PI));
+}
+
+function holdWeaponWorldHeading(previousHeading, nextHeading) {
+  if (!Number.isFinite(previousHeading) || !Number.isFinite(nextHeading) || scoutPlaneMode || torpedoScopeActive) return;
+  const headingDelta = clamp(getSignedAngularDistance(nextHeading, previousHeading), -weaponHeadingHoldMaxDelta, weaponHeadingHoldMaxDelta);
+  if (Math.abs(headingDelta) < 0.00001) return;
+
+  if (flakViewActive) {
+    flakYaw = normalizeAngle(flakYaw - headingDelta);
+  }
+  if (cannonViewActive) {
+    cannonYaw = clamp(cannonYaw - headingDelta, -cannonYawLimit, cannonYawLimit);
+  }
+}
+
+function getHeldFlakSpeed(startTime, fineSpeed, mediumSpeed, fastSpeed, veryFastSpeed, maxSpeed, extremeSpeed) {
+  return getHeldWeaponSpeed(startTime, fineSpeed, mediumSpeed, fastSpeed, veryFastSpeed, maxSpeed, extremeSpeed, flakHoldTimings);
+}
+
+const flakHoldTimings = {
+  medium: flakHoldMediumDelaySeconds,
+  fast: flakHoldFastDelaySeconds,
+  veryFast: flakHoldVeryFastDelaySeconds,
+  max: flakHoldMaxDelaySeconds,
+  extreme: flakHoldExtremeDelaySeconds
+};
+
+const cannonHoldTimings = {
+  medium: cannonHoldMediumDelaySeconds,
+  fast: cannonHoldFastDelaySeconds,
+  veryFast: cannonHoldVeryFastDelaySeconds,
+  max: cannonHoldMaxDelaySeconds,
+  extreme: cannonHoldExtremeDelaySeconds
+};
+
+function getHeldWeaponSpeed(startTime, fineSpeed, mediumSpeed, fastSpeed, veryFastSpeed, maxSpeed, extremeSpeed, timings) {
+  return getContinuousHeldWeaponSpeed(startTime, fineSpeed, extremeSpeed, timings.extreme);
+}
+
+function getHeldCannonSpeed(startTime, fineSpeed, extremeSpeed) {
+  const sightLevel = currentCannonSightLevel();
+  const startSpeed = fineSpeed * sightLevel.startSpeedFactor;
+  const rampSeconds = cannonHoldTimings.extreme * sightLevel.rampFactor;
+  return getContinuousHeldWeaponSpeed(startTime, startSpeed, extremeSpeed, rampSeconds);
+}
+
+function getContinuousHeldWeaponSpeed(startTime, fineSpeed, maxSpeed, rampSeconds) {
+  const heldSeconds = Math.max(0, time - startTime);
+  const ratio = clamp(heldSeconds / Math.max(0.001, rampSeconds), 0, 1);
+  const eased = ratio * ratio * (3 - 2 * ratio);
+  return fineSpeed + (maxSpeed - fineSpeed) * eased;
+}
+
+function getPlayerCameraSetup(forward) {
+  if (sideViewSandboxMode) {
+    return getDebugOrbitCameraSetup();
+  }
+
+  if (scoutPlaneMode && bombBayViewActive) {
+    const preview = getAirTorpedoDropPreview();
+    if (bombBayImpactFocus && time >= bombBayImpactFocus.expiresAt) {
+      bombBayImpactFocus = null;
+    }
+    const focus = bombBayImpactFocus?.position ?? preview.centerImpact;
+    const position = transformLocalPlanePoint(new Vector3(0, -0.02 - Math.sin(time * 1.1) * 0.03, 3.72));
+    const target = new Vector3(focus.x, 0.2, focus.z);
+    return { position, target };
+  }
+
+  if (!scoutPlaneMode && flakViewActive) {
+    const elevationRoot = boat.sternFlak?.elevationRoot;
+    if (!elevationRoot) {
+      return { position: camera.position.clone(), target: cameraTarget.clone() };
+    }
+    const worldMatrix = elevationRoot.computeWorldMatrix(true);
+    const position = Vector3.TransformCoordinates(
+      new Vector3(0, playerFlakSightYOffset, playerFlakEyeZ),
+      worldMatrix
+    );
+    const target = Vector3.TransformCoordinates(
+      new Vector3(0, playerFlakSightYOffset, flakSightTargetZ),
+      worldMatrix
+    );
+    return {
+      position,
+      target
+    };
+  }
+
+  if (!scoutPlaneMode && cannonViewActive) {
+    const elevationRoot = boat.bowCannon?.elevationRoot;
+    if (!elevationRoot) {
+      return { position: camera.position.clone(), target: cameraTarget.clone() };
+    }
+    const worldMatrix = elevationRoot.computeWorldMatrix(true);
+    const position = Vector3.TransformCoordinates(
+      new Vector3(0, playerCannonSightYOffset, playerCannonEyeZ),
+      worldMatrix
+    );
+    const target = Vector3.TransformCoordinates(
+      new Vector3(0, playerCannonSightYOffset, 180),
+      worldMatrix
+    );
+    return {
+      position,
+      target
+    };
+  }
+
+  if (!scoutPlaneMode) {
+    const bridgeWindow = getBridgeWindowCameraLocalPosition();
+    const position = transformLocalShipPointWithoutTilt(bridgeWindow.position, torpedoBoatVisualScale);
+    const target = transformLocalShipPointWithoutTilt(bridgeWindow.target, torpedoBoatVisualScale);
+    return { position, target };
+  }
+
+  // Oblique chase camera for the scout-plane perspective test.
+  const cameraDistance = 24.0;
+  const bridgeEyeHeight = 0;
+  const cameraHeight = scoutPlaneMode ? 9.5 - scoutPlanePitch * 10 : bridgeEyeHeight;
+  const position = boat.root.position
+    .subtract(forward.scale(cameraDistance))
+    .add(new Vector3(0, cameraHeight, 0));
+  const planeLookDown = scoutPlaneMode ? -8.0 - scoutPlanePitch * 42 : 0.9;
+  const target = boat.root.position
+    .add(forward.scale(scoutPlaneMode ? 90.0 : 24.0))
+    .add(new Vector3(0, planeLookDown, 0));
+  return { position, target };
+}
+
+function getBridgeWindowCameraLocalPosition() {
+  const bridgeBaseZ = 0.64;
+  const bridgeBaseDepth = 0.76;
+  const bridgeBaseHeight = 0.414;
+  const bridgeHouseZ = 0.72;
+  const bridgeHouseDepth = 0.46;
+  const bridgeHouseHeight = 0.2898;
+  const bridgeWindowYOffset = 0.02;
+  const bridgeBaseBackBottomY = getTorpedoBoatDeckY(bridgeBaseZ - bridgeBaseDepth * 0.5) - 0.004;
+  const bridgeBaseFrontBottomY = getTorpedoBoatDeckY(bridgeBaseZ + bridgeBaseDepth * 0.5) - 0.004;
+  const bridgeBaseTopY = Math.max(bridgeBaseBackBottomY, bridgeBaseFrontBottomY) + bridgeBaseHeight;
+  const bridgeHouseCenterY = bridgeBaseTopY + bridgeHouseHeight * 0.5;
+  const windowY = bridgeHouseCenterY + bridgeWindowYOffset;
+  const windowFrontZ = bridgeHouseZ + bridgeHouseDepth * 0.5;
+  return {
+    position: new Vector3(0, windowY, windowFrontZ - 0.035),
+    target: new Vector3(0, windowY - 0.035, windowFrontZ + 72)
+  };
+}
+
+function transformLocalPlanePoint(localPoint) {
+  const rotation = Quaternion.FromEulerAngles(scoutPlanePitch, heading, -turnVelocity * 2.8);
+  const matrix = Matrix.Compose(
+    new Vector3(scoutPlaneVisualScale, scoutPlaneVisualScale, scoutPlaneVisualScale),
+    rotation,
+    boat.root.position
+  );
+  return Vector3.TransformCoordinates(localPoint, matrix);
+}
+
+function transformLocalShipPointWithoutTilt(localPoint, visualScale = 1) {
+  const right = new Vector3(Math.cos(heading), 0, -Math.sin(heading));
+  const forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
+  return boat.root.position
+    .add(right.scale(localPoint.x * visualScale))
+    .add(new Vector3(0, localPoint.y * visualScale, 0))
+    .add(forward.scale(localPoint.z * visualScale));
+}
+
+function worldToLocalShipPointWithoutTilt(worldPoint) {
+  const delta = worldPoint.subtract(boat.root.position);
+  const right = new Vector3(Math.cos(heading), 0, -Math.sin(heading));
+  const forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
+  return new Vector3(
+    Vector3.Dot(delta, right) / torpedoBoatVisualScale,
+    delta.y / torpedoBoatVisualScale,
+    Vector3.Dot(delta, forward) / torpedoBoatVisualScale
+  );
+}
+
+function getDebugOrbitCameraSetup() {
+  if (debugCameraMode === "ship") {
+    const shipYaw = heading + debugShipCameraYaw * Math.PI / 180;
+    const localRight = new Vector3(Math.cos(heading), 0, -Math.sin(heading));
+    const localForward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
+    const position = boat.root.position
+      .add(localRight.scale(debugShipCameraX))
+      .add(localForward.scale(debugShipCameraZ))
+      .add(new Vector3(0, debugOrbitTargetY, 0));
+    const lookDirection = new Vector3(
+      Math.sin(shipYaw) * Math.cos(debugOrbitPitch),
+      Math.sin(debugOrbitPitch),
+      Math.cos(shipYaw) * Math.cos(debugOrbitPitch)
+    );
+    return { position, target: position.add(lookDirection.scale(80)) };
+  }
+
+  const target = boat.root.position.add(new Vector3(0, debugOrbitTargetY, 0));
+  const distanceMagnitude = Math.max(Math.abs(debugOrbitRadius), 0.05);
+  const distanceDirection = Math.sign(debugOrbitRadius) || 1;
+  const horizontalRadius = distanceDirection * distanceMagnitude * Math.cos(debugOrbitPitch);
+  const position = target.add(new Vector3(
+    Math.sin(debugOrbitYaw) * horizontalRadius,
+    distanceMagnitude * Math.sin(debugOrbitPitch),
+    Math.cos(debugOrbitYaw) * horizontalRadius
+  ));
+  return { position, target };
+}
+
+function wrapDegrees(value) {
+  return ((((value + 180) % 360) + 360) % 360) - 180;
+}
+
+function getBombBayFov() {
+  const altitudeFactor = clamp(
+    (boat.root.position.y - scoutPlaneCruiseAltitude) / (scoutPlaneMaxAltitude - scoutPlaneCruiseAltitude),
+    0,
+    1
+  );
+  return bombBayWideFov + (bombBayZoomFov - bombBayWideFov) * altitudeFactor;
+}
+
+function getAirTorpedoDropPreview() {
+  const forward = getForwardVector(heading);
+  const dropAltitude = Math.max(0.5, boat.root.position.y - 0.2);
+  const fallSeconds = getBombFallSeconds(dropAltitude, scoutPlaneVerticalSpeed);
+  const horizontalSpeed = Math.max(0, speed);
+  const airTravel = horizontalSpeed * fallSeconds;
+  const waterEntry = boat.root.position
+    .add(forward.scale(airTorpedoSightReleaseOffset + airTravel))
+    .add(new Vector3(0, -boat.root.position.y + 0.2, 0));
+  const waterRunDistance = clamp(
+    (shipTorpedoBaseSpeed * airTorpedoSpeedFactor + horizontalSpeed * shipTorpedoSpeedGain * airTorpedoSpeedFactor) * airTorpedoSightRunSeconds,
+    airTorpedoSightMinRunDistance,
+    airTorpedoSightMaxRunDistance
+  );
+  const centerImpact = waterEntry.add(forward.scale(waterRunDistance));
+  const sightCenter = waterEntry.add(forward.scale(waterRunDistance * 0.5));
+  return {
+    waterEntry,
+    centerImpact,
+    sightCenter,
+    fallSeconds,
+    horizontalSpeed,
+    waterRunDistance,
+    bounds: { width: 5.2, length: waterRunDistance },
+    sightHeading: heading,
+    impactPoints: [
+      { x: waterEntry.x, z: waterEntry.z },
+      { x: centerImpact.x, z: centerImpact.z }
+    ]
+  };
+}
+
+function getBombDropPreview() {
+  const horizontalSpeed = clamp(speed * 0.92, 4, 28);
+  const bombPreviewPoints = getBombImpactPreviewPoints(horizontalSpeed);
+  const impactPoints = bombPreviewPoints.map((point) => ({ x: point.x, z: point.z }));
+  const centerlinePoints = bombPreviewPoints.map((point) => ({ x: point.centerX, z: point.centerZ }));
+  const impactSpacing = horizontalSpeed * bombReleaseIntervalSeconds;
+  const sightHeading = getBombSightHeading(centerlinePoints);
+  const bounds = getBombSightBounds(impactPoints, sightHeading);
+  const patternLength = bounds.length;
+  const firstImpact = new Vector3(impactPoints[0].x, 0.2, impactPoints[0].z);
+  const centerImpact = new Vector3(bounds.center.x, 0.2, bounds.center.z);
+  firstImpact.y = 0.2;
+  centerImpact.y = 0.2;
+
+  return {
+    firstImpact,
+    centerImpact,
+    impactSpacing,
+    patternLength,
+    fallSeconds: bombPreviewPoints[bombPreviewPoints.length - 1]?.impactAtSeconds ?? 0,
+    horizontalSpeed,
+    impactPoints,
+    centerlinePoints,
+    bounds,
+    sightHeading
+  };
+}
+
+function getBombSightHeading(impactPoints) {
+  const first = impactPoints[0];
+  const last = impactPoints[impactPoints.length - 1] ?? first;
+  const dx = last.x - first.x;
+  const dz = last.z - first.z;
+  if (Math.hypot(dx, dz) <= 0.001) return heading;
+  return Math.atan2(dx, dz);
+}
+
+function getBombSightBounds(impactPoints, sightHeading) {
+  const origin = impactPoints[0] ?? { x: 0, z: 0 };
+  const localPoints = impactPoints.map((point) => worldPointToBombSightLocal(point, origin, sightHeading));
+  const xs = localPoints.map((point) => point.x);
+  const zs = localPoints.map((point) => point.z);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const firstLocal = localPoints[0] ?? { x: 0, z: 0 };
+  const lastLocal = localPoints[localPoints.length - 1] ?? firstLocal;
+  const length = Math.hypot(lastLocal.x - firstLocal.x, lastLocal.z - firstLocal.z);
+  const centerLocal = {
+    x: (minX + maxX) * 0.5,
+    z: (firstLocal.z + lastLocal.z) * 0.5
+  };
+  return {
+    center: bombSightLocalToWorldPoint(centerLocal, origin, sightHeading),
+    width: maxX - minX,
+    length
+  };
+}
+
+function worldPointToBombSightLocal(point, origin, sightHeading) {
+  const dx = point.x - origin.x;
+  const dz = point.z - origin.z;
+  const sin = Math.sin(sightHeading);
+  const cos = Math.cos(sightHeading);
+  return {
+    x: dx * cos - dz * sin,
+    z: dx * sin + dz * cos
+  };
+}
+
+function bombSightLocalToWorldPoint(point, origin, sightHeading) {
+  const sin = Math.sin(sightHeading);
+  const cos = Math.cos(sightHeading);
+  return {
+    x: origin.x + point.x * cos + point.z * sin,
+    z: origin.z - point.x * sin + point.z * cos
+  };
+}
+
+function getBombImpactPreviewPoints(horizontalSpeed) {
+  return Array.from({ length: bombsPerDrop }, (_, index) => {
+    const releaseDelay = index * bombReleaseIntervalSeconds;
+    const planeState = predictScoutPlaneBombReleaseState(releaseDelay);
+    const bombHeading = normalizeAngle(planeState.heading + getBombPatternHeadingJitter(index));
+    const bombSpeed = Math.max(0, horizontalSpeed + getBombPatternSpeedJitter(index));
+    const releaseForward = getForwardVector(planeState.heading);
+    const releaseRight = getRightVector(planeState.heading);
+    const bombForward = getForwardVector(bombHeading);
+    const dropAltitude = Math.max(0, planeState.y - bombDropVerticalOffset);
+    const fallSeconds = getBombFallSeconds(dropAltitude, scoutPlaneVerticalSpeed);
+    const releasePosition = planeState.position
+      .add(releaseForward.scale(bombDropForwardOffset))
+      .add(releaseRight.scale(getBombPatternOffset(index)));
+    const centerlineRelease = planeState.position.add(releaseForward.scale(bombDropForwardOffset));
+    const impact = releasePosition.add(bombForward.scale(bombSpeed * fallSeconds));
+    const centerlineImpact = centerlineRelease.add(releaseForward.scale(horizontalSpeed * fallSeconds));
+    return {
+      x: impact.x,
+      z: impact.z,
+      centerX: centerlineImpact.x,
+      centerZ: centerlineImpact.z,
+      impactAtSeconds: releaseDelay + fallSeconds
+    };
+  });
+}
+
+function getBombFallSeconds(dropAltitude, verticalSpeed) {
+  const initialDownSpeed = -verticalSpeed;
+  return Math.max(0, (-initialDownSpeed + Math.sqrt(initialDownSpeed * initialDownSpeed + 2 * bombGravity * dropAltitude)) / bombGravity);
+}
+
+function predictScoutPlaneBombReleaseState(delaySeconds) {
+  const steps = Math.max(1, Math.ceil(delaySeconds / 0.08));
+  const dt = steps > 0 ? delaySeconds / steps : 0;
+  let predictedHeading = heading;
+  const predictedPosition = boat.root.position.clone();
+  for (let step = 0; step < steps; step += 1) {
+    predictedHeading = normalizeAngle(predictedHeading + turnVelocity * dt);
+    predictedPosition.addInPlace(getForwardVector(predictedHeading).scale(speed * dt));
+  }
+  return {
+    position: predictedPosition,
+    heading: predictedHeading,
+    y: clamp(boat.root.position.y + scoutPlaneVerticalSpeed * delaySeconds, scoutPlaneMinAltitude, scoutPlaneMaxAltitude)
+  };
+}
+
+function getBombPatternOffset(index) {
+  const side = index % 2 === 0 ? -1 : 1;
+  return side * bombPatternLateralSpacing;
+}
+
+function getBombPatternHeadingJitter(index) {
+  const centered = stableUnitNoise(index * 97 + 31) - 0.5;
+  return centered * bombPatternHeadingJitter;
+}
+
+function getBombPatternSpeedJitter(index) {
+  return (stableUnitNoise(index * 83 + 47) - 0.5) * bombPatternSpeedJitter;
 }
 
 function isHudControlEvent(event) {
@@ -659,6 +2024,337 @@ function setupMapZoomControl(input) {
   });
 }
 
+function setupRadarRangeControl(button) {
+  if (!button) return;
+  button.addEventListener("click", (event) => {
+    setRadarMode("radar");
+    button.blur();
+    event.stopPropagation();
+  });
+}
+
+function setupTargetRadarControl(button) {
+  if (!button) return;
+  button.addEventListener("click", (event) => {
+    setRadarMode("target");
+    button.blur();
+    event.stopPropagation();
+  });
+  updateRadarModeButtons();
+}
+
+function setRadarMode(mode) {
+  if (singleRadarMode) return;
+  radarModeOverride = mode === "target" ? "target" : "radar";
+  radarModeOverrideUntil = performance.now() + RADAR_MODE_OVERRIDE_MS;
+  setEffectiveRadarMode(radarModeOverride, true);
+}
+
+function setEffectiveRadarMode(mode, forceUpdate = false) {
+  const nextMode = mode === "target" ? "target" : "radar";
+  if (radarMode === nextMode && !forceUpdate) return;
+  radarMode = nextMode;
+  updateRadarModeButtons();
+}
+
+function updateRadarModeButtons() {
+  document.body.dataset.radarRangeMode = radarMode === "target" ? "near" : "far";
+  document.body.dataset.radarMode = radarMode;
+  document.body.dataset.radarModeOverride = radarModeOverride ? "active" : "off";
+  if (radarRangeButton) {
+    radarRangeButton.classList.toggle("is-active", radarMode !== "target");
+  }
+  if (targetRadarButton) {
+    targetRadarButton.classList.toggle("is-active", radarMode === "target");
+  }
+}
+
+function getSelectedRadarRange() {
+  if (singleRadarMode) {
+    const combatRadarRange = clientRadarRange * combatRadarRangeFactor;
+    return scoutPlaneMode && bombBayViewActive ? combatRadarRange * 0.5 : combatRadarRange;
+  }
+  return getRadarRangeForMode("radar");
+}
+
+function getRadarRangeForMode(mode) {
+  const rangeMode = mode === "target" ? "near" : "far";
+  return clientRadarRange * (radarRangeFactors[rangeMode] ?? radarRangeFactors.far);
+}
+
+function setupFlakViewControl(button) {
+  if (!button) return;
+  updateBattleStationButtons();
+  button.addEventListener("click", (event) => {
+    setBattleStation("flak");
+    button.blur();
+    event.stopPropagation();
+  });
+}
+
+function setupBridgeViewControl(button) {
+  if (!button) return;
+  updateBattleStationButtons();
+  button.addEventListener("click", (event) => {
+    setBattleStation("bridge");
+    button.blur();
+    event.stopPropagation();
+  });
+}
+
+function setupCannonViewControl(button) {
+  if (!button) return;
+  updateBattleStationButtons();
+  button.addEventListener("click", (event) => {
+    setBattleStation("cannon");
+    button.blur();
+    event.stopPropagation();
+  });
+}
+
+function setupAlignWeaponsControl(button, mode = "flat") {
+  if (!button) return;
+  button.addEventListener("click", (event) => {
+    alignWeaponsForBridge(mode);
+    button.blur();
+    event.stopPropagation();
+  });
+}
+
+function setupTorpedoAidControl(button) {
+  if (!button) return;
+  button.addEventListener("click", (event) => {
+    setBattleStation("torpedo");
+    button.blur();
+    event.stopPropagation();
+  });
+}
+
+function setupSideViewCameraTuner() {
+  if (!sideViewSandboxMode) return;
+  const panel = document.createElement("section");
+  panel.className = "side-view-camera-panel";
+  panel.innerHTML = `
+    <div class="side-view-camera-title">Kamera Entwurf</div>
+    <div class="side-view-camera-mode" role="group" aria-label="Kameramodus">
+      <button type="button" data-camera-mode="orbit">Orbit</button>
+      <button type="button" data-camera-mode="ship">An Bord</button>
+    </div>
+    <label>Weite <output data-camera-output="fov"></output><input data-camera-control="fov" type="range" min="0.28" max="1.20" step="0.01"></label>
+    <label>Abstand <output data-camera-output="distance"></output><input data-camera-control="distance" type="range" min="-32" max="32" step="0.1"></label>
+    <label>Blickhöhe <output data-camera-output="height"></output><input data-camera-control="height" type="range" min="-0.2" max="3.2" step="0.02"></label>
+    <label>Seitlich <output data-camera-output="shipX"></output><input data-camera-control="shipX" type="range" min="-3.2" max="3.2" step="0.02"></label>
+    <label>Vor/Zurück <output data-camera-output="shipZ"></output><input data-camera-control="shipZ" type="range" min="-5.2" max="5.2" step="0.02"></label>
+    <label>Richtung <output data-camera-output="shipYaw"></output><input data-camera-control="shipYaw" type="range" min="-180" max="180" step="1"></label>
+    <div class="side-view-camera-hint">Ziehen dreht, Rad zoomt. Link aktualisiert sich.</div>
+  `;
+  document.body.appendChild(panel);
+
+  const modeButtons = [...panel.querySelectorAll("[data-camera-mode]")];
+  const fovInput = panel.querySelector('[data-camera-control="fov"]');
+  const distanceInput = panel.querySelector('[data-camera-control="distance"]');
+  const heightInput = panel.querySelector('[data-camera-control="height"]');
+  const shipXInput = panel.querySelector('[data-camera-control="shipX"]');
+  const shipZInput = panel.querySelector('[data-camera-control="shipZ"]');
+  const shipYawInput = panel.querySelector('[data-camera-control="shipYaw"]');
+  const outputs = {
+    fov: panel.querySelector('[data-camera-output="fov"]'),
+    distance: panel.querySelector('[data-camera-output="distance"]'),
+    height: panel.querySelector('[data-camera-output="height"]'),
+    shipX: panel.querySelector('[data-camera-output="shipX"]'),
+    shipZ: panel.querySelector('[data-camera-output="shipZ"]'),
+    shipYaw: panel.querySelector('[data-camera-output="shipYaw"]')
+  };
+
+  fovInput.value = debugOrbitFov.toFixed(2);
+  distanceInput.value = debugOrbitRadius.toFixed(1);
+  heightInput.value = debugOrbitTargetY.toFixed(2);
+  shipXInput.value = debugShipCameraX.toFixed(2);
+  shipZInput.value = debugShipCameraZ.toFixed(2);
+  shipYawInput.value = debugShipCameraYaw.toFixed(0);
+
+  const refresh = () => {
+    debugOrbitFov = clamp(Number(fovInput.value), 0.28, 1.2);
+    debugOrbitRadius = clamp(Number(distanceInput.value), -32, 32);
+    debugOrbitTargetY = clamp(Number(heightInput.value), -0.2, 3.2);
+    debugShipCameraX = clamp(Number(shipXInput.value), -3.2, 3.2);
+    debugShipCameraZ = clamp(Number(shipZInput.value), -5.2, 5.2);
+    debugShipCameraYaw = wrapDegrees(Number(shipYawInput.value));
+    outputs.fov.textContent = debugOrbitFov.toFixed(2);
+    outputs.distance.textContent = debugOrbitRadius.toFixed(1);
+    outputs.height.textContent = debugOrbitTargetY.toFixed(2);
+    outputs.shipX.textContent = debugShipCameraX.toFixed(2);
+    outputs.shipZ.textContent = debugShipCameraZ.toFixed(2);
+    outputs.shipYaw.textContent = `${debugShipCameraYaw.toFixed(0)}°`;
+    document.body.dataset.sideViewFov = debugOrbitFov.toFixed(2);
+    document.body.dataset.sideViewDistance = debugOrbitRadius.toFixed(1);
+    document.body.dataset.sideViewHeight = debugOrbitTargetY.toFixed(2);
+    document.body.dataset.sideViewMode = debugCameraMode;
+    document.body.dataset.sideViewX = debugShipCameraX.toFixed(2);
+    document.body.dataset.sideViewZ = debugShipCameraZ.toFixed(2);
+    document.body.dataset.sideViewYaw = debugShipCameraYaw.toFixed(0);
+    panel.dataset.cameraMode = debugCameraMode;
+    modeButtons.forEach((button) => {
+      button.classList.toggle("active", button.dataset.cameraMode === debugCameraMode);
+    });
+    updateSideViewCameraUrl();
+  };
+
+  modeButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      debugCameraMode = button.dataset.cameraMode === "ship" ? "ship" : "orbit";
+      refresh();
+      focusGameCanvas();
+    });
+  });
+
+  [fovInput, distanceInput, heightInput, shipXInput, shipZInput, shipYawInput].forEach((input) => {
+    input.addEventListener("input", refresh);
+    input.addEventListener("pointerdown", (event) => event.stopPropagation());
+    input.addEventListener("pointermove", (event) => event.stopPropagation());
+    input.addEventListener("keydown", (event) => event.stopPropagation());
+  });
+  refresh();
+}
+
+function updateSideViewCameraUrl() {
+  const nextUrl = new URL(window.location.href);
+  nextUrl.searchParams.set("viewMode", debugCameraMode);
+  nextUrl.searchParams.set("viewFov", debugOrbitFov.toFixed(2));
+  nextUrl.searchParams.set("viewDistance", debugOrbitRadius.toFixed(1));
+  nextUrl.searchParams.set("viewHeight", debugOrbitTargetY.toFixed(2));
+  nextUrl.searchParams.set("viewX", debugShipCameraX.toFixed(2));
+  nextUrl.searchParams.set("viewZ", debugShipCameraZ.toFixed(2));
+  nextUrl.searchParams.set("viewYaw", debugShipCameraYaw.toFixed(0));
+  window.history.replaceState(null, "", nextUrl);
+}
+
+function updateSideViewCameraControls() {
+  if (!sideViewSandboxMode) return;
+  const distanceInput = document.querySelector('[data-camera-control="distance"]');
+  const distanceOutput = document.querySelector('[data-camera-output="distance"]');
+  const shipZInput = document.querySelector('[data-camera-control="shipZ"]');
+  const shipZOutput = document.querySelector('[data-camera-output="shipZ"]');
+  const shipYawInput = document.querySelector('[data-camera-control="shipYaw"]');
+  const shipYawOutput = document.querySelector('[data-camera-output="shipYaw"]');
+  if (distanceInput) distanceInput.value = debugOrbitRadius.toFixed(1);
+  if (distanceOutput) distanceOutput.textContent = debugOrbitRadius.toFixed(1);
+  if (shipZInput) shipZInput.value = debugShipCameraZ.toFixed(2);
+  if (shipZOutput) shipZOutput.textContent = debugShipCameraZ.toFixed(2);
+  if (shipYawInput) shipYawInput.value = debugShipCameraYaw.toFixed(0);
+  if (shipYawOutput) shipYawOutput.textContent = `${debugShipCameraYaw.toFixed(0)}°`;
+  document.body.dataset.sideViewDistance = debugOrbitRadius.toFixed(1);
+  document.body.dataset.sideViewZ = debugShipCameraZ.toFixed(2);
+  document.body.dataset.sideViewYaw = debugShipCameraYaw.toFixed(0);
+}
+
+function alignWeaponsForBridge(mode = "flat") {
+  const airDefense = mode === "air-defense";
+  weaponAlignTarget = {
+    flakYaw: Math.PI,
+    flakPitch: clamp(airDefense ? weaponAlignAirDefenseFlakPitch : weaponAlignFlatFlakPitch, flakMinPitch, flakMaxPitch),
+    cannonYaw: 0,
+    cannonPitch: clamp(airDefense ? weaponAlignAirDefenseCannonPitch : weaponAlignFlatCannonPitch, cannonMinPitch, cannonMaxPitch),
+    mode: airDefense ? "air-defense" : "flat"
+  };
+  document.body.dataset.weaponAlign = weaponAlignTarget.mode;
+}
+
+function cancelWeaponAlignment() {
+  if (!weaponAlignTarget) return;
+  weaponAlignTarget = null;
+  document.body.dataset.weaponAlign = "manual";
+}
+
+function updateWeaponAlignment(dt) {
+  if (!weaponAlignTarget) return;
+  flakYaw = moveAngleToward(flakYaw, weaponAlignTarget.flakYaw, weaponAlignYawSpeed * dt);
+  flakPitch = moveValueToward(flakPitch, weaponAlignTarget.flakPitch, weaponAlignPitchSpeed * dt);
+  cannonYaw = moveValueToward(cannonYaw, weaponAlignTarget.cannonYaw, weaponAlignYawSpeed * dt);
+  cannonPitch = moveValueToward(cannonPitch, weaponAlignTarget.cannonPitch, weaponAlignPitchSpeed * dt);
+  if (
+    Math.abs(shortestAngleDelta(flakYaw, weaponAlignTarget.flakYaw)) < 0.002
+    && Math.abs(flakPitch - weaponAlignTarget.flakPitch) < 0.002
+    && Math.abs(cannonYaw - weaponAlignTarget.cannonYaw) < 0.002
+    && Math.abs(cannonPitch - weaponAlignTarget.cannonPitch) < 0.002
+  ) {
+    weaponAlignTarget = null;
+  }
+}
+
+function moveValueToward(value, target, maxStep) {
+  if (Math.abs(target - value) <= maxStep) {
+    return target;
+  }
+  return value + Math.sign(target - value) * maxStep;
+}
+
+function moveAngleToward(value, target, maxStep) {
+  const delta = shortestAngleDelta(value, target);
+  if (Math.abs(delta) <= maxStep) {
+    return normalizeAngle(target);
+  }
+  return normalizeAngle(value + Math.sign(delta) * maxStep);
+}
+
+function shortestAngleDelta(from, to) {
+  let delta = normalizeAngle(to) - normalizeAngle(from);
+  if (delta > Math.PI) delta -= Math.PI * 2;
+  if (delta < -Math.PI) delta += Math.PI * 2;
+  return delta;
+}
+
+function updateBattleStationButtons() {
+  bridgeViewButton?.classList.toggle("is-active", !flakViewActive && !cannonViewActive && !torpedoScopeActive);
+  flakViewButton?.classList.toggle("is-active", flakViewActive);
+  cannonViewButton?.classList.toggle("is-active", cannonViewActive);
+  torpedoAidButton?.classList.toggle("is-active", torpedoScopeActive);
+  updateCannonSightDisplay();
+}
+
+function cycleCannonSightLevel() {
+  changeCannonSightLevel(1, true);
+}
+
+function changeCannonSightLevel(direction, wrap = false) {
+  const rawNextIndex = cannonSightLevelIndex + direction;
+  const nextIndex = wrap
+    ? (rawNextIndex + cannonSightLevels.length) % cannonSightLevels.length
+    : clamp(rawNextIndex, 0, cannonSightLevels.length - 1);
+  setCannonSightLevel(nextIndex);
+}
+
+function setCannonSightLevel(index) {
+  cannonSightLevelIndex = clamp(Math.round(index), 0, cannonSightLevels.length - 1);
+  document.body.dataset.cannonSight = currentCannonSightLevel().label;
+  updateBattleStationButtons();
+}
+
+function updateCannonSightDisplay() {
+  if (!cannonSightValue) return;
+  cannonSightValue.textContent = currentCannonSightLevel().label;
+}
+
+function getCannonFov() {
+  return currentCannonSightLevel().fov;
+}
+
+function currentCannonSightLevel() {
+  return cannonSightLevels[cannonSightLevelIndex] ?? cannonSightLevels[0];
+}
+
+function updateCannonSightFromWheel(event) {
+  mouseWheelCannonSightAccumulator += event.deltaY;
+  while (mouseWheelCannonSightAccumulator <= -mouseWheelEngineStep) {
+    changeCannonSightLevel(1);
+    mouseWheelCannonSightAccumulator += mouseWheelEngineStep;
+  }
+  while (mouseWheelCannonSightAccumulator >= mouseWheelEngineStep) {
+    changeCannonSightLevel(-1);
+    mouseWheelCannonSightAccumulator -= mouseWheelEngineStep;
+  }
+}
+
 function setupDebugMapTeleport(canvas) {
   if (!canvas) return;
 
@@ -669,6 +2365,21 @@ function setupDebugMapTeleport(canvas) {
     const y = (event.clientY - rect.top) * (canvas.clientHeight / rect.height);
     const target = mapPointToWorld(x, y, lastMapViewport);
 
+    if (debugMarkerMapEnabled) {
+      addDebugMapMarker(target);
+      teleportPlayerToDebugMapPosition(target);
+      event.stopPropagation();
+      event.preventDefault();
+      return;
+    }
+
+    teleportPlayerToDebugMapPosition(target);
+    event.stopPropagation();
+    event.preventDefault();
+  });
+}
+
+function teleportPlayerToDebugMapPosition(target) {
     boat.root.position.x = target.x;
     boat.root.position.z = target.z;
     playerBearingPosition = new Vector3(target.x, boat.root.position.y, target.z);
@@ -685,9 +2396,90 @@ function setupDebugMapTeleport(canvas) {
       sendPlayerState();
     }
     document.body.dataset.debugTeleport = `${Math.round(target.x)},${Math.round(target.z)}`;
-    event.stopPropagation();
-    event.preventDefault();
+    document.body.dataset.debugTeleportVector = `new Vector2(${Math.round(target.x)}, ${Math.round(target.z)})`;
+    console.info("[sea-battle] debug map position", {
+      x: Math.round(target.x),
+      z: Math.round(target.z),
+      vector: document.body.dataset.debugTeleportVector
+    });
+}
+
+function setupDebugMapMarkerPanel() {
+  debugMapMarkerOutput?.addEventListener("input", () => {
+    debugMapMarkersEdited = true;
+    debugMapMarkers = parseDebugMapMarkers(debugMapMarkerOutput.value);
+    document.body.dataset.debugMapMarkers = String(debugMapMarkers.length);
   });
+
+  copyDebugMapMarkersButton?.addEventListener("click", () => {
+    const text = formatDebugMapMarkers();
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).catch(() => {
+        if (debugMapMarkerOutput) debugMapMarkerOutput.select();
+      });
+    } else if (debugMapMarkerOutput) {
+      debugMapMarkerOutput.select();
+    }
+  });
+
+  undoDebugMapMarkerButton?.addEventListener("click", () => {
+    debugMapMarkersEdited = true;
+    debugMapMarkers = debugMapMarkers.slice(0, -1);
+    updateDebugMapMarkerPanel();
+  });
+
+  clearDebugMapMarkersButton?.addEventListener("click", () => {
+    debugMapMarkersEdited = true;
+    debugMapMarkers = [];
+    updateDebugMapMarkerPanel();
+  });
+}
+
+function addDebugMapMarker(position) {
+  debugMapMarkersEdited = true;
+  const marker = {
+    x: Math.round(position.x),
+    z: Math.round(position.z)
+  };
+  debugMapMarkers = [...debugMapMarkers, marker];
+  document.body.dataset.debugMapMarkerLast = `new Vector2(${marker.x}, ${marker.z})`;
+  console.info("[sea-battle] debug map marker", document.body.dataset.debugMapMarkerLast);
+  updateDebugMapMarkerPanel();
+}
+
+function updateDebugMapMarkerPanel() {
+  if (debugMapMarkerPanel) {
+    debugMapMarkerPanel.hidden = !debugMarkerMapEnabled;
+  }
+  if (debugMapMarkerOutput) {
+    debugMapMarkerOutput.value = formatDebugMapMarkers();
+  }
+  document.body.dataset.debugMapMarkers = String(debugMapMarkers.length);
+}
+
+function formatDebugMapMarkers() {
+  return debugMapMarkers
+    .map((marker) => `new Vector2(${marker.x}, ${marker.z})`)
+    .join("\n");
+}
+
+function parseDebugMapMarkers(text) {
+  return String(text ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = line.match(/-?\d+(?:\.\d+)?/g);
+      if (!match || match.length < 2) return null;
+      const x = Number(match[0]);
+      const z = Number(match[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+      return {
+        x: Math.round(x),
+        z: Math.round(z)
+      };
+    })
+    .filter(Boolean);
 }
 
 function setupTelegraphDragControl(scale) {
@@ -764,7 +2556,11 @@ function setupMobileFireButton(button) {
 
   button.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
-    requestPlayerTorpedoFire();
+    if (flakViewActive) {
+      firePlayerFlak();
+    } else {
+      requestPlayerWeaponFire();
+    }
     event.stopPropagation();
     event.preventDefault();
   });
@@ -806,6 +2602,9 @@ function createPerformanceTelemetry() {
     fireTorpedoHttpRequests: 0,
     fireTorpedoHttpTotalMs: 0,
     fireTorpedoHttpMaxMs: 0,
+    dropBombHttpRequests: 0,
+    dropBombHttpTotalMs: 0,
+    dropBombHttpMaxMs: 0,
     performanceHttpRequests: 0,
     performanceHttpTotalMs: 0,
     performanceHttpMaxMs: 0
@@ -843,9 +2642,11 @@ function finishHttpRequest(kind, startedAt) {
     ? "playerStateHttp"
     : kind === "fireTorpedo"
       ? "fireTorpedoHttp"
-      : kind === "performance"
-        ? "performanceHttp"
-        : "";
+      : kind === "dropBomb"
+        ? "dropBombHttp"
+        : kind === "performance"
+          ? "performanceHttp"
+          : "";
   if (!keyPrefix) return;
   performanceTelemetry[`${keyPrefix}Requests`] += 1;
   performanceTelemetry[`${keyPrefix}TotalMs`] += elapsedMs;
@@ -859,16 +2660,17 @@ function flushPerformanceTelemetry(now) {
     performanceTelemetry.lastFlushAt = now;
     return;
   }
-  if (now - performanceTelemetry.lastFlushAt < 4) return;
+  if (now - performanceTelemetry.lastFlushAt < 2) return;
 
   const elapsed = Math.max(0.001, now - performanceTelemetry.lastFlushAt);
   const reportStartedWallTime = performanceTelemetry.startedWallTime;
   const reportEndedWallTime = Date.now();
+  const worldDeltas = collectWorldDeltaDiagnostics();
   const report = {
     playerId,
     teamId: playerTeamId,
     shipId: playerServerShipId ?? "",
-    setupId: getRequestedSetupId(),
+    setupId: "server",
     userAgent: navigator.userAgent,
     platform: clientCapability.platform,
     vendor: clientCapability.vendor,
@@ -896,15 +2698,36 @@ function flushPerformanceTelemetry(now) {
     slowFrames80: performanceTelemetry.slowFrames80,
     clampedFrames: performanceTelemetry.clampedFrames,
     measuredSpeed: Number(measuredSpeedSample.speed.toFixed(2)),
+    x: Number(boat.root.position.x.toFixed(2)),
+    z: Number(boat.root.position.z.toFixed(2)),
+    heading: Number(heading.toFixed(4)),
     selectedSpeed: Number(speed.toFixed(2)),
+    speed: Number(speed.toFixed(2)),
     turnVelocity: Number(turnVelocity.toFixed(4)),
+    engineOrder,
     rudderDegrees: Number(rudderDegrees.toFixed(1)),
+    playerDamageState,
+    playerTorpedoesRemaining: Number.isFinite(playerTorpedoesRemaining) ? playerTorpedoesRemaining : -1,
+    localTorpedoCount: torpedoSystem.active.length,
+    serverTorpedoes: readDatasetInt("serverTorpedoes"),
+    serverTorpedoVisuals: readDatasetInt("serverTorpedoVisuals"),
+    serverBombs: readDatasetInt("serverBombs"),
+    serverBombVisuals: readDatasetInt("serverBombVisuals"),
+    fireTorpedoSync: document.body.dataset.fireTorpedoSync ?? "",
+    fireTorpedoSyncError: document.body.dataset.fireTorpedoSyncError ?? "",
+    dropBombSync: document.body.dataset.dropBombSync ?? "",
+    dropBombSyncError: document.body.dataset.dropBombSyncError ?? "",
+    playerStateSync: document.body.dataset.playerStateSync ?? "",
+    playerStateSyncError: document.body.dataset.playerStateSyncError ?? "",
+    gameEventSource: document.body.dataset.gameEventSource ?? "",
+    lastKey: document.body.dataset.lastKey ?? "",
+    ownServerTorpedoLaunch: document.body.dataset.ownServerTorpedoLaunch ?? "",
+    sessionExpired: document.body.dataset.sessionExpired ?? "",
     meshCount: scene.meshes.length,
     visibleMeshCount: scene.meshes.filter((mesh) => mesh.isEnabled() && mesh.isVisible).length,
     enemyCount: enemyMotions.filter((motion) => motion.root.isEnabled()).length,
     foamCount: foam?.patches?.length ?? 0,
     torpedoCount: torpedoSystem.active.length,
-    radarContacts: serverRadarContacts.length,
     serverShips: serverShipsById.size,
     gameEventSourceReady,
     gameStreamAgeSeconds: lastGameStreamMessageAt > 0 ? Number((time - lastGameStreamMessageAt).toFixed(2)) : -1,
@@ -918,11 +2741,15 @@ function flushPerformanceTelemetry(now) {
     fireTorpedoHttpRequests: performanceTelemetry.fireTorpedoHttpRequests,
     avgFireTorpedoHttpMs: averageMs(performanceTelemetry.fireTorpedoHttpTotalMs, performanceTelemetry.fireTorpedoHttpRequests),
     maxFireTorpedoHttpMs: Number(performanceTelemetry.fireTorpedoHttpMaxMs.toFixed(2)),
+    dropBombHttpRequests: performanceTelemetry.dropBombHttpRequests,
+    avgDropBombHttpMs: averageMs(performanceTelemetry.dropBombHttpTotalMs, performanceTelemetry.dropBombHttpRequests),
+    maxDropBombHttpMs: Number(performanceTelemetry.dropBombHttpMaxMs.toFixed(2)),
     performanceHttpRequests: performanceTelemetry.performanceHttpRequests,
     avgPerformanceHttpMs: averageMs(performanceTelemetry.performanceHttpTotalMs, performanceTelemetry.performanceHttpRequests),
     maxPerformanceHttpMs: Number(performanceTelemetry.performanceHttpMaxMs.toFixed(2))
   };
 
+  maybeReportLargeWorldDelta(worldDeltas);
   sendPerformanceReport(report);
   performanceTelemetry = createPerformanceTelemetry();
   performanceTelemetry.startedAt = now;
@@ -932,7 +2759,7 @@ function flushPerformanceTelemetry(now) {
 function sendPerformanceReport(report) {
   const requestStartedAt = beginHttpRequest();
   const finishPerformanceRequest = () => finishHttpRequest("performance", requestStartedAt);
-  fetch("/game/client-performance", {
+  fetch(gameEndpoint("/game/client-performance"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(report),
@@ -946,8 +2773,120 @@ function sendPerformanceReport(report) {
   );
 }
 
+function collectWorldDeltaDiagnostics() {
+  const ownShip = playerServerShipId ? serverShipsById.get(playerServerShipId) : null;
+  const ownShipDelta = ownShip
+    ? distance2D(boat.root.position, { x: ownShip.x, z: ownShip.z })
+    : -1;
+  const torpedoDelta = collectVisualDelta(torpedoSystem.serverVisuals);
+  const bombDelta = collectVisualDelta(bombSystem.serverVisuals, true);
+  const worst = [
+    { kind: "ship", delta: ownShipDelta, id: ownShip?.id ?? "", visual: summarizeVector(boat.root.position), server: ownShip ? { x: round2(ownShip.x), y: round2(ownShip.y ?? 0), z: round2(ownShip.z) } : null },
+    { kind: "torpedo", ...torpedoDelta },
+    { kind: "bomb", ...bombDelta }
+  ].filter((entry) => Number.isFinite(entry.delta) && entry.delta >= 0);
+
+  return {
+    ownShipDelta: round2(ownShipDelta),
+    torpedoVisualMaxDelta: round2(torpedoDelta.delta),
+    bombVisualMaxDelta: round2(bombDelta.delta),
+    maxDelta: Math.max(0, ...worst.map((entry) => entry.delta)),
+    summary: stringifyClientEventDetails({
+      serverT: Number.isFinite(lastServerSnapshotTime) ? round2(lastServerSnapshotTime) : null,
+      ship: worst.find((entry) => entry.kind === "ship") ?? null,
+      torpedo: torpedoDelta,
+      bomb: bombDelta
+    })
+  };
+}
+
+function collectVisualDelta(visuals, includeHeight = false) {
+  let result = { id: "", delta: -1, visual: null, server: null };
+  visuals?.forEach?.((visual, id) => {
+    if (!visual?.root?.position || !visual?.serverPosition) return;
+    const delta = includeHeight
+      ? Vector3.Distance(visual.root.position, visual.serverPosition)
+      : distance2D(visual.root.position, visual.serverPosition);
+    if (!Number.isFinite(delta) || delta <= result.delta) return;
+    result = {
+      id: String(id),
+      delta,
+      visual: summarizeVector(visual.root.position),
+      server: summarizeVector(visual.serverPosition)
+    };
+  });
+  return {
+    ...result,
+    delta: round2(result.delta)
+  };
+}
+
+function maybeReportLargeWorldDelta(worldDeltas) {
+  if (!worldDeltas || !Number.isFinite(worldDeltas.maxDelta) || worldDeltas.maxDelta < 8) return;
+  if (time < nextWorldDeltaEventTime) return;
+  nextWorldDeltaEventTime = time + 10;
+  sendClientGameEvent("world-delta", {
+    ownShipDelta: worldDeltas.ownShipDelta,
+    torpedoVisualMaxDelta: worldDeltas.torpedoVisualMaxDelta,
+    bombVisualMaxDelta: worldDeltas.bombVisualMaxDelta,
+    summary: worldDeltas.summary
+  });
+}
+
+function round2(value) {
+  return Number.isFinite(value) ? Number(value.toFixed(2)) : -1;
+}
+
+function sendClientGameEvent(event, details = {}) {
+  const report = {
+    playerId,
+    teamId: playerTeamId,
+    shipId: playerServerShipId ?? pendingPlayerServerShip?.id ?? "",
+    event,
+    clientTime: Number(time.toFixed(2)),
+    x: Number(boat.root.position.x.toFixed(2)),
+    z: Number(boat.root.position.z.toFixed(2)),
+    heading: Number(heading.toFixed(4)),
+    speed: Number(speed.toFixed(2)),
+    damageState: playerDamageState,
+    localTorpedoes: torpedoSystem.active.length,
+    serverTorpedoes: readDatasetInt("serverTorpedoes"),
+    serverTorpedoVisuals: readDatasetInt("serverTorpedoVisuals"),
+    details: stringifyClientEventDetails(details)
+  };
+  const payload = JSON.stringify(report);
+  const endpoint = getClientGameEventEndpoint();
+
+  if (navigator.sendBeacon) {
+    const sent = navigator.sendBeacon(endpoint, new Blob([payload], { type: "application/json" }));
+    if (sent) return;
+  }
+
+  fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: payload,
+    keepalive: true
+  }).catch((error) => {
+    document.body.dataset.clientEventLogError = error.message;
+  });
+}
+
+function stringifyClientEventDetails(details) {
+  try {
+    return JSON.stringify(details).slice(0, 1200);
+  } catch {
+    return "{}";
+  }
+}
+
 function averageMs(totalMs, count) {
   return count > 0 ? Number((totalMs / count).toFixed(2)) : 0;
+}
+
+function readDatasetInt(name) {
+  const value = Number.parseInt(document.body.dataset[name] ?? "", 10);
+  return Number.isFinite(value) ? value : -1;
 }
 
 function createClientCapabilitySnapshot(engineInstance, renderCanvas) {
@@ -1026,7 +2965,6 @@ function isTorpedoFireKey(event) {
 
   return (
     code === "Space" ||
-    code === "KeyF" ||
     code === "Enter" ||
     code === "NumpadEnter" ||
     key === "Enter" ||
@@ -1052,6 +2990,15 @@ function formatInputEvent(event) {
 
 function changeEngineOrder(direction) {
   engineOrder = clamp(engineOrder + direction, 0, engineOrders.length - 1);
+}
+
+function updateAltimeter(altitudeUnits) {
+  if (!altitudeValue || !altimeterHundredsHand || !altimeterThousandsHand) return;
+
+  const altitudeMeters = Math.max(0, Math.round(altitudeUnits * worldMetersPerUnit));
+  altitudeValue.textContent = String(altitudeMeters);
+  altimeterHundredsHand.style.transform = `translate(-50%, -100%) rotate(${(altitudeMeters % 1000) / 1000}turn)`;
+  altimeterThousandsHand.style.transform = `translate(-50%, -100%) rotate(${altitudeMeters / 10000}turn)`;
 }
 
 function stepRudderDegrees(currentDegrees, direction) {
@@ -1082,8 +3029,8 @@ function stopGlobalMouseRudder(button) {
 }
 
 function fireMouseTorpedo(button) {
-  if (!isMouseTorpedoButton(button) || playerDamageState !== "active") return false;
-  requestPlayerTorpedoFire();
+  if (!isMouseTorpedoButton(button) || playerDamageState !== "active" || flakViewActive) return false;
+  requestPlayerWeaponFire();
   return true;
 }
 
@@ -1097,7 +3044,57 @@ function updateGlobalMouseRudder(event) {
   rudderDegrees = clamp(rightMouseRudderStartDegrees + dragDegrees, -maxRudderDegrees, maxRudderDegrees);
 }
 
+async function loadGameConfig() {
+  const fallback = {
+    vehicleScale: {
+      torpedoBoat: 3,
+      scoutPlane: 1.5
+    },
+    engineSpeeds: [-8.0, -2.2, 0, 0.69, 2.25, 4.75, 8.0, 12.0, 15.5]
+  };
+  if (directSideViewSandboxRequested) {
+    return fallback;
+  }
+
+  const endpoint = gameEndpoint("/game/config");
+  try {
+    const response = await fetch(endpoint, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`status ${response.status}`);
+    }
+    const payload = await response.json();
+    return {
+      vehicleScale: {
+        torpedoBoat: positiveNumber(payload?.vehicleScale?.torpedoBoat, fallback.vehicleScale.torpedoBoat),
+        scoutPlane: positiveNumber(payload?.vehicleScale?.scoutPlane, fallback.vehicleScale.scoutPlane)
+      },
+      engineSpeeds: engineSpeedArray(payload?.engineSpeeds, fallback.engineSpeeds)
+    };
+  } catch (error) {
+    console.warn("[sea-battle] game config unavailable, using local fallback", { endpoint, message: error.message });
+    return fallback;
+  }
+}
+
+function engineSpeedArray(values, fallback) {
+  if (!Array.isArray(values) || values.length !== fallback.length) {
+    return fallback;
+  }
+  return values.map((value, index) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback[index];
+  });
+}
+
+function positiveNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
 async function loadWorldLandmasses() {
+  if (directSideViewSandboxRequested) {
+    return [];
+  }
   const endpoint = getWorldMapEndpoint();
   const response = await fetch(endpoint, { cache: "no-store" });
   if (!response.ok) {
@@ -1125,14 +3122,40 @@ function failWorldMapLoad(endpoint, message) {
 }
 
 function getWorldMapEndpoint() {
-  if (location.port === "5173" || location.port === "4173") {
-    return `${location.protocol}//${location.hostname}/game/world`;
-  }
+  return gameEndpoint("/game/world");
+}
 
-  return "/game/world";
+async function loadDebugRespawnCandidates() {
+  if (debugRespawnCandidatesLoaded) return;
+  debugRespawnCandidatesLoaded = true;
+  const endpoint = getDebugRespawnCandidatesEndpoint();
+  try {
+    const response = await fetch(endpoint, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`status ${response.status}`);
+    }
+    const payload = await response.json();
+    debugRespawnCandidates = Array.isArray(payload)
+      ? payload
+          .map((point) => ({ x: Number(point.x), z: Number(point.z) }))
+          .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.z))
+      : [];
+    document.body.dataset.debugRespawnCandidates = String(debugRespawnCandidates.length);
+  } catch (error) {
+    debugRespawnCandidatesLoaded = false;
+    document.body.dataset.debugRespawnCandidates = "error";
+    console.warn("[sea-battle] respawn candidate debug layer unavailable", error);
+  }
+}
+
+function getDebugRespawnCandidatesEndpoint() {
+  return gameEndpoint("/game/debug/respawn-candidates");
 }
 
 async function loadGameState() {
+  if (directSideViewSandboxRequested) {
+    return createDirectSideViewSandboxState();
+  }
   const endpoint = getGameStateEndpoint();
   const response = await fetch(endpoint, { cache: "no-store" });
   if (!response.ok) {
@@ -1157,6 +3180,34 @@ async function loadGameState() {
   return payload;
 }
 
+function createDirectSideViewSandboxState() {
+  return {
+    sessionId: "side-view-sandbox",
+    state: "running",
+    t: 0,
+    ships: [
+      {
+        id: "sandbox-player",
+        teamId: "light",
+        controlledBy: "player-BPB-sandbox",
+        state: "active",
+        x: 0,
+        z: 0,
+        heading: 0,
+        speed: 0,
+        engineOrder: 0,
+        rudderDegrees: 0,
+        torpedoesRemaining: 12,
+        vehicleType: "torpedo-boat"
+      }
+    ],
+    torpedoes: [],
+    bombs: [],
+    destroyedShipsByTeam: {},
+    killsByPlayer: {}
+  };
+}
+
 function failGameStateLoad(endpoint, message) {
   document.body.dataset.gameStateSource = "error";
   document.body.dataset.gameStateError = message;
@@ -1165,11 +3216,7 @@ function failGameStateLoad(endpoint, message) {
 }
 
 function getGameStateEndpoint() {
-  if (location.port === "5173" || location.port === "4173") {
-    return `${location.protocol}//${location.hostname}/game/state`;
-  }
-
-  return "/game/state";
+  return gameEndpoint("/game/state");
 }
 
 async function loadServerBuildInfo() {
@@ -1181,11 +3228,7 @@ async function loadServerBuildInfo() {
 }
 
 function getServerBuildInfoEndpoint() {
-  if (location.port === "5173" || location.port === "4173") {
-    return `${location.protocol}//${location.hostname}/game/version`;
-  }
-
-  return "/game/version";
+  return gameEndpoint("/game/version");
 }
 
 function updateBuildInfoPanel(clientBuild, serverBuild) {
@@ -1208,98 +3251,210 @@ function formatBuildInfo(info) {
 }
 
 function getPlayerStateEndpoint() {
-  if (location.port === "5173" || location.port === "4173") {
-    return `${location.protocol}//${location.hostname}/game/player-state`;
-  }
-
-  return "/game/player-state";
+  return gameEndpoint("/game/player-state");
 }
 
 function getFireTorpedoEndpoint() {
-  if (location.port === "5173" || location.port === "4173") {
-    return `${location.protocol}//${location.hostname}/game/fire-torpedo`;
-  }
+  return gameEndpoint("/game/fire-torpedo");
+}
 
-  return "/game/fire-torpedo";
+function getDropBombEndpoint() {
+  return gameEndpoint("/game/drop-bomb");
+}
+
+function getFireFlakEndpoint() {
+  return gameEndpoint("/game/fire-flak");
+}
+
+function getFireCannonEndpoint() {
+  return gameEndpoint("/game/fire-cannon");
+}
+
+function getReportPlaneHitEndpoint() {
+  return gameEndpoint("/game/report-plane-hit");
+}
+
+function getClientGameEventEndpoint() {
+  return gameEndpoint("/game/client-event");
 }
 
 function getGameEventsEndpoint() {
   const safePlayerId = encodeURIComponent(playerId);
-  const safeTeamId = encodeURIComponent(playerTeamId);
-  if (location.port === "5173" || location.port === "4173") {
-    return `${location.protocol}//${location.hostname}/game/events/${safePlayerId}/${safeTeamId}`;
-  }
-
-  return `/game/events/${safePlayerId}/${safeTeamId}`;
+  return gameEndpoint(`/game/events/${safePlayerId}`);
 }
 
-function getLocalPlayerId(initials = "PL") {
-  const storageKey = "seaBattlePlayerId";
-  const idPrefix = `player-${initials}-`;
-  const existingId = localStorage.getItem(storageKey);
-  if (existingId?.startsWith(idPrefix)) {
-    return existingId;
+async function requirePlayerLogin() {
+  if (directSideViewSandboxRequested) {
+    return {
+      playerId: "player-BPB-sandbox",
+      initials: "BPB",
+      teamId: "light"
+    };
   }
 
-  const randomPart = Math.random().toString(36).slice(2, 10);
-  const id = `${idPrefix}${Date.now().toString(36)}-${randomPart}`;
-  localStorage.setItem(storageKey, id);
-  return id;
+  const accountId = readStoredValue("accountId");
+  if (!accountId.trim()) {
+    return showClientLogin();
+  }
+
+  const response = await fetch(getPlayerSessionByAccountEndpoint(accountId), { cache: "no-store" });
+  if (!response.ok) {
+    localStorage.removeItem("seaBattlePlayerId");
+    localStorage.removeItem("seaBattlePlayerInitials");
+    localStorage.removeItem("seaBattlePlayerTeamId");
+    return showClientLogin({ accountId });
+  }
+
+  const session = await response.json();
+  const playerId = String(session.playerId ?? "");
+  const initials = sanitizeInitials(session.initials);
+  const teamId = sanitizeTeamId(session.teamId);
+  if (playerId.startsWith(`player-${initials}-`) && initials && teamId) {
+    return { playerId, initials, teamId };
+  }
+
+  return showClientLogin({ accountId });
 }
 
-function requirePlayerLogin() {
-  const params = new URLSearchParams(location.search);
-  const requestedTeamId = sanitizeTeamId(params.get("team") ?? params.get("side"));
-  const requestedInitials = sanitizeInitials(params.get("initials") ?? params.get("name") ?? params.get("player"));
-  const storageKey = "seaBattlePlayerInitials";
-  const existing = sanitizeInitials(localStorage.getItem(storageKey));
-  if (requestedInitials && requestedTeamId) {
-    localStorage.setItem(storageKey, requestedInitials);
-    return Promise.resolve({ initials: requestedInitials, teamId: requestedTeamId });
-  }
-  if (existing && requestedTeamId) {
-    return Promise.resolve({ initials: existing, teamId: requestedTeamId });
-  }
-
+function showClientLogin(prefill = {}) {
   document.body.classList.add("login-active");
-  const overlay = document.createElement("section");
-  overlay.className = "login-screen";
-  overlay.innerHTML = `
+  const screen = document.createElement("section");
+  screen.className = "login-screen";
+  screen.innerHTML = `
     <form class="login-card">
       <strong>Sea Battle</strong>
-      <label for="playerInitials">Initialen</label>
-      <input id="playerInitials" name="initials" maxlength="${maxPlayerInitialsLength}" pattern="[A-Za-z0-9]{1,${maxPlayerInitialsLength}}" autocomplete="off" value="${existing}" autofocus />
-      <label for="playerTeam">Seite</label>
-      <select id="playerTeam" name="team">
-        ${teamDefinitions.map((team) => `<option value="${team.id}">${team.label}</option>`).join("")}
-      </select>
-      <button type="submit">Start</button>
+      <label>Name<input name="nickname" autocomplete="off" minlength="2" maxlength="40" required></label>
+      <label>Kennung<input name="alias" autocomplete="off" autocapitalize="characters" maxlength="5" pattern="[A-Za-z0-9]{1,5}" required></label>
+      <label>Flotte<select name="team" required><option value="light">Light</option><option value="dark">Dark</option></select></label>
+      <button type="submit">Einsteigen</button>
+      <small data-login-error></small>
     </form>
   `;
-  document.body.appendChild(overlay);
-  const input = overlay.querySelector("input");
-  const teamSelect = overlay.querySelector("select");
-  if (requestedTeamId && teamSelect) {
-    teamSelect.value = requestedTeamId;
-  }
-  input?.focus();
-  input?.select();
-  input?.addEventListener("input", () => {
-    input.value = sanitizeInitials(input.value);
-  });
+  document.body.appendChild(screen);
+
+  const form = screen.querySelector("form");
+  const error = screen.querySelector("[data-login-error]");
+  const accountId = String(prefill.accountId ?? readStoredValue("accountId") ?? "");
+  form.elements.nickname.value = String(prefill.nickname ?? "").trim();
+  form.elements.alias.value = String(prefill.alias ?? "").trim().toUpperCase();
+  form.elements.team.value = sanitizeTeamId(prefill.team ?? readStoredValue("seaBattlePlayerTeamId")) || "light";
 
   return new Promise((resolve) => {
-    overlay.querySelector("form")?.addEventListener("submit", (event) => {
+    form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const initials = sanitizeInitials(input?.value) || "PL";
-      const teamId = sanitizeTeamId(teamSelect?.value) || "light";
-      localStorage.setItem(storageKey, initials);
-      setRequestedTeamInUrl(teamId);
-      document.body.classList.remove("login-active");
-      overlay.remove();
-      resolve({ initials, teamId });
+      error.textContent = "";
+      const nickname = String(form.elements.nickname.value ?? "").trim();
+      const alias = sanitizeInitials(form.elements.alias.value);
+      const team = sanitizeTeamId(form.elements.team.value);
+      if (!nickname || nickname.length < 2 || !alias || !team) {
+        error.textContent = "Bitte Name, Kennung und Flotte setzen.";
+        return;
+      }
+
+      try {
+        const response = await fetch(gameEndpoint("/game/start"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            accountId,
+            nickname,
+            alias,
+            team,
+            vehicleType: "torpedo-boat"
+          })
+        });
+        if (!response.ok) {
+          throw new Error(`Login fehlgeschlagen (${response.status})`);
+        }
+        const payload = await response.json();
+        const session = payload.player ?? payload;
+        const nextAccountId = String(payload.accountId ?? accountId ?? "");
+        const playerId = String(session.playerId ?? "");
+        const initials = sanitizeInitials(session.initials ?? alias);
+        const teamId = sanitizeTeamId(session.teamId ?? team);
+        if (!playerId || !initials || !teamId) {
+          throw new Error("Login-Antwort unvollständig");
+        }
+        localStorage.setItem("accountId", nextAccountId);
+        localStorage.setItem("seaBattlePlayerId", playerId);
+        localStorage.setItem("seaBattlePlayerInitials", initials);
+        localStorage.setItem("seaBattlePlayerTeamId", teamId);
+        localStorage.setItem("vehicleType", "torpedo-boat");
+        document.body.classList.remove("login-active");
+        screen.remove();
+        resolve({ playerId, initials, teamId, freshLogin: true });
+      } catch (caught) {
+        error.textContent = caught?.message ?? "Login fehlgeschlagen";
+      }
     });
   });
+}
+
+async function requireRegisteredGameSession(login) {
+  if (directSideViewSandboxRequested) {
+    return;
+  }
+  if (login?.freshLogin) {
+    return;
+  }
+  const playerId = login?.playerId ?? login;
+  const response = await fetch(getPlayerSessionEndpoint(playerId), { cache: "no-store" });
+  if (response.ok) {
+    return;
+  }
+  expireActiveLogin(`session-check-${response.status}`);
+  await new Promise(() => {});
+}
+
+function getPlayerSessionEndpoint(playerId) {
+  const safePlayerId = encodeURIComponent(playerId);
+  return gameEndpoint(`/game/session/${safePlayerId}`);
+}
+
+function getPlayerSessionByAccountEndpoint(accountId) {
+  const safeAccountId = encodeURIComponent(accountId);
+  return gameEndpoint(`/game/session/account/${safeAccountId}`);
+}
+
+function gameEndpoint(path) {
+  if (location.port === "5173" || location.port === "4173") {
+    return path;
+  }
+  return `${serverPathPrefix()}${path}`;
+}
+
+function startPageUrl() {
+  return `${serverPathPrefix()}/start.html`;
+}
+
+function serverPathPrefix() {
+  return location.pathname === "/sea-battle" || location.pathname.startsWith("/sea-battle/")
+    ? "/sea-battle"
+    : "";
+}
+
+function expireActiveLogin(reason) {
+  document.body.dataset.sessionExpired = reason;
+  localStorage.removeItem("seaBattlePlayerId");
+  localStorage.removeItem("seaBattlePlayerInitials");
+  localStorage.removeItem("seaBattlePlayerTeamId");
+  window.location.replace(startPageUrl());
+}
+
+function readStoredValue(key) {
+  const raw = localStorage.getItem(key) ?? "";
+  if (!raw.trim()) {
+    return "";
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && "value" in parsed) {
+      return String(parsed.value ?? "");
+    }
+  } catch (ignored) {
+    // Existing Sea Battle values were stored as plain strings. Keep supporting them.
+  }
+  return raw;
 }
 
 function sanitizeInitials(value) {
@@ -1318,16 +3473,8 @@ function sanitizeTeamId(value) {
   return getTeamDefinition(teamId) ? teamId : "";
 }
 
-function setRequestedTeamInUrl(teamId) {
-  if (!history.replaceState) return;
-  const url = new URL(location.href);
-  url.searchParams.set("team", teamId);
-  history.replaceState(null, "", url);
-}
-
 function getRequestedPlayerTeamId(ships, selectedTeamId = "") {
-  const params = new URLSearchParams(location.search);
-  const requestedTeamId = selectedTeamId || params.get("team") || params.get("side");
+  const requestedTeamId = selectedTeamId;
   const teamIds = [...new Set(ships.map((ship) => ship.teamId).filter(Boolean))];
 
   if (requestedTeamId && teamIds.includes(requestedTeamId)) {
@@ -1353,7 +3500,8 @@ function setupResetGameControl(button) {
 
 function openHostSpecialMenu() {
   const debugLabel = debugMapEnabled ? "Debug-Karte aus" : "Debug-Karte an";
-  const choice = window.prompt(`Spezialmenue: 1 = ${debugLabel}, 2 = Spiel neu starten`, "1");
+  const markerLabel = debugMarkerMapEnabled ? "Marker-Karte aus" : "Marker-Karte an";
+  const choice = window.prompt(`Spezialmenue: 1 = ${debugLabel}, 2 = Spiel neu starten, 3 = ${markerLabel}, 8 = Seitenansicht Sandbox, 9 = Zwei Schiffe`, "1");
   if (choice === null) return;
   const normalized = choice.trim().toLowerCase();
   if (normalized === "1" || normalized === "debug" || normalized === "karte") {
@@ -1362,33 +3510,94 @@ function openHostSpecialMenu() {
   }
   if (normalized === "2" || normalized === "reset" || normalized === "restart" || normalized === "neu") {
     requestHostGameReset();
+    return;
+  }
+  if (normalized === "3" || normalized === "marker" || normalized === "punkte") {
+    toggleDebugMarkerMap();
+    return;
+  }
+  if (normalized === "8" || normalized === "side-view-sandbox" || normalized === "sandbox" || normalized === "seitenansicht") {
+    requestHostGameReset("side-view-sandbox");
+    return;
+  }
+  if (normalized === "9" || normalized === "two-ship-duel" || normalized === "duel" || normalized === "zwei-schiffe") {
+    requestHostGameReset("two-ship-duel");
   }
 }
 
 function toggleDebugMap() {
   debugMapEnabled = !debugMapEnabled;
+  if (!debugMapEnabled) {
+    debugMarkerMapEnabled = false;
+  }
   bigMapEnabled = debugMapEnabled;
   document.body.dataset.debugMap = String(debugMapEnabled);
+  document.body.dataset.debugMarkerMap = String(debugMarkerMapEnabled);
   document.body.classList.toggle("big-map", bigMapEnabled);
+  document.body.classList.toggle("debug-marker-map", debugMarkerMapEnabled);
   document.body.dataset.bigMap = String(bigMapEnabled);
   const url = new URL(location.href);
   if (debugMapEnabled) {
     url.searchParams.set("debug", "1");
+    if (debugMarkerMapEnabled) {
+      url.searchParams.set("markers", "1");
+    } else {
+      url.searchParams.delete("markers");
+    }
     url.searchParams.delete("bigMap");
+    loadDebugRespawnCandidates();
   } else {
     url.searchParams.delete("debug");
     url.searchParams.delete("bigMap");
+    url.searchParams.delete("markers");
     document.body.dataset.debugMapShips = "0";
+    document.body.dataset.debugRespawnCandidates = "0";
+  }
+  updateDebugMapMarkerPanel();
+  if (mapCanvas && boat?.root?.position) {
+    drawMapInstrument(mapCanvas, boat.root.position, blockedWaters, mapZoom, heading);
   }
   if (history.replaceState) {
     history.replaceState(null, "", url);
   }
 }
 
-async function requestHostGameReset() {
+function toggleDebugMarkerMap() {
+  debugMarkerMapEnabled = !debugMarkerMapEnabled;
+  debugMapEnabled = debugMarkerMapEnabled || debugMapEnabled;
+  bigMapEnabled = debugMapEnabled;
+  document.body.dataset.debugMap = String(debugMapEnabled);
+  document.body.dataset.debugMarkerMap = String(debugMarkerMapEnabled);
+  document.body.classList.toggle("big-map", bigMapEnabled);
+  document.body.classList.toggle("debug-marker-map", debugMarkerMapEnabled);
+  document.body.dataset.bigMap = String(bigMapEnabled);
+  const url = new URL(location.href);
+  if (debugMapEnabled) {
+    url.searchParams.set("debug", "1");
+    url.searchParams.delete("bigMap");
+    loadDebugRespawnCandidates();
+  } else {
+    url.searchParams.delete("debug");
+    url.searchParams.delete("bigMap");
+  }
+  if (debugMarkerMapEnabled) {
+    url.searchParams.set("markers", "1");
+  } else {
+    url.searchParams.delete("markers");
+  }
+  updateDebugMapMarkerPanel();
+  if (mapCanvas && boat?.root?.position) {
+    drawMapInstrument(mapCanvas, boat.root.position, blockedWaters, mapZoom, heading);
+  }
+  if (history.replaceState) {
+    history.replaceState(null, "", url);
+  }
+}
+
+async function requestHostGameReset(forcedSetupId = null) {
   const adminKey = window.prompt("Host key");
   if (!adminKey) return;
-  const setupId = promptGameSetupId();
+  const setupId = forcedSetupId ?? promptGameSetupId();
   if (setupId === null) return;
 
   try {
@@ -1407,32 +3616,26 @@ async function requestHostGameReset() {
 }
 
 function promptGameSetupId() {
-  const currentSetup = new URLSearchParams(location.search).get("setup") ?? "dense-land";
-  const defaultChoice = currentSetup === "islands"
-    ? "2"
-    : currentSetup === "escort-debug"
-      ? "3"
-      : currentSetup === "landmark-tour"
-        ? "4"
-        : "1";
-  const choice = window.prompt("World: 1 = Dense land, 2 = Islands, 3 = Escort debug, 4 = Landmark tour", defaultChoice);
+  const defaultChoice = "1";
+  const choice = window.prompt("World: 1 = Dense land, 2 = Islands, 3 = Escort debug, 4 = Landmark tour, 5 = Dense land crowded, 6 = Dense land crowded reverse, 7 = Scout plane, 8 = Seitenansicht Sandbox, 9 = Zwei Schiffe", defaultChoice);
   if (choice === null) return null;
   const normalized = choice.trim().toLowerCase();
   if (normalized === "2" || normalized === "islands" || normalized === "island") return "islands";
   if (normalized === "3" || normalized === "escort-debug" || normalized === "escort") return "escort-debug";
   if (normalized === "4" || normalized === "landmark-tour" || normalized === "tour") return "landmark-tour";
+  if (normalized === "5" || normalized === "fleet-clash" || normalized === "clash" || normalized === "crowded") return "dense-land-crowded";
+  if (normalized === "6" || normalized === "fleet-clash-reverse" || normalized === "clash-reverse" || normalized === "crowded-reverse") return "dense-land-crowded-reverse";
+  if (normalized === "7" || normalized === "scout-plane" || normalized === "plane" || normalized === "flugzeug" || normalized === "aufklaerer") return scoutPlaneSetupId;
+  if (normalized === "8" || normalized === "side-view-sandbox" || normalized === "sandbox" || normalized === "seitenansicht") return "side-view-sandbox";
+  if (normalized === "9" || normalized === "two-ship-duel" || normalized === "duel" || normalized === "zwei-schiffe") return "two-ship-duel";
   return "dense-land";
-}
-
-function getRequestedSetupId() {
-  return new URLSearchParams(location.search).get("setup") ?? "default";
 }
 
 function getResetGameEndpoint() {
   if (location.protocol === "file:") {
     return "http://127.0.0.1:9090/game/reset";
   }
-  return "/game/reset";
+  return gameEndpoint("/game/reset");
 }
 
 function getTeamShips(ships, teamId) {
@@ -1510,6 +3713,8 @@ function updatePlayerList(ships, killsByPlayer = {}) {
     const teamClass = `player-list-row-${getTeamDefinition(ship.teamId)?.className ?? "dark"}`;
     row.className = `player-list-row ${teamClass}${ship.controlledBy === playerId ? " player-list-row-own" : ""}`;
 
+    const marker = createPlayerListMarker(ship);
+
     const initials = document.createElement("strong");
     initials.textContent = getPlayerInitialsFromId(ship.controlledBy);
 
@@ -1533,11 +3738,209 @@ function updatePlayerList(ships, killsByPlayer = {}) {
     const sector = document.createElement("small");
     sector.textContent = formatMapSector(ship);
 
-    row.append(initials, shipLabel, kills, bearing, sector);
+    row.append(marker, initials, shipLabel, kills, bearing, sector);
     playerListRows.append(row);
   });
 
   document.body.dataset.humanPlayers = String(humanShips.length);
+}
+
+function createPlayerListMarker(ship) {
+  const marker = createUnitMarker(ship.teamId, getShipVehicleType(ship));
+  marker.classList.add("player-list-marker");
+  return marker;
+}
+
+function updateKillFeedFromSnapshot(snapshot) {
+  if (!killFeedRows || !snapshot) return;
+  rememberKillFeedShipLabels(snapshot.ships);
+  const candidates = [
+    ...collectKillFeedImpacts(snapshot.torpedoImpacts, "torpedo", "Torpedo"),
+    ...collectKillFeedImpacts(snapshot.bombImpacts, "bomb", "Bomben"),
+    ...collectKillFeedImpacts(snapshot.flakHits, "flak", (impact) => isCannonServerProjectile(impact?.id) ? "Kanone" : "Flak", () => true),
+    ...collectKillFeedImpacts(snapshot.ramHits, "ram", "Rammen", () => true)
+  ].sort((left, right) => left.t - right.t);
+
+  candidates.forEach((event) => {
+    if (killFeedEventIds.has(event.key)) return;
+    killFeedEventIds.add(event.key);
+    event.number = nextKillFeedNumber;
+    nextKillFeedNumber += 1;
+    event.highlight = true;
+    killFeedEvents.unshift(event);
+  });
+
+  if (killFeedEvents.length > killFeedLimit) {
+    killFeedEvents = killFeedEvents.slice(0, killFeedLimit);
+  }
+  if (killFeedEventIds.size > 80) {
+    killFeedEventIds = new Set(killFeedEvents.map((event) => event.key));
+  }
+  renderKillFeed();
+}
+
+function rememberKillFeedShipLabels(ships) {
+  if (!Array.isArray(ships)) return;
+  ships.forEach((ship) => {
+    if (!ship?.id) return;
+    const cached = killFeedShipLabels.get(ship.id);
+    const controlledByHuman = isHumanController(ship.controlledBy);
+    if (controlledByHuman || !cached) {
+      killFeedShipLabels.set(ship.id, {
+        controlledBy: ship.controlledBy,
+        label: createShipDesignation(ship),
+        teamId: ship.teamId,
+        vehicleType: getShipVehicleType(ship),
+        wasHuman: controlledByHuman
+      });
+    }
+  });
+  if (killFeedShipLabels.size > 120) {
+    killFeedShipLabels = new Map(Array.from(killFeedShipLabels.entries()).slice(-90));
+  }
+}
+
+function collectKillFeedImpacts(impacts, type, weaponLabel, isKill = (impact) => impact?.reason === "ship-hit") {
+  if (!Array.isArray(impacts)) return [];
+  return impacts
+    .filter((impact) => impact?.id && impact?.shipId && impact?.targetShipId && isKill(impact))
+    .map((impact) => {
+      const sourceShip = serverShipsById.get(impact.shipId);
+      const targetShip = serverShipsById.get(impact.targetShipId);
+      const source = getKillFeedShipInfo(impact.shipId, sourceShip, impact.teamId);
+      const target = getKillFeedShipInfo(impact.targetShipId, targetShip);
+      return {
+        key: `${type}:${impact.id}:${impact.targetShipId}:${impact.t}`,
+        t: Number.isFinite(impact.t) ? impact.t : 0,
+        weaponLabel: typeof weaponLabel === "function" ? weaponLabel(impact) : weaponLabel,
+        sourceLabel: source.label,
+        sourceTeamId: source.teamId,
+        sourceVehicleType: source.vehicleType,
+        targetLabel: target.label,
+        targetTeamId: target.teamId,
+        targetVehicleType: target.vehicleType
+      };
+    });
+}
+
+function isCannonServerProjectile(id) {
+  return typeof id === "string" && id.startsWith("cannon-");
+}
+
+function getKillFeedShipLabel(shipId, ship = null, teamId = null) {
+  return getKillFeedShipInfo(shipId, ship, teamId).label;
+}
+
+function getKillFeedShipInfo(shipId, ship = null, teamId = null) {
+  const target = ship ?? serverShipsById.get(shipId);
+  const cachedLabel = killFeedShipLabels.get(shipId);
+  if (target && (isHumanController(target.controlledBy) || target.state === "active")) {
+    return {
+      label: createShipDesignation(target),
+      teamId: target.teamId,
+      vehicleType: getShipVehicleType(target)
+    };
+  }
+  if (cachedLabel?.label) {
+    return {
+      label: cachedLabel.label,
+      teamId: cachedLabel.teamId ?? target?.teamId ?? teamId,
+      vehicleType: cachedLabel.vehicleType ?? getShipVehicleType(target)
+    };
+  }
+  if (target) {
+    return {
+      label: createShipDesignation(target),
+      teamId: target.teamId,
+      vehicleType: getShipVehicleType(target)
+    };
+  }
+  if (shipId) {
+    const fallback = { id: shipId, teamId, controlledBy: "bot" };
+    return {
+      label: createShipDesignation(fallback),
+      teamId,
+      vehicleType: getShipVehicleType(fallback)
+    };
+  }
+  return { label: "unbekannt", teamId, vehicleType: "torpedo-boat" };
+}
+
+function renderKillFeed() {
+  if (!killFeedRows) return;
+  killFeedRows.innerHTML = "";
+  if (killFeedEvents.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "kill-feed-empty";
+    empty.textContent = "Keine Abschüsse";
+    killFeedRows.append(empty);
+    document.body.dataset.killFeedEvents = "0";
+    return;
+  }
+
+  killFeedEvents.forEach((event) => {
+    const row = document.createElement("div");
+    row.className = `kill-feed-row${event.highlight ? " is-new" : ""}`;
+
+    const number = document.createElement("span");
+    number.className = "kill-feed-number";
+    number.textContent = `${event.number ?? ""}`;
+
+    const text = document.createElement("div");
+    text.className = "kill-feed-text";
+
+    const source = document.createElement("strong");
+    source.className = "kill-feed-party";
+    source.append(
+      createKillFeedMarker(event.sourceTeamId, event.sourceVehicleType),
+      document.createTextNode(event.sourceLabel)
+    );
+
+    const separator = document.createElement("span");
+    separator.className = "kill-feed-separator";
+    separator.textContent = ">";
+
+    const victim = document.createElement("strong");
+    victim.className = "kill-feed-party";
+    victim.append(
+      createKillFeedMarker(event.targetTeamId, event.targetVehicleType),
+      document.createTextNode(event.targetLabel)
+    );
+
+    const detail = document.createElement("span");
+    detail.className = "kill-feed-detail";
+    detail.textContent = event.weaponLabel;
+
+    const parties = document.createElement("div");
+    parties.className = "kill-feed-parties";
+    parties.append(source, separator, victim);
+
+    text.append(parties, detail);
+    row.append(number, text);
+    killFeedRows.append(row);
+    event.highlight = false;
+  });
+  document.body.dataset.killFeedEvents = String(killFeedEvents.length);
+}
+
+function createKillFeedMarker(teamId, vehicleType) {
+  const marker = createUnitMarker(teamId, vehicleType);
+  marker.classList.add("kill-feed-marker");
+  return marker;
+}
+
+function createUnitMarker(teamId, vehicleType) {
+  const marker = document.createElement("i");
+  const teamClass = getRelativeUnitMarkerTeamClass(teamId);
+  marker.className = `unit-marker unit-marker-${teamClass} unit-marker-${vehicleType === "scout-plane" ? "plane" : "ship"}`;
+  marker.setAttribute("aria-hidden", "true");
+  return marker;
+}
+
+function getRelativeUnitMarkerTeamClass(teamId) {
+  const normalizedTeamId = sanitizeTeamId(teamId);
+  if (!normalizedTeamId) return "unknown";
+  return normalizedTeamId === playerTeamId ? "friendly" : "enemy";
 }
 
 function isHumanController(controller) {
@@ -1548,6 +3951,46 @@ function getPlayerInitialsFromId(controller) {
   if (!isHumanController(controller)) return "BOT";
   const match = controller.match(/^player-([A-Z0-9]{1,5})-/i);
   return (match?.[1] ?? controller.slice(0, maxPlayerInitialsLength)).toUpperCase();
+}
+
+function getWeaponSourceLabel(shipId, sourceVehicleType = null, teamId = null) {
+  const ship = serverShipsById.get(shipId) ?? enemyMotions.find((motion) => motion.id === shipId);
+  if (isHumanController(ship?.controlledBy)) {
+    return getPlayerInitialsFromId(ship.controlledBy);
+  }
+  if (shipId) {
+    return createShipDesignation({
+      id: shipId,
+      teamId: ship?.teamId ?? teamId,
+      controlledBy: ship?.controlledBy,
+      vehicleType: sourceVehicleType ?? ship?.vehicleType
+    });
+  }
+  if (ship?.label) return ship.label;
+  return "unbekannt";
+}
+
+function createDestroyedByText(weaponLabel, shipId, sourceVehicleType = null, teamId = null) {
+  return `Abgeschossen durch ${weaponLabel} von ${getWeaponSourceLabel(shipId, sourceVehicleType, teamId)}`;
+}
+
+function showDamageMessage(text, now = time, duration = 2.2) {
+  flakHitAlertUntil = now + duration;
+  if (flakHitAlert) {
+    flakHitAlert.textContent = text;
+  }
+}
+
+function notifyOwnWeaponImpact(impact, weaponLabel, notificationPrefix, sourceVehicleType = null) {
+  const ownShipId = playerServerShipId ?? pendingPlayerServerShip?.id;
+  if (!impact?.id || !ownShipId || impact.targetShipId !== ownShipId) return;
+  const key = `${notificationPrefix}:${impact.id}:${impact.t}`;
+  if (damageNotificationIds.has(key)) return;
+  damageNotificationIds.add(key);
+  if (damageNotificationIds.size > 80) {
+    damageNotificationIds = new Set(Array.from(damageNotificationIds).slice(-48));
+  }
+  showDamageMessage(createDestroyedByText(weaponLabel, impact.shipId, sourceVehicleType, impact.teamId), time, 2.6);
 }
 
 function getRelativeBearingToShip(ship) {
@@ -1592,28 +4035,6 @@ function createPlayerSpawn(teamShips, currentPlayerId) {
   };
 }
 
-function applyRequestedTestSpawn(spawn, landmasses) {
-  const params = new URLSearchParams(location.search);
-  const requestedSpawn = String(params.get("spawn") ?? params.get("testSpawn") ?? "").toLowerCase();
-  if (!["beacon", "rock-beacon", "felslampe"].includes(requestedSpawn)) return spawn;
-
-  const lighthouseLands = chooseLighthouseLandmasses(landmasses, 4);
-  const target = chooseRockBeaconLandmasses(landmasses, lighthouseLands)[0];
-  if (!target) return spawn;
-
-  const distance = Math.max(target.rx ?? 28, target.rz ?? 28) + 90;
-  const position = new Vector3(target.x - distance * 0.95, 0.28, target.z + distance * 0.45);
-  const heading = Math.atan2(target.x - position.x, target.z - position.z);
-  document.body.dataset.testSpawn = "beacon";
-  document.body.dataset.testSpawnTarget = target.name ?? "";
-
-  return {
-    ...spawn,
-    position,
-    heading
-  };
-}
-
 function createPlayerRespawnPoints(teamShips, fallbackSpawn) {
   const spawns = teamShips
     .filter((ship) => ship.state === "active")
@@ -1630,6 +4051,7 @@ function getOtherServerShips(ships, ownShipId) {
 }
 
 function syncMultiplayerState(now) {
+  if (sideViewSandboxMode) return;
   if (now >= nextPlayerStateSendTime && !playerStateRequestInFlight && playerDamageState === "active") {
     nextPlayerStateSendTime = now + 0.25;
     sendPlayerState();
@@ -1648,17 +4070,28 @@ async function sendPlayerState() {
         playerId,
         teamId: playerTeamId,
         x: boat.root.position.x,
+        y: scoutPlaneMode ? boat.root.position.y : 0,
         z: boat.root.position.z,
         heading,
         speed,
+        verticalSpeed: scoutPlaneMode ? scoutPlaneVerticalSpeed : 0,
         turnVelocity,
         engineOrder,
         rudderDegrees: Math.round(rudderDegrees),
+        flakYaw,
+        flakPitch,
+        cannonYaw,
+        cannonPitch,
         clientTime: performance.now() / 1000,
-        debugTeleport
+        debugTeleport,
+        vehicleType: scoutPlaneMode ? "scout-plane" : "torpedo-boat"
       })
     });
     if (!response.ok) {
+      if (response.status === 403) {
+        expireActiveLogin("player-state-403");
+        return;
+      }
       throw new Error(`Player state request failed with ${response.status}`);
     }
     await response.json();
@@ -1675,42 +4108,162 @@ async function sendPlayerState() {
   }
 }
 
+function requestPlayerWeaponFire() {
+  return requestPlayerTorpedoFire();
+}
+
 async function requestPlayerTorpedoFire() {
   if (fireTorpedoRequestInFlight || playerDamageState !== "active") return;
 
   fireTorpedoRequestInFlight = true;
   const requestStartedAt = beginHttpRequest();
+  const requestedTubeSide = scoutPlaneMode ? 0 : (torpedoSystem.nextTube === 0 ? -1 : 1);
+  torpedoSystem.pendingOwnTubeSide = scoutPlaneMode ? null : requestedTubeSide;
+  const fireRequest = {
+    playerId,
+    teamId: playerTeamId,
+    vehicleType: scoutPlaneMode ? "scout-plane" : "torpedo-boat",
+    x: boat.root.position.x,
+    z: boat.root.position.z,
+    heading,
+    speed,
+    turnVelocity,
+    engineOrder,
+    rudderDegrees: Math.round(rudderDegrees),
+    y: scoutPlaneMode ? scoutPlaneAltitude : boat.root.position.y,
+    verticalSpeed: scoutPlaneMode ? scoutPlaneVerticalSpeed : 0,
+    tubeSide: requestedTubeSide,
+    clientTime: performance.now() / 1000
+  };
+  sendClientGameEvent("torpedo-fire-request", {
+    request: summarizeFireRequest(fireRequest),
+    playerServerShipId,
+    pendingPlayerServerShipId: pendingPlayerServerShip?.id ?? "",
+    serverClockOffset: Number.isFinite(serverClockOffset) ? Number(serverClockOffset.toFixed(3)) : null,
+    serverClockReset: document.body.dataset.serverClockReset ?? ""
+  });
   try {
     const response = await fetch(getFireTorpedoEndpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        playerId,
-        teamId: playerTeamId
-      })
+      body: JSON.stringify(fireRequest)
     });
     if (!response.ok) {
+      if (response.status === 403) {
+        torpedoSystem.pendingOwnTubeSide = null;
+        expireActiveLogin("fire-torpedo-403");
+        return;
+      }
       throw new Error(`Fire torpedo request failed with ${response.status}`);
     }
-    applyServerGameSnapshot(await response.json());
+    const snapshot = await response.json();
+    applyServerGameSnapshot(snapshot);
+    if (torpedoSystem.pendingOwnTubeSide === requestedTubeSide) {
+      torpedoSystem.pendingOwnTubeSide = null;
+    }
+    sendClientGameEvent("torpedo-fire-response", {
+      status: response.status,
+      snapshotT: Number.isFinite(snapshot?.t) ? Number(snapshot.t.toFixed(2)) : null,
+      torpedoes: Array.isArray(snapshot?.torpedoes) ? snapshot.torpedoes.length : -1,
+      ownShip: summarizeShip(snapshot?.ships?.find((ship) => ship.controlledBy === playerId && ship.teamId === playerTeamId))
+    });
     document.body.dataset.fireTorpedoSync = "ok";
   } catch (error) {
+    torpedoSystem.pendingOwnTubeSide = null;
     document.body.dataset.fireTorpedoSync = "error";
     document.body.dataset.fireTorpedoSyncError = error.message;
+    sendClientGameEvent("torpedo-fire-error", { message: error.message });
   } finally {
     finishHttpRequest("fireTorpedo", requestStartedAt);
     fireTorpedoRequestInFlight = false;
   }
 }
 
+function summarizeFireRequest(request) {
+  return {
+    x: Number(request.x.toFixed(2)),
+    z: Number(request.z.toFixed(2)),
+    heading: Number(request.heading.toFixed(4)),
+    speed: Number(request.speed.toFixed(2)),
+    turnVelocity: Number(request.turnVelocity.toFixed(4)),
+    engineOrder: request.engineOrder,
+    rudderDegrees: request.rudderDegrees,
+    tubeSide: request.tubeSide,
+    clientTime: Number(request.clientTime.toFixed(3))
+  };
+}
+
+function summarizeShip(ship) {
+  if (!ship) return null;
+  return {
+    id: ship.id ?? "",
+    state: ship.state ?? "",
+    x: Number.isFinite(ship.x) ? Number(ship.x.toFixed(2)) : null,
+    z: Number.isFinite(ship.z) ? Number(ship.z.toFixed(2)) : null,
+    heading: Number.isFinite(ship.heading) ? Number(ship.heading.toFixed(4)) : null,
+    speed: Number.isFinite(ship.speed) ? Number(ship.speed.toFixed(2)) : null,
+    torpedoesRemaining: Number.isFinite(ship.torpedoesRemaining) ? ship.torpedoesRemaining : null
+  };
+}
+
+async function requestPlayerBombDrop() {
+  if (dropBombRequestInFlight || playerDamageState !== "active") return;
+  if (!scoutPlaneMode) return;
+
+  const preview = getAirTorpedoDropPreview();
+  bombBayImpactFocus = {
+    position: preview.centerImpact.clone(),
+    expiresAt: time + preview.fallSeconds + bombReleaseIntervalSeconds * (bombsPerDrop - 1) + bombBayImpactFocusExtraSeconds
+  };
+
+  dropBombRequestInFlight = true;
+  const requestStartedAt = beginHttpRequest();
+  try {
+    const response = await fetch(getDropBombEndpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        playerId,
+        teamId: playerTeamId,
+        x: boat.root.position.x,
+        y: boat.root.position.y,
+        z: boat.root.position.z,
+        heading,
+        speed,
+        turnVelocity,
+        verticalSpeed: scoutPlaneVerticalSpeed,
+        vehicleType: "scout-plane"
+      })
+    });
+    if (!response.ok) {
+      if (response.status === 403) {
+        expireActiveLogin("drop-bomb-403");
+        return;
+      }
+      throw new Error(`Drop bomb request failed with ${response.status}`);
+    }
+    applyServerGameSnapshot(await response.json());
+    document.body.dataset.dropBombSync = "ok";
+  } catch (error) {
+    document.body.dataset.dropBombSync = "error";
+    document.body.dataset.dropBombSyncError = error.message;
+  } finally {
+    finishHttpRequest("dropBomb", requestStartedAt);
+    dropBombRequestInFlight = false;
+  }
+}
+
 function applyServerGameSnapshot(snapshot) {
   if (!snapshot || !Array.isArray(snapshot.ships)) return;
+  if (sideViewSandboxMode) {
+    document.body.dataset.playerStateSync = "sandbox-local";
+    return;
+  }
   const snapshotClientTime = getSnapshotClientTime(snapshot);
   serverShipsById = indexShipsById(snapshot.ships);
-  serverRadarReady = false;
-  serverRadarContacts = [];
   updateFleetStatus(snapshot.ships, snapshot.destroyedShipsByTeam);
   updatePlayerList(snapshot.ships, snapshot.killsByPlayer);
+  updateKillFeedFromSnapshot(snapshot);
 
   const ownShip = snapshot.ships.find((ship) => ship.controlledBy === playerId && ship.teamId === playerTeamId);
   const previousOwnShip = snapshot.ships.find((ship) => ship.id === playerServerShipId);
@@ -1718,6 +4271,11 @@ function applyServerGameSnapshot(snapshot) {
   if (ownShip) {
     const assignedShipChanged = playerServerShipId !== ownShip.id;
     if (assignedShipChanged && playerServerSnapshotReceived && playerServerShipId) {
+      sendClientGameEvent("player-ship-change-pending", {
+        previousShipId: playerServerShipId,
+        nextShip: summarizeShip(ownShip),
+        damageStateBefore: playerDamageState
+      });
       pendingPlayerServerShip = ownShip;
       document.body.dataset.pendingPlayerShipId = ownShip.id;
       if (playerDamageState === "active") {
@@ -1732,6 +4290,10 @@ function applyServerGameSnapshot(snapshot) {
       document.body.dataset.pendingPlayerShipId = "";
       updatePlayerTorpedoStock(Number.isFinite(ownShip.torpedoesRemaining) ? ownShip.torpedoesRemaining : null);
       if (!playerServerSnapshotReceived || assignedShipChanged) {
+        sendClientGameEvent("player-ship-assigned", {
+          assignedShipChanged,
+          ship: summarizeShip(ownShip)
+        });
         alignPlayerBoatToServerShip(ownShip);
         playerServerSnapshotReceived = true;
       } else {
@@ -1747,6 +4309,10 @@ function applyServerGameSnapshot(snapshot) {
   ) {
     pendingPlayerServerShip = null;
     document.body.dataset.pendingPlayerShipId = "";
+    sendClientGameEvent("player-ship-missing-start-sinking", {
+      previousOwnShip: summarizeShip(previousOwnShip),
+      playerServerShipId
+    });
     beginPlayerSinking(null, time);
   }
 
@@ -1765,21 +4331,133 @@ function applyServerGameSnapshot(snapshot) {
   syncServerTorpedoes(
     Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes : [],
     Array.isArray(snapshot.torpedoImpacts) ? snapshot.torpedoImpacts : [],
+    time,
+    snapshot.t
+  );
+  radarTorpedoSnapshots = Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes : [];
+  syncServerBombs(
+    Array.isArray(snapshot.bombs) ? snapshot.bombs : [],
+    Array.isArray(snapshot.bombImpacts) ? snapshot.bombImpacts : [],
     snapshotClientTime
   );
+  syncServerFlakProjectiles(
+    Array.isArray(snapshot.flakProjectiles) ? snapshot.flakProjectiles : [],
+    snapshotClientTime
+  );
+  syncServerFlakImpacts(Array.isArray(snapshot.flakImpacts) ? snapshot.flakImpacts : []);
+  syncServerFlakHitEffects(Array.isArray(snapshot.flakHits) ? snapshot.flakHits : [], ownShip);
+  syncServerOwnFlakHits(Array.isArray(snapshot.flakHits) ? snapshot.flakHits : [], ownShip);
   document.body.dataset.remoteShips = String(snapshot.ships.length);
   document.body.dataset.serverTorpedoes = String(Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes.length : 0);
+  document.body.dataset.serverBombs = String(Array.isArray(snapshot.bombs) ? snapshot.bombs.length : 0);
+  document.body.dataset.serverFlakProjectiles = String(Array.isArray(snapshot.flakProjectiles) ? snapshot.flakProjectiles.length : 0);
+  document.body.dataset.serverFlakImpacts = String(Array.isArray(snapshot.flakImpacts) ? snapshot.flakImpacts.length : 0);
   document.body.dataset.playerStateSync = "ok";
+}
+
+function syncServerFlakImpacts(impacts) {
+  if (!Array.isArray(impacts)) return;
+  impacts.forEach((impact) => {
+    const key = `${impact.id}:${impact.reason}:${impact.t}`;
+    if (flakSystem.impactEffectIds.has(key)) return;
+    flakSystem.impactEffectIds.add(key);
+    if (impact.reason === "ship-critical-hit") {
+      const cannonImpact = isCannonServerProjectile(impact.id);
+      notifyOwnWeaponImpact(impact, cannonImpact ? "Kanone" : "Flak", cannonImpact ? "cannon" : "flak");
+    }
+    const position = new Vector3(
+      Number.isFinite(impact.x) ? impact.x : 0,
+      Number.isFinite(impact.y) ? impact.y : 0,
+      Number.isFinite(impact.z) ? impact.z : 0
+    );
+    if (impact.reason === "land-hit" || impact.reason === "ship-hit" || impact.reason === "ship-critical-hit") {
+      createFlakLandImpactEffect(flakSystem, position);
+    } else if (isCannonServerProjectile(impact.id)) {
+      createCannonWaterImpactEffect(flakSystem, position);
+    } else {
+      createFlakWaterImpactEffect(flakSystem, position);
+    }
+  });
+  if (flakSystem.impactEffectIds.size > 120) {
+    flakSystem.impactEffectIds = new Set(Array.from(flakSystem.impactEffectIds).slice(-80));
+  }
+}
+
+function syncServerFlakHitEffects(hits, ownShip = null) {
+  if (!Array.isArray(hits)) return;
+  const ownShipId = ownShip?.id ?? playerServerShipId ?? pendingPlayerServerShip?.id;
+  hits.forEach((hit) => {
+    if (!hit?.id || flakSystem.hitEffectIds.has(hit.id)) return;
+    if (scoutPlaneMode && ownShipId && hit.targetShipId === ownShipId) return;
+    flakSystem.hitEffectIds.add(hit.id);
+    if (flakSystem.hitEffectIds.size > 80) {
+      flakSystem.hitEffectIds = new Set(Array.from(flakSystem.hitEffectIds).slice(-48));
+    }
+    const targetMotion = enemyMotions.find((motion) => motion.id === hit.targetShipId);
+    if (isScoutPlaneMotion(targetMotion)) {
+      if (targetMotion.state !== "air-hit") {
+        beginEnemyScoutPlaneAirHit(targetMotion, hit, time);
+      }
+      return;
+    }
+    createScoutPlaneHitSequence(flakSystem, getFlakHitPosition(hit));
+  });
+}
+
+function getFlakHitPosition(hit) {
+  return new Vector3(
+    Number.isFinite(hit?.x) ? hit.x : boat.root.position.x,
+    Number.isFinite(hit?.y) ? hit.y : boat.root.position.y,
+    Number.isFinite(hit?.z) ? hit.z : boat.root.position.z
+  );
+}
+
+function syncServerOwnFlakHits(hits, ownShip = null) {
+  if (!scoutPlaneMode || !Array.isArray(hits)) return;
+  const ownShipId = ownShip?.id ?? playerServerShipId ?? pendingPlayerServerShip?.id;
+  if (!ownShipId) return;
+  if (playerDamageState !== "active") return;
+
+  const ownHit = hits
+    .filter((hit) => hit?.targetShipId === ownShipId)
+    .sort((left, right) => (Number(right.t) || 0) - (Number(left.t) || 0))[0];
+  if (!ownHit || ownHit.id === lastFlakHitId) return;
+
+  lastFlakHitId = ownHit.id;
+  playerHits += 1;
+  document.body.dataset.playerFlakHit = ownHit.id;
+  document.body.dataset.playerFlakHitAt = String(ownHit.t ?? "");
+  beginScoutPlaneFlakHit(ownHit, time);
+}
+
+function updateFlakHitAlert(now) {
+  if (!flakHitAlert) return;
+  flakHitAlert.classList.toggle("is-visible", now < flakHitAlertUntil);
+}
+
+function updatePlaneHitFlash(now) {
+  if (!planeHitFlash) return;
+  if (now >= planeHitFlashUntil) {
+    planeHitFlash.style.setProperty("--plane-hit-flash-opacity", "0");
+    return;
+  }
+  const duration = Math.max(0.001, planeHitFlashUntil - planeHitFlashStart);
+  const t = clamp((now - planeHitFlashStart) / duration, 0, 1);
+  const pulse = t < 0.18 ? 1 : Math.max(0, 1 - (t - 0.18) / 0.82);
+  planeHitFlash.style.setProperty("--plane-hit-flash-opacity", (0.82 * pulse).toFixed(3));
 }
 
 function getSnapshotClientTime(snapshot) {
   if (!Number.isFinite(snapshot?.t)) return time;
 
   const observedOffset = time - snapshot.t;
-  serverClockOffset = serverClockOffset === null
+  const serverTimeReset = Number.isFinite(lastServerSnapshotTime) && snapshot.t + 2 < lastServerSnapshotTime;
+  serverClockOffset = serverClockOffset === null || serverTimeReset
     ? observedOffset
     : Math.min(serverClockOffset, observedOffset);
+  lastServerSnapshotTime = snapshot.t;
   document.body.dataset.serverClockOffset = serverClockOffset.toFixed(3);
+  document.body.dataset.serverClockReset = serverTimeReset ? "1" : "0";
   return snapshot.t + serverClockOffset;
 }
 
@@ -1874,7 +4552,9 @@ function applyPlayerServerTarget(dt) {
 
   boat.root.position.x = correctedPosition.x;
   boat.root.position.z = correctedPosition.z;
+  const previousHeading = heading;
   heading = correctedHeading;
+  holdWeaponWorldHeading(previousHeading, heading);
   speed = prediction.speed;
   turnVelocity = correctedTurnRate;
   const correctionDecay = Math.min(1, dt * 8.0);
@@ -1905,36 +4585,6 @@ function predictPlayerServerMotion(target, age) {
     heading: target.heading + target.turnRate * age,
     speed: target.speed + target.speedRate * age
   };
-}
-
-function applyServerRadarSnapshot(snapshot) {
-  if (!snapshot || !Array.isArray(snapshot.contacts)) return;
-
-  serverRadarReady = true;
-  serverRadarObserverPosition = Number.isFinite(snapshot.observerX) && Number.isFinite(snapshot.observerZ)
-    ? new Vector3(snapshot.observerX, 0.28, snapshot.observerZ)
-    : null;
-  serverRadarObserverHeading = Number.isFinite(snapshot.observerHeading) ? snapshot.observerHeading : null;
-  serverRadarRange = Number.isFinite(snapshot.range) ? snapshot.range : 360;
-  serverRadarContacts = snapshot.contacts.map((contact) => {
-    const ship = serverShipsById.get(contact.id);
-    return {
-      id: `radar-${contact.id}`,
-      shipId: contact.id,
-      team: contact.teamId === playerTeamId ? "light" : "dark",
-      teamId: contact.teamId,
-      controlledBy: ship?.controlledBy ?? "bot",
-      label: createRadarContactLabel(ship ?? contact),
-      position: new Vector3(contact.x, 0.28, contact.z),
-      heading: contact.heading,
-      distance: contact.distance,
-      bearing: contact.bearing,
-      serverVisible: true
-    };
-  });
-  document.body.dataset.radarStateSync = "ok";
-  document.body.dataset.radarShipId = snapshot.shipId ?? "";
-  document.body.dataset.radarContacts = String(serverRadarContacts.length);
 }
 
 function connectGameEventStream() {
@@ -1975,9 +4625,6 @@ function applyGameStreamMessage(data) {
   }
 
   applyServerGameSnapshot(message.state);
-  if (message.radar) {
-    applyServerRadarSnapshot(message.radar);
-  }
   document.body.dataset.gameEventSource = gameEventSourceReady ? "open" : "message";
   document.body.dataset.gameEventTime = String(message.state?.t ?? "");
 }
@@ -1985,28 +4632,50 @@ function applyGameStreamMessage(data) {
 function updateOrCreateRemoteShip(ship) {
   const existing = enemyMotions.find((motion) => motion.id === ship.id);
   if (existing) {
-    applyServerShipSnapshot(existing, ship);
-    return existing;
+    if (existing.vehicleType === getShipVehicleType(ship)) {
+      applyServerShipSnapshot(existing, ship);
+      return existing;
+    }
+    disposeRemoteMotion(existing);
+    enemyMotions.splice(enemyMotions.indexOf(existing), 1);
   }
 
-  const boatModel = createEnemyTorpedoBoat(scene, materials, `server_ship_${ship.id}`, ship.teamId, createShipDesignation(ship));
+  const boatModel = createRemoteVehicleModel(scene, materials, `server_ship_${ship.id}`, ship);
   const headingValue = Number.isFinite(ship.heading) ? ship.heading : 0;
-  boatModel.root.position = new Vector3(ship.x, 0.26, ship.z);
+  boatModel.root.position = new Vector3(ship.x, remoteVehicleY(ship), ship.z);
   boatModel.root.rotationQuaternion = Quaternion.FromEulerAngles(0, headingValue, 0);
   boatModel.root.metadata = {
     serverShipId: ship.id,
     teamId: ship.teamId,
-    controlledBy: ship.controlledBy
+    controlledBy: ship.controlledBy,
+    vehicleType: getShipVehicleType(ship)
   };
-  const motion = createEnemyMotion(boatModel.root, boatModel.bowWake, headingValue, ship.engineOrder ?? 2, enemyMotions.length, ship);
+  const motion = createEnemyMotion(boatModel, headingValue, ship.engineOrder ?? 2, enemyMotions.length, ship);
+  applyRemoteWeaponAim(motion, ship);
   enemyMotions.push(motion);
   return motion;
 }
 
+function disposeRemoteMotion(motion) {
+  motion.timers?.forEach((timer) => window.clearTimeout(timer));
+  hideEnemyWake(motion.bowWake);
+  motion.bowWake?.root?.getChildMeshes?.().forEach((mesh) => mesh.dispose());
+  motion.bowWake?.root?.dispose?.();
+  motion.root?.getChildMeshes?.().forEach((mesh) => mesh.dispose());
+  motion.root?.dispose?.();
+}
+
 function applyServerShipSnapshot(motion, ship) {
+  if (motion.state === "air-hit") return;
   if (motion.state === "sinking") return;
 
   if (ship.state === "sunk") {
+    if (isScoutPlaneMotion(motion)) {
+      motion.serverState = "sunk";
+      motion.root.setEnabled(false);
+      motion.state = "sunk";
+      return;
+    }
     motion.serverState = "sunk";
     motion.serverPosition.x = Number.isFinite(ship.x) ? ship.x : motion.serverPosition.x;
     motion.serverPosition.z = Number.isFinite(ship.z) ? ship.z : motion.serverPosition.z;
@@ -2030,18 +4699,24 @@ function applyServerShipSnapshot(motion, ship) {
 
   motion.teamId = ship.teamId;
   motion.controlledBy = ship.controlledBy;
+  motion.vehicleType = getShipVehicleType(ship);
   motion.serverState = ship.state;
   motion.serverPosition.x = Number.isFinite(ship.x) ? ship.x : motion.serverPosition.x;
+  motion.serverPosition.y = remoteVehicleY(ship);
   motion.serverPosition.z = Number.isFinite(ship.z) ? ship.z : motion.serverPosition.z;
   motion.serverHeading = Number.isFinite(ship.heading) ? ship.heading : motion.serverHeading;
-  motion.serverSpeed = Number.isFinite(ship.speed) ? ship.speed : motion.serverSpeed;
+  const wakeTestOverrideActive = scenarioTestMode && Number.isFinite(motion.wakeTestOverrideUntil) && time < motion.wakeTestOverrideUntil;
+  motion.serverSpeed = !wakeTestOverrideActive && Number.isFinite(ship.speed) ? ship.speed : motion.serverSpeed;
+  motion.serverTurnVelocity = Number.isFinite(ship.turnVelocity) ? ship.turnVelocity : motion.serverTurnVelocity;
   motion.serverSnapshotTime = time;
+  applyRemoteWeaponAim(motion, ship);
   motion.heading = Number.isFinite(ship.heading) ? blendAngle(motion.heading, ship.heading, 0.18) : motion.heading;
-  motion.speed = Number.isFinite(ship.speed) ? motion.speed + (ship.speed - motion.speed) * 0.18 : motion.speed;
-  motion.engineOrder = Number.isInteger(ship.engineOrder) ? ship.engineOrder : motion.engineOrder;
+  motion.speed = !wakeTestOverrideActive && Number.isFinite(ship.speed) ? motion.speed + (ship.speed - motion.speed) * 0.18 : motion.speed;
+  motion.engineOrder = !wakeTestOverrideActive && Number.isInteger(ship.engineOrder) ? ship.engineOrder : motion.engineOrder;
   motion.rudder = Number.isFinite(ship.rudderDegrees) ? clamp(ship.rudderDegrees / maxRudderDegrees, -1, 1) : motion.rudder;
   if (wasInactive && correctionDistance > 55) {
     motion.root.position.x = motion.serverPosition.x;
+    motion.root.position.y = motion.serverPosition.y;
     motion.root.position.z = motion.serverPosition.z;
   }
   motion.root.setEnabled(true);
@@ -2049,8 +4724,30 @@ function applyServerShipSnapshot(motion, ship) {
   motion.root.metadata = {
     ...motion.root.metadata,
     teamId: ship.teamId,
-    controlledBy: ship.controlledBy
+    controlledBy: ship.controlledBy,
+    vehicleType: motion.vehicleType
   };
+}
+
+function applyRemoteWeaponAim(motion, ship) {
+  if (!motion || isScoutPlaneMotion(motion)) return;
+  motion.flakYaw = Number.isFinite(ship.flakYaw) ? ship.flakYaw : (motion.flakYaw ?? 0);
+  motion.flakPitch = Number.isFinite(ship.flakPitch) ? ship.flakPitch : (motion.flakPitch ?? 0);
+  motion.cannonYaw = Number.isFinite(ship.cannonYaw) ? ship.cannonYaw : (motion.cannonYaw ?? 0);
+  motion.cannonPitch = Number.isFinite(ship.cannonPitch) ? ship.cannonPitch : (motion.cannonPitch ?? 0);
+
+  if (motion.boat?.sternFlak?.mount) {
+    motion.boat.sternFlak.mount.rotation.y = motion.flakYaw;
+  }
+  if (motion.boat?.sternFlak?.elevationRoot) {
+    motion.boat.sternFlak.elevationRoot.rotation.x = -motion.flakPitch;
+  }
+  if (motion.boat?.bowCannon?.mount) {
+    motion.boat.bowCannon.mount.rotation.y = motion.cannonYaw;
+  }
+  if (motion.boat?.bowCannon?.elevationRoot) {
+    motion.boat.bowCannon.elevationRoot.rotation.x = -motion.cannonPitch;
+  }
 }
 
 function escapeHtml(value) {
@@ -2092,9 +4789,59 @@ function updateRudderGauge(indicator, valueElement, degrees) {
   }
 }
 
-function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading) {
+function updateWeaponElevationGauge(indicator, valueElement, pitch, minPitch, maxPitch) {
+  const ratio = clamp((pitch - minPitch) / Math.max(0.001, maxPitch - minPitch), 0, 1);
+  indicator?.style.setProperty("--weapon-elevation-ratio", String(ratio));
+
+  if (valueElement) {
+    valueElement.textContent = `${Math.round(Math.max(0, pitch) * 180 / Math.PI)}°`;
+  }
+}
+
+function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading, radarHeading = heading, options = {}) {
   drawMapInstrument(mapCanvas, playerPosition, landZones, mapZoom, heading);
-  drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading, serverRadarRange);
+  if (!singleRadarMode) {
+    updateAutomaticRadarMode(radarContacts, playerPosition);
+  }
+  const radarRange = getSelectedRadarRange();
+  drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, radarHeading, radarRange, {
+    flakLookHeading: options.flakLookHeading,
+    targetMode: !scoutPlaneMode && (flakViewActive || cannonViewActive || torpedoScopeActive),
+    targetLineMode: flakViewActive ? "flak" : (cannonViewActive ? "cannon" : "torpedo"),
+    radarTorpedoes: radarTorpedoSnapshots
+  });
+  document.body.dataset.radarHeading = String(Math.round(normalizeAngle(radarHeading) * 180 / Math.PI));
+}
+
+function updateAutomaticRadarMode(radarContacts, playerPosition) {
+  if (singleRadarMode) {
+    radarModeOverride = null;
+    radarModeOverrideUntil = 0;
+    setEffectiveRadarMode("radar");
+    return;
+  }
+  if (scoutPlaneMode) {
+    radarModeOverride = null;
+    radarModeOverrideUntil = 0;
+    setEffectiveRadarMode("radar");
+    return;
+  }
+
+  if (radarModeOverride && performance.now() < radarModeOverrideUntil) {
+    setEffectiveRadarMode(radarModeOverride);
+    return;
+  }
+  const hadRadarOverride = Boolean(radarModeOverride);
+  radarModeOverride = null;
+  radarModeOverrideUntil = 0;
+
+  const targetRange = getRadarRangeForMode("target");
+  const enemyInTargetRange = radarContacts.some((contact) => (
+    contact?.position &&
+    contact.teamId !== playerTeamId &&
+    distance2D(playerPosition, contact.position) <= targetRange
+  ));
+  setEffectiveRadarMode(enemyInTargetRange ? "target" : "radar", hadRadarOverride);
 }
 
 function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, heading) {
@@ -2106,8 +4853,7 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, headi
   if (!ctx || width < 2 || height < 2) return;
   const zoomIndex = clamp(Number(zoomControl?.value ?? 1), 0, mapZoomScales.length - 1);
   const zoomScale = mapZoomScales[zoomIndex];
-  const tile = getMapTile(playerPosition, zoomScale);
-  const bounds = getMapTileBounds(tile, zoomScale);
+  const bounds = getCenteredMapBounds(playerPosition, zoomScale, width / height);
   const scale = Math.min(width / (bounds.maxX - bounds.minX), height / (bounds.maxZ - bounds.minZ));
   lastMapViewport = { bounds, width, height, scale };
 
@@ -2122,19 +4868,82 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, headi
   if (debugMapEnabled) {
     drawDebugMapHeightOverlay(ctx, visibleLandZones, bounds, width, height, scale);
   }
-  drawMapLandLabels(ctx, visibleLandZones, bounds, width, height, scale);
+  if (!debugMarkerMapEnabled) {
+    drawMapLandLabels(ctx, visibleLandZones, bounds, width, height, scale);
+  }
   drawMapLandmarkMarkers(ctx, landZones, bounds, width, height, scale);
 
   if (debugMapEnabled) {
+    drawDebugRespawnCandidates(ctx, bounds, width, height, scale);
+    drawDebugMapMarkers(ctx, bounds, width, height, scale);
     drawDebugMapShips(ctx, bounds, width, height, scale);
   }
 
   const playerPoint = clampInstrumentPoint(worldToMapPoint(playerPosition, bounds, width, height, scale), width, height, 6);
-  drawMapShipMarker(ctx, playerPoint.x, playerPoint.y, "#f7fbff", heading);
+  drawMapUnitMarker(ctx, playerPoint.x, playerPoint.y, {
+    teamId: playerTeamId,
+    controlledBy: playerId,
+    vehicleType: scoutPlaneMode ? "scout-plane" : "torpedo-boat"
+  }, heading);
 
   if (mapSectorValue) mapSectorValue.textContent = formatMapSector(playerPosition);
   if (mapCoordinateValue) mapCoordinateValue.textContent = `${formatWorldCoordinate(playerPosition)}\n${formatMapBounds(bounds)}\nZoom x${zoomScale}`;
   updateMapGridEdgeLabels(bounds, width, height, scale);
+}
+
+function drawDebugRespawnCandidates(ctx, bounds, width, height, scale) {
+  if (!debugRespawnCandidates.length) return;
+
+  let visibleCandidates = 0;
+  ctx.save();
+  ctx.font = bigMapEnabled ? "800 11px Inter, sans-serif" : "800 8px Inter, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  debugRespawnCandidates.forEach((position, index) => {
+    if (position.x < bounds.minX || position.x > bounds.maxX || position.z < bounds.minZ || position.z > bounds.maxZ) {
+      return;
+    }
+    const point = worldToMapPoint(position, bounds, width, height, scale);
+    const radius = bigMapEnabled ? 7 : 5;
+    ctx.fillStyle = "rgba(7, 31, 43, 0.82)";
+    ctx.strokeStyle = "rgba(171, 255, 245, 0.95)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "rgba(211, 255, 250, 0.98)";
+    ctx.fillText(String(index + 1), point.x, point.y + 0.5);
+    visibleCandidates += 1;
+  });
+  ctx.restore();
+  document.body.dataset.debugRespawnCandidatesVisible = String(visibleCandidates);
+}
+
+function drawDebugMapMarkers(ctx, bounds, width, height, scale) {
+  if (!debugMarkerMapEnabled || !debugMapMarkers.length) return;
+
+  ctx.save();
+  ctx.font = bigMapEnabled ? "900 12px Inter, sans-serif" : "900 9px Inter, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  debugMapMarkers.forEach((marker, index) => {
+    if (marker.x < bounds.minX || marker.x > bounds.maxX || marker.z < bounds.minZ || marker.z > bounds.maxZ) {
+      return;
+    }
+    const point = worldToMapPoint(marker, bounds, width, height, scale);
+    const radius = bigMapEnabled ? 8 : 5.5;
+    ctx.fillStyle = "rgba(255, 44, 44, 0.88)";
+    ctx.strokeStyle = "rgba(255, 245, 245, 0.95)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
+    ctx.fillText(String(index + 1), point.x, point.y + 0.5);
+  });
+  ctx.restore();
 }
 
 function drawDebugMapShips(ctx, bounds, width, height, scale) {
@@ -2147,7 +4956,7 @@ function drawDebugMapShips(ctx, bounds, width, height, scale) {
       continue;
     }
     const point = worldToMapPoint(position, bounds, width, height, scale);
-    drawMapShipMarker(ctx, point.x, point.y, mapShipColor(ship), Number.isFinite(ship.heading) ? ship.heading : 0, 5.5);
+    drawMapUnitMarker(ctx, point.x, point.y, ship, Number.isFinite(ship.heading) ? ship.heading : 0);
     drawMapShipLabel(ctx, createShipDesignation(ship), point.x + 7, point.y, mapShipColor(ship));
     visibleShips += 1;
   }
@@ -2230,7 +5039,7 @@ function drawMapSectorGrid(ctx, bounds, width, height, scale) {
   ctx.restore();
 }
 
-function drawRadarInstrument(canvas, statusElement, playerPosition, radarContacts, landZones, heading, range = 360) {
+function drawRadarInstrument(canvas, statusElement, playerPosition, radarContacts, landZones, heading, range = 360, options = {}) {
   if (!canvas) return;
 
   const ctx = prepareInstrumentCanvas(canvas);
@@ -2241,6 +5050,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   const centerY = height * 0.5;
   const radius = Math.max(1, Math.min(width, height) * 0.46);
   const radarRange = range;
+  const targetMode = options.targetMode === true;
   const scale = radius / radarRange;
 
   ctx.clearRect(0, 0, width, height);
@@ -2252,41 +5062,63 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   ctx.fillRect(0, 0, width, height);
 
   drawRadarRangeRings(ctx, centerX, centerY, radius);
-  landZones.forEach((zone) => drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, radius, radarRange));
-
   drawRadarLandUnion(ctx, landZones, playerPosition, centerX, centerY, scale, heading, width, height);
 
   const contacts = radarContacts
     .map((contact) => ({
       ...contact,
       distance: Number.isFinite(contact.distance) ? contact.distance : distance2D(playerPosition, contact.position),
-      blocked: contact.serverVisible ? false : isLineBlockedByLand(playerPosition, contact.position, landZones)
+      blocked: false
     }))
     .filter((contact) => contact.distance <= radarRange);
   const visibleContacts = contacts.filter((contact) => !contact.blocked);
   visibleContacts.forEach((contact) => {
     const contactPoint = worldToRadarPoint(contact.position, playerPosition, centerX, centerY, scale, heading);
-    drawRadarContactMarker(ctx, contactPoint.x, contactPoint.y, contact.team, false, contact.heading, heading, contact.label);
+    drawRadarContactMarker(ctx, contactPoint.x, contactPoint.y, contact.team, false, contact.heading, heading, contact.label, contact.vehicleType);
   });
+
+  if (Array.isArray(options.radarTorpedoes) && options.radarTorpedoes.length > 0) {
+    drawRadarTorpedoes(
+      ctx,
+      centerX,
+      centerY,
+      playerPosition,
+      options.radarTorpedoes,
+      heading,
+      radarRange,
+      scale
+    );
+  }
+
+  if (targetMode) {
+    drawRadarTargetLine(
+      ctx,
+      centerX,
+      centerY,
+      radius,
+      playerPosition,
+      visibleContacts,
+      heading,
+      radarRange,
+      scale,
+      options.targetLineMode === "torpedo" ? heading : options.flakLookHeading,
+      options.targetLineMode ?? "torpedo"
+    );
+  }
 
   const nearestVisible = visibleContacts.reduce((nearest, contact) => (
     !nearest || contact.distance < nearest.distance ? contact : nearest
   ), null);
-  const nearestShadow = contacts.reduce((nearest, contact) => (
-    contact.blocked && (!nearest || contact.distance < nearest.distance) ? contact : nearest
-  ), null);
-
   if (nearestVisible) {
     const suffix = visibleContacts.length > 1 ? ` x${visibleContacts.length}` : "";
     const label = nearestVisible.team === "light" ? "Own" : "Enemy";
     if (statusElement) statusElement.textContent = `${label} ${formatWorldDistance(nearestVisible.distance)}${suffix}`;
-  } else if (nearestShadow) {
-    if (statusElement) statusElement.textContent = `Shadow ${formatWorldDistance(nearestShadow.distance)}`;
   } else {
     if (statusElement) statusElement.textContent = `Clear ${formatWorldDistance(radarRange)}`;
   }
 
   drawRadarContactMarker(ctx, centerX, centerY, "light", true);
+  drawRadarOwnHeadingMarker(ctx, centerX, centerY);
   ctx.restore();
 
   ctx.strokeStyle = "rgba(155, 229, 223, 0.62)";
@@ -2576,7 +5408,7 @@ function drawMapLandmarkMarkers(ctx, zones, bounds, width, height, scale) {
   lighthouseLands.forEach((zone, index) => {
     const position = getLighthousePosition(zone, index);
     drawMapLightMarker(ctx, position, bounds, width, height, scale, "lighthouse");
-    if (debugMapEnabled) {
+    if (debugMapEnabled && !debugMarkerMapEnabled) {
       drawMapLighthouseDebugLabel(ctx, zone, position, bounds, width, height, scale);
     }
   });
@@ -2786,6 +5618,15 @@ function drawMapShipMarker(ctx, x, y, color, markerHeading, size = 7) {
   ctx.fill();
 }
 
+function drawMapUnitMarker(ctx, x, y, ship, markerHeading) {
+  const color = mapShipColor(ship);
+  if (getShipVehicleType(ship) === "scout-plane") {
+    drawRadarPlaneMarker(ctx, x, y, color, markerHeading);
+  } else {
+    drawRadarShipMarker(ctx, x, y, color, markerHeading);
+  }
+}
+
 function drawMapShipLabel(ctx, label, x, y, color) {
   ctx.save();
   ctx.font = "800 8px Inter, Arial, sans-serif";
@@ -2805,13 +5646,18 @@ function mapShipColor(ship) {
   return "#ff6b4a";
 }
 
-function drawRadarContactMarker(ctx, x, y, team, isPlayer = false, contactHeading = null, radarHeading = 0, label = "") {
+function drawRadarContactMarker(ctx, x, y, team, isPlayer = false, contactHeading = null, radarHeading = 0, label = "", vehicleType = "torpedo-boat") {
   const color = team === "light" ? "#7fd7ff" : "#ff6b4a";
   const ring = team === "light" ? "rgba(127, 215, 255, 0.42)" : "rgba(255, 107, 74, 0.48)";
   const radius = isPlayer ? 4.2 : 4;
 
   if (!isPlayer && Number.isFinite(contactHeading)) {
-    drawRadarShipMarker(ctx, x, y, color, contactHeading - radarHeading);
+    const relativeHeading = contactHeading - radarHeading;
+    if (vehicleType === "scout-plane") {
+      drawRadarPlaneMarker(ctx, x, y, color, relativeHeading);
+    } else {
+      drawRadarShipMarker(ctx, x, y, color, relativeHeading);
+    }
   } else {
     drawInstrumentMarker(ctx, x, y, color, radius);
   }
@@ -2860,21 +5706,197 @@ function drawRadarCompassRing(ctx, centerX, centerY, radius, radarHeading) {
   ctx.restore();
 }
 
-function drawRadarShipMarker(ctx, x, y, color, relativeHeading) {
-  const noseX = Math.sin(relativeHeading) * 7;
-  const noseY = -Math.cos(relativeHeading) * 7;
-  const sideX = Math.cos(relativeHeading) * 3.4;
-  const sideY = Math.sin(relativeHeading) * 3.4;
-  const sternX = -Math.sin(relativeHeading) * 4.4;
-  const sternY = Math.cos(relativeHeading) * 4.4;
+function drawRadarFlakLookIndicator(ctx, centerX, centerY, radius, flakLookHeading, radarHeading) {
+  if (!Number.isFinite(flakLookHeading) || !Number.isFinite(radarHeading)) return;
+  const relative = normalizeAngle(flakLookHeading - radarHeading);
+  const inner = radius * 0.17;
+  const outer = radius * 0.9;
 
-  ctx.fillStyle = color;
+  ctx.save();
+  ctx.strokeStyle = "rgba(155, 229, 223, 0.62)";
+  ctx.lineWidth = 1.15;
+  ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.moveTo(x + noseX, y + noseY);
-  ctx.lineTo(x + sternX + sideX, y + sternY + sideY);
-  ctx.lineTo(x + sternX - sideX, y + sternY - sideY);
+  ctx.moveTo(centerX + Math.sin(relative) * inner, centerY - Math.cos(relative) * inner);
+  ctx.lineTo(centerX + Math.sin(relative) * outer, centerY - Math.cos(relative) * outer);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawRadarTorpedoes(ctx, centerX, centerY, playerPosition, torpedoes, radarHeading, radarRange, scale) {
+  if (!Array.isArray(torpedoes) || torpedoes.length === 0) return;
+
+  let visible = 0;
+  for (const torpedo of torpedoes) {
+    if (visible >= 16) break;
+    if (!torpedo || torpedo.state !== "running") continue;
+    if (!Number.isFinite(torpedo.x) || !Number.isFinite(torpedo.z)) continue;
+
+    const position = { x: torpedo.x, z: torpedo.z };
+    const distance = distance2D(playerPosition, position);
+    if (distance > radarRange) continue;
+
+    const point = worldToRadarPoint(position, playerPosition, centerX, centerY, scale, radarHeading);
+    drawRadarTorpedoMarker(ctx, point.x, point.y, Number.isFinite(torpedo.heading) ? torpedo.heading : 0, radarHeading);
+    visible += 1;
+  }
+}
+
+function drawRadarTorpedoMarker(ctx, x, y, heading, radarHeading) {
+  const relativeHeading = normalizeAngle(heading - radarHeading);
+  const length = 2.4;
+  const halfLength = length * 0.5;
+  const dx = Math.sin(relativeHeading) * halfLength;
+  const dy = -Math.cos(relativeHeading) * halfLength;
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(235, 245, 244, 0.82)";
+  ctx.lineWidth = 1.15;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(x - dx, y - dy);
+  ctx.lineTo(x + dx, y + dy);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawRadarTargetLine(ctx, centerX, centerY, radius, playerPosition, visibleContacts, radarHeading, radarRange, scale, firingHeading, mode) {
+  if (!Number.isFinite(firingHeading)) return;
+
+  const relative = normalizeAngle(firingHeading - radarHeading);
+  const obstruction = mode === "torpedo"
+    ? findRadarTargetLineObstruction(playerPosition, firingHeading, visibleContacts, radarRange)
+    : null;
+  const endpointDistance = obstruction ? obstruction.distance : radarRange;
+  const inner = radius * 0.12;
+  const outer = clamp(endpointDistance * scale, inner, radius * 0.92);
+  const endX = centerX + Math.sin(relative) * outer;
+  const endY = centerY - Math.cos(relative) * outer;
+
+  ctx.save();
+  ctx.strokeStyle = obstruction ? "rgba(255, 239, 164, 0.58)" : "rgba(155, 229, 223, 0.42)";
+  ctx.lineWidth = 1.0;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(centerX + Math.sin(relative) * inner, centerY - Math.cos(relative) * inner);
+  ctx.lineTo(endX, endY);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function findRadarTargetLineObstruction(playerPosition, firingHeading, contacts, radarRange) {
+  let best = null;
+  const forward = { x: Math.sin(firingHeading), z: Math.cos(firingHeading) };
+  for (const contact of contacts) {
+    if (!contact || contact.vehicleType === "scout-plane") continue;
+    if (!Number.isFinite(contact.position?.x) || !Number.isFinite(contact.position?.z)) continue;
+    const dx = contact.position.x - playerPosition.x;
+    const dz = contact.position.z - playerPosition.z;
+    const along = dx * forward.x + dz * forward.z;
+    if (along <= 0 || along > radarRange) continue;
+    const cross = Math.abs(dx * forward.z - dz * forward.x);
+    if (cross > 10.5) continue;
+
+    const start = Math.max(0, along - 12);
+    const end = Math.min(radarRange, along + 12);
+    for (let distance = start; distance <= end; distance += 1.0) {
+      const point = {
+        x: playerPosition.x + forward.x * distance,
+        z: playerPosition.z + forward.z * distance
+      };
+      if (pointHitsRadarShipHull(point, contact)) {
+        if (!best || distance < best.distance) {
+          best = { distance, contact };
+        }
+        break;
+      }
+    }
+  }
+  return best;
+}
+
+function pointHitsRadarShipHull(point, contact) {
+  const heading = Number.isFinite(contact.heading) ? contact.heading : 0;
+  const local = getEnemyHitLocalPoint(point, contact.position, heading);
+  if (!isForwardInsideTorpedoBoatHull(local.forward, 0.35)) return false;
+  return Math.abs(local.right) <= getTorpedoBoatHullTopHalfWidthAt(local.forward) + 0.35;
+}
+
+function drawRadarOwnHeadingMarker(ctx, centerX, centerY) {
+  ctx.save();
+  ctx.fillStyle = "rgba(247, 251, 255, 0.94)";
+  ctx.strokeStyle = "rgba(2, 16, 21, 0.86)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(centerX, centerY - 9);
+  ctx.lineTo(centerX + 4.2, centerY + 5.8);
+  ctx.lineTo(centerX, centerY + 3.2);
+  ctx.lineTo(centerX - 4.2, centerY + 5.8);
   ctx.closePath();
+  ctx.stroke();
   ctx.fill();
+  ctx.restore();
+}
+
+function drawRadarShipMarker(ctx, x, y, color, relativeHeading) {
+  const toPoint = createRadarMarkerPointMapper(x, y, relativeHeading);
+  ctx.fillStyle = color;
+  ctx.strokeStyle = "rgba(2, 16, 21, 0.86)";
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  moveToRadarMarkerPoint(ctx, toPoint, 0, 7.2);
+  lineToRadarMarkerPoint(ctx, toPoint, 2.5, 2.2);
+  lineToRadarMarkerPoint(ctx, toPoint, 2.3, -5.0);
+  lineToRadarMarkerPoint(ctx, toPoint, 0, -4.2);
+  lineToRadarMarkerPoint(ctx, toPoint, -2.3, -5.0);
+  lineToRadarMarkerPoint(ctx, toPoint, -2.5, 2.2);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fill();
+}
+
+function drawRadarPlaneMarker(ctx, x, y, color, relativeHeading) {
+  const toPoint = createRadarMarkerPointMapper(x, y, relativeHeading);
+  ctx.fillStyle = color;
+  ctx.strokeStyle = "rgba(2, 16, 21, 0.86)";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  moveToRadarMarkerPoint(ctx, toPoint, 0, 7.5);
+  lineToRadarMarkerPoint(ctx, toPoint, 1.3, 1.2);
+  lineToRadarMarkerPoint(ctx, toPoint, 6.3, -0.7);
+  lineToRadarMarkerPoint(ctx, toPoint, 1.1, -1.9);
+  lineToRadarMarkerPoint(ctx, toPoint, 0.9, -5.0);
+  lineToRadarMarkerPoint(ctx, toPoint, 3.0, -6.1);
+  lineToRadarMarkerPoint(ctx, toPoint, 0, -5.7);
+  lineToRadarMarkerPoint(ctx, toPoint, -3.0, -6.1);
+  lineToRadarMarkerPoint(ctx, toPoint, -0.9, -5.0);
+  lineToRadarMarkerPoint(ctx, toPoint, -1.1, -1.9);
+  lineToRadarMarkerPoint(ctx, toPoint, -6.3, -0.7);
+  lineToRadarMarkerPoint(ctx, toPoint, -1.3, 1.2);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fill();
+}
+
+function createRadarMarkerPointMapper(x, y, relativeHeading) {
+  const forwardX = Math.sin(relativeHeading);
+  const forwardY = -Math.cos(relativeHeading);
+  const rightX = Math.cos(relativeHeading);
+  const rightY = Math.sin(relativeHeading);
+  return (side, forward) => ({
+    x: x + rightX * side + forwardX * forward,
+    y: y + rightY * side + forwardY * forward
+  });
+}
+
+function moveToRadarMarkerPoint(ctx, toPoint, side, forward) {
+  const point = toPoint(side, forward);
+  ctx.moveTo(point.x, point.y);
+}
+
+function lineToRadarMarkerPoint(ctx, toPoint, side, forward) {
+  const point = toPoint(side, forward);
+  ctx.lineTo(point.x, point.y);
 }
 
 function clampInstrumentPoint(point, width, height, padding) {
@@ -2901,43 +5923,6 @@ function drawRadarRangeRings(ctx, centerX, centerY, radius) {
   ctx.moveTo(centerX - radius, centerY);
   ctx.lineTo(centerX + radius, centerY);
   ctx.stroke();
-}
-
-function drawRadarShadow(ctx, zone, playerPosition, heading, centerX, centerY, radius, radarRange) {
-  if (!zone.radarOcclusion) return;
-  if (!Number.isFinite(radius) || radius <= 0) return;
-
-  const dx = zone.x - playerPosition.x;
-  const dz = zone.z - playerPosition.z;
-  const distance = Math.sqrt(dx * dx + dz * dz);
-  const centerAngle = Math.atan2(dx, dz) - heading;
-  let halfAngle = 0;
-  let shadowStartDistance = Number.POSITIVE_INFINITY;
-
-  for (const point of getCoastContourPoints(zone, 40, "radar")) {
-    const pointDx = point.x - playerPosition.x;
-    const pointDz = point.z - playerPosition.z;
-    const pointDistance = Math.sqrt(pointDx * pointDx + pointDz * pointDz);
-    const pointAngle = Math.atan2(pointDx, pointDz) - heading;
-    halfAngle = Math.max(halfAngle, Math.abs(normalizeAngle(pointAngle - centerAngle)));
-    shadowStartDistance = Math.min(shadowStartDistance, pointDistance);
-  }
-
-  if (distance < 1 || shadowStartDistance <= 0 || shadowStartDistance > radarRange || halfAngle <= 0.01) return;
-
-  const near = clamp(shadowStartDistance / radarRange, 0.04, 1) * radius;
-  const start = centerAngle - halfAngle;
-  const end = centerAngle + halfAngle;
-
-  ctx.fillStyle = "rgba(0, 0, 0, 0.52)";
-  ctx.beginPath();
-  ctx.moveTo(centerX + Math.sin(start) * near, centerY - Math.cos(start) * near);
-  ctx.lineTo(centerX + Math.sin(start) * radius, centerY - Math.cos(start) * radius);
-  ctx.arc(centerX, centerY, radius, start - Math.PI / 2, end - Math.PI / 2);
-  ctx.lineTo(centerX + Math.sin(end) * near, centerY - Math.cos(end) * near);
-  ctx.arc(centerX, centerY, near, end - Math.PI / 2, start - Math.PI / 2, true);
-  ctx.closePath();
-  ctx.fill();
 }
 
 function isLineBlockedByLand(from, to, landZones) {
@@ -2977,25 +5962,16 @@ function formatWorldDistance(worldUnits) {
   return `${Math.round(meters)} m`;
 }
 
-function getMapTile(position, zoomScale = 1) {
-  const size = mapTileSize * zoomScale;
+function getCenteredMapBounds(position, zoomScale = 1, aspectRatio = 1) {
+  const safeAspectRatio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1;
+  const height = mapTileSize * zoomScale;
+  const width = height * safeAspectRatio;
 
   return {
-    x: Math.floor((position.x + size * 0.5) / size),
-    z: Math.floor((position.z + size * 0.5) / size)
-  };
-}
-
-function getMapTileBounds(tile, zoomScale = 1) {
-  const size = mapTileSize * zoomScale;
-  const centerX = tile.x * size;
-  const centerZ = tile.z * size;
-
-  return {
-    minX: centerX - size * 0.5,
-    maxX: centerX + size * 0.5,
-    minZ: centerZ - size * 0.5,
-    maxZ: centerZ + size * 0.5
+    minX: position.x - width * 0.5,
+    maxX: position.x + width * 0.5,
+    minZ: position.z - height * 0.5,
+    maxZ: position.z + height * 0.5
   };
 }
 
@@ -3091,7 +6067,8 @@ function createShipDesignation(ship) {
   const match = String(ship.id ?? "").match(/(\d+)$/);
   const number = match ? Number.parseInt(match[1], 10) : 0;
   const base = getTeamDefinition(ship.teamId)?.shipBase ?? 50;
-  return `S ${base + number}`;
+  const prefix = getShipVehicleType(ship) === "scout-plane" ? "F" : "S";
+  return `${prefix} ${base + number}`;
 }
 
 function createRadarContactLabel(ship) {
@@ -3114,39 +6091,162 @@ function indexShipsById(ships) {
   return new Map((ships ?? []).map((ship) => [ship.id, ship]));
 }
 
+function updateScoutPlaneFlakDemo(motions, now) {
+  if (!scoutPlaneMode || !scoutPlaneExperimentFlakDemo || playerDamageState !== "active") return;
+  if (now < (flakSystem.nextDemoFireTime ?? 0)) return;
+
+  const flakMotions = motions
+    .filter((motion) => motion.boat?.sternFlak?.elevationRoot)
+    .sort((a, b) => distance2D(a.root.position, boat.root.position) - distance2D(b.root.position, boat.root.position));
+  if (!flakMotions.length) return;
+
+  const motion = flakMotions[flakSystem.nextDemoMotionIndex % flakMotions.length];
+  flakSystem.nextDemoMotionIndex = (flakSystem.nextDemoMotionIndex + 1) % flakMotions.length;
+
+  const target = boat.root.position
+    .add(getForwardVector(heading).scale(Math.max(0, speed) * 0.25))
+    .add(new Vector3(0, 0.7, 0));
+  aimDemoFlakAtTarget(motion.boat, target);
+
+  const shot = getFlakShotFromElevationRoot(motion.boat.sternFlak?.elevationRoot, 0.75, target, getForwardVector(motion.heading).scale(motion.speed ?? 0));
+  if (!shot) return;
+
+  flakSystem.nextDemoFireTime = now + flakDemoFireIntervalSeconds;
+  const spreadShot = createSpreadFlakShot(shot, flakSystem.nextId);
+  createFlakProjectile(flakSystem, spreadShot.position, spreadShot.velocity, spreadShot.direction);
+  createFlakMuzzleFlash(flakSystem, shot.position, shot.direction);
+  document.body.dataset.flakDemoFire = "ok";
+  document.body.dataset.flakDemoBoats = String(flakMotions.length);
+}
+
+function createStaticFlakDemoFleet(scene, materials, parent, playerPosition, playerHeading) {
+  const forward = getForwardVector(playerHeading);
+  const right = getRightVector(playerHeading);
+  const placements = [
+    { f: 145, r: -70 },
+    { f: 165, r: 55 },
+    { f: 230, r: -10 },
+    { f: 105, r: 95 }
+  ];
+
+  return placements.map((placement, index) => {
+    const demoBoat = createEnemyTorpedoBoat(scene, materials, `flak_demo_boat_${index + 1}`, "dark", `F${index + 1}`, true);
+    demoBoat.root.parent = parent;
+    demoBoat.root.position = playerPosition
+      .add(forward.scale(placement.f))
+      .add(right.scale(placement.r));
+    demoBoat.root.position.y = remoteVehicleY({ vehicleType: "torpedo-boat" });
+    const demoHeading = Math.atan2(playerPosition.x - demoBoat.root.position.x, playerPosition.z - demoBoat.root.position.z);
+    demoBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, demoHeading, 0);
+    return {
+      id: `flak-demo-${index + 1}`,
+      numericIndex: index + 1,
+      teamId: "demo",
+      controlledBy: "flak-demo",
+      vehicleType: "torpedo-boat",
+      serverState: "active",
+      root: demoBoat.root,
+      boat: demoBoat,
+      heading: demoHeading,
+      speed: 0,
+      state: "active"
+    };
+  });
+}
+
+function aimDemoFlakAtTarget(demoBoat, target) {
+  const mount = demoBoat.sternFlak?.mount;
+  const elevationRoot = demoBoat.sternFlak?.elevationRoot;
+  if (!mount || !elevationRoot || !mount.parent) return;
+
+  const parentMatrix = mount.parent.computeWorldMatrix(true).clone();
+  parentMatrix.invert();
+  const localTarget = Vector3.TransformCoordinates(target, parentMatrix).subtract(mount.position);
+  const yaw = Math.atan2(localTarget.x, localTarget.z);
+  const horizontalDistance = Math.hypot(localTarget.x, localTarget.z);
+  const pitch = clamp(Math.atan2(localTarget.y - elevationRoot.position.y, horizontalDistance), flakMinPitch, flakMaxPitch);
+  mount.rotation.y = yaw;
+  elevationRoot.rotation.x = -pitch;
+}
+
 function createEnemyFleet(scene, materials, serverShips) {
   return serverShips.map((ship, index) => {
-    const enemyBoat = createEnemyTorpedoBoat(scene, materials, `server_ship_${ship.id}`, ship.teamId, createShipDesignation(ship));
+    const enemyBoat = createRemoteVehicleModel(scene, materials, `server_ship_${ship.id}`, ship);
     const heading = Number.isFinite(ship.heading) ? ship.heading : 0;
     const engineOrder = Number.isInteger(ship.engineOrder) ? ship.engineOrder : 2;
-    enemyBoat.root.position = new Vector3(ship.x, 0.26, ship.z);
+    enemyBoat.root.position = new Vector3(ship.x, remoteVehicleY(ship), ship.z);
     enemyBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
     enemyBoat.root.metadata = {
       serverShipId: ship.id,
       teamId: ship.teamId,
-      controlledBy: ship.controlledBy
+      controlledBy: ship.controlledBy,
+      vehicleType: getShipVehicleType(ship)
     };
-    return createEnemyMotion(enemyBoat.root, enemyBoat.bowWake, heading, engineOrder, index, ship);
+    const motion = createEnemyMotion(enemyBoat, heading, engineOrder, index, ship);
+    applyRemoteWeaponAim(motion, ship);
+    return motion;
   });
 }
 
-function createEnemyMotion(root, bowWake, heading, engineOrder, index = 0, serverShip = null) {
+function createRemoteVehicleModel(scene, materials, name, ship) {
+  return isScoutPlaneShip(ship)
+    ? createScoutPlane(scene, materials, name, ship.teamId, false)
+    : createEnemyTorpedoBoat(
+      scene,
+      materials,
+      name,
+      ship.teamId,
+      createShipDesignation(ship),
+      scoutPlaneExperimentShowAllFlak || isHumanController(ship?.controlledBy)
+    );
+}
+
+function getShipVehicleType(ship) {
+  return ship?.vehicleType === "scout-plane" ? "scout-plane" : "torpedo-boat";
+}
+
+function isScoutPlaneShip(ship) {
+  return getShipVehicleType(ship) === "scout-plane";
+}
+
+function isScoutPlaneMotion(motion) {
+  return motion?.vehicleType === "scout-plane";
+}
+
+function remoteVehicleY(ship) {
+  if (!isScoutPlaneShip(ship)) return torpedoBoatWaterlineY;
+  return Number.isFinite(ship?.y) ? ship.y : scoutPlaneCruiseAltitude;
+}
+
+function createEnemyMotion(vehicle, heading, engineOrder, index = 0, serverShip = null) {
+  const root = vehicle.root;
   return {
     id: serverShip?.id ?? `local-${index + 1}`,
     numericIndex: index + 1,
     teamId: serverShip?.teamId ?? "unknown",
     controlledBy: serverShip?.controlledBy ?? "local",
+    vehicleType: getShipVehicleType(serverShip),
     serverState: serverShip?.state ?? "active",
     root,
-    bowWake,
+    bowWake: vehicle.bowWake,
+    propellerRoot: vehicle.propellerRoot,
+    propellerRoots: vehicle.propellerRoots,
+    shadow: vehicle.shadow,
+    flakYaw: Number.isFinite(serverShip?.flakYaw) ? serverShip.flakYaw : 0,
+    flakPitch: Number.isFinite(serverShip?.flakPitch) ? serverShip.flakPitch : 0,
+    cannonYaw: Number.isFinite(serverShip?.cannonYaw) ? serverShip.cannonYaw : 0,
+    cannonPitch: Number.isFinite(serverShip?.cannonPitch) ? serverShip.cannonPitch : 0,
     heading,
     speed: serverShip?.speed ?? 0,
     isServerControlled: Boolean(serverShip),
-    serverPosition: new Vector3(serverShip?.x ?? root.position.x, 0.28, serverShip?.z ?? root.position.z),
+    boat: vehicle,
+    serverPosition: new Vector3(serverShip?.x ?? root.position.x, remoteVehicleY(serverShip), serverShip?.z ?? root.position.z),
     serverHeading: Number.isFinite(serverShip?.heading) ? serverShip.heading : heading,
     serverSpeed: Number.isFinite(serverShip?.speed) ? serverShip.speed : 0,
+    serverTurnVelocity: Number.isFinite(serverShip?.turnVelocity) ? serverShip.turnVelocity : 0,
     serverSnapshotTime: 0,
     turnVelocity: 0,
+    visualBank: 0,
     rollImpulse: 0,
     engineOrder,
     rudder: 0,
@@ -3194,7 +6294,15 @@ function applyEnemyMotionEvent(motion, event) {
 }
 
 function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
-  if (motion.state === "sunk") return;
+  if (motion.state === "sunk") {
+    hideEnemyWake(motion.bowWake);
+    return;
+  }
+
+  if (motion.state === "air-hit") {
+    updateEnemyScoutPlaneAirHit(motion, dt, time);
+    return;
+  }
 
   if (motion.state === "sinking") {
     updateEnemySinking(motion, dt, time);
@@ -3211,7 +6319,7 @@ function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
   updateEnemyHelmTowardTarget(motion, playerPosition, landZones, time);
 
   const targetSpeed = engineOrders[motion.engineOrder].speed;
-  const speedResponse = Math.abs(targetSpeed) > Math.abs(motion.speed) ? 0.58 : 0.78;
+  const speedResponse = Math.abs(targetSpeed) > Math.abs(motion.speed) ? 0.58 : 0.42;
   motion.speed += (targetSpeed - motion.speed) * Math.min(1, dt * speedResponse);
 
   const turnStrength = motion.speed >= 0 ? 0.22 : -0.16;
@@ -3223,12 +6331,14 @@ function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
   const forward = new Vector3(Math.sin(motion.heading), 0, Math.cos(motion.heading));
   motion.root.position.addInPlace(forward.scale(motion.speed * dt));
   motion.root.position.y = torpedoBoatWaterlineY + Math.sin(time * 1.6 + 1.9) * enemyTorpedoBoatBobAmplitude;
+  const trimPitch = getTorpedoBoatTrimPitch(motion.speed);
+  const roll = -motion.turnVelocity * 0.42 + motion.rollImpulse + Math.sin(time * 1.4) * 0.01;
   motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
-    Math.sin(time * 1.9 + 0.8) * 0.015,
+    trimPitch + Math.sin(time * 1.9 + 0.8) * 0.015,
     motion.heading,
-    -motion.turnVelocity * 0.42 + motion.rollImpulse + Math.sin(time * 1.4) * 0.01
+    roll
   );
-  updateEnemyBowWake(motion.bowWake, motion.speed, time);
+  updateEnemyBowWake(motion.bowWake, motion.speed, time, dt, motion.root.position, motion.heading);
 
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
   document.body.dataset.enemyEngineOrder = engineOrders[motion.engineOrder].label;
@@ -3243,24 +6353,80 @@ function updateServerEnemyMotion(motion, dt, time) {
 
   motion.speed += (motion.serverSpeed - motion.speed) * Math.min(1, dt * 3.5);
   motion.heading = blendAngle(motion.heading, motion.serverHeading, Math.min(1, dt * 3.2));
+  motion.turnVelocity += ((motion.serverTurnVelocity ?? 0) - motion.turnVelocity) * Math.min(1, dt * 3.6);
 
   const forward = new Vector3(Math.sin(motion.heading), 0, Math.cos(motion.heading));
   motion.root.position.addInPlace(forward.scale(motion.speed * dt));
 
   const correctionStrength = correctionDistance > 18 ? 4.2 : 1.8;
   motion.root.position.x += (projectedServerPosition.x - motion.root.position.x) * Math.min(1, dt * correctionStrength);
+  motion.root.position.y += (motion.serverPosition.y - motion.root.position.y) * Math.min(1, dt * 2.6);
   motion.root.position.z += (projectedServerPosition.z - motion.root.position.z) * Math.min(1, dt * correctionStrength);
-  motion.root.position.y = torpedoBoatWaterlineY + Math.sin(time * 1.6 + 1.9) * enemyTorpedoBoatBobAmplitude;
-  motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
-    Math.sin(time * 1.9 + 0.8) * 0.015,
-    motion.heading,
-    Math.sin(time * 1.4) * 0.01
-  );
-  updateEnemyBowWake(motion.bowWake, motion.speed, time);
+  if (isScoutPlaneMotion(motion)) {
+    const targetBank = clamp(-motion.turnVelocity * 2.35, -0.72, 0.72);
+    motion.visualBank += (targetBank - motion.visualBank) * Math.min(1, dt * 4.2);
+    motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
+      0,
+      motion.heading,
+      motion.visualBank
+    );
+    updateScoutPlaneVisual(motion, Math.max(6, Math.abs(motion.speed)), time);
+  } else {
+    motion.root.position.y = torpedoBoatWaterlineY + Math.sin(time * 1.6 + 1.9) * enemyTorpedoBoatBobAmplitude;
+    const trimPitch = getTorpedoBoatTrimPitch(motion.speed);
+    const roll = Math.sin(time * 1.4) * 0.01;
+    motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
+      trimPitch + Math.sin(time * 1.9 + 0.8) * 0.015,
+      motion.heading,
+      roll
+    );
+    const wakeSpeed = Math.max(0, motion.speed, motion.serverSpeed ?? 0);
+    updateEnemyBowWake(motion.bowWake, wakeSpeed, time, dt, motion.root.position, motion.heading);
+  }
 
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
   document.body.dataset.enemyEngineOrder = engineOrders[motion.engineOrder].label;
   document.body.dataset.enemySpeed = motion.speed.toFixed(1);
+}
+
+function beginEnemyScoutPlaneAirHit(motion, hit, now) {
+  motion.state = "air-hit";
+  motion.airHitStartTime = now;
+  motion.airHitExploded = false;
+  motion.nextAirHitSmokeTime = now;
+  motion.airHitHeading = motion.heading;
+  motion.airHitSpeed = Math.max(7.5, Math.abs(motion.speed) || motion.serverSpeed || scoutPlaneCruiseSpeed);
+  motion.root.setEnabled(true);
+  createScoutPlaneHitSequence(flakSystem, getFlakHitPosition(hit));
+}
+
+function updateEnemyScoutPlaneAirHit(motion, dt, now) {
+  const age = now - (motion.airHitStartTime ?? now);
+  const forward = new Vector3(Math.sin(motion.airHitHeading ?? motion.heading), 0, Math.cos(motion.airHitHeading ?? motion.heading));
+  const speedFactor = clamp(1 - age / scoutPlaneFlakSmokeSeconds, 0.35, 1);
+  motion.root.position.addInPlace(forward.scale((motion.airHitSpeed ?? scoutPlaneCruiseSpeed) * speedFactor * dt));
+  motion.root.position.y -= dt * (0.55 + age * 0.8);
+  motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
+    -0.08 - age * 0.08,
+    motion.airHitHeading ?? motion.heading,
+    (motion.visualBank ?? 0) + Math.sin(now * 5.5) * 0.08 + age * 0.16
+  );
+  updateScoutPlaneVisual(motion, Math.max(4, (motion.airHitSpeed ?? scoutPlaneCruiseSpeed) * speedFactor), now);
+
+  if (!motion.airHitExploded && now >= (motion.nextAirHitSmokeTime ?? now)) {
+    createBurningScoutPlaneTrail(flakSystem, motion.root.position, forward.scale(-1.8));
+    motion.nextAirHitSmokeTime = now + scoutPlaneFlakSmokeIntervalSeconds;
+  }
+
+  if (!motion.airHitExploded && age >= scoutPlaneFlakSmokeSeconds) {
+    motion.airHitExploded = true;
+    createScoutPlaneAirExplosion(flakSystem, motion.root.position.clone());
+    motion.root.setEnabled(false);
+  }
+
+  if (age >= scoutPlaneFlakRespawnSeconds) {
+    motion.state = "sunk";
+  }
 }
 
 function updateEnemyHelmTowardTarget(motion, playerPosition, landZones, time) {
@@ -3299,7 +6465,10 @@ function beginEnemySinking(motion, side, time) {
   motion.rollImpulse = motion.sinkSide * 0.5;
   motion.timers.forEach((timer) => window.clearTimeout(timer));
   motion.timers = [];
-  updateEnemyBowWake(motion.bowWake, 0, time);
+  if (motion.bowWake) {
+    motion.bowWake.strength = 0;
+  }
+  updateEnemyBowWake(motion.bowWake, 0, time, 1 / 60, motion.root.position, motion.heading);
 }
 
 function updateEnemySinking(motion, dt, time) {
@@ -3314,13 +6483,14 @@ function updateEnemySinking(motion, dt, time) {
   const ease = easeInOutCubic(t);
   const roll = motion.sinkSide * (0.12 + ease * 1.45) + motion.rollImpulse;
   const pitch = -ease * 0.28 + Math.sin(time * 1.7) * (1 - t) * 0.025;
-  motion.root.position.y = motion.sinkStartY - ease * 2.35 + Math.sin(time * 3.1) * (1 - t) * 0.035;
+  motion.root.position.y = motion.sinkStartY - ease * torpedoBoatSinkDepth + Math.sin(time * 3.1) * (1 - t) * 0.035;
   motion.root.rotationQuaternion = Quaternion.FromEulerAngles(pitch, motion.heading, roll);
-  updateEnemyBowWake(motion.bowWake, 0, time);
+  updateEnemyBowWake(motion.bowWake, 0, time, dt, motion.root.position, motion.heading);
 
   if (t >= 1) {
     motion.state = "sunk";
     motion.root.setEnabled(false);
+    hideEnemyWake(motion.bowWake);
   }
 
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
@@ -3329,10 +6499,6 @@ function updateEnemySinking(motion, dt, time) {
 }
 
 function getRadarContacts(enemyMotions) {
-  if (serverRadarReady) {
-    return serverRadarContacts;
-  }
-
   return getSnapshotRadarContacts();
 }
 
@@ -3349,8 +6515,10 @@ function getSnapshotRadarContacts() {
       teamId: ship.teamId,
       controlledBy: ship.controlledBy ?? "bot",
       label: createRadarContactLabel(ship),
+      vehicleType: getShipVehicleType(ship),
       position: new Vector3(ship.x, 0.28, ship.z),
       heading: Number.isFinite(ship.heading) ? ship.heading : 0,
+      speed: Number.isFinite(ship.speed) ? ship.speed : 0,
       serverVisible: false
     });
   }
@@ -3359,9 +6527,15 @@ function getSnapshotRadarContacts() {
   return contacts;
 }
 
-function beginPlayerSinking(hitPosition, now) {
+function beginPlayerSinking(hitPosition, now, damageMessage = null) {
   if (playerDamageState !== "active") return;
 
+  sendClientGameEvent("player-sinking-start", {
+    damageMessage: damageMessage ?? "",
+    hitPosition: hitPosition ? summarizeVector(hitPosition) : null,
+    playerServerShipId,
+    pendingPlayerServerShipId: pendingPlayerServerShip?.id ?? ""
+  });
   playerDamageState = "sinking";
   playerSinkStartTime = now;
   playerSinkStartY = boat.root.position.y;
@@ -3371,6 +6545,9 @@ function beginPlayerSinking(hitPosition, now) {
   rudderDegrees = 0;
   turnVelocity *= 0.25;
   speed *= 0.18;
+  if (damageMessage) {
+    showDamageMessage(damageMessage, now, 2.6);
+  }
   updateSinkingWaterOverlay(0);
 }
 
@@ -3380,7 +6557,7 @@ function updatePlayerSinking(playerBoat, now) {
   const ease = easeInOutCubic(t);
   const bob = Math.sin(now * 3.4) * (1 - t) * 0.05;
 
-  playerBoat.root.position.y = playerSinkStartY - ease * 2.25 + bob;
+  playerBoat.root.position.y = playerSinkStartY - ease * torpedoBoatSinkDepth + bob;
   playerBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(
     -ease * 0.32 + Math.sin(now * 1.8) * (1 - t) * 0.025,
     heading,
@@ -3393,7 +6570,73 @@ function updatePlayerSinking(playerBoat, now) {
   }
 }
 
+function beginScoutPlaneFlakHit(hit, now) {
+  if (!scoutPlaneMode || playerDamageState !== "active") return;
+
+  playerDamageState = "air-hit";
+  scoutPlaneFlakHitStartTime = now;
+  scoutPlaneFlakHitExploded = false;
+  nextScoutPlaneFlakSmokeTime = now;
+  scoutPlaneFlakHitHeading = heading;
+  scoutPlaneFlakHitSpeed = Math.max(scoutPlaneMinSpeed, Math.abs(speed) || scoutPlaneCruiseSpeed);
+  heldElevatorDirection = 0;
+  heldRudderDirection = 0;
+  heldFlakDirection = 0;
+  heldFlakPitchDirection = 0;
+  heldFlakFire = false;
+  speed *= 0.18;
+  scoutPlaneTargetSpeed = scoutPlaneMinSpeed;
+  scoutPlaneVerticalSpeed = 0;
+  turnVelocity *= 0.15;
+  ramShake = 0.85;
+  flakHitAlertUntil = now + scoutPlaneFlakRespawnSeconds;
+  planeHitFlashStart = now;
+  planeHitFlashUntil = now + 0.82;
+  document.body.dataset.playerDamageState = "air-hit";
+  document.body.dataset.scoutPlaneFlakHit = hit?.id ?? "";
+  showDamageMessage(createDestroyedByText("Flak", hit?.shipId), now, scoutPlaneFlakRespawnSeconds);
+}
+
+function updateScoutPlaneFlakHitSequence(playerPlane, now, dt) {
+  const age = now - scoutPlaneFlakHitStartTime;
+  const forward = new Vector3(Math.sin(scoutPlaneFlakHitHeading), 0, Math.cos(scoutPlaneFlakHitHeading));
+  const position = playerPlane.root.position.clone();
+  if (!scoutPlaneFlakHitExploded) {
+    const speedFactor = clamp(1 - age / scoutPlaneFlakSmokeSeconds, 0.35, 1);
+    playerPlane.root.position.addInPlace(forward.scale(scoutPlaneFlakHitSpeed * speedFactor * dt));
+    playerPlane.root.position.y -= dt * (0.5 + age * 0.75);
+    playerPlane.root.rotationQuaternion = Quaternion.FromEulerAngles(
+      -0.08 - age * 0.08,
+      scoutPlaneFlakHitHeading,
+      -turnVelocity * 2.8 + Math.sin(now * 5.4) * 0.08 + age * 0.16
+    );
+    updateScoutPlaneVisual(playerPlane, Math.max(4, scoutPlaneFlakHitSpeed * speedFactor), now);
+  }
+
+  if (!scoutPlaneFlakHitExploded && age <= scoutPlaneFlakSmokeSeconds && now >= nextScoutPlaneFlakSmokeTime) {
+    createBurningScoutPlaneTrail(flakSystem, playerPlane.root.position, forward.scale(-1.8));
+    nextScoutPlaneFlakSmokeTime = now + scoutPlaneFlakSmokeIntervalSeconds;
+  }
+
+  if (!scoutPlaneFlakHitExploded && age >= scoutPlaneFlakSmokeSeconds) {
+    scoutPlaneFlakHitExploded = true;
+    createScoutPlaneAirExplosion(flakSystem, playerPlane.root.position.clone());
+    playerPlane.root.setEnabled(false);
+    ramShake = 1;
+  }
+
+  if (age >= scoutPlaneFlakRespawnSeconds) {
+    respawnPlayerBoat(playerPlane);
+  }
+}
+
 function respawnPlayerBoat(playerBoat) {
+  if (scoutPlaneMode) {
+    respawnPlayerScoutPlane(playerBoat);
+    return;
+  }
+
+  resetTransientWeaponVisualsAfterRespawn();
   if (pendingPlayerServerShip) {
     const nextShip = pendingPlayerServerShip;
     pendingPlayerServerShip = null;
@@ -3404,6 +6647,9 @@ function respawnPlayerBoat(playerBoat) {
     updatePlayerTorpedoStock(Number.isFinite(nextShip.torpedoesRemaining) ? nextShip.torpedoesRemaining : null);
     playerDamageState = "active";
     updateSinkingWaterOverlay(0);
+    sendClientGameEvent("player-respawn-server-ship", {
+      ship: summarizeShip(nextShip)
+    });
     return;
   }
 
@@ -3422,6 +6668,57 @@ function respawnPlayerBoat(playerBoat) {
   document.body.dataset.playerShipId = "pending";
   playerBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
   updateSinkingWaterOverlay(0);
+  sendClientGameEvent("player-respawn-pending", {
+    spawn: {
+      x: Number(spawn.position.x.toFixed(2)),
+      z: Number(spawn.position.z.toFixed(2)),
+      heading: Number(spawn.heading.toFixed(4))
+    }
+  });
+}
+
+function respawnPlayerScoutPlane(playerPlane) {
+  resetTransientWeaponVisualsAfterRespawn();
+  playerRespawnIndex = (playerRespawnIndex + 1) % playerRespawnPoints.length;
+  const spawn = playerRespawnPoints[playerRespawnIndex];
+
+  playerPlane.root.setEnabled(true);
+  playerPlane.root.position.set(spawn.position.x, scoutPlaneCruiseAltitude, spawn.position.z);
+  heading = spawn.heading;
+  speed = scoutPlaneCruiseSpeed;
+  scoutPlaneTargetSpeed = scoutPlaneCruiseSpeed;
+  scoutPlaneAltitude = scoutPlaneCruiseAltitude;
+  scoutPlaneVerticalSpeed = 0;
+  scoutPlanePitch = 0;
+  turnVelocity = 0;
+  rudderDegrees = 0;
+  engineOrder = 7;
+  ramShake = 0.72;
+  playerDamageState = "active";
+  playerServerShipId = null;
+  debugTeleportPending = true;
+  document.body.dataset.playerShipId = "pending";
+  document.body.dataset.playerDamageState = "active";
+  document.body.dataset.scoutPlaneFlakHit = "";
+  playerPlane.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
+  updateSinkingWaterOverlay(0);
+}
+
+function resetTransientWeaponVisualsAfterRespawn() {
+  torpedoSystem.active.forEach(disposeTorpedo);
+  torpedoSystem.active = [];
+  torpedoSystem.serverVisuals.forEach(disposeServerTorpedoVisual);
+  torpedoSystem.serverVisuals.clear();
+  torpedoSystem.serverSourceVehicleTypes.clear();
+  bombSystem.serverVisuals.forEach(disposeServerBombVisual);
+  bombSystem.serverVisuals.clear();
+  flakSystem.serverVisuals.forEach(disposeFlakProjectile);
+  flakSystem.serverVisuals.clear();
+  cannonSystem.serverVisuals.forEach(disposeFlakProjectile);
+  cannonSystem.serverVisuals.clear();
+  cannonSystem.active.forEach(disposeFlakProjectile);
+  cannonSystem.active = [];
+  document.body.dataset.weaponVisualsResetAt = time.toFixed(2);
 }
 
 function updateSinkingWaterOverlay(level) {
@@ -3441,35 +6738,81 @@ function getPlayerSinkSide(hitPosition, playerPosition, playerHeading) {
   return right >= 0 ? -1 : 1;
 }
 
-function updateEnemyBowWake(wake, speed, time) {
+function updateEnemyBowWake(wake, speed, time, dt = 1 / 60, sourcePosition = null, sourceHeading = 0) {
   if (!wake) return;
 
-  const strength = clamp(Math.abs(speed) / 8, 0, 1);
-  wake.root.setEnabled(strength > 0.08);
+  const forwardSpeed = Math.max(0, speed);
+  const targetStrength = forwardSpeed <= 0.02
+    ? 0
+    : clamp(0.08 + smoothstep(0, enemyBowWakeFullSpeed, forwardSpeed) * 0.92, 0, 1);
+  const response = targetStrength > wake.strength ? 4.2 : 0.65;
+  wake.strength += (targetStrength - wake.strength) * Math.min(1, dt * response);
+  const wakeIntensity = wake.strength;
+  const wakeLift = wakeIntensity * 0.018;
+  wake.root.setEnabled(forwardSpeed > 0.02 || wakeIntensity > 0.025);
+  if (sourcePosition) {
+    wake.root.position.x = sourcePosition.x;
+    wake.root.position.y = wake.waterlineY;
+    wake.root.position.z = sourcePosition.z;
+  }
+  wake.root.rotationQuaternion = Quaternion.FromEulerAngles(0, sourceHeading, 0);
 
   wake.segments.forEach((segment, index) => {
-    const pulse = 0.88 + Math.sin(time * 3.2 + index * 0.7) * 0.08;
-    const visible = segment.metadata.row <= getVisibleWakeRows(strength);
-    segment.setEnabled(visible);
-    segment.scaling.x = 1.35 + strength * 1.85 + segment.metadata.row * 0.12;
-    segment.scaling.z = (0.82 + strength * 0.62) * pulse;
-    segment.position.y = enemyBowWakeSurfaceY + Math.sin(time * 2.8 + index) * 0.005;
+    const pulse = 0.92 + Math.sin(time * 2.1 + index * 0.7) * 0.05;
+    const kind = segment.metadata?.kind ?? "bow";
+    const row = segment.metadata?.row ?? 1;
+    const visibility = wakeRowVisibility(wakeIntensity, row);
+    segment.setEnabled(visibility > 0.015);
+    segment.visibility = visibility;
+    if (kind === "sternEdge") {
+      segment.scaling.x = 0.32 + wakeIntensity * 0.58 + row * 0.035;
+      segment.scaling.z = (0.42 + wakeIntensity * 0.54) * pulse;
+    } else {
+      segment.scaling.x = 0.38 + wakeIntensity * 1.22 + row * 0.06;
+      segment.scaling.z = (0.42 + wakeIntensity * 0.64) * pulse;
+    }
+    segment.position.y = enemyBowWakeSurfaceY + wakeLift + Math.sin(time * 2.0 + index) * 0.003;
   });
 
   wake.churn.forEach((patch, index) => {
-    const pulse = 0.75 + Math.sin(time * 4.1 + index * 1.7) * 0.16;
-    patch.scaling.x = (0.65 + strength * 1.05) * pulse;
-    patch.scaling.z = 0.55 + strength * 1.2;
-    patch.position.y = enemyBowWakeSurfaceY + Math.sin(time * 3.6 + index) * 0.006;
+    const kind = patch.metadata?.kind ?? "bowChurn";
+    const row = patch.metadata?.row ?? 1;
+    const visibility = wakeRowVisibility(wakeIntensity, row);
+    const pulse = 0.82 + Math.sin(time * 2.6 + index * 1.7) * 0.08;
+    patch.setEnabled(visibility > 0.015);
+    patch.visibility = visibility;
+    if (kind === "sternChurn") {
+      patch.scaling.x = (0.24 + wakeIntensity * 0.86) * pulse;
+      patch.scaling.z = 0.18 + wakeIntensity * 0.5;
+    } else {
+      patch.scaling.x = (0.24 + wakeIntensity * 0.66) * pulse;
+      patch.scaling.z = 0.22 + wakeIntensity * 0.65;
+    }
+    patch.position.y = enemyBowWakeSurfaceY + wakeLift + Math.sin(time * 2.4 + index) * 0.004;
   });
 }
 
-function getVisibleWakeRows(strength) {
-  if (strength >= 0.52) return 5;
-  if (strength >= 0.38) return 4;
-  if (strength >= 0.24) return 3;
-  if (strength >= 0.12) return 2;
-  return 1;
+function hideEnemyWake(wake) {
+  if (!wake) return;
+  wake.strength = 0;
+  wake.root?.setEnabled?.(false);
+  wake.segments?.forEach((segment) => {
+    segment.setEnabled(false);
+    segment.visibility = 0;
+  });
+  wake.churn?.forEach((patch) => {
+    patch.setEnabled(false);
+    patch.visibility = 0;
+  });
+}
+
+function wakeRowVisibility(strength, row) {
+  return clamp(strength * 3.8 - (row - 1) * 0.52, 0, 1);
+}
+
+function getTorpedoBoatTrimPitch(speedValue) {
+  const forwardSpeed = Math.max(0, speedValue);
+  return -smoothstep(torpedoBoatTrimStartSpeed, torpedoBoatTrimFullSpeed, forwardSpeed) * Math.abs(torpedoBoatMaxTrimPitch);
 }
 
 function createTorpedoSystem(scene, materials, parent) {
@@ -3485,6 +6828,7 @@ function createTorpedoSystem(scene, materials, parent) {
     muzzleEffects: [],
     hitEffects: [],
     serverVisuals: new Map(),
+    serverSourceVehicleTypes: new Map(),
     serverImpactIds: new Set(),
     nextTube: 0,
     nextFireTime: 0,
@@ -3492,6 +6836,1958 @@ function createTorpedoSystem(scene, materials, parent) {
     nextId: 1,
     hits: 0
   };
+}
+
+function createBombSystem(scene, materials, parent) {
+  const root = new TransformNode("bombs", scene);
+  root.parent = parent;
+  const sightMarker = createBombSightMarker(scene, materials, root);
+
+  return {
+    root,
+    scene,
+    materials,
+    sightMarker,
+    serverVisuals: new Map(),
+    serverImpactIds: new Set(),
+    hits: 0
+  };
+}
+
+function createBombSightMarker(scene, materials, parent) {
+  const root = new TransformNode("bomb_sight_marker", scene);
+  root.parent = parent;
+  root.setEnabled(false);
+
+  const crossParts = [
+    { part: "upper", width: 0.11, depth: 1 },
+    { part: "lower", width: 0.11, depth: 1 },
+    { part: "left", width: 1, depth: 0.11 },
+    { part: "right", width: 1, depth: 0.11 }
+  ].map((definition) => {
+    const line = MeshBuilder.CreateBox(`bomb_sight_marker_${definition.part}`, {
+      width: definition.width,
+      height: 0.045,
+      depth: definition.depth
+    }, scene);
+    line.parent = root;
+    line.material = materials.beaconGlow;
+    return { mesh: line, part: definition.part };
+  });
+
+  root.metadata = {
+    crossParts
+  };
+
+  return root;
+}
+
+function createFlakSystem(scene, materials, parent) {
+  const root = new TransformNode("flak_projectiles", scene);
+  root.parent = parent;
+
+  return {
+    root,
+    scene,
+    materials,
+    active: [],
+    flashes: [],
+    airHitEffects: [],
+    scheduledHitEffects: [],
+    hitEffectIds: new Set(),
+    impactEffectIds: new Set(),
+    serverVisuals: new Map(),
+    nextFireTime: 0,
+    nextDemoMotionIndex: 0,
+    nextId: 1
+  };
+}
+
+function createCannonSystem(scene, materials, parent) {
+  const root = new TransformNode("cannon_projectiles", scene);
+  root.parent = parent;
+
+  return {
+    root,
+    scene,
+    materials,
+    active: [],
+    flashes: [],
+    airHitEffects: [],
+    serverVisuals: new Map(),
+    nextId: 1
+  };
+}
+
+function firePlayerFlak() {
+  if (!flakViewActive || playerDamageState !== "active" || time < flakSystem.nextFireTime) return;
+  const shot = getPlayerFlakShot();
+  if (!shot) return;
+  if (flakShotWouldHitOwnBoat(shot)) {
+    document.body.dataset.flakFire = "blocked-own-ship";
+    return;
+  }
+
+  flakSystem.nextFireTime = time + flakFireCooldownSeconds;
+  const spreadShot = createSpreadFlakShot(shot, flakSystem.nextId);
+  createFlakProjectile(flakSystem, spreadShot.position, spreadShot.velocity, spreadShot.direction);
+  createFlakMuzzleFlash(flakSystem, shot.muzzle, shot.direction);
+  reportPlayerFlakShot(spreadShot);
+  document.body.dataset.flakFire = "ok";
+  document.body.dataset.flakShots = String(flakSystem.nextId - 1);
+}
+
+function firePlayerCannon() {
+  if (!cannonViewActive || playerDamageState !== "active") return;
+  if (time < nextCannonFireTime) {
+    document.body.dataset.cannonFire = "reloading";
+    document.body.dataset.cannonReload = Math.max(0, nextCannonFireTime - time).toFixed(1);
+    document.body.dataset.cannonReloading = "true";
+    return;
+  }
+
+  const shot = getPlayerCannonShot();
+  if (!shot) return;
+  if (cannonShotWouldHitOwnBoat(shot)) {
+    document.body.dataset.cannonFire = "blocked-own-ship";
+    return;
+  }
+
+  nextCannonFireTime = time + cannonFireCooldownSeconds;
+  triggerCannonBarrelRecoil(boat.bowCannon, time);
+  createCannonProjectile(cannonSystem, shot.position, shot.velocity, shot.direction);
+  createCannonMuzzleBlast(cannonSystem, shot.muzzle, shot.direction);
+  reportPlayerCannonShot(shot);
+  document.body.dataset.cannonFire = "ok";
+  document.body.dataset.cannonShots = String(cannonSystem.nextId - 1);
+  document.body.dataset.cannonReload = cannonFireCooldownSeconds.toFixed(1);
+  document.body.dataset.cannonReloading = "true";
+}
+
+function installScenarioTestHooks() {
+  if (!scenarioTestMode) return;
+
+  window.seaBattleScenarioTest = {
+    setStation(station) {
+      setBattleStation(String(station ?? "bridge"));
+      return stationSnapshot();
+    },
+    async setPlayerNavigationState(state) {
+      if (Number.isFinite(Number(state?.x))) {
+        boat.root.position.x = Number(state.x);
+      }
+      if (Number.isFinite(Number(state?.z))) {
+        boat.root.position.z = Number(state.z);
+      }
+      if (Number.isFinite(Number(state?.y))) {
+        boat.root.position.y = Number(state.y);
+        scoutPlaneAltitude = Number(state.y);
+      }
+      if (Number.isFinite(Number(state?.heading))) {
+        heading = Number(state.heading);
+      }
+      if (Number.isFinite(Number(state?.speed))) {
+        speed = Number(state.speed);
+        scoutPlaneTargetSpeed = Number(state.speed);
+      }
+      if (Number.isFinite(Number(state?.verticalSpeed))) {
+        scoutPlaneVerticalSpeed = Number(state.verticalSpeed);
+      }
+      if (Number.isInteger(state?.engineOrder)) {
+        engineOrder = clamp(state.engineOrder, 0, engineOrders.length - 1);
+      }
+      boat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
+      await sendPlayerState();
+      return {
+        x: boat.root.position.x,
+        z: boat.root.position.z,
+        y: boat.root.position.y,
+        heading,
+        speed,
+        verticalSpeed: scoutPlaneVerticalSpeed,
+        engineOrder
+      };
+    },
+    aimCannonAt(target) {
+      return aimPlayerCannonAtWorldPoint(target);
+    },
+    async fireCannonAt(target) {
+      setBattleStation("cannon");
+      const aim = aimPlayerCannonAtWorldPoint(target);
+      document.body.dataset.cannonFireSync = "";
+      firePlayerCannon();
+      return {
+        aim,
+        station: stationSnapshot(),
+        fire: document.body.dataset.cannonFire ?? ""
+      };
+    },
+    aimFlakAt(target) {
+      return aimPlayerFlakAtWorldPoint(target);
+    },
+    weaponViewAlignment(weapon) {
+      return weaponViewAlignmentSnapshot(weapon);
+    },
+    setEnemyWakeState(shipId, state) {
+      const motion = enemyMotions.find((candidate) => candidate.id === shipId);
+      if (!motion) {
+        throw new Error(`Enemy motion not found: ${shipId}`);
+      }
+      if (Number.isFinite(Number(state?.speed))) {
+        const nextSpeed = Number(state.speed);
+        motion.speed = nextSpeed;
+        motion.serverSpeed = nextSpeed;
+      }
+      if (Number.isInteger(state?.engineOrder)) {
+        motion.engineOrder = clamp(state.engineOrder, 0, engineOrders.length - 1);
+      }
+      motion.isServerControlled = false;
+      motion.wakeTestOverrideUntil = time + 3;
+      return enemyWakeSnapshot(shipId);
+    },
+    setEnemyServerWakeCorrectionState(shipId, state = {}) {
+      const motion = enemyMotions.find((candidate) => candidate.id === shipId);
+      if (!motion) {
+        throw new Error(`Enemy motion not found: ${shipId}`);
+      }
+      const offset = Number.isFinite(Number(state.offset)) ? Number(state.offset) : 18;
+      motion.isServerControlled = true;
+      motion.state = "active";
+      motion.speed = 0;
+      motion.serverSpeed = 0;
+      motion.serverSnapshotTime = time;
+      motion.serverHeading = motion.heading;
+      motion.serverPosition.copyFrom(motion.root.position);
+      motion.root.position.x -= Math.sin(motion.heading) * offset;
+      motion.root.position.z -= Math.cos(motion.heading) * offset;
+      hideEnemyWake(motion.bowWake);
+      return enemyWakeSnapshot(shipId);
+    },
+    enemyWakeSnapshot(shipId) {
+      return enemyWakeSnapshot(shipId);
+    },
+    async fireFlakAt(target) {
+      setBattleStation("flak");
+      const aim = aimPlayerFlakAtWorldPoint(target);
+      document.body.dataset.flakFireSync = "";
+      firePlayerFlak();
+      return {
+        aim,
+        station: stationSnapshot(),
+        fire: document.body.dataset.flakFire ?? ""
+      };
+    },
+    async fireTorpedo() {
+      setBattleStation("bridge");
+      document.body.dataset.fireTorpedoSync = "";
+      const before = await window.seaBattleScenarioTest.state();
+      await requestPlayerTorpedoFire();
+      return {
+        beforeTorpedoes: Array.isArray(before?.torpedoes) ? before.torpedoes.length : null,
+        station: stationSnapshot(),
+        fire: document.body.dataset.fireTorpedoSync ?? ""
+      };
+    },
+    airDropTorpedoVisuals() {
+      return Array.from(torpedoSystem.serverVisuals.values())
+        .filter((visual) => visual.launchMode === "air-drop")
+        .map((visual) => ({
+          id: visual.id,
+          x: Number(visual.root.position.x.toFixed(3)),
+          y: Number(visual.root.position.y.toFixed(3)),
+          z: Number(visual.root.position.z.toFixed(3)),
+          startX: Number(visual.launchStart.x.toFixed(3)),
+          startY: Number(visual.launchStart.y.toFixed(3)),
+          startZ: Number(visual.launchStart.z.toFixed(3)),
+          serverX: Number(visual.serverPosition.x.toFixed(3)),
+          serverZ: Number(visual.serverPosition.z.toFixed(3)),
+          runDistance: Number(visual.runDistance.toFixed(3)),
+          waterEntryJump: Number.isFinite(visual.airDropWaterEntryJump)
+            ? Number(visual.airDropWaterEntryJump.toFixed(3))
+            : null,
+          runDistanceAtSplash: Number.isFinite(visual.airDropRunDistanceAtSplash)
+            ? Number(visual.airDropRunDistanceAtSplash.toFixed(3))
+            : null,
+          surfaced: visual.airDropSurfaced !== false,
+          splashCreated: Boolean(visual.airDropSplashCreated)
+        }));
+    },
+    async state() {
+      const response = await fetch(getGameStateEndpoint(), { cache: "no-store" });
+      return response.json();
+    }
+  };
+  document.body.dataset.scenarioTest = "ready";
+}
+
+function enemyWakeSnapshot(shipId) {
+  const motion = enemyMotions.find((candidate) => candidate.id === shipId);
+  if (!motion?.bowWake) return null;
+  const wake = motion.bowWake;
+  const segments = wake.segments.map((segment) => ({
+    kind: segment.metadata?.kind ?? "bow",
+    row: segment.metadata?.row ?? 1,
+    enabled: segment.isEnabled(),
+    visibility: Number((segment.visibility ?? 1).toFixed(3)),
+    scaleX: Number(segment.scaling.x.toFixed(3)),
+    scaleZ: Number(segment.scaling.z.toFixed(3))
+  }));
+  const churn = wake.churn.map((patch) => ({
+    kind: patch.metadata?.kind ?? "bowChurn",
+    row: patch.metadata?.row ?? 1,
+    enabled: patch.isEnabled(),
+    visibility: Number((patch.visibility ?? 1).toFixed(3)),
+    scaleX: Number(patch.scaling.x.toFixed(3)),
+    scaleZ: Number(patch.scaling.z.toFixed(3))
+  }));
+  return {
+    shipId,
+    speed: Number(motion.speed.toFixed(3)),
+    serverSpeed: Number((motion.serverSpeed ?? 0).toFixed(3)),
+    engineOrder: motion.engineOrder,
+    wakeEnabled: wake.root.isEnabled(),
+    strength: Number(wake.strength.toFixed(3)),
+    bowVisibility: averageWakeVisibility(segments.filter((segment) => segment.kind === "bow")),
+    sternEdgeVisibility: averageWakeVisibility(segments.filter((segment) => segment.kind === "sternEdge")),
+    sternChurnVisibility: averageWakeVisibility(churn.filter((patch) => patch.kind === "sternChurn"))
+  };
+}
+
+function averageWakeVisibility(parts) {
+  if (parts.length === 0) return 0;
+  return Number((parts.reduce((sum, part) => sum + (part.enabled ? part.visibility : 0), 0) / parts.length).toFixed(3));
+}
+
+function stationSnapshot() {
+  return {
+    flak: flakViewActive,
+    cannon: cannonViewActive,
+    torpedo: torpedoScopeActive
+  };
+}
+
+function weaponViewAlignmentSnapshot(weapon) {
+  const normalizedWeapon = String(weapon ?? "").toLowerCase();
+  if (normalizedWeapon === "flak") {
+    setBattleStation("flak");
+    return weaponViewAlignmentFromShot("flak", getPlayerFlakShot());
+  }
+  if (normalizedWeapon === "cannon") {
+    setBattleStation("cannon");
+    return weaponViewAlignmentFromShot("cannon", getPlayerCannonShot());
+  }
+  throw new Error(`Unknown weapon view alignment: ${weapon}`);
+}
+
+function weaponViewAlignmentFromShot(weapon, shot) {
+  if (!shot) return null;
+  const setup = getPlayerCameraSetup(getForwardVector(heading));
+  const cameraDirection = setup.target.subtract(setup.position).normalize();
+  const shotDirection = shot.direction.normalize();
+  const directionDot = clamp(Vector3.Dot(cameraDirection, shotDirection), -1, 1);
+  const muzzleDelta = shot.muzzle.subtract(setup.position);
+  const visibleMuzzle = visibleWeaponMuzzle(weapon);
+  return {
+    directionAngle: Math.acos(directionDot),
+    muzzleAhead: Vector3.Dot(muzzleDelta, cameraDirection),
+    muzzleDistanceFromSightLine: distancePointToRay(shot.muzzle, setup.position, cameraDirection),
+    projectileStartDistance: Vector3.Distance(shot.position, shot.muzzle),
+    visibleProjectileStartDistance: visibleMuzzle ? Vector3.Distance(visibleMuzzle, shot.position) : null,
+    visibleMuzzleDistance: visibleMuzzle ? Vector3.Distance(visibleMuzzle, shot.muzzle) : null,
+    camera: vectorSnapshot(setup.position),
+    target: vectorSnapshot(setup.target),
+    muzzle: vectorSnapshot(shot.muzzle),
+    visibleMuzzle: visibleMuzzle ? vectorSnapshot(visibleMuzzle) : null,
+    shotPosition: vectorSnapshot(shot.position)
+  };
+}
+
+function visibleWeaponMuzzle(weapon) {
+  if (weapon === "flak") {
+    return boat.sternFlak?.muzzle?.getAbsolutePosition?.() ?? null;
+  }
+  if (weapon === "cannon") {
+    const cannon = boat.bowCannon;
+    const elevationRoot = cannon?.elevationRoot;
+    if (!elevationRoot) return null;
+    const worldMatrix = elevationRoot.computeWorldMatrix(true);
+    return Vector3.TransformCoordinates(new Vector3(0, 0, cannon.muzzleZ ?? 0.52), worldMatrix);
+  }
+  return null;
+}
+
+function vectorSnapshot(vector) {
+  return { x: vector.x, y: vector.y, z: vector.z };
+}
+
+function aimPlayerCannonAtWorldPoint(target) {
+  if (!boat?.bowCannon?.elevationRoot) {
+    throw new Error("Player cannon is not available");
+  }
+  const worldTarget = new Vector3(
+    Number(target?.x ?? 0),
+    Number(target?.y ?? 0),
+    Number(target?.z ?? 0)
+  );
+  if (![worldTarget.x, worldTarget.y, worldTarget.z].every(Number.isFinite)) {
+    throw new Error("Cannon target must contain finite x/y/z values");
+  }
+
+  for (let correction = 0; correction < 3; correction += 1) {
+    const localTarget = worldToLocalShipPointWithoutTilt(worldTarget);
+    const desiredLocalYaw = Math.atan2(localTarget.x - boat.bowCannon.mount.position.x, localTarget.z - boat.bowCannon.mount.position.z);
+    cannonYaw = clamp(desiredLocalYaw, -cannonYawLimit, cannonYawLimit);
+    updatePlayerCannonMount();
+
+    cannonPitch = bestCannonPitchForWorldPoint(worldTarget);
+    updatePlayerCannonMount();
+  }
+
+  const shot = getPlayerCannonShot();
+  const miss = shot?.velocity
+    ? distancePointToProjectileArc(worldTarget, shot.position, shot.velocity, cannonProjectileGravity)
+    : null;
+  const result = {
+    target: { x: worldTarget.x, y: worldTarget.y, z: worldTarget.z },
+    yaw: cannonYaw,
+    pitch: cannonPitch,
+    miss: Number.isFinite(miss) ? miss : null,
+    shot: shot
+      ? {
+        position: { x: shot.position.x, y: shot.position.y, z: shot.position.z },
+        muzzle: { x: shot.muzzle.x, y: shot.muzzle.y, z: shot.muzzle.z },
+        direction: { x: shot.direction.x, y: shot.direction.y, z: shot.direction.z }
+      }
+      : null
+  };
+  document.body.dataset.scenarioCannonAim = JSON.stringify(result);
+  return result;
+}
+
+function bestCannonPitchForWorldPoint(worldTarget) {
+  let low = cannonMinPitch;
+  let high = cannonMaxPitch;
+  let bestPitch = cannonPitch;
+  let bestError = Number.POSITIVE_INFINITY;
+
+  for (let step = 0; step < 22; step += 1) {
+    const mid = (low + high) / 2;
+    cannonPitch = mid;
+    updatePlayerCannonMount();
+
+    const shot = getPlayerCannonShot();
+    const signedError = shot ? signedProjectileVerticalMiss(worldTarget, shot.position, shot.velocity, cannonProjectileGravity) : 0;
+    const absError = Math.abs(signedError);
+    if (absError < bestError) {
+      bestError = absError;
+      bestPitch = mid;
+    }
+
+    if (signedError > 0) {
+      high = mid;
+    } else {
+      low = mid;
+    }
+  }
+  return clamp(bestPitch, cannonMinPitch, cannonMaxPitch);
+}
+
+function distancePointToRay(point, origin, direction) {
+  const toPoint = point.subtract(origin);
+  const along = Math.max(0, Vector3.Dot(toPoint, direction));
+  const closest = origin.add(direction.scale(along));
+  return Vector3.Distance(point, closest);
+}
+
+function signedRayVerticalMiss(point, origin, direction) {
+  const toPoint = point.subtract(origin);
+  const along = Math.max(0, Vector3.Dot(toPoint, direction));
+  const closest = origin.add(direction.scale(along));
+  return closest.y - point.y;
+}
+
+function projectileTimeClosestToHorizontalPoint(point, origin, velocity) {
+  const dx = point.x - origin.x;
+  const dz = point.z - origin.z;
+  const horizontalSpeedSq = velocity.x * velocity.x + velocity.z * velocity.z;
+  if (horizontalSpeedSq <= 0.000001) return 0;
+  return Math.max(0, (dx * velocity.x + dz * velocity.z) / horizontalSpeedSq);
+}
+
+function signedProjectileVerticalMiss(point, origin, velocity, gravity) {
+  const t = projectileTimeClosestToHorizontalPoint(point, origin, velocity);
+  const y = origin.y + velocity.y * t - 0.5 * gravity * t * t;
+  return y - point.y;
+}
+
+function distancePointToProjectileArc(point, origin, velocity, gravity) {
+  const t = projectileTimeClosestToHorizontalPoint(point, origin, velocity);
+  const closest = new Vector3(
+    origin.x + velocity.x * t,
+    origin.y + velocity.y * t - 0.5 * gravity * t * t,
+    origin.z + velocity.z * t
+  );
+  return Vector3.Distance(point, closest);
+}
+
+function getPlayerCannonShot() {
+  const shot = getCannonShotFromModel(boat.bowCannon, heading, speed);
+  return shot
+    ? { ...shot, weaponYaw: cannonYaw, weaponPitch: cannonPitch }
+    : null;
+}
+
+function aimPlayerFlakAtWorldPoint(target) {
+  const mount = boat?.sternFlak?.mount;
+  const elevationRoot = boat?.sternFlak?.elevationRoot;
+  if (!mount || !elevationRoot || !mount.parent) {
+    throw new Error("Player flak is not available");
+  }
+  const worldTarget = new Vector3(
+    Number(target?.x ?? 0),
+    Number(target?.y ?? 0),
+    Number(target?.z ?? 0)
+  );
+  if (![worldTarget.x, worldTarget.y, worldTarget.z].every(Number.isFinite)) {
+    throw new Error("Flak target must contain finite x/y/z values");
+  }
+
+  const localTarget = worldToLocalShipPointWithoutTilt(worldTarget).subtract(mount.position);
+  flakYaw = normalizeAngle(Math.atan2(localTarget.x, localTarget.z));
+  const horizontalDistance = Math.hypot(localTarget.x, localTarget.z);
+  flakPitch = clamp(
+    Math.atan2(localTarget.y - elevationRoot.position.y, horizontalDistance),
+    flakMinPitch,
+    flakMaxPitch
+  );
+  updatePlayerFlakMount();
+  flakPitch = bestFlakPitchForWorldPoint(worldTarget);
+  updatePlayerFlakMount();
+
+  const shot = getPlayerFlakShot();
+  const miss = shot?.velocity
+    ? distancePointToProjectileArc(worldTarget, shot.position, shot.velocity, flakProjectileGravity)
+    : null;
+  const result = {
+    target: { x: worldTarget.x, y: worldTarget.y, z: worldTarget.z },
+    yaw: flakYaw,
+    pitch: flakPitch,
+    miss: Number.isFinite(miss) ? miss : null,
+    shot: shot
+      ? {
+        position: { x: shot.position.x, y: shot.position.y, z: shot.position.z },
+        muzzle: { x: shot.muzzle.x, y: shot.muzzle.y, z: shot.muzzle.z },
+        direction: { x: shot.direction.x, y: shot.direction.y, z: shot.direction.z }
+      }
+      : null
+  };
+  document.body.dataset.scenarioFlakAim = JSON.stringify(result);
+  return result;
+}
+
+function bestFlakPitchForWorldPoint(worldTarget) {
+  let low = flakMinPitch;
+  let high = flakMaxPitch;
+  let bestPitch = flakPitch;
+  let bestError = Number.POSITIVE_INFINITY;
+
+  for (let step = 0; step < 22; step += 1) {
+    const mid = (low + high) / 2;
+    flakPitch = mid;
+    updatePlayerFlakMount();
+
+    const shot = getPlayerFlakShot();
+    const signedError = shot ? signedProjectileVerticalMiss(worldTarget, shot.position, shot.velocity, flakProjectileGravity) : 0;
+    const absError = Math.abs(signedError);
+    if (absError < bestError) {
+      bestError = absError;
+      bestPitch = mid;
+    }
+
+    if (signedError > 0) {
+      high = mid;
+    } else {
+      low = mid;
+    }
+  }
+  return clamp(bestPitch, flakMinPitch, flakMaxPitch);
+}
+
+function getCannonShotFromModel(cannon, baseHeading = 0, baseSpeed = 0) {
+  const elevationRoot = cannon?.elevationRoot;
+  if (!elevationRoot) return null;
+
+  const worldMatrix = elevationRoot.computeWorldMatrix(true);
+  const muzzleZ = cannon.muzzleZ ?? 0.52;
+  const barrelY = 0;
+  const muzzle = Vector3.TransformCoordinates(new Vector3(0, barrelY, muzzleZ), worldMatrix);
+  const aimTarget = Vector3.TransformCoordinates(new Vector3(0, barrelY, 80), worldMatrix);
+  const direction = aimTarget.subtract(muzzle).normalize();
+
+  return {
+    position: muzzle.add(direction.scale(0.12)),
+    muzzle,
+    direction,
+    velocity: direction.scale(cannonProjectileSpeed).add(getForwardVector(baseHeading).scale(baseSpeed))
+  };
+}
+
+function triggerCannonBarrelRecoil(cannon, now) {
+  if (!cannon?.barrel) return;
+  cannon.recoilStart = now;
+}
+
+function updateCannonBarrelRecoil(cannon, now) {
+  if (!cannon?.barrel || !Number.isFinite(cannon.barrelBaseZ)) return;
+  if (!Number.isFinite(cannon.recoilStart)) {
+    cannon.barrel.position.z = cannon.barrelBaseZ;
+    return;
+  }
+
+  const t = (now - cannon.recoilStart) / cannonBarrelRecoilDuration;
+  if (t >= 1) {
+    cannon.recoilStart = null;
+    cannon.barrel.position.z = cannon.barrelBaseZ;
+    return;
+  }
+
+  const recoil = t < 0.24
+    ? t / 0.24
+    : Math.pow(1 - (t - 0.24) / 0.76, 2);
+  cannon.barrel.position.z = cannon.barrelBaseZ - cannonBarrelRecoilDistance * recoil;
+}
+
+function cannonShotWouldHitOwnBoat(shot) {
+  if (!shot?.position || !shot?.direction || !boat?.root) return true;
+  for (let distance = 0.65; distance <= 7.5; distance += 0.85) {
+    const worldPoint = shot.position.add(shot.direction.scale(distance));
+    const localPoint = worldToLocalShipPointWithoutTilt(worldPoint);
+    if (ownBoatFlakHitArea(localPoint) === "critical") {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function reportPlayerCannonShot(shot) {
+  if (!playerServerShipId || !playerId || !playerTeamId || !shot) return;
+  try {
+    const response = await fetch(getFireCannonEndpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        playerId,
+        teamId: playerTeamId,
+        shipId: playerServerShipId,
+        x: shot.position.x,
+        y: shot.position.y,
+        z: shot.position.z,
+        vx: shot.velocity.x,
+        vy: shot.velocity.y,
+        vz: shot.velocity.z,
+        weaponYaw: shot.weaponYaw ?? cannonYaw,
+        weaponPitch: shot.weaponPitch ?? cannonPitch
+      })
+    });
+    if (response.status === 403) {
+      expireActiveLogin("fire-cannon-403");
+      return;
+    }
+    document.body.dataset.cannonFireSync = response.ok ? "ok" : `http-${response.status}`;
+  } catch (error) {
+    document.body.dataset.cannonFireSync = "error";
+    document.body.dataset.cannonFireSyncError = error.message;
+  }
+}
+
+async function reportPlayerFlakShot(shot) {
+  if (!playerServerShipId || !playerId || !playerTeamId || !shot) return;
+  try {
+    const response = await fetch(getFireFlakEndpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        playerId,
+        teamId: playerTeamId,
+        shipId: playerServerShipId,
+        x: shot.position.x,
+        y: shot.position.y,
+        z: shot.position.z,
+        vx: shot.velocity.x,
+        vy: shot.velocity.y,
+        vz: shot.velocity.z,
+        weaponYaw: shot.weaponYaw ?? flakYaw,
+        weaponPitch: shot.weaponPitch ?? flakPitch
+      })
+    });
+    if (response.status === 403) {
+      expireActiveLogin("fire-flak-403");
+      return;
+    }
+    document.body.dataset.flakFireSync = response.ok ? "ok" : `http-${response.status}`;
+  } catch (error) {
+    document.body.dataset.flakFireSync = "error";
+    document.body.dataset.flakFireSyncError = error.message;
+  }
+}
+
+async function reportLocalPlaneHit(hit, weaponType) {
+  if (!playerServerShipId || !playerId || !playerTeamId || !hit?.motion || !hit?.position) return;
+  const key = hit.reportId ?? `${weaponType}:${hit.motion.id}:${Math.round(time * 1000)}`;
+  if (reportedLocalPlaneHitIds.has(key)) return;
+  reportedLocalPlaneHitIds.add(key);
+  if (reportedLocalPlaneHitIds.size > 40) {
+    reportedLocalPlaneHitIds = new Set(Array.from(reportedLocalPlaneHitIds).slice(-24));
+  }
+  try {
+    const response = await fetch(getReportPlaneHitEndpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        playerId,
+        teamId: playerTeamId,
+        shipId: playerServerShipId,
+        targetShipId: hit.motion.id,
+        weaponType,
+        x: hit.position.x,
+        y: hit.position.y,
+        z: hit.position.z
+      })
+    });
+    if (response.status === 403) {
+      expireActiveLogin("report-plane-hit-403");
+      return;
+    }
+    document.body.dataset.localPlaneHitSync = response.ok ? "ok" : `http-${response.status}`;
+  } catch (error) {
+    document.body.dataset.localPlaneHitSync = "error";
+    document.body.dataset.localPlaneHitSyncError = error.message;
+  }
+}
+
+function getPlayerFlakShot() {
+  const shot = getFlakShotFromElevationRoot(
+    boat.sternFlak?.elevationRoot,
+    playerSternFlakScale,
+    null,
+    getForwardVector(heading).scale(speed)
+  );
+  return shot
+    ? { ...shot, weaponYaw: flakYaw, weaponPitch: flakPitch }
+    : null;
+}
+
+function flakShotWouldHitOwnBoat(shot) {
+  if (!shot?.position || !shot?.direction || !boat?.root) return true;
+  for (let distance = 0.35; distance <= 8.0; distance += 1.5) {
+    const worldPoint = shot.position.add(shot.direction.scale(distance));
+    const localPoint = worldToLocalShipPointWithoutTilt(worldPoint);
+    if (ownBoatFlakHitArea(localPoint) !== "miss") {
+      return true;
+    }
+  }
+  return false;
+}
+
+function ownBoatFlakHitArea(point) {
+  const absRight = Math.abs(point.x);
+  if (point.y >= 0.72 && point.y <= 1.72 && point.z >= 0.32 && point.z <= 1.24 && absRight <= 0.62) {
+    return "critical";
+  }
+  if (point.y >= 0.78 && point.y <= 1.92 && point.z >= -1.5 && point.z <= 0.24 && absRight <= 0.26) {
+    return "critical";
+  }
+  const deckClearance = getTorpedoBoatDeckY(point.z) + 0.025;
+  if (point.y >= 0.1 && point.y <= deckClearance && isForwardInsideTorpedoBoatHull(point.z, 0.18) && absRight <= getTorpedoBoatHullTopHalfWidthAt(point.z) + 0.18) {
+    return "surface";
+  }
+  return "miss";
+}
+
+function isForwardInsideTorpedoBoatHull(forward, margin = 0) {
+  const sections = torpedoBoatHullSections();
+  return forward >= sections[0].z - margin && forward <= sections[sections.length - 1].z + margin;
+}
+
+function getTorpedoBoatHullTopHalfWidthAt(forward) {
+  const sections = torpedoBoatHullSections().map((section) => ({
+    z: section.z,
+    halfWidth: section.topWidth * 0.5
+  }));
+  if (forward <= sections[0].z) return sections[0].halfWidth;
+  for (let index = 0; index < sections.length - 1; index += 1) {
+    const current = sections[index];
+    const next = sections[index + 1];
+    if (forward <= next.z) {
+      const t = (forward - current.z) / (next.z - current.z);
+      return current.halfWidth + (next.halfWidth - current.halfWidth) * t;
+    }
+  }
+  return sections[sections.length - 1].halfWidth;
+}
+
+function getFlakShotFromElevationRoot(elevationRoot, scale, target, baseVelocity) {
+  if (!elevationRoot) return null;
+
+  const worldMatrix = elevationRoot.computeWorldMatrix(true);
+  const muzzleZ = (flakBarrelCenterZ + flakBarrelLength * 0.5) * scale;
+  const barrelY = 0;
+  const sightY = flakSightYOffsetFactor * scale;
+  const muzzle = Vector3.TransformCoordinates(new Vector3(0, barrelY, muzzleZ), worldMatrix);
+  const sightOrigin = Vector3.TransformCoordinates(new Vector3(0, sightY, flakEyeZFactor * scale), worldMatrix);
+  const sightTarget = target ?? Vector3.TransformCoordinates(new Vector3(0, sightY, flakSightTargetZ), worldMatrix);
+  const direction = sightTarget.subtract(target ? muzzle : sightOrigin).normalize();
+
+  return {
+    position: muzzle.add(direction.scale(0.08)),
+    muzzle,
+    direction,
+    velocity: direction.scale(flakProjectileSpeed).add(baseVelocity ?? Vector3.Zero())
+  };
+}
+
+function createSpreadFlakShot(shot, seed) {
+  const sideSpread = (stableUnitNoise(seed * 2 + 11) - 0.5) * 0.022;
+  const verticalSpread = 0;
+  const velocity = spreadFlakVelocity(shot.velocity, sideSpread, verticalSpread);
+  const direction = velocity.lengthSquared() > 0.0001 ? velocity.normalizeToNew() : shot.direction.clone();
+  return {
+    ...shot,
+    direction,
+    velocity
+  };
+}
+
+function stableUnitNoise(seed) {
+  const value = Math.sin(seed * 12.9898) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+function spreadFlakVelocity(velocity, sideSpread, verticalSpread) {
+  const speed = velocity.length();
+  if (speed <= 0.001 || (sideSpread === 0 && verticalSpread === 0)) {
+    return velocity.clone();
+  }
+
+  const direction = velocity.scale(1 / speed);
+  let right = new Vector3(direction.z, 0, -direction.x);
+  if (right.lengthSquared() <= 0.0001) {
+    right = new Vector3(1, 0, 0);
+  } else {
+    right.normalize();
+  }
+
+  return direction
+    .add(right.scale(sideSpread))
+    .add(new Vector3(0, verticalSpread, 0))
+    .normalize()
+    .scale(speed);
+}
+
+function createFlakProjectile(system, position, velocity, direction, options = {}) {
+  const id = system.nextId;
+  system.nextId += 1;
+
+  const root = new TransformNode(`flak_shell_${id}`, system.scene);
+  root.parent = system.root;
+  root.position.copyFrom(position);
+
+  const core = MeshBuilder.CreateSphere(`${root.name}_core`, {
+    diameter: 0.2 * shipGunVisualScale,
+    segments: 10
+  }, system.scene);
+  core.parent = root;
+  core.material = system.materials.flakTracer;
+
+  const trail = [];
+  const trailSegments = options.trailSegments ?? 1;
+  for (let i = 0; i < trailSegments; i += 1) {
+    const segment = MeshBuilder.CreateSphere(`${root.name}_trail_${i}`, {
+      diameter: (0.17 - i * 0.018) * shipGunVisualScale,
+      segments: 8
+    }, system.scene);
+    segment.parent = system.root;
+    segment.material = system.materials.flakTracerTrail;
+    segment.position.copyFrom(position.add(direction.scale((-0.16 - i * 0.22) * shipGunVisualScale)));
+    trail.push(segment);
+  }
+
+  const light = new PointLight(`${root.name}_light`, position, system.scene);
+  light.diffuse = new Color3(0.96, 0.98, 1.0);
+  light.specular = new Color3(0.9, 0.96, 1.0);
+  light.intensity = 1.25;
+  light.range = 32 * Math.sqrt(shipGunVisualScale);
+
+  system.active.push({
+    id,
+    weaponType: "flak",
+    root,
+    core,
+    trail,
+    light,
+    position: position.clone(),
+    previousPosition: position.subtract(direction.scale(0.55)),
+    velocity,
+    age: 0,
+    lifetime: flakProjectileLifetime,
+    direction: direction.clone(),
+    samplePositions: Array.from({ length: trailSegments + 1 }, (_, index) => position.add(direction.scale(-0.16 - index * 0.22)))
+  });
+  return system.active[system.active.length - 1];
+}
+
+function createCannonProjectile(system, position, velocity, direction) {
+  const id = system.nextId;
+  system.nextId += 1;
+
+  const root = new TransformNode(`cannon_shell_${id}`, system.scene);
+  root.parent = system.root;
+  root.position.copyFrom(position);
+
+  const core = MeshBuilder.CreateSphere(`${root.name}_core`, {
+    diameter: 0.68 * shipGunVisualScale,
+    segments: 12
+  }, system.scene);
+  core.parent = root;
+  core.material = system.materials.cannonTracer ?? system.materials.flakTracer;
+
+  const trail = [];
+  for (let i = 0; i < 4; i += 1) {
+    const segment = MeshBuilder.CreateSphere(`${root.name}_trail_${i}`, {
+      diameter: (0.48 - i * 0.06) * shipGunVisualScale,
+      segments: 8
+    }, system.scene);
+    segment.parent = system.root;
+    segment.material = system.materials.cannonTracerTrail ?? system.materials.flakTracerTrail;
+    segment.position.copyFrom(position.add(direction.scale((-0.28 - i * 0.42) * shipGunVisualScale)));
+    trail.push(segment);
+  }
+
+  const light = new PointLight(`${root.name}_light`, position, system.scene);
+  light.diffuse = new Color3(0.96, 0.98, 1.0);
+  light.specular = new Color3(0.9, 0.96, 1.0);
+  light.intensity = 3.15;
+  light.range = 66 * Math.sqrt(shipGunVisualScale);
+
+  system.active.push({
+    id,
+    weaponType: "cannon",
+    root,
+    core,
+    trail,
+    light,
+    position: position.clone(),
+    previousPosition: position.subtract(direction.scale(0.65)),
+    velocity,
+    age: 0,
+    lifetime: cannonProjectileLifetime,
+    direction: direction.clone(),
+    samplePositions: Array.from({ length: 5 }, (_, index) => position.add(direction.scale(-0.28 - index * 0.42)))
+  });
+  return system.active[system.active.length - 1];
+}
+
+function createFlakMuzzleFlash(system, position, direction) {
+  const flash = MeshBuilder.CreateSphere(`flak_muzzle_flash_${system.nextId}`, {
+    diameter: 0.24 * shipGunVisualScale,
+    segments: 10
+  }, system.scene);
+  flash.parent = system.root;
+  flash.material = system.materials.flakFlash;
+  flash.position.copyFrom(position.add(direction.scale(0.08 * shipGunVisualScale)));
+
+  const light = new PointLight(`${flash.name}_light`, flash.position.clone(), system.scene);
+  light.diffuse = new Color3(1.0, 0.76, 0.42);
+  light.specular = new Color3(1.0, 0.78, 0.5);
+  light.intensity = 2.0;
+  light.range = 28 * Math.sqrt(shipGunVisualScale);
+
+  system.flashes.push({
+    mesh: flash,
+    light,
+    origin: flash.position.clone(),
+    age: 0,
+    lifetime: 0.16,
+    lightIntensity: 2.0,
+    direction: direction.clone()
+  });
+}
+
+function createCannonMuzzleBlast(system, position, direction) {
+  const flashId = system.nextId;
+  const flash = MeshBuilder.CreateSphere(`cannon_muzzle_flash_${flashId}`, {
+    diameter: 0.68 * shipGunVisualScale,
+    segments: 12
+  }, system.scene);
+  flash.parent = system.root;
+  flash.material = system.materials.flakFlash;
+  flash.position.copyFrom(position.add(direction.scale(0.18 * shipGunVisualScale)));
+  flash.isPickable = false;
+
+  const light = new PointLight(`${flash.name}_light`, flash.position.clone(), system.scene);
+  light.diffuse = new Color3(1.0, 0.78, 0.42);
+  light.specular = new Color3(1.0, 0.86, 0.62);
+  light.intensity = 4.4;
+  light.range = 58 * Math.sqrt(shipGunVisualScale);
+
+  system.flashes.push({
+    mesh: flash,
+    light,
+    origin: flash.position.clone(),
+    age: 0,
+    lifetime: 0.24,
+    lightIntensity: 4.4,
+    direction: direction.clone()
+  });
+
+  for (let index = 0; index < 4; index += 1) {
+    const puff = MeshBuilder.CreateSphere(`cannon_muzzle_smoke_${flashId}_${index}`, {
+      diameter: (0.34 + index * 0.055) * shipGunVisualScale,
+      segments: 10
+    }, system.scene);
+    puff.parent = system.root;
+    puff.material = system.materials.volcanicSmoke;
+    puff.position.copyFrom(position.add(direction.scale((0.12 + index * 0.12) * shipGunVisualScale)).add(new Vector3(
+      (stableUnitNoise(flashId + index * 13) - 0.5) * 0.18 * shipGunVisualScale,
+      (stableUnitNoise(flashId + index * 17) - 0.5) * 0.12 * shipGunVisualScale,
+      (stableUnitNoise(flashId + index * 19) - 0.5) * 0.18 * shipGunVisualScale
+    )));
+    puff.isPickable = false;
+    system.airHitEffects.push({
+      mesh: puff,
+      age: 0,
+      lifetime: 0.82 + index * 0.07,
+      origin: puff.position.clone(),
+      velocity: direction.scale((0.62 + index * 0.14) * shipGunVisualScale).add(new Vector3(0, (0.2 + index * 0.035) * shipGunVisualScale, 0)),
+      gravity: 0.02,
+      baseScale: new Vector3(0.34, 0.28, 0.34).scale(shipGunVisualScale),
+      grow: new Vector3(1.18, 0.82, 1.18).scale(shipGunVisualScale),
+      alpha: 0.26
+    });
+  }
+}
+
+function getLocalProjectileScoutPlaneHit(projectile, weaponType) {
+  if (!projectile?.position || !projectile?.previousPosition) return null;
+  const candidates = enemyMotions.filter((motion) => (
+    isScoutPlaneMotion(motion) &&
+    motion.state === "active" &&
+    motion.serverState === "active" &&
+    motion.root?.isEnabled?.() &&
+    distanceToProjectileSegment2D(projectile.previousPosition, projectile.position, motion.root.position) <= 10.0
+  ));
+  if (!candidates.length) return null;
+
+  const movement = projectile.position.subtract(projectile.previousPosition);
+  const segmentLength = movement.length();
+  const samples = Math.max(1, Math.ceil(segmentLength / 1.6));
+  for (const motion of candidates) {
+    for (let index = 0; index <= samples; index += 1) {
+      const t = index / samples;
+      const position = projectile.previousPosition.add(movement.scale(t));
+      if (pointHitsScoutPlaneMotion(position, motion)) {
+        return {
+          motion,
+          position,
+          reportId: `${weaponType}:${projectile.id}:${motion.id}`
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function distanceToProjectileSegment2D(start, end, point) {
+  const dx = end.x - start.x;
+  const dz = end.z - start.z;
+  const lengthSquared = dx * dx + dz * dz;
+  const t = lengthSquared <= 0.0001
+    ? 0
+    : clamp(((point.x - start.x) * dx + (point.z - start.z) * dz) / lengthSquared, 0, 1);
+  const x = start.x + dx * t;
+  const z = start.z + dz * t;
+  return Math.hypot(point.x - x, point.z - z);
+}
+
+function pointHitsScoutPlaneMotion(position, motion) {
+  const planePosition = motion.root.position;
+  const dx = position.x - planePosition.x;
+  const dz = position.z - planePosition.z;
+  const right = (dx * Math.cos(motion.heading) - dz * Math.sin(motion.heading)) / scoutPlaneVisualScale;
+  const forward = (dx * Math.sin(motion.heading) + dz * Math.cos(motion.heading)) / scoutPlaneVisualScale;
+  const vertical = (position.y - planePosition.y) / scoutPlaneVisualScale;
+  const bank = clamp(motion.visualBank ?? 0, -0.72, 0.72);
+  const cosBank = Math.cos(bank);
+  const sinBank = Math.sin(bank);
+  const modelRight = right * cosBank + vertical * sinBank;
+  const modelVertical = -right * sinBank + vertical * cosBank;
+  return pointHitsScoutPlanePart(
+    forward,
+    modelRight,
+    modelVertical,
+    -scoutPlaneHitHalfLength,
+    scoutPlaneHitHalfLength,
+    scoutPlaneHitFuselageHalfWidth
+  ) || pointHitsScoutPlanePart(
+    forward,
+    modelRight,
+    modelVertical,
+    scoutPlaneHitWingForwardMin,
+    scoutPlaneHitWingForwardMax,
+    scoutPlaneHitWingHalfWidth
+  ) || pointHitsScoutPlanePart(
+    forward,
+    modelRight,
+    modelVertical,
+    scoutPlaneHitTailForwardMin,
+    scoutPlaneHitTailForwardMax,
+    scoutPlaneHitTailHalfWidth
+  );
+}
+
+function pointHitsScoutPlanePart(forward, right, vertical, forwardMin, forwardMax, halfWidth) {
+  return forward >= forwardMin - scoutPlaneHitMargin &&
+    forward <= forwardMax + scoutPlaneHitMargin &&
+    Math.abs(right) <= halfWidth + scoutPlaneHitMargin &&
+    Math.abs(vertical) <= scoutPlaneHitVerticalHalfHeight + scoutPlaneHitMargin;
+}
+
+function handleLocalProjectileScoutPlaneHit(system, projectile, hit, weaponType, now) {
+  const hitId = `local-${hit.reportId}`;
+  if (!flakSystem.hitEffectIds.has(hitId)) {
+    flakSystem.hitEffectIds.add(hitId);
+  }
+  beginEnemyScoutPlaneAirHit(hit.motion, {
+    id: hitId,
+    shipId: playerServerShipId,
+    targetShipId: hit.motion.id,
+    x: hit.position.x,
+    y: hit.position.y,
+    z: hit.position.z,
+    t: now
+  }, now);
+  reportLocalPlaneHit(hit, weaponType);
+  disposeFlakProjectile(projectile);
+}
+
+function updateProjectileLightBudget(system, maxEnabledLights) {
+  const litProjectiles = system.active
+    .filter((projectile) => !projectile.disposed && projectile.light)
+    .sort((a, b) => a.age - b.age)
+    .slice(0, maxEnabledLights);
+  const litIds = new Set(litProjectiles.map((projectile) => projectile.id));
+  system.active.forEach((projectile) => {
+    projectile.light?.setEnabled?.(litIds.has(projectile.id));
+  });
+}
+
+function updateFlakSystem(system, dt, now) {
+  system.active = system.active.filter((projectile) => {
+    projectile.age += dt;
+    if (projectile.age >= projectile.lifetime) {
+      disposeFlakProjectile(projectile);
+      return false;
+    }
+
+    projectile.previousPosition.copyFrom(projectile.position);
+    projectile.velocity.y -= flakProjectileGravity * dt;
+    projectile.position.addInPlace(projectile.velocity.scale(dt));
+    projectile.root.position.copyFrom(projectile.position);
+    projectile.direction = projectile.position.subtract(projectile.previousPosition).normalize();
+
+    const planeHit = getLocalProjectileScoutPlaneHit(projectile, "flak");
+    if (planeHit) {
+      handleLocalProjectileScoutPlaneHit(system, projectile, planeHit, "flak", now);
+      return false;
+    }
+
+    const pulse = 0.72 + Math.sin(now * 80 + projectile.age * 13) * 0.18;
+    projectile.core.scaling.setAll(getProjectileVisibilityScale(projectile.position, flakProjectileMaxVisualScale));
+    projectile.core.visibility = pulse;
+    projectile.samplePositions.unshift(projectile.position.clone());
+    projectile.samplePositions = projectile.samplePositions.slice(0, projectile.trail.length + 1);
+    projectile.trail.forEach((segment, index) => {
+      const sample = projectile.samplePositions[index + 1] ?? projectile.previousPosition;
+      segment.position.copyFrom(sample);
+      const fade = Math.max(0.16, pulse - index * 0.16);
+      segment.scaling.setAll(getProjectileVisibilityScale(sample, flakProjectileMaxVisualScale * 0.82) * (1 - index * 0.12));
+      segment.visibility = fade;
+    });
+    projectile.light.position.copyFrom(projectile.position);
+    projectile.light.intensity = 0.45 + pulse * 0.45;
+    return true;
+  });
+  updateProjectileLightBudget(system, flakProjectileLightBudget);
+  system.serverVisuals.forEach((projectile, id) => {
+    if (projectile.disposed) {
+      system.serverVisuals.delete(id);
+    }
+  });
+
+  system.flashes = system.flashes.filter((flash) => {
+    flash.age += dt;
+    const t = flash.age / flash.lifetime;
+    if (t >= 1) {
+      flash.light.dispose();
+      flash.mesh.dispose();
+      return false;
+    }
+    const fade = 1 - t;
+    flash.mesh.visibility = fade;
+    flash.mesh.scaling.setAll(1 + t * 2.35);
+    flash.mesh.position.copyFrom(flash.origin.add(flash.direction.scale(t * 0.7)));
+    flash.light.position.copyFrom(flash.mesh.position);
+    flash.light.intensity = (flash.lightIntensity ?? 0.85) * fade;
+    return true;
+  });
+
+  system.airHitEffects = system.airHitEffects.filter((effect) => updateAirHitEffect(effect, dt));
+  system.scheduledHitEffects = system.scheduledHitEffects.filter((effect) => updateScheduledHitEffect(system, effect, dt));
+
+  document.body.dataset.flakProjectiles = String(system.active.length);
+}
+
+function updateCannonSystem(system, dt, now, landZones) {
+  system.active = system.active.filter((projectile) => {
+    projectile.age += dt;
+    if (projectile.age >= projectile.lifetime) {
+      disposeFlakProjectile(projectile);
+      return false;
+    }
+
+    projectile.previousPosition.copyFrom(projectile.position);
+    projectile.velocity.y -= cannonProjectileGravity * dt;
+    projectile.position.addInPlace(projectile.velocity.scale(dt));
+    projectile.root.position.copyFrom(projectile.position);
+    projectile.direction = projectile.position.subtract(projectile.previousPosition).normalize();
+
+    const planeHit = getLocalProjectileScoutPlaneHit(projectile, "cannon");
+    if (planeHit) {
+      handleLocalProjectileScoutPlaneHit(system, projectile, planeHit, "cannon", now);
+      return false;
+    }
+
+    const impact = getCannonProjectileImpact(projectile, landZones);
+    if (impact) {
+      if (impact.kind === "land") {
+        createFlakLandImpactEffect(system, impact.position);
+      } else {
+        createCannonWaterImpactEffect(system, impact.position, projectile.direction);
+      }
+      disposeFlakProjectile(projectile);
+      return false;
+    }
+
+    const pulse = 0.82 + Math.sin(now * 46 + projectile.age * 11) * 0.1;
+    projectile.core.scaling.setAll(getProjectileVisibilityScale(projectile.position, cannonProjectileMaxVisualScale));
+    projectile.core.visibility = pulse;
+    projectile.samplePositions.unshift(projectile.position.clone());
+    projectile.samplePositions = projectile.samplePositions.slice(0, projectile.trail.length + 1);
+    projectile.trail.forEach((segment, index) => {
+      const sample = projectile.samplePositions[index + 1] ?? projectile.previousPosition;
+      segment.position.copyFrom(sample);
+      segment.visibility = Math.max(0.14, pulse - index * 0.24);
+      segment.scaling.setAll(getProjectileVisibilityScale(sample, cannonProjectileMaxVisualScale * 0.78) * (1 - index * 0.16));
+    });
+    projectile.light.position.copyFrom(projectile.position);
+    projectile.light.intensity = 0.55 + pulse * 0.55;
+    return true;
+  });
+  updateProjectileLightBudget(system, cannonProjectileLightBudget);
+
+  system.flashes = system.flashes.filter((flash) => {
+    flash.age += dt;
+    const t = flash.age / flash.lifetime;
+    if (t >= 1) {
+      flash.light.dispose();
+      flash.mesh.dispose();
+      return false;
+    }
+    const fade = 1 - t;
+    flash.mesh.visibility = fade;
+    flash.mesh.scaling.setAll(1 + t * 3.05);
+    flash.mesh.position.copyFrom(flash.origin.add(flash.direction.scale(t * 1.05)));
+    flash.light.position.copyFrom(flash.mesh.position);
+    flash.light.intensity = (flash.lightIntensity ?? 2.15) * fade;
+    return true;
+  });
+
+  system.airHitEffects = system.airHitEffects.filter((effect) => updateAirHitEffect(effect, dt));
+  document.body.dataset.cannonProjectiles = String(system.active.length);
+  document.body.dataset.cannonReload = Math.max(0, nextCannonFireTime - now).toFixed(1);
+  document.body.dataset.cannonReloading = nextCannonFireTime > now ? "true" : "false";
+}
+
+function getProjectileVisibilityScale(position, maxScale) {
+  const distance = Vector3.Distance(camera.position, position);
+  const t = clamp((distance - 220) / 1280, 0, 1);
+  return 1 + t * (maxScale - 1);
+}
+
+function getCannonProjectileImpact(projectile, landZones) {
+  const position = projectile.position;
+  if (isCannonProjectileInLand(position, landZones)) {
+    return { kind: "land", position: position.clone() };
+  }
+  if (position.y <= 0.03) {
+    return { kind: "water", position: new Vector3(position.x, 0.03, position.z) };
+  }
+  return null;
+}
+
+function isCannonProjectileInLand(position, landZones) {
+  if (position.y > 3.2) return false;
+  return landZones.some((zone) => {
+    const distance = getZoneShapeDistance(position, zone, zone.rx, zone.rz);
+    return distance < getZoneBlockDistance(zone, "navigation") && !isInLandWater(position, zone);
+  });
+}
+
+function createCannonWaterImpactEffect(system, position, direction = null) {
+  const impactPosition = new Vector3(position.x, 0.06, position.z);
+  const heading = direction && Math.abs(direction.x) + Math.abs(direction.z) > 0.001
+    ? Math.atan2(direction.x, direction.z)
+    : 0;
+  const forward = getForwardVector(heading);
+  const right = getRightVector(heading);
+  const effectId = system.nextId++;
+
+  for (let i = 0; i < 6; i += 1) {
+    const patch = createJaggedSurfacePatch(`cannon_water_churn_${effectId}_${i}`, system.scene, 0.62 + i * 0.16, 0.42 + i * 0.08, effectId + i * 31);
+    patch.parent = system.root;
+    patch.material = system.materials.foam;
+    patch.position.copyFrom(
+      impactPosition
+        .add(forward.scale((i - 2) * 0.05))
+        .add(right.scale(((i % 3) - 1) * 0.1))
+        .add(new Vector3(0, 0.006 + i * 0.003, 0))
+    );
+    patch.rotation.y = heading + i * 0.51;
+    system.airHitEffects.push({
+      mesh: patch,
+      age: 0,
+      lifetime: 0.82 + i * 0.045,
+      origin: patch.position.clone(),
+      velocity: forward.scale(-0.035 * i).add(right.scale(((i % 2) * 2 - 1) * 0.055)).add(new Vector3(0, 0.02, 0)),
+      gravity: 0.03,
+      baseScale: patch.scaling.clone(),
+      grow: new Vector3(1.55 + i * 0.14, 0.08, 1.05 + i * 0.1),
+      seed: effectId + i
+    });
+  }
+
+  for (let i = 0; i < 5; i += 1) {
+    const spray = createJaggedHitWall(`cannon_water_spray_${effectId}_${i}`, system.scene, 0.16 + i * 0.026, 0.42 + i * 0.08, effectId + i * 37);
+    spray.parent = system.root;
+    spray.material = system.materials.foam;
+    spray.position.copyFrom(impactPosition.add(new Vector3(0, 0.17 + i * 0.035, 0)));
+    spray.rotation.y = heading + (i - 2) * 0.28;
+    system.airHitEffects.push({
+      mesh: spray,
+      age: 0,
+      lifetime: 0.55 + i * 0.04,
+      origin: spray.position.clone(),
+      velocity: forward.scale(0.05 + i * 0.025).add(right.scale((i - 2) * 0.09)).add(new Vector3(0, 0.48 + i * 0.065, 0)),
+      gravity: 0.42,
+      baseScale: spray.scaling.clone(),
+      grow: new Vector3(0.72, 0.42, 0.72),
+      seed: effectId + 40 + i
+    });
+  }
+}
+
+function createScoutPlaneHitSequence(system, position) {
+  createScoutPlaneSmokeBurst(system, position);
+  createAirHitSpark(system, position);
+  createAirHitFire(system, position);
+  system.scheduledHitEffects.push({
+    age: 0,
+    delay: 0.62,
+    position: position.clone()
+  });
+}
+
+function createFlakWaterImpactEffect(system, position) {
+  const effectId = system.nextId++;
+  const surfacePosition = new Vector3(position.x, 0.055, position.z);
+  createFlakImpactFlash(system, effectId, surfacePosition.add(new Vector3(0, 0.62, 0)), 0.72, 28, 2.18);
+
+  const core = MeshBuilder.CreateSphere(`flak_water_impact_core_${effectId}`, {
+    diameter: 0.46,
+    segments: 10
+  }, system.scene);
+  core.parent = system.root;
+  core.material = system.materials.flakFlash;
+  core.position.copyFrom(surfacePosition.add(new Vector3(0, 0.16, 0)));
+  core.isPickable = false;
+  system.airHitEffects.push({
+    mesh: core,
+    age: 0,
+    lifetime: 0.24,
+    origin: core.position.clone(),
+    velocity: new Vector3(0, 0.12, 0),
+    baseScale: new Vector3(0.62, 0.48, 0.62),
+    grow: new Vector3(1.85, 1.05, 1.85),
+    alpha: 0.96
+  });
+
+  for (let index = 0; index < 5; index += 1) {
+    const patch = createJaggedSurfacePatch(`flak_water_impact_${effectId}_${index}`, system.scene, 0.42 + index * 0.12, 0.3 + index * 0.06, effectId + index * 17);
+    patch.parent = system.root;
+    patch.material = system.materials.foam;
+    patch.position.copyFrom(surfacePosition.add(new Vector3(
+      (stableUnitNoise(effectId + index * 7) - 0.5) * 0.24,
+      index * 0.006,
+      (stableUnitNoise(effectId + index * 11) - 0.5) * 0.24
+    )));
+    patch.rotation.y = stableUnitNoise(effectId + index * 13) * Math.PI * 2;
+    patch.isPickable = false;
+    system.airHitEffects.push({
+      mesh: patch,
+      age: 0,
+      lifetime: 0.58 + index * 0.08,
+      origin: patch.position.clone(),
+      velocity: new Vector3(0, 0.06 + index * 0.022, 0),
+      gravity: 0.05,
+      baseScale: new Vector3(0.72, 0.72, 0.72),
+      grow: new Vector3(2.05, 0.1, 1.55),
+      alpha: 0.86
+    });
+  }
+
+  for (let index = 0; index < 4; index += 1) {
+    const spray = createJaggedHitWall(`flak_water_spray_${effectId}_${index}`, system.scene, 0.15 + index * 0.04, 0.46 + index * 0.12, effectId + index * 29);
+    spray.parent = system.root;
+    spray.material = system.materials.foam;
+    spray.position.copyFrom(surfacePosition.add(new Vector3(0, 0.24 + index * 0.07, 0)));
+    spray.rotation.y = stableUnitNoise(effectId + index * 31) * Math.PI * 2;
+    spray.isPickable = false;
+    system.airHitEffects.push({
+      mesh: spray,
+      age: 0,
+      lifetime: 0.54 + index * 0.055,
+      origin: spray.position.clone(),
+      velocity: new Vector3(
+        (stableUnitNoise(effectId + index * 37) - 0.5) * 0.96,
+        0.74 + index * 0.105,
+        (stableUnitNoise(effectId + index * 41) - 0.5) * 0.96
+      ),
+      gravity: 0.62,
+      baseScale: new Vector3(0.78, 0.92, 0.78),
+      grow: new Vector3(0.62, 0.78, 0.62),
+      alpha: 0.96
+    });
+  }
+}
+
+function createFlakLandImpactEffect(system, position) {
+  const effectId = system.nextId++;
+  createFlakImpactFlash(system, effectId, position.add(new Vector3(0, 0.42, 0)), 0.58, 30, 2.25);
+
+  const core = MeshBuilder.CreateSphere(`flak_land_impact_core_${effectId}`, {
+    diameter: 0.5,
+    segments: 10
+  }, system.scene);
+  core.parent = system.root;
+  core.material = system.materials.explosionCore;
+  core.position.copyFrom(position.add(new Vector3(0, 0.16, 0)));
+  core.isPickable = false;
+  system.airHitEffects.push({
+    mesh: core,
+    age: 0,
+    lifetime: 0.28,
+    origin: core.position.clone(),
+    velocity: new Vector3(0, 0.22, 0),
+    baseScale: new Vector3(0.66, 0.66, 0.66),
+    grow: new Vector3(1.7, 1.25, 1.7),
+    alpha: 0.96
+  });
+
+  const spark = MeshBuilder.CreateSphere(`flak_land_impact_spark_${effectId}`, {
+    diameter: 0.62,
+    segments: 8
+  }, system.scene);
+  spark.parent = system.root;
+  spark.material = system.materials.flakFlash;
+  spark.position.copyFrom(position.add(new Vector3(0, 0.08, 0)));
+  spark.isPickable = false;
+  system.airHitEffects.push({
+    mesh: spark,
+    age: 0,
+    lifetime: 0.26,
+    origin: spark.position.clone(),
+    velocity: Vector3.Zero(),
+    baseScale: new Vector3(0.64, 0.64, 0.64),
+    grow: new Vector3(1.7, 1.28, 1.7),
+    alpha: 0.94
+  });
+
+  const dust = MeshBuilder.CreateSphere(`flak_land_impact_dust_${effectId}`, {
+    diameter: 0.72,
+    segments: 8
+  }, system.scene);
+  dust.parent = system.root;
+  dust.material = system.materials.volcanicSmokeWarm;
+  dust.position.copyFrom(position.add(new Vector3(0, 0.18, 0)));
+  dust.isPickable = false;
+  system.airHitEffects.push({
+    mesh: dust,
+    age: 0,
+    lifetime: 0.94,
+    origin: dust.position.clone(),
+    velocity: new Vector3(0, 0.56, 0),
+    gravity: 0.18,
+    baseScale: new Vector3(0.5, 0.34, 0.5),
+    grow: new Vector3(1.7, 1.0, 1.7),
+    alpha: 0.5
+  });
+}
+
+function createFlakImpactFlash(system, effectId, position, lifetime, range, intensity) {
+  const light = new PointLight(`flak_impact_flash_${effectId}`, position, system.scene);
+  light.diffuse = new Color3(0.98, 0.96, 0.82);
+  light.specular = new Color3(1.0, 0.92, 0.72);
+  light.intensity = intensity;
+  light.range = range;
+  system.airHitEffects.push({
+    light,
+    age: 0,
+    lifetime,
+    intensity,
+    range
+  });
+}
+
+function createScoutPlaneSmokeBurst(system, position) {
+  for (let index = 0; index < 5; index += 1) {
+    createScoutPlaneSmokePuff(system, position.add(new Vector3(
+      (stableUnitNoise(system.nextId + index * 13) - 0.5) * 1.1,
+      (stableUnitNoise(system.nextId + index * 17) - 0.5) * 0.7,
+      (stableUnitNoise(system.nextId + index * 19) - 0.5) * 1.1
+    )));
+  }
+}
+
+function createAirHitSpark(system, position) {
+  const spark = MeshBuilder.CreateSphere(`scout_plane_hit_spark_${system.nextId}_${system.airHitEffects.length}`, {
+    diameter: 1.1,
+    segments: 10
+  }, system.scene);
+  spark.parent = system.root;
+  spark.material = system.materials.flakFlash;
+  spark.position.copyFrom(position);
+  spark.isPickable = false;
+  system.airHitEffects.push({
+    mesh: spark,
+    age: 0,
+    lifetime: 0.24,
+    origin: position.clone(),
+    velocity: Vector3.Zero(),
+    baseScale: new Vector3(0.8, 0.8, 0.8),
+    grow: new Vector3(1.2, 1.2, 1.2),
+    alpha: 0.9
+  });
+}
+
+function updateScheduledHitEffect(system, effect, dt) {
+  effect.age += dt;
+  if (effect.age < effect.delay) return true;
+  createScoutPlaneAirExplosion(system, effect.position);
+  return false;
+}
+
+function createAirHitFire(system, position) {
+  for (let index = 0; index < 4; index += 1) {
+    const flame = MeshBuilder.CreateSphere(`scout_plane_hit_flame_${system.nextId}_${index}`, {
+      diameter: 0.62 + index * 0.08,
+      segments: 10
+    }, system.scene);
+    flame.parent = system.root;
+    flame.material = system.materials.volcanicSmokeWarm;
+    flame.position.copyFrom(position.add(new Vector3(
+      (stableUnitNoise(system.nextId + index * 23) - 0.5) * 0.9,
+      (stableUnitNoise(system.nextId + index * 29) - 0.5) * 0.5,
+      (stableUnitNoise(system.nextId + index * 31) - 0.5) * 0.9
+    )));
+    flame.isPickable = false;
+    system.airHitEffects.push({
+      mesh: flame,
+      age: 0,
+      lifetime: 0.82 + index * 0.06,
+      origin: flame.position.clone(),
+      velocity: new Vector3(
+        (stableUnitNoise(system.nextId + index * 37) - 0.5) * 1.1,
+        0.8 + stableUnitNoise(system.nextId + index * 41) * 0.7,
+        (stableUnitNoise(system.nextId + index * 43) - 0.5) * 1.1
+      ),
+      baseScale: new Vector3(0.5, 0.5, 0.5),
+      grow: new Vector3(1.25, 1.05, 1.25),
+      alpha: 0.7
+    });
+  }
+}
+
+function createBurningScoutPlaneTrail(system, position, drift = Vector3.Zero()) {
+  createScoutPlaneSmokePuff(system, position.add(drift));
+  for (let index = 0; index < 2; index += 1) {
+    const flame = MeshBuilder.CreateSphere(`scout_plane_burning_flame_${system.nextId}_${system.airHitEffects.length}_${index}`, {
+      diameter: 0.48 + stableUnitNoise(system.nextId + index * 19) * 0.28,
+      segments: 10
+    }, system.scene);
+    flame.parent = system.root;
+    flame.material = system.materials.volcanicSmokeWarm;
+    flame.position.copyFrom(position.add(drift).add(new Vector3(
+      (stableUnitNoise(system.nextId + index * 23) - 0.5) * 0.8,
+      (stableUnitNoise(system.nextId + index * 29) - 0.5) * 0.35,
+      (stableUnitNoise(system.nextId + index * 31) - 0.5) * 0.8
+    )));
+    flame.isPickable = false;
+    system.airHitEffects.push({
+      mesh: flame,
+      age: 0,
+      lifetime: 0.72,
+      origin: flame.position.clone(),
+      velocity: new Vector3(
+        (stableUnitNoise(system.nextId + index * 37) - 0.5) * 0.8,
+        0.55 + stableUnitNoise(system.nextId + index * 41) * 0.35,
+        (stableUnitNoise(system.nextId + index * 43) - 0.5) * 0.8
+      ),
+      baseScale: new Vector3(0.45, 0.45, 0.45),
+      grow: new Vector3(0.75, 0.65, 0.75),
+      alpha: 0.74
+    });
+  }
+}
+
+function createScoutPlaneSmokePuff(system, position) {
+  const id = `${system.nextId}_${system.airHitEffects.length}`;
+  const puff = MeshBuilder.CreateSphere(`scout_plane_hit_smoke_${id}`, {
+    diameter: 1.0,
+    segments: 10
+  }, system.scene);
+  puff.parent = system.root;
+  puff.material = system.materials.volcanicSmoke;
+  puff.position.copyFrom(position.add(new Vector3(
+    (stableUnitNoise(system.nextId + 17) - 0.5) * 1.2,
+    -0.2 + stableUnitNoise(system.nextId + 23) * 0.5,
+    (stableUnitNoise(system.nextId + 31) - 0.5) * 1.2
+  )));
+  puff.isPickable = false;
+  system.airHitEffects.push({
+    mesh: puff,
+    age: 0,
+    lifetime: 1.55,
+    origin: puff.position.clone(),
+    velocity: new Vector3(
+      (stableUnitNoise(system.nextId + 41) - 0.5) * 0.7,
+      1.15 + stableUnitNoise(system.nextId + 47) * 0.55,
+      (stableUnitNoise(system.nextId + 53) - 0.5) * 0.7
+    ),
+    baseScale: new Vector3(0.7, 0.55, 0.7),
+    grow: new Vector3(2.4, 1.8, 2.4),
+    alpha: 0.56
+  });
+}
+
+function createScoutPlaneAirExplosion(system, position) {
+  const center = position.add(new Vector3(0, 0.15, 0));
+  createAirExplosionCore(system, center);
+  createAirExplosionLight(system, center);
+  createAirExplosionDebris(system, center);
+  createAirExplosionFireBloom(system, center);
+  for (let i = 0; i < 10; i += 1) {
+    const puff = MeshBuilder.CreateSphere(`scout_plane_explosion_smoke_${system.nextId}_${i}`, {
+      diameter: 1.0,
+      segments: 10
+    }, system.scene);
+    puff.parent = system.root;
+    puff.material = i % 3 === 0 ? system.materials.volcanicSmokeWarm : system.materials.volcanicSmoke;
+    puff.position.copyFrom(center);
+    puff.isPickable = false;
+    const angle = i * Math.PI * 0.25;
+    const lateral = 2.2 + stableUnitNoise(system.nextId + i * 7) * 1.2;
+    system.airHitEffects.push({
+      mesh: puff,
+      age: 0,
+      lifetime: 1.7 + i * 0.045,
+      origin: center.clone(),
+      velocity: new Vector3(Math.cos(angle) * lateral, 0.75 + i * 0.07, Math.sin(angle) * lateral),
+      baseScale: new Vector3(0.65, 0.65, 0.65),
+      grow: new Vector3(2.8, 2.15, 2.8),
+      alpha: i % 3 === 0 ? 0.5 : 0.44
+    });
+  }
+}
+
+function createAirExplosionFireBloom(system, position) {
+  for (let i = 0; i < 5; i += 1) {
+    const flame = MeshBuilder.CreateSphere(`scout_plane_explosion_fire_${system.nextId}_${i}`, {
+      diameter: 1.0,
+      segments: 10
+    }, system.scene);
+    flame.parent = system.root;
+    flame.material = system.materials.volcanicSmokeWarm;
+    flame.position.copyFrom(position);
+    flame.isPickable = false;
+    const angle = i * Math.PI * 0.4;
+    system.airHitEffects.push({
+      mesh: flame,
+      age: 0,
+      lifetime: 0.86 + i * 0.05,
+      origin: position.clone(),
+      velocity: new Vector3(Math.cos(angle) * 2.7, 1.0 + i * 0.08, Math.sin(angle) * 2.7),
+      baseScale: new Vector3(0.75, 0.75, 0.75),
+      grow: new Vector3(1.8, 1.45, 1.8),
+      alpha: 0.66
+    });
+  }
+}
+
+function createAirExplosionDebris(system, position) {
+  for (let i = 0; i < 16; i += 1) {
+    const glowing = i < 6;
+    const fragment = MeshBuilder.CreateBox(`scout_plane_explosion_fragment_${system.nextId}_${i}`, {
+      width: glowing ? 0.22 : 0.34,
+      height: glowing ? 0.08 : 0.11,
+      depth: glowing ? 0.34 : 0.52
+    }, system.scene);
+    fragment.parent = system.root;
+    fragment.material = glowing ? system.materials.explosionCore : system.materials.funnel;
+    fragment.position.copyFrom(position);
+    fragment.isPickable = false;
+    const angle = i * 2.399;
+    const speedOut = glowing ? 7.4 + stableUnitNoise(system.nextId + i * 5) * 4.6 : 4.8 + stableUnitNoise(system.nextId + i * 7) * 3.8;
+    const lift = glowing ? 2.9 + stableUnitNoise(system.nextId + i * 11) * 1.7 : 1.2 + stableUnitNoise(system.nextId + i * 13) * 2.1;
+    system.airHitEffects.push({
+      mesh: fragment,
+      age: 0,
+      lifetime: glowing ? 1.75 : 2.85,
+      origin: position.clone(),
+      velocity: new Vector3(Math.cos(angle) * speedOut, lift, Math.sin(angle) * speedOut),
+      gravity: glowing ? 4.1 : 5.2,
+      baseScale: new Vector3(1, 1, 1),
+      grow: glowing ? new Vector3(-0.45, -0.45, -0.45) : new Vector3(-0.2, -0.2, -0.2),
+      alpha: glowing ? 0.92 : 0.66,
+      spin: new Vector3(3.4 + i * 0.17, 4.2 + i * 0.11, 2.8 + i * 0.13)
+    });
+  }
+}
+
+function createAirExplosionCore(system, position) {
+  const core = MeshBuilder.CreateSphere(`scout_plane_explosion_core_${system.nextId}`, {
+    diameter: 3.0,
+    segments: 12
+  }, system.scene);
+  core.parent = system.root;
+  core.material = system.materials.explosionCore;
+  core.position.copyFrom(position);
+  core.isPickable = false;
+  system.airHitEffects.push({
+    mesh: core,
+    age: 0,
+    lifetime: 0.42,
+    origin: position.clone(),
+    velocity: Vector3.Zero(),
+    baseScale: new Vector3(0.65, 0.65, 0.65),
+    grow: new Vector3(2.7, 2.7, 2.7),
+    alpha: 0.95
+  });
+}
+
+function createAirExplosionLight(system, position) {
+  const light = new PointLight(`scout_plane_explosion_light_${system.nextId}`, position.clone(), system.scene);
+  light.diffuse = new Color3(1.0, 0.72, 0.36);
+  light.specular = new Color3(1.0, 0.82, 0.52);
+  light.intensity = 6.4;
+  light.range = 145;
+  system.airHitEffects.push({
+    light,
+    age: 0,
+    lifetime: 0.72,
+    intensity: 6.4,
+    range: 145
+  });
+}
+
+function updateAirHitEffect(effect, dt) {
+  effect.age += dt;
+  const t = effect.age / effect.lifetime;
+  if (t >= 1) {
+    disposeAirHitEffect(effect);
+    return false;
+  }
+
+  const fade = 1 - t;
+  if (effect.mesh) {
+    effect.mesh.position.copyFrom(effect.origin.add(effect.velocity.scale(effect.age)));
+    if (Number.isFinite(effect.gravity)) {
+      effect.mesh.position.y -= effect.gravity * effect.age * effect.age * 0.5;
+    }
+    effect.mesh.scaling.set(
+      effect.baseScale.x + effect.grow.x * t,
+      effect.baseScale.y + effect.grow.y * t,
+      effect.baseScale.z + effect.grow.z * t
+    );
+    effect.mesh.visibility = (effect.alpha ?? 0.5) * fade;
+    if (effect.spin) {
+      effect.mesh.rotation.x += effect.spin.x * dt;
+      effect.mesh.rotation.y += effect.spin.y * dt;
+      effect.mesh.rotation.z += effect.spin.z * dt;
+    }
+  }
+  if (effect.light) {
+    effect.light.intensity = effect.intensity * fade;
+    effect.light.range = effect.range * (0.65 + t * 0.35);
+  }
+  return true;
+}
+
+function disposeAirHitEffect(effect) {
+  effect.mesh?.dispose();
+  effect.light?.dispose();
+}
+
+function disposeFlakProjectile(projectile) {
+  projectile.disposed = true;
+  projectile.light.dispose();
+  projectile.trail.forEach((segment) => segment.dispose());
+  projectile.root.getChildMeshes().forEach((mesh) => mesh.dispose());
+  projectile.root.dispose();
+}
+
+function syncServerFlakProjectiles(projectiles, snapshotClientTime = time) {
+  const activeFlakIds = new Set();
+  const activeCannonIds = new Set();
+  projectiles
+    .filter((snapshot) => snapshot.shipId !== playerServerShipId)
+    .forEach((snapshot) => {
+      const system = isCannonServerProjectile(snapshot.id) ? cannonSystem : flakSystem;
+      const visualId = getServerProjectileVisualId(snapshot);
+      if (system === cannonSystem) {
+        activeCannonIds.add(visualId);
+      } else {
+        activeFlakIds.add(visualId);
+      }
+      const visual = system.serverVisuals.get(visualId) ?? createServerFlakProjectile(system, snapshot, snapshotClientTime, visualId);
+      applyServerFlakProjectileSnapshot(visual, snapshot, snapshotClientTime);
+    });
+
+  flakSystem.serverVisuals.forEach((visual, id) => {
+    if (!activeFlakIds.has(id)) {
+      disposeFlakProjectile(visual);
+      flakSystem.serverVisuals.delete(id);
+    }
+  });
+  cannonSystem.serverVisuals.forEach((visual, id) => {
+    if (!activeCannonIds.has(id)) {
+      disposeFlakProjectile(visual);
+      cannonSystem.serverVisuals.delete(id);
+    }
+  });
+}
+
+function getServerProjectileVisualId(snapshot) {
+  const firedAt = Number.isFinite(snapshot?.firedAt) ? snapshot.firedAt.toFixed(3) : "unknown";
+  return `${snapshot?.id ?? "projectile"}@${firedAt}`;
+}
+
+function createServerFlakProjectile(system, snapshot, snapshotClientTime = time, visualId = getServerProjectileVisualId(snapshot)) {
+  const isCannonProjectile = isCannonServerProjectile(snapshot.id);
+  const position = new Vector3(
+    Number.isFinite(snapshot.x) ? snapshot.x : 0,
+    Number.isFinite(snapshot.y) ? snapshot.y : 0,
+    Number.isFinite(snapshot.z) ? snapshot.z : 0
+  );
+  const velocity = new Vector3(
+    Number.isFinite(snapshot.vx) ? snapshot.vx : 0,
+    Number.isFinite(snapshot.vy) ? snapshot.vy : 0,
+    Number.isFinite(snapshot.vz) ? snapshot.vz : 1
+  );
+  const direction = velocity.lengthSquared() > 0.0001 ? velocity.normalizeToNew() : Vector3.Forward();
+  const visual = createFlakProjectile(system, position, velocity, direction, {
+    trailSegments: isCannonProjectile ? 4 : 1
+  });
+  visual.serverId = snapshot.id;
+  visual.weaponType = isCannonProjectile ? "cannon" : "flak";
+  if (isCannonProjectile) {
+    emphasizeServerCannonProjectile(visual, system.materials);
+  }
+  visual.age = Math.max(0, snapshotClientTime - (Number.isFinite(snapshot.firedAt) ? snapshot.firedAt : snapshotClientTime));
+  system.serverVisuals.set(visualId, visual);
+  createRemoteMuzzleEffectForProjectile(snapshot);
+  return visual;
+}
+
+function emphasizeServerCannonProjectile(visual, materials) {
+  visual.core.material = materials.cannonTracer ?? visual.core.material;
+  visual.core?.scaling?.setAll(2.1);
+  visual.trail?.forEach((segment, index) => {
+    segment.material = materials.cannonTracerTrail ?? segment.material;
+    segment.scaling.setAll(1.85 - index * 0.18);
+  });
+  if (visual.light) {
+    visual.light.intensity = 2.6;
+    visual.light.range = 58;
+  }
+}
+
+function createRemoteMuzzleEffectForProjectile(snapshot) {
+  const motion = snapshot?.shipId ? enemyMotions.find((candidate) => candidate.id === snapshot.shipId) : null;
+  if (!motion || motion.id === playerServerShipId || !motion.root?.isEnabled?.()) return;
+  const isCannonProjectile = isCannonServerProjectile(snapshot.id);
+  const shot = isCannonProjectile
+    ? getCannonShotFromModel(motion.boat?.bowCannon, motion.heading, motion.speed)
+    : getRemoteFlakShot(motion);
+  const fallbackDirection = getProjectileDirectionFromSnapshot(snapshot);
+  const muzzle = shot?.muzzle ?? new Vector3(
+    Number.isFinite(snapshot.x) ? snapshot.x : motion.root.position.x,
+    Number.isFinite(snapshot.y) ? snapshot.y : motion.root.position.y,
+    Number.isFinite(snapshot.z) ? snapshot.z : motion.root.position.z
+  );
+  const direction = shot?.direction ?? fallbackDirection;
+  if (isCannonProjectile) {
+    triggerCannonBarrelRecoil(motion.boat?.bowCannon, time);
+    createCannonMuzzleBlast(cannonSystem, muzzle, direction);
+  } else {
+    createFlakMuzzleFlash(flakSystem, muzzle, direction);
+  }
+}
+
+function getRemoteFlakShot(motion) {
+  return getFlakShotFromElevationRoot(
+    motion?.boat?.sternFlak?.elevationRoot,
+    0.75,
+    null,
+    getForwardVector(motion?.heading ?? 0).scale(motion?.speed ?? 0)
+  );
+}
+
+function getProjectileDirectionFromSnapshot(snapshot) {
+  const velocity = new Vector3(
+    Number.isFinite(snapshot?.vx) ? snapshot.vx : 0,
+    Number.isFinite(snapshot?.vy) ? snapshot.vy : 0,
+    Number.isFinite(snapshot?.vz) ? snapshot.vz : 1
+  );
+  return velocity.lengthSquared() > 0.0001 ? velocity.normalizeToNew() : Vector3.Forward();
+}
+
+function applyServerFlakProjectileSnapshot(visual, snapshot, snapshotClientTime = time) {
+  if (!visual || visual.disposed) return;
+  visual.position.set(
+    Number.isFinite(snapshot.x) ? snapshot.x : visual.position.x,
+    Number.isFinite(snapshot.y) ? snapshot.y : visual.position.y,
+    Number.isFinite(snapshot.z) ? snapshot.z : visual.position.z
+  );
+  visual.previousPosition.copyFrom(visual.position);
+  visual.velocity.set(
+    Number.isFinite(snapshot.vx) ? snapshot.vx : visual.velocity.x,
+    Number.isFinite(snapshot.vy) ? snapshot.vy : visual.velocity.y,
+    Number.isFinite(snapshot.vz) ? snapshot.vz : visual.velocity.z
+  );
+  if (visual.velocity.lengthSquared() > 0.0001) {
+    visual.direction = visual.velocity.normalizeToNew();
+  }
+  visual.age = Math.max(0, snapshotClientTime - (Number.isFinite(snapshot.firedAt) ? snapshot.firedAt : snapshotClientTime));
 }
 
 // A fired torpedo starts as a visible tube ejection, then becomes a simple straight-running weapon.
@@ -3508,39 +8804,41 @@ function firePlayerTorpedo(system, shipRoot, heading, turnVelocity, shipSpeed, n
   const forward = getForwardVector(launchHeading);
   const right = getRightVector(launchHeading);
   const tuning = torpedoLaunchDefaults;
-  const tubeX = tubeSide * tuning.tubeX;
-  const muzzleEffectX = tubeSide * 0.32;
-  const tubeStartZ = tuning.startZ;
-  const muzzleZ = 3.05;
+  const tubeX = tubeSide * tuning.tubeX * torpedoBoatVisualScale;
+  const tubeStartZ = tuning.startZ * torpedoBoatVisualScale;
+  const waterEntryZ = tuning.waterEntryZ * torpedoBoatVisualScale;
+  const runStartZ = tuning.runStartZ * torpedoBoatVisualScale;
+  const tubeStartY = tuning.startY * torpedoBoatVisualScale;
   const launchStart = shipRoot.position
     .add(right.scale(tubeX))
     .add(forward.scale(tubeStartZ))
-    .add(new Vector3(0, tuning.startY, 0));
+    .add(new Vector3(0, tubeStartY, 0));
   const muzzleEffectStart = shipRoot.position
-    .add(right.scale(muzzleEffectX))
+    .add(right.scale(tubeX))
     .add(forward.scale(tubeStartZ))
-    .add(new Vector3(0, tuning.startY, 0));
+    .add(new Vector3(0, tubeStartY, 0));
   const launchEnd = shipRoot.position
     .add(right.scale(tubeX))
-    .add(forward.scale(muzzleZ + 0.32))
+    .add(forward.scale(waterEntryZ))
     .add(new Vector3(0, -0.04, 0));
   const muzzlePuffPoint = shipRoot.position
-    .add(right.scale(muzzleEffectX))
-    .add(forward.scale(muzzleZ + 0.4))
-    .add(new Vector3(0, -0.04, 0));
+    .add(right.scale(tubeX))
+    .add(forward.scale(waterEntryZ + 0.12))
+    .add(new Vector3(0, 0.02, 0));
   const runStart = shipRoot.position
     .add(right.scale(tubeX))
-    .add(forward.scale(muzzleZ + 0.52))
+    .add(forward.scale(runStartZ))
     .add(new Vector3(0, 0.06, 0));
 
   const root = new TransformNode(`torpedo_${system.nextId}`, system.scene);
   root.parent = system.root;
+  root.scaling.setAll(torpedoVisualScale);
   root.position.copyFrom(launchStart);
   root.rotationQuaternion = Quaternion.FromEulerAngles(0, launchHeading, 0);
 
   const body = MeshBuilder.CreateCylinder(`${root.name}_body`, {
-    diameter: 0.2,
-    height: 3.84,
+    diameter: 0.2 * torpedoThicknessScale,
+    height: torpedoBodyLength,
     tessellation: 12
   }, system.scene);
   body.parent = root;
@@ -3548,13 +8846,13 @@ function firePlayerTorpedo(system, shipRoot, heading, turnVelocity, shipSpeed, n
   body.material = system.materials.funnel;
 
   const nose = MeshBuilder.CreateCylinder(`${root.name}_nose`, {
-    diameterTop: 0.035,
-    diameterBottom: 0.2,
-    height: 0.36,
+    diameterTop: 0.035 * torpedoThicknessScale,
+    diameterBottom: 0.2 * torpedoThicknessScale,
+    height: torpedoNoseLength,
     tessellation: 12
   }, system.scene);
   nose.parent = root;
-  nose.position.z = 2.1;
+  nose.position.z = torpedoBodyLength * 0.5 + torpedoNoseLength * 0.5;
   nose.rotation.x = Math.PI / 2;
   nose.material = system.materials.funnel;
 
@@ -3571,7 +8869,7 @@ function firePlayerTorpedo(system, shipRoot, heading, turnVelocity, shipSpeed, n
     runStart,
     age: 0,
     runDistance: 0,
-    speed: 24 + Math.max(0, shipSpeed) * 0.35,
+    speed: shipTorpedoBaseSpeed + Math.max(0, shipSpeed) * shipTorpedoSpeedGain,
     owner: "player",
     // Keep launch nearly immediate so turning fire does not drag behind the player's aim.
     launchDuration: 0.2,
@@ -3581,7 +8879,7 @@ function firePlayerTorpedo(system, shipRoot, heading, turnVelocity, shipSpeed, n
   system.nextId += 1;
   system.active.push(torpedo);
   createLaunchPuff(system, muzzlePuffPoint, launchHeading, tubeSide);
-  createMuzzleEffect(system, muzzleEffectStart, launchHeading, tubeSide);
+  createMuzzleEffect(system, muzzleEffectStart, launchHeading, tubeSide, shipSpeed);
   return true;
 }
 
@@ -3598,26 +8896,27 @@ function fireEnemyTorpedo(system, motion, targetPosition, now) {
   system.nextEnemyFireTime = now + 18;
 
   const launchStart = motion.root.position
-    .add(right.scale(tubeSide * 0.44))
-    .add(forward.scale(3.65))
-    .add(new Vector3(0, 0.42, 0));
+    .add(right.scale(tubeSide * 0.44 * torpedoBoatVisualScale))
+    .add(forward.scale(3.65 * torpedoBoatVisualScale))
+    .add(new Vector3(0, 0.76 * torpedoBoatVisualScale, 0));
   const launchEnd = motion.root.position
-    .add(right.scale(tubeSide * 0.44))
-    .add(forward.scale(4.35))
+    .add(right.scale(tubeSide * 0.44 * torpedoBoatVisualScale))
+    .add(forward.scale(4.35 * torpedoBoatVisualScale))
     .add(new Vector3(0, 0.04, 0));
   const runStart = motion.root.position
-    .add(right.scale(tubeSide * 0.44))
-    .add(forward.scale(4.65))
+    .add(right.scale(tubeSide * 0.44 * torpedoBoatVisualScale))
+    .add(forward.scale(4.65 * torpedoBoatVisualScale))
     .add(new Vector3(0, 0.05, 0));
 
   const root = new TransformNode(`enemy_torpedo_${system.nextId}`, system.scene);
   root.parent = system.root;
+  root.scaling.setAll(torpedoVisualScale);
   root.position.copyFrom(launchStart);
   root.rotationQuaternion = Quaternion.FromEulerAngles(0, launchHeading, 0);
 
   const body = MeshBuilder.CreateCylinder(`${root.name}_body`, {
-    diameter: 0.18,
-    height: 3.5,
+    diameter: 0.18 * torpedoThicknessScale,
+    height: torpedoBodyLength,
     tessellation: 12
   }, system.scene);
   body.parent = root;
@@ -3625,13 +8924,13 @@ function fireEnemyTorpedo(system, motion, targetPosition, now) {
   body.material = system.materials.funnel;
 
   const nose = MeshBuilder.CreateCylinder(`${root.name}_nose`, {
-    diameterTop: 0.035,
-    diameterBottom: 0.18,
-    height: 0.34,
+    diameterTop: 0.035 * torpedoThicknessScale,
+    diameterBottom: 0.18 * torpedoThicknessScale,
+    height: torpedoNoseLength,
     tessellation: 12
   }, system.scene);
   nose.parent = root;
-  nose.position.z = 1.92;
+  nose.position.z = torpedoBodyLength * 0.5 + torpedoNoseLength * 0.5;
   nose.rotation.x = Math.PI / 2;
   nose.material = system.materials.funnel;
 
@@ -3648,7 +8947,7 @@ function fireEnemyTorpedo(system, motion, targetPosition, now) {
     runStart,
     age: 0,
     runDistance: 0,
-    speed: 21 + Math.max(0, motion.speed) * 0.25,
+    speed: (21 * torpedoSpeedScale + Math.max(0, motion.speed) * 0.25 * torpedoSpeedScale) * torpedoSpeedAdjustment,
     owner: "enemy",
     launchDuration: 0.24,
     maxRange: 520,
@@ -3660,9 +8959,11 @@ function fireEnemyTorpedo(system, motion, targetPosition, now) {
 }
 
 function updateEnemyFireControl(system, enemyMotions, playerPosition, landZones, time) {
+  if (scoutPlaneMode) return;
   enemyMotions.forEach((motion) => {
     if (motion.state !== "active") return;
     if (motion.isServerControlled) return;
+    if (isScoutPlaneMotion(motion)) return;
     if (motion.teamId === playerTeamId) return;
 
     const distance = distance2D(playerPosition, motion.root.position);
@@ -3682,13 +8983,13 @@ function isTargetInEnemyTorpedoArc(motion, targetPosition) {
   return getAngularDistance(targetHeading, motion.heading) <= enemyTorpedoFireArcRadians;
 }
 
-function syncServerTorpedoes(torpedoes, impacts = [], snapshotClientTime = time) {
+function syncServerTorpedoes(torpedoes, impacts = [], snapshotReceivedAt = time, snapshotServerTime = null) {
   const activeIds = new Set();
 
   torpedoes.forEach((snapshot) => {
     activeIds.add(snapshot.id);
-    const visual = torpedoSystem.serverVisuals.get(snapshot.id) ?? createServerTorpedoVisual(torpedoSystem, snapshot, snapshotClientTime);
-    applyServerTorpedoSnapshot(visual, snapshot, snapshotClientTime);
+    const visual = torpedoSystem.serverVisuals.get(snapshot.id) ?? createServerTorpedoVisual(torpedoSystem, snapshot, snapshotReceivedAt, snapshotServerTime);
+    applyServerTorpedoSnapshot(visual, snapshot, snapshotReceivedAt);
   });
 
   renderServerTorpedoImpacts(impacts);
@@ -3698,7 +8999,9 @@ function syncServerTorpedoes(torpedoes, impacts = [], snapshotClientTime = time)
 
     disposeServerTorpedoVisual(visual);
     torpedoSystem.serverVisuals.delete(id);
+    torpedoSystem.serverSourceVehicleTypes.delete(id);
   });
+  document.body.dataset.serverTorpedoVisuals = String(torpedoSystem.serverVisuals.size);
 }
 
 function renderServerTorpedoImpacts(impacts) {
@@ -3706,6 +9009,8 @@ function renderServerTorpedoImpacts(impacts) {
     const key = `${impact.id}:${impact.reason}:${impact.t}`;
     if (torpedoSystem.serverImpactIds.has(key)) return;
     torpedoSystem.serverImpactIds.add(key);
+    const sourceVehicleType = torpedoSystem.serverSourceVehicleTypes.get(impact.id);
+    notifyOwnWeaponImpact(impact, "Torpedo", "torpedo", sourceVehicleType === "scout-plane" ? sourceVehicleType : null);
 
     const position = new Vector3(
       Number.isFinite(impact.x) ? impact.x : 0,
@@ -3716,6 +9021,10 @@ function renderServerTorpedoImpacts(impacts) {
     torpedoSystem.hits += 1;
     if (impact.reason === "expired") {
       createRangeSplash(torpedoSystem, position, headingValue);
+    } else if (impact.reason === "ship-hit") {
+      createTorpedoShipWaterColumn(torpedoSystem, position, headingValue);
+    } else if (impact.reason === "land-hit") {
+      createHitChurn(torpedoSystem, position, headingValue, 1.45);
     } else {
       createHitChurn(torpedoSystem, position, headingValue);
     }
@@ -3726,16 +9035,17 @@ function renderServerTorpedoImpacts(impacts) {
   }
 }
 
-function createServerTorpedoVisual(system, snapshot, snapshotClientTime = time) {
+function createServerTorpedoVisual(system, snapshot, snapshotReceivedAt = time, snapshotServerTime = null) {
   const root = new TransformNode(`server_torpedo_${snapshot.id}`, system.scene);
   root.parent = system.root;
-  const launch = getServerTorpedoLaunch(snapshot);
+  root.scaling.setAll(torpedoVisualScale);
+  const launch = getServerTorpedoLaunch(system, snapshot, snapshotServerTime);
   root.position.copyFrom(launch.start);
   root.rotationQuaternion = Quaternion.FromEulerAngles(0, launch.heading, 0);
 
   const body = MeshBuilder.CreateCylinder(`${root.name}_body`, {
-    diameter: 0.2,
-    height: 3.84,
+    diameter: 0.2 * torpedoThicknessScale,
+    height: torpedoBodyLength,
     tessellation: 12
   }, system.scene);
   body.parent = root;
@@ -3743,15 +9053,21 @@ function createServerTorpedoVisual(system, snapshot, snapshotClientTime = time) 
   body.material = system.materials.funnel;
 
   const nose = MeshBuilder.CreateCylinder(`${root.name}_nose`, {
-    diameterTop: 0.035,
-    diameterBottom: 0.2,
-    height: 0.36,
+    diameterTop: 0.035 * torpedoThicknessScale,
+    diameterBottom: 0.2 * torpedoThicknessScale,
+    height: torpedoNoseLength,
     tessellation: 12
   }, system.scene);
   nose.parent = root;
-  nose.position.z = 2.1;
+  nose.position.z = torpedoBodyLength * 0.5 + torpedoNoseLength * 0.5;
   nose.rotation.x = Math.PI / 2;
   nose.material = system.materials.funnel;
+
+  const speedValue = Number.isFinite(snapshot.speed) ? snapshot.speed : fallbackServerTorpedoSpeed(launch);
+  const launchIsBeingReplayed = launch.mode === "local-tube" || launch.mode === "air-drop";
+  const initialRunDistance = launchIsBeingReplayed
+    ? 0
+    : Math.max(0, getServerTorpedoAge(snapshot, snapshotServerTime) * speedValue);
 
   const visual = {
     id: snapshot.id,
@@ -3761,45 +9077,235 @@ function createServerTorpedoVisual(system, snapshot, snapshotClientTime = time) 
     wake: createTorpedoWake(system.scene, system.materials, root.name),
     heading: Number.isFinite(snapshot.heading) ? snapshot.heading : 0,
     forward: getForwardVector(Number.isFinite(snapshot.heading) ? snapshot.heading : 0),
-    speed: Number.isFinite(snapshot.speed) ? snapshot.speed : 24,
-    serverPosition: new Vector3(snapshot.x, 0.05, snapshot.z),
-    serverSnapshotTime: snapshotClientTime,
-    runDistance: 0,
-    launchBlendUntil: launch.blendUntil
+    speed: speedValue,
+    verticalSpeed: Number.isFinite(snapshot.verticalSpeed) ? snapshot.verticalSpeed : 0,
+    serverState: snapshot.state ?? "running",
+    serverPosition: new Vector3(snapshot.x, Number.isFinite(snapshot.y) ? snapshot.y : 0.05, snapshot.z),
+    serverSnapshotTime: snapshotReceivedAt,
+    runDistance: initialRunDistance,
+    launchStart: launch.start.clone(),
+    launchWaterStart: launch.waterStart?.clone?.() ?? null,
+    launchRunStart: launch.runStart?.clone?.() ?? null,
+    launchMode: launch.mode,
+    launchBlendUntil: launch.blendUntil,
+    launchBlendDuration: launch.blendDuration ?? 0.35,
+    localTubeSideOffset: Number.isFinite(launch.sideOffset) ? launch.sideOffset : 0,
+    localTubeReleased: launch.mode !== "local-tube",
+    airDropSplashCreated: false,
+    airDropSurfaced: launch.mode !== "air-drop",
+    airDropSubmergedUntilDistance: launch.mode === "air-drop" ? airDroppedTorpedoSubmergedDistance : 0,
+    airDropSplashPosition: launch.splashPosition?.clone?.() ?? null,
+    airDropLastFallPosition: null,
+    airDropWaterEntryJump: null,
+    airDropRunDistanceAtSplash: null
   };
   system.serverVisuals.set(snapshot.id, visual);
+  if (launch.sourceVehicleType === "scout-plane") {
+    system.serverSourceVehicleTypes.set(snapshot.id, "scout-plane");
+  }
+
+  if (snapshot.shipId === playerServerShipId || snapshot.shipId === pendingPlayerServerShip?.id) {
+    sendClientGameEvent("own-torpedo-visual-created", {
+      torpedoId: snapshot.id,
+      torpedoShipId: snapshot.shipId ?? "",
+      launchMode: launch.mode,
+      torpedoAge: Number(getServerTorpedoAge(snapshot, snapshotServerTime).toFixed(2)),
+      initialRunDistance: Number(initialRunDistance.toFixed(2)),
+      serverPosition: summarizeVector(visual.serverPosition),
+      visualStart: summarizeVector(root.position),
+      snapshotReceivedAt: Number(snapshotReceivedAt.toFixed(2)),
+      snapshotServerTime: Number.isFinite(snapshotServerTime) ? Number(snapshotServerTime.toFixed(2)) : null,
+      firedAt: Number.isFinite(snapshot.firedAt) ? Number(snapshot.firedAt.toFixed(2)) : null,
+      serverClockOffset: Number.isFinite(serverClockOffset) ? Number(serverClockOffset.toFixed(3)) : null
+    });
+  }
 
   if (launch.showMuzzleEffect) {
     createLaunchPuff(system, launch.puffPosition, launch.heading, launch.tubeSide);
-    createMuzzleEffect(system, launch.muzzlePosition, launch.heading, launch.tubeSide);
+    createMuzzleEffect(system, launch.muzzlePosition, launch.heading, launch.tubeSide, launch.sourceSpeed);
   }
   return visual;
 }
 
-function getServerTorpedoLaunch(snapshot) {
+function getServerTorpedoLaunch(system, snapshot, snapshotServerTime = null) {
   const heading = Number.isFinite(snapshot.heading) ? snapshot.heading : 0;
-  const serverPosition = new Vector3(snapshot.x, 0.05, snapshot.z);
+  const serverPosition = new Vector3(snapshot.x, Number.isFinite(snapshot.y) ? snapshot.y : 0.05, snapshot.z);
+  const isOwnTorpedo = snapshot.shipId && (snapshot.shipId === playerServerShipId || snapshot.shipId === pendingPlayerServerShip?.id);
+  const isPendingOwnTorpedo = snapshot.shipId && snapshot.shipId === pendingPlayerServerShip?.id;
+  const shooterShip = snapshot.shipId ? serverShipsById.get(snapshot.shipId) : null;
+  const shooterMotion = snapshot.shipId ? enemyMotions.find((motion) => motion.id === snapshot.shipId) : null;
+  const isAirDropped = shooterShip?.vehicleType === "scout-plane" || shooterMotion?.vehicleType === "scout-plane";
+  const torpedoAge = getServerTorpedoAge(snapshot, snapshotServerTime);
+  const isFreshShipLaunch = torpedoAge <= serverTorpedoFreshLaunchSeconds;
+  const isFreshAirDrop = torpedoAge <= airDroppedTorpedoMaxVisualFallSeconds + 0.15;
+
+  if (isAirDropped && snapshot.state === "airborne") {
+    document.body.dataset.serverTorpedoLaunch = "airborne";
+    return {
+      mode: "air-drop",
+      heading,
+      start: serverPosition,
+      waterStart: null,
+      splashPosition: null,
+      puffPosition: serverPosition,
+      muzzlePosition: serverPosition,
+      tubeSide: 0,
+      blendUntil: 0,
+      blendDuration: 0,
+      showMuzzleEffect: false,
+      sourceVehicleType: "scout-plane",
+      sourceSpeed: Number.isFinite(snapshot.speed) ? snapshot.speed : 0
+    };
+  }
+
+  if (isAirDropped && isFreshAirDrop) {
+    const sourceY = isOwnTorpedo && boat?.root?.position
+      ? boat.root.position.y
+      : shooterMotion?.root?.position
+        ? shooterMotion.root.position.y
+        : remoteVehicleY(shooterShip);
+    const sourcePosition = new Vector3(serverPosition.x, Math.max(8, sourceY - 0.7), serverPosition.z);
+    const fallSeconds = getAirDroppedTorpedoVisualFallSeconds(sourcePosition.y);
+    document.body.dataset.serverTorpedoLaunch = "air-drop";
+    return {
+      mode: "air-drop",
+      heading,
+      start: sourcePosition,
+      waterStart: serverPosition.clone(),
+      splashPosition: serverPosition.clone(),
+      puffPosition: serverPosition,
+      muzzlePosition: serverPosition,
+      tubeSide: 1,
+      blendUntil: time + fallSeconds,
+      blendDuration: fallSeconds,
+      showMuzzleEffect: false,
+      sourceVehicleType: "scout-plane",
+      sourceSpeed: 0
+    };
+  }
+
+  if (isOwnTorpedo && isFreshShipLaunch && boat?.root?.position && distance2D(boat.root.position, serverPosition) < 35) {
+    const launchHeading = Number.isFinite(heading) ? heading : 0;
+    const forward = getForwardVector(launchHeading);
+    const right = getRightVector(launchHeading);
+    const tuning = torpedoLaunchDefaults;
+    const serverOffset = serverPosition.subtract(boat.root.position);
+    const sideOffset = serverOffset.x * right.x + serverOffset.z * right.z;
+    const snapshotTubeSide = snapshot.tubeSide === -1 || snapshot.tubeSide === 1 ? snapshot.tubeSide : null;
+    const pendingTubeSide = system.pendingOwnTubeSide === -1 || system.pendingOwnTubeSide === 1
+      ? system.pendingOwnTubeSide
+      : null;
+    const inferredTubeSide = Math.abs(sideOffset) > tuning.tubeX * torpedoBoatVisualScale * 0.35
+      ? Math.sign(sideOffset)
+      : (system.nextTube === 0 ? -1 : 1);
+    const tubeSide = snapshotTubeSide ?? pendingTubeSide ?? inferredTubeSide;
+    if (pendingTubeSide !== null) {
+      system.pendingOwnTubeSide = null;
+    }
+    system.nextTube = tubeSide < 0 ? 1 : 0;
+    const tubeX = tubeSide * tuning.tubeX * torpedoBoatVisualScale;
+    const tubeStartZ = tuning.startZ * torpedoBoatVisualScale;
+    const waterEntryZ = tuning.waterEntryZ * torpedoBoatVisualScale;
+    const tubeStartY = tuning.startY * torpedoBoatVisualScale;
+    const start = boat.root.position
+      .add(right.scale(tubeX))
+      .add(forward.scale(tubeStartZ))
+      .add(new Vector3(0, tubeStartY, 0));
+    const waterStart = boat.root.position
+      .add(right.scale(tubeX))
+      .add(forward.scale(waterEntryZ))
+      .add(new Vector3(0, 0.05, 0));
+    const runStart = boat.root.position
+      .add(right.scale(tubeX))
+      .add(forward.scale(tuning.runStartZ * torpedoBoatVisualScale))
+      .add(new Vector3(0, 0.05, 0));
+    const puffPosition = boat.root.position
+      .add(right.scale(tubeX))
+      .add(forward.scale(waterEntryZ + 0.12))
+      .add(new Vector3(0, 0.02, 0));
+    const muzzlePosition = boat.root.position
+      .add(right.scale(tubeX))
+      .add(forward.scale(tubeStartZ))
+      .add(new Vector3(0, tubeStartY, 0));
+
+    document.body.dataset.ownServerTorpedoLaunch = "local";
+    return {
+      mode: "local-tube",
+      heading: launchHeading,
+      start,
+      waterStart,
+      runStart,
+      puffPosition,
+      muzzlePosition,
+      tubeSide,
+      sideOffset: tubeX,
+      blendUntil: time + 0.35,
+      blendDuration: 0.35,
+      showMuzzleEffect: true,
+      sourceVehicleType: null,
+      sourceSpeed: Math.max(0, Number.isFinite(shooterShip?.speed) ? shooterShip.speed : speed)
+    };
+  }
+
+  if (isAirDropped) {
+    document.body.dataset.serverTorpedoLaunch = "air-drop-restored";
+  }
 
   return {
+    mode: isPendingOwnTorpedo ? "pending-own-server-position" : "server-position",
     heading,
     start: serverPosition,
     puffPosition: serverPosition,
     muzzlePosition: serverPosition,
     tubeSide: 1,
     blendUntil: 0,
-    showMuzzleEffect: false
+    showMuzzleEffect: false,
+    sourceVehicleType: isAirDropped ? "scout-plane" : null,
+    sourceSpeed: 0
   };
 }
 
-function applyServerTorpedoSnapshot(visual, snapshot, snapshotClientTime = time) {
-  visual.serverPosition = new Vector3(snapshot.x, 0.05, snapshot.z);
-  visual.serverSnapshotTime = snapshotClientTime;
+function getAirDroppedTorpedoVisualFallSeconds(releaseY) {
+  if (!Number.isFinite(releaseY)) return airDroppedTorpedoFallSeconds;
+  return clamp(releaseY / 135, 0.75, airDroppedTorpedoMaxVisualFallSeconds);
+}
+
+function fallbackServerTorpedoSpeed(launch) {
+  return launch?.mode === "air-drop"
+    ? shipTorpedoBaseSpeed * airTorpedoSpeedFactor
+    : shipTorpedoBaseSpeed;
+}
+
+function getServerTorpedoAge(snapshot, snapshotServerTime = null) {
+  if (!Number.isFinite(snapshot?.firedAt)) return 0;
+  if (!Number.isFinite(snapshotServerTime)) return 0;
+  return Math.max(0, snapshotServerTime - snapshot.firedAt);
+}
+
+function applyServerTorpedoSnapshot(visual, snapshot, snapshotReceivedAt = time) {
+  visual.serverState = snapshot.state ?? visual.serverState ?? "running";
+  visual.serverPosition = new Vector3(snapshot.x, Number.isFinite(snapshot.y) ? snapshot.y : 0.05, snapshot.z);
+  visual.serverSnapshotTime = snapshotReceivedAt;
   visual.heading = Number.isFinite(snapshot.heading) ? snapshot.heading : visual.heading;
   visual.forward = getForwardVector(visual.heading);
   visual.speed = Number.isFinite(snapshot.speed) ? snapshot.speed : visual.speed;
+  visual.verticalSpeed = Number.isFinite(snapshot.verticalSpeed) ? snapshot.verticalSpeed : visual.verticalSpeed ?? 0;
 
   if (!visual.root.rotationQuaternion) {
     visual.root.rotationQuaternion = Quaternion.FromEulerAngles(0, visual.heading, 0);
+  }
+  const visualDistance = distance2D(visual.root.position, visual.serverPosition);
+  if (!visual.reportedLargeCorrection && snapshot.shipId === playerServerShipId && visualDistance > 20) {
+    visual.reportedLargeCorrection = true;
+    sendClientGameEvent("torpedo-visual-large-correction", {
+      torpedoId: snapshot.id,
+      shipId: snapshot.shipId ?? "",
+      distance: Number(visualDistance.toFixed(2)),
+      visualPosition: summarizeVector(visual.root.position),
+      serverPosition: summarizeVector(visual.serverPosition),
+      snapshotReceivedAt: Number(snapshotReceivedAt.toFixed(2)),
+      snapshotT: Number.isFinite(snapshot.t) ? Number(snapshot.t.toFixed(2)) : null
+    });
   }
   if (time >= (visual.launchBlendUntil ?? 0) && distance2D(visual.root.position, visual.serverPosition) > 45) {
     visual.root.position.copyFrom(visual.serverPosition);
@@ -3808,19 +9314,370 @@ function applyServerTorpedoSnapshot(visual, snapshot, snapshotClientTime = time)
 
 function updateServerTorpedoVisuals(system, dt, now) {
   system.serverVisuals.forEach((visual) => {
-    const snapshotAge = Math.max(0, now - (visual.serverSnapshotTime ?? now));
     const forward = visual.forward;
-    const projected = visual.serverPosition.add(forward.scale(visual.speed * snapshotAge));
+    const right = getRightVector(visual.heading);
+    const snapshotAge = Math.max(0, now - (visual.serverSnapshotTime ?? now));
+    const projected = visual.serverPosition
+      .add(forward.scale(visual.speed * snapshotAge))
+      .add(right.scale(visual.localTubeSideOffset ?? 0));
+    const projectedY = visual.serverState === "airborne"
+      ? visual.serverPosition.y + (visual.verticalSpeed ?? 0) * snapshotAge - 0.5 * bombGravity * snapshotAge * snapshotAge
+      : visual.serverPosition.y;
     const step = visual.speed * dt;
 
-    visual.root.position.addInPlace(forward.scale(step));
-    visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 4.5);
-    visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 4.5);
-    visual.root.position.y = 0.05;
-    visual.root.rotationQuaternion = Quaternion.FromEulerAngles(0, visual.heading, 0);
+    if (visual.serverState === "airborne") {
+      visual.body?.setEnabled(true);
+      visual.nose?.setEnabled(true);
+      visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 8);
+      visual.root.position.y += (projectedY - visual.root.position.y) * Math.min(1, dt * 8);
+      visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 8);
+      visual.root.rotationQuaternion = Quaternion.FromEulerAngles(0.52, visual.heading, 0);
+      visual.runDistance = 0;
+      visual.airDropLastFallPosition = visual.root.position.clone();
+      updateTorpedoWake(visual, false, now);
+      return;
+    }
+
+    if (now < (visual.launchBlendUntil ?? 0) && visual.launchMode === "local-tube") {
+      const duration = visual.launchBlendDuration || 0.35;
+      const t = 1 - clamp((visual.launchBlendUntil - now) / duration, 0, 1);
+      const eased = easeOutCubic(t);
+      const waterStart = visual.launchWaterStart ?? visual.launchRunStart ?? visual.serverPosition;
+      visual.root.position.x = visual.launchStart.x + (waterStart.x - visual.launchStart.x) * eased;
+      visual.root.position.z = visual.launchStart.z + (waterStart.z - visual.launchStart.z) * eased;
+      visual.root.position.y = visual.launchStart.y + (0.05 - visual.launchStart.y) * (t * t);
+      visual.root.rotationQuaternion = Quaternion.FromEulerAngles(0.28 * (1 - eased), visual.heading, 0);
+    } else if (now < (visual.launchBlendUntil ?? 0) && visual.launchMode === "air-drop") {
+      const duration = visual.launchBlendDuration || airDroppedTorpedoFallSeconds;
+      const t = 1 - clamp((visual.launchBlendUntil - now) / duration, 0, 1);
+      const eased = easeInOutCubic(t);
+      const waterStart = visual.launchWaterStart ?? visual.serverPosition;
+      visual.root.position.x = visual.launchStart.x + (waterStart.x - visual.launchStart.x) * eased;
+      visual.root.position.z = visual.launchStart.z + (waterStart.z - visual.launchStart.z) * eased;
+      visual.root.position.y = visual.launchStart.y + (0.05 - visual.launchStart.y) * (t * t);
+      visual.root.rotationQuaternion = Quaternion.FromEulerAngles(0.52 * (1 - eased), visual.heading, 0);
+      visual.runDistance = 0;
+      visual.airDropLastFallPosition = visual.root.position.clone();
+      updateTorpedoWake(visual, false, now);
+      return;
+    } else {
+      if (visual.launchMode === "local-tube" && !visual.localTubeReleased) {
+        visual.localTubeReleased = true;
+        visual.body?.setEnabled(false);
+        visual.nose?.setEnabled(false);
+        if (visual.launchRunStart) {
+          visual.root.position.copyFrom(visual.launchRunStart);
+        }
+      }
+      if (visual.launchMode === "air-drop" && !visual.airDropSplashCreated) {
+        visual.airDropSplashCreated = true;
+        const splashPosition = visual.airDropSplashPosition ?? visual.serverPosition ?? visual.root.position;
+        visual.airDropWaterEntryJump = visual.airDropLastFallPosition
+          ? distance2D(visual.airDropLastFallPosition, splashPosition)
+          : 0;
+        visual.runDistance = 0;
+        visual.airDropRunDistanceAtSplash = 0;
+        visual.root.position.copyFrom(splashPosition);
+        visual.root.position.y = -0.22;
+        visual.body?.setEnabled(false);
+        visual.nose?.setEnabled(false);
+        createAirDroppedTorpedoSplash(system, splashPosition, visual.heading);
+      }
+      visual.root.position.addInPlace(forward.scale(step));
+      if (visual.launchMode !== "air-drop") {
+        visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 4.5);
+        visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 4.5);
+      }
+      if (visual.launchMode === "air-drop" && !visual.airDropSurfaced && visual.runDistance < visual.airDropSubmergedUntilDistance) {
+        visual.root.position.y = -0.22;
+      } else {
+        if (visual.launchMode === "air-drop" && !visual.airDropSurfaced) {
+          visual.airDropSurfaced = true;
+          visual.body?.setEnabled(false);
+          visual.nose?.setEnabled(false);
+          createAirDroppedTorpedoSurfaceWake(system, visual.root.position, visual.heading);
+        }
+        visual.root.position.y = 0.05;
+      }
+      visual.root.rotationQuaternion = Quaternion.FromEulerAngles(0, visual.heading, 0);
+    }
     visual.runDistance += step;
-    updateTorpedoWake(visual, true, now);
+    if (visual.launchMode === "server-position") {
+      visual.body?.setEnabled(false);
+      visual.nose?.setEnabled(false);
+    }
+    updateTorpedoWake(visual, visual.root.position.y <= 0.08 && visual.airDropSurfaced !== false, now);
   });
+}
+
+function syncServerBombs(bombs, impacts = [], snapshotClientTime = time) {
+  const activeIds = new Set();
+
+  bombs.forEach((snapshot) => {
+    activeIds.add(snapshot.id);
+    const visual = bombSystem.serverVisuals.get(snapshot.id) ?? createServerBombVisual(bombSystem, snapshot, snapshotClientTime);
+    applyServerBombSnapshot(visual, snapshot, snapshotClientTime);
+  });
+
+  renderServerBombImpacts(impacts);
+
+  bombSystem.serverVisuals.forEach((visual, id) => {
+    if (activeIds.has(id)) return;
+
+    disposeServerBombVisual(visual);
+    bombSystem.serverVisuals.delete(id);
+  });
+  document.body.dataset.serverBombVisuals = String(bombSystem.serverVisuals.size);
+}
+
+function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
+  const root = new TransformNode(`server_bomb_${snapshot.id}`, system.scene);
+  root.parent = system.root;
+  const serverPosition = new Vector3(
+    Number.isFinite(snapshot.x) ? snapshot.x : 0,
+    Number.isFinite(snapshot.y) ? snapshot.y : 0,
+    Number.isFinite(snapshot.z) ? snapshot.z : 0
+  );
+  const launch = getServerBombLaunch(snapshot, serverPosition, snapshotClientTime);
+  root.position.copyFrom(launch.start);
+  root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2, Number.isFinite(snapshot.heading) ? snapshot.heading : 0, 0);
+
+  const body = MeshBuilder.CreateCylinder(`${root.name}_body`, {
+    diameter: 0.22,
+    height: 0.88,
+    tessellation: 12
+  }, system.scene);
+  body.parent = root;
+  body.rotation.x = Math.PI / 2;
+  body.material = system.materials.funnel;
+
+  const nose = MeshBuilder.CreateCylinder(`${root.name}_nose`, {
+    diameterTop: 0,
+    diameterBottom: 0.22,
+    height: 0.22,
+    tessellation: 12
+  }, system.scene);
+  nose.parent = root;
+  nose.rotation.x = Math.PI / 2;
+  nose.position.z = 0.55;
+  nose.material = system.materials.funnel;
+
+  const fin = MeshBuilder.CreateBox(`${root.name}_fin`, { width: 0.34, height: 0.05, depth: 0.14 }, system.scene);
+  fin.parent = root;
+  fin.position.z = -0.48;
+  fin.material = system.materials.funnel;
+
+  const visual = {
+    id: snapshot.id,
+    root,
+    body,
+    nose,
+    fin,
+    heading: Number.isFinite(snapshot.heading) ? snapshot.heading : 0,
+    speed: Number.isFinite(snapshot.speed) ? snapshot.speed : 0,
+    verticalSpeed: 0,
+    serverPosition,
+    serverSnapshotTime: snapshotClientTime,
+    launchStart: launch.start.clone(),
+    launchBlendUntil: launch.blendUntil,
+    launchBlendDuration: launch.blendDuration
+  };
+  system.serverVisuals.set(snapshot.id, visual);
+  return visual;
+}
+
+function getServerBombLaunch(snapshot, serverPosition, snapshotClientTime = time) {
+  const start = getServerBombLaunchPosition(snapshot);
+  if (!start) {
+    return { start: serverPosition, blendUntil: 0, blendDuration: 0 };
+  }
+  return {
+    start: serverPosition,
+    blendUntil: 0,
+    blendDuration: 0
+  };
+}
+
+function getServerBombLaunchPosition(snapshot) {
+  if (!Number.isFinite(snapshot.launchX) || !Number.isFinite(snapshot.launchY) || !Number.isFinite(snapshot.launchZ)) {
+    return null;
+  }
+  return new Vector3(snapshot.launchX, snapshot.launchY, snapshot.launchZ);
+}
+
+function applyServerBombSnapshot(visual, snapshot, snapshotClientTime = time) {
+  const previousPosition = visual.serverPosition;
+  const previousSnapshotTime = visual.serverSnapshotTime ?? snapshotClientTime;
+  const nextServerPosition = new Vector3(
+    Number.isFinite(snapshot.x) ? snapshot.x : visual.serverPosition.x,
+    Number.isFinite(snapshot.y) ? snapshot.y : visual.serverPosition.y,
+    Number.isFinite(snapshot.z) ? snapshot.z : visual.serverPosition.z
+  );
+  const snapshotDelta = snapshotClientTime - previousSnapshotTime;
+  if (snapshotDelta > 0.001 && previousPosition && Number.isFinite(nextServerPosition.y) && Number.isFinite(previousPosition.y)) {
+    const measuredVerticalSpeed = (nextServerPosition.y - previousPosition.y) / snapshotDelta;
+    if (Number.isFinite(measuredVerticalSpeed)) {
+      visual.verticalSpeed = Number.isFinite(visual.verticalSpeed)
+        ? visual.verticalSpeed + (measuredVerticalSpeed - visual.verticalSpeed) * 0.45
+        : measuredVerticalSpeed;
+    }
+  }
+  visual.serverPosition = nextServerPosition;
+  visual.serverSnapshotTime = snapshotClientTime;
+  visual.heading = Number.isFinite(snapshot.heading) ? snapshot.heading : visual.heading;
+  visual.speed = Number.isFinite(snapshot.speed) ? snapshot.speed : visual.speed;
+  if (!visual.root.rotationQuaternion) {
+    visual.root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2, visual.heading, 0);
+  }
+}
+
+function updateServerBombVisuals(system, dt, now) {
+  const finishedBombs = [];
+  system.serverVisuals.forEach((visual) => {
+    const forward = getForwardVector(visual.heading);
+    const snapshotAge = Math.max(0, now - (visual.serverSnapshotTime ?? now));
+    const projected = visual.serverPosition.add(forward.scale(visual.speed * snapshotAge));
+    const verticalSpeed = Number.isFinite(visual.verticalSpeed) ? visual.verticalSpeed : 0;
+    const projectedY = visual.serverPosition.y + verticalSpeed * snapshotAge - 0.5 * bombGravity * snapshotAge * snapshotAge;
+
+    if (now < (visual.launchBlendUntil ?? 0)) {
+      const duration = visual.launchBlendDuration || 0.24;
+      const t = 1 - clamp((visual.launchBlendUntil - now) / duration, 0, 1);
+      const eased = easeInOutCubic(t);
+      visual.root.position.x = visual.launchStart.x + (projected.x - visual.launchStart.x) * eased;
+      visual.root.position.y = visual.launchStart.y + (projectedY - visual.launchStart.y) * eased;
+      visual.root.position.z = visual.launchStart.z + (projected.z - visual.launchStart.z) * eased;
+      visual.root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2, visual.heading, 0);
+      return;
+    }
+
+    visual.root.position.addInPlace(forward.scale(visual.speed * dt));
+    if (Number.isFinite(visual.verticalSpeed)) {
+      visual.verticalSpeed -= bombGravity * dt;
+      visual.root.position.y += visual.verticalSpeed * dt;
+    }
+    visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 4.5);
+    visual.root.position.y += (projectedY - visual.root.position.y) * Math.min(1, dt * 2);
+    visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 4.5);
+    if (visual.root.position.y <= 0) {
+      const impactKey = `visual-water:${visual.id}`;
+      if (!system.serverImpactIds.has(impactKey)) {
+        system.serverImpactIds.add(impactKey);
+        createHitChurn(torpedoSystem, new Vector3(visual.root.position.x, 0.05, visual.root.position.z), visual.heading);
+      }
+      finishedBombs.push(visual.id);
+      return;
+    }
+    visual.root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2, visual.heading, 0);
+  });
+  finishedBombs.forEach((id) => {
+    const visual = system.serverVisuals.get(id);
+    if (!visual) return;
+    disposeServerBombVisual(visual);
+    system.serverVisuals.delete(id);
+  });
+}
+
+function updateBombSightMarker(system, forward) {
+  if (!system.sightMarker) return;
+  if (!scoutPlaneMode || !bombBayViewActive || playerDamageState !== "active") {
+    system.sightMarker.setEnabled(false);
+    document.body.dataset.bombSight = "off";
+    return;
+  }
+
+  const preview = getAirTorpedoDropPreview();
+  system.sightMarker.position.set(preview.sightCenter.x, 0.2, preview.sightCenter.z);
+  system.sightMarker.rotation.y = preview.sightHeading;
+  updateAirTorpedoSightPattern(system.sightMarker, preview);
+  system.sightMarker.setEnabled(true);
+  document.body.dataset.bombSight = `${preview.centerImpact.x.toFixed(1)},${preview.centerImpact.z.toFixed(1)}`;
+}
+
+function updateAirTorpedoSightPattern(marker, preview) {
+  const parts = marker.metadata ?? {};
+  const runLength = Math.max(24, preview.waterRunDistance);
+  const entryOffset = -preview.waterRunDistance * 0.5;
+  (parts.crossParts ?? []).forEach(({ mesh, part }) => {
+    if (part === "upper") {
+      mesh.scaling.x = 1;
+      mesh.scaling.z = runLength;
+      mesh.position.x = 0;
+      mesh.position.z = 0;
+      return;
+    }
+    if (part === "lower") {
+      mesh.scaling.x = 1;
+      mesh.scaling.z = 4;
+      mesh.position.x = 0;
+      mesh.position.z = entryOffset - 2;
+      return;
+    }
+    mesh.scaling.x = part === "left" || part === "right" ? 3.4 : 1;
+    mesh.scaling.z = 1;
+    mesh.position.x = part === "right" ? 2.25 : -2.25;
+    mesh.position.z = entryOffset;
+  });
+}
+
+function updateBombSightPattern(marker, preview) {
+  const parts = marker.metadata ?? {};
+  const impactPoints = preview.impactPoints.map((point) => {
+    return worldPointToBombSightLocal(point, { x: marker.position.x, z: marker.position.z }, marker.rotation.y);
+  });
+  const xs = impactPoints.map((point) => point.x);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const centerX = 0;
+  const centerZ = 0;
+  const fixedSpreadXs = Array.from({ length: bombsPerDrop }, (_, index) => getBombPatternOffset(index));
+  const fixedImpactWidth = Math.max(...fixedSpreadXs) - Math.min(...fixedSpreadXs);
+  const impactWidth = Math.max(2.8, preview.bounds.width + 1.2, fixedImpactWidth + 1.2);
+  const impactLength = Math.max(4.4, preview.bounds.length + 3.0);
+  const armLength = bombSightArmLength;
+  const gapX = impactWidth * 0.5;
+  const gapZ = impactLength * 0.5;
+
+  (parts.crossParts ?? []).forEach(({ mesh, part }) => {
+    if (part === "upper" || part === "lower") {
+      mesh.scaling.x = 1;
+      mesh.scaling.z = armLength;
+      mesh.position.x = centerX;
+      mesh.position.z = centerZ + (part === "upper" ? gapZ + armLength * 0.5 : -gapZ - armLength * 0.5);
+      return;
+    }
+    mesh.scaling.x = armLength;
+    mesh.scaling.z = 1;
+    mesh.position.x = centerX + (part === "right" ? gapX + armLength * 0.5 : -gapX - armLength * 0.5);
+    mesh.position.z = centerZ;
+  });
+}
+
+function renderServerBombImpacts(impacts) {
+  impacts.forEach((impact) => {
+    const key = `${impact.id}:${impact.reason}:${impact.t}`;
+    if (bombSystem.serverImpactIds.has(key)) return;
+    bombSystem.serverImpactIds.add(key);
+    notifyOwnWeaponImpact(impact, "Bomben", "bomb", "scout-plane");
+
+    const position = new Vector3(
+      Number.isFinite(impact.x) ? impact.x : 0,
+      0.05,
+      Number.isFinite(impact.z) ? impact.z : 0
+    );
+    bombSystem.hits += 1;
+    torpedoSystem.hits += 1;
+    createHitChurn(torpedoSystem, position, Number.isFinite(impact.heading) ? impact.heading : 0);
+  });
+
+  if (bombSystem.serverImpactIds.size > 120) {
+    bombSystem.serverImpactIds = new Set(Array.from(bombSystem.serverImpactIds).slice(-80));
+  }
+}
+
+function disposeServerBombVisual(visual) {
+  visual.root.getChildMeshes().forEach((mesh) => mesh.dispose());
+  visual.root.dispose();
 }
 
 function disposeServerTorpedoVisual(visual) {
@@ -3832,13 +9689,47 @@ function disposeServerTorpedoVisual(visual) {
 function createTorpedoWake(scene, materials, name) {
   const wake = [];
 
-  for (let i = 0; i < 9; i += 1) {
-    const segment = MeshBuilder.CreateBox(`${name}_wake_${i}`, {
-      width: 0.08 + i * 0.018,
+  const bodyHint = MeshBuilder.CreateCylinder(`${name}_wake_body_hint`, {
+    diameter: 0.036 * torpedoBoatVisualScale * torpedoBodyHintWidthScale * torpedoThicknessScale,
+    height: (torpedoNoseForwardOffset + torpedoTailBackwardOffset) * 0.82,
+    tessellation: 10
+  }, scene);
+  bodyHint.rotation.x = Math.PI / 2;
+  bodyHint.material = materials.torpedoWakeBody;
+  bodyHint.metadata = { kind: "bodyHint" };
+  bodyHint.setEnabled(false);
+  wake.push(bodyHint);
+
+  for (let side = -1; side <= 1; side += 2) {
+    const contour = MeshBuilder.CreateBox(`${name}_head_contour_wake_${side}`, {
+      width: 0.036 * torpedoWakeVisualScale,
       height: 0.012,
-      depth: 0.58 + i * 0.08
+      depth: 1
+    }, scene);
+    contour.material = materials.foam;
+    contour.metadata = { kind: "headContour", side, baseDepth: 1 };
+    contour.setEnabled(false);
+    wake.push(contour);
+
+    const flare = MeshBuilder.CreateBox(`${name}_head_flare_wake_${side}`, {
+      width: 0.032 * torpedoWakeVisualScale,
+      height: 0.012,
+      depth: 1
+    }, scene);
+    flare.material = materials.foam;
+    flare.metadata = { kind: "headFlare", side, baseDepth: 1 };
+    flare.setEnabled(false);
+    wake.push(flare);
+  }
+
+  for (let i = 0; i < 5; i += 1) {
+    const segment = MeshBuilder.CreateBox(`${name}_wake_${i}`, {
+      width: (0.08 + i * 0.018) * torpedoWakeVisualScale * torpedoSternWakeSizeScale,
+      height: 0.012,
+      depth: (0.58 + i * 0.08) * torpedoWakeVisualScale * torpedoSternWakeSizeScale * torpedoSternWakeLengthScale
     }, scene);
     segment.material = materials.foam;
+    segment.metadata = { kind: "trail", row: i };
     segment.setEnabled(false);
     wake.push(segment);
   }
@@ -3849,19 +9740,24 @@ function createTorpedoWake(scene, materials, name) {
 function createLaunchPuff(system, position, heading, tubeSide) {
   const forward = getForwardVector(heading);
   const right = getRightVector(heading);
+  const side = tubeSide < 0 ? -1 : 1;
 
   for (let i = 0; i < 9; i += 1) {
-    const patch = MeshBuilder.CreateBox(`torpedo_puff_${system.nextId}_${i}`, {
-      width: 0.2 + i * 0.034,
-      height: 0.018,
-      depth: 0.28 + i * 0.05
-    }, system.scene);
+    const seed = system.nextId * 29 + i * 13;
+    const patch = createJaggedSurfacePatch(
+      `torpedo_puff_${system.nextId}_${i}`,
+      system.scene,
+      0.22 + i * 0.04,
+      0.28 + i * 0.06,
+      seed
+    );
     patch.parent = system.root;
     patch.material = system.materials.foam;
+    const sideSpread = (stableUnitNoise(seed + 5) - 0.5) * 0.035;
     patch.position.copyFrom(
       position
         .add(forward.scale(i * 0.08))
-        .add(right.scale(tubeSide * (0.01 + i * 0.012)))
+        .add(right.scale(side * (0.055 + i * 0.018) + sideSpread))
         .add(new Vector3(0, -0.02, 0))
     );
     patch.rotation.y = heading;
@@ -3869,38 +9765,43 @@ function createLaunchPuff(system, position, heading, tubeSide) {
   }
 }
 
-function createMuzzleEffect(system, position, heading, tubeSide) {
+function createMuzzleEffect(system, position, heading, tubeSide, sourceSpeed = 0) {
   const forward = getForwardVector(heading);
   const right = getRightVector(heading);
-
-  const ring = MeshBuilder.CreateTorus(`torpedo_muzzle_ring_${system.nextId}`, {
-    diameter: 0.42,
-    thickness: 0.045,
-    tessellation: 16
-  }, system.scene);
-  ring.parent = system.root;
-  ring.material = system.materials.foam;
-  ring.position.copyFrom(position.add(forward.scale(0.28)).add(new Vector3(0, 0.02, 0)));
-  ring.rotation.x = Math.PI / 2;
-  ring.rotation.y = heading;
-  system.muzzleEffects.push({ mesh: ring, age: 0, lifetime: 0.32, seed: 0, kind: "ring" });
+  const side = tubeSide < 0 ? -1 : 1;
+  const carriedForwardSpeed = Math.max(0, Number.isFinite(sourceSpeed) ? sourceSpeed : 0);
 
   for (let i = 0; i < 4; i += 1) {
-    const jet = MeshBuilder.CreateBox(`torpedo_muzzle_jet_${system.nextId}_${i}`, {
-      width: 0.09 + i * 0.02,
-      height: 0.018,
-      depth: 0.34 + i * 0.08
+    const seed = system.nextId * 43 + i * 17;
+    const sizeJitter = 0.82 + stableUnitNoise(seed + 3) * 0.48;
+    const sideJitter = (stableUnitNoise(seed + 7) - 0.5) * 0.025;
+    const liftJitter = (stableUnitNoise(seed + 11) - 0.5) * 0.06;
+    const steam = MeshBuilder.CreateSphere(`torpedo_muzzle_steam_${system.nextId}_${i}`, {
+      diameter: (0.2 + i * 0.035) * sizeJitter,
+      segments: 8
     }, system.scene);
-    jet.parent = system.root;
-    jet.material = system.materials.foam;
-    jet.position.copyFrom(
+    steam.parent = system.root;
+    steam.material = system.materials.foam;
+    steam.position.copyFrom(
       position
-        .add(forward.scale(0.18 + i * 0.16))
-        .add(right.scale(tubeSide * (0.006 + i * 0.008)))
-        .add(new Vector3(0, 0.0, 0))
+        .add(forward.scale(0.26 + i * 0.2 + stableUnitNoise(seed + 13) * 0.07))
+        .add(right.scale(side * (0.07 + i * 0.022) + sideJitter))
+        .add(new Vector3(0, 0.22 + i * 0.035 + liftJitter, 0))
     );
-    jet.rotation.y = heading;
-    system.muzzleEffects.push({ mesh: jet, age: 0, lifetime: 0.22 + i * 0.05, seed: i + 1, kind: "jet" });
+    steam.scaling.x = 1.12 + stableUnitNoise(seed + 19) * 0.45;
+    steam.scaling.y = 0.72 + stableUnitNoise(seed + 23) * 0.24;
+    steam.scaling.z = 0.82 + stableUnitNoise(seed + 29) * 0.52;
+    steam.rotation.y = heading + (stableUnitNoise(seed + 31) - 0.5) * 0.42;
+    system.muzzleEffects.push({
+      mesh: steam,
+      age: 0,
+      lifetime: 0.28 + stableUnitNoise(seed + 37) * 0.1,
+      seed: i + 1,
+      kind: "steam",
+      forward: forward.clone(),
+      carriedForwardSpeed,
+      side
+    });
   }
 }
 
@@ -3966,11 +9867,20 @@ function updateTorpedoSystem(system, dt, time, enemyMotions, landZones, playerPo
       effect.mesh.dispose();
       return false;
     }
-    const scale = effect.kind === "ring" ? 1 + t * 1.7 : 1 + t * 0.8;
-    effect.mesh.scaling.x = scale;
-    effect.mesh.scaling.y = scale;
-    effect.mesh.scaling.z = scale;
-    effect.mesh.position.y += dt * (effect.kind === "ring" ? 0.04 : -0.02);
+    if (effect.kind === "steam") {
+      const grow = 1 + t * 1.25;
+      effect.mesh.scaling.x = grow;
+      effect.mesh.scaling.z = 1 + t * 1.65;
+      effect.mesh.position.addInPlace(effect.forward.scale(dt * ((effect.carriedForwardSpeed ?? 0) + 0.55 + effect.seed * 0.08)));
+      effect.mesh.position.y += dt * (0.09 + effect.seed * 0.01);
+      effect.mesh.rotation.y += dt * 0.18 * (effect.side || 1);
+    } else {
+      const scale = effect.kind === "ring" ? 1 + t * 1.7 : 1 + t * 0.8;
+      effect.mesh.scaling.x = scale;
+      effect.mesh.scaling.y = scale;
+      effect.mesh.scaling.z = scale;
+      effect.mesh.position.y += dt * (effect.kind === "ring" ? 0.04 : -0.02);
+    }
     effect.mesh.setEnabled(t < 0.92);
     return true;
   });
@@ -4003,6 +9913,8 @@ function updateTorpedoSystem(system, dt, time, enemyMotions, landZones, playerPo
 
     if (torpedo.runDistance === 0) {
       torpedo.root.position.copyFrom(torpedo.runStart);
+      torpedo.body?.setEnabled(false);
+      torpedo.nose?.setEnabled(false);
     }
 
     const step = torpedo.speed * dt;
@@ -4020,7 +9932,7 @@ function updateTorpedoSystem(system, dt, time, enemyMotions, landZones, playerPo
         enemyId: hitEnemy.id,
         enemyPosition: summarizeVector(hitEnemy.root.position)
       }, landZones);
-      createHitChurn(system, torpedo.root.position, torpedo.heading);
+      createTorpedoShipWaterColumn(system, torpedo.root.position, torpedo.heading);
       disposeTorpedo(torpedo);
       return false;
     }
@@ -4032,7 +9944,7 @@ function updateTorpedoSystem(system, dt, time, enemyMotions, landZones, playerPo
       recordTorpedoEvent(system, torpedo, "player-hit", time, {
         playerPosition: summarizeVector(playerPosition)
       }, landZones);
-      createHitChurn(system, torpedo.root.position, torpedo.heading);
+      createTorpedoShipWaterColumn(system, torpedo.root.position, torpedo.heading);
       disposeTorpedo(torpedo);
       return false;
     }
@@ -4042,7 +9954,7 @@ function updateTorpedoSystem(system, dt, time, enemyMotions, landZones, playerPo
       torpedo.hit = true;
       system.hits += 1;
       recordTorpedoEvent(system, torpedo, "land-hit", time, { landHit }, landZones);
-      createHitChurn(system, torpedo.root.position, torpedo.heading);
+      createHitChurn(system, torpedo.root.position, torpedo.heading, 1.45);
       disposeTorpedo(torpedo);
       return false;
     }
@@ -4177,6 +10089,7 @@ function summarizeVector(vector) {
 }
 
 function getPlayerRamHit(playerPosition, playerHeading, playerSpeed, enemyMotions, time) {
+  if (scoutPlaneMode) return null;
   if (time < nextRamHitTime || playerSpeed < 2.2) return null;
 
   const forward = getForwardVector(playerHeading);
@@ -4190,6 +10103,7 @@ function getPlayerRamHit(playerPosition, playerHeading, playerSpeed, enemyMotion
 
   for (const enemyMotion of enemyMotions) {
     if (enemyMotion.teamId === playerTeamId) continue;
+    if (isScoutPlaneMotion(enemyMotion)) continue;
     const hitPoint = bowProbePoints.find((point) => pointHitsEnemyHull(point, enemyMotion, 0.16));
     if (!hitPoint) continue;
 
@@ -4215,11 +10129,13 @@ function getRamShakeOffset(heading, strength, time) {
 function getTorpedoEnemyHit(torpedoPosition, enemyMotions) {
   return enemyMotions.find((enemyMotion) => (
     enemyMotion.teamId !== playerTeamId &&
+    !isScoutPlaneMotion(enemyMotion) &&
     pointHitsEnemyHull(torpedoPosition, enemyMotion, 0.22)
   )) ?? null;
 }
 
 function torpedoHitsPlayer(torpedoPosition, playerPosition) {
+  if (scoutPlaneMode) return false;
   const dx = torpedoPosition.x - playerPosition.x;
   const dz = torpedoPosition.z - playerPosition.z;
   return dx * dx + dz * dz <= 1.9 * 1.9;
@@ -4231,13 +10147,13 @@ function pointHitsEnemyHull(point, enemyMotion, radius) {
   const hit = getEnemyHitLocalPoint(point, enemyMotion.root.position, enemyMotion.heading);
   const stern = -4.05;
   const bow = 4.45;
-  const lengthPadding = 0.18;
+  const lengthPadding = 0.18 + radius / torpedoBoatVisualScale;
 
   if (hit.forward < stern - lengthPadding || hit.forward > bow + lengthPadding) {
     return false;
   }
 
-  const halfWidth = getEnemyHullHalfWidthAt(hit.forward) + radius;
+  const halfWidth = getEnemyHullHalfWidthAt(hit.forward) + radius / torpedoBoatVisualScale;
   return Math.abs(hit.right) <= halfWidth;
 }
 
@@ -4260,49 +10176,102 @@ function getEnemyHitLocalPoint(point, enemyPosition, enemyHeading) {
   const dz = point.z - enemyPosition.z;
 
   return {
-    right: dx * Math.cos(enemyHeading) - dz * Math.sin(enemyHeading),
-    forward: dx * Math.sin(enemyHeading) + dz * Math.cos(enemyHeading)
+    right: (dx * Math.cos(enemyHeading) - dz * Math.sin(enemyHeading)) / torpedoBoatVisualScale,
+    forward: (dx * Math.sin(enemyHeading) + dz * Math.cos(enemyHeading)) / torpedoBoatVisualScale
   };
 }
 
 function getEnemyHullHalfWidthAt(forward) {
-  const sections = [
-    { z: -4.05, halfWidth: 0.39 },
-    { z: -2.3, halfWidth: 0.61 },
-    { z: 1.55, halfWidth: 0.66 },
-    { z: 3.25, halfWidth: 0.31 },
-    { z: 4.45, halfWidth: 0.04 }
-  ];
-
-  if (forward <= sections[0].z) return sections[0].halfWidth;
-
-  for (let i = 0; i < sections.length - 1; i += 1) {
-    const current = sections[i];
-    const next = sections[i + 1];
-    if (forward <= next.z) {
-      const t = (forward - current.z) / (next.z - current.z);
-      return current.halfWidth + (next.halfWidth - current.halfWidth) * t;
-    }
-  }
-
-  return sections[sections.length - 1].halfWidth;
+  return getTorpedoBoatHullTopHalfWidthAt(forward);
 }
 
 function updateTorpedoWake(torpedo, visible, time) {
   torpedo.wake.forEach((segment, index) => {
-    segment.setEnabled(visible && index * 0.8 < torpedo.runDistance);
+    const kind = segment.metadata?.kind ?? "trail";
+    const row = segment.metadata?.row ?? index;
+    segment.setEnabled(visible && (kind === "headContour" || kind === "headFlare" || kind === "bodyHint" || row * 0.8 < torpedo.runDistance));
     if (!visible) return;
 
-    const distanceBehind = 0.72 + index * 0.58;
+    if (kind === "bodyHint") {
+      const hintCenterOffset = (torpedoNoseForwardOffset - torpedoTailBackwardOffset) * 0.5;
+      segment.position.copyFrom(
+        torpedo.root.position
+          .add(torpedo.forward.scale(hintCenterOffset))
+          .add(new Vector3(0, -0.018, 0))
+      );
+      segment.rotation.y = torpedo.heading;
+      segment.scaling.x = 1 + Math.sin(time * 5.5) * 0.04;
+      segment.scaling.z = 1;
+      return;
+    }
+
+    if (kind === "headContour") {
+      const side = segment.metadata?.side ?? 1;
+      const noseTipZ = torpedoNoseForwardOffset;
+      const noseShoulderZ = torpedoBodyLength * 0.5;
+      const noseShoulderX = 0.102 * torpedoThicknessScale * torpedoVisualScale;
+      positionTorpedoWakeSegment(
+        segment,
+        torpedo,
+        0,
+        noseTipZ,
+        side * noseShoulderX,
+        noseShoulderZ,
+        -0.032
+      );
+      segment.visibility = 0.9;
+      segment.scaling.x = 1 + Math.sin(time * 6.4 + side) * 0.06;
+      return;
+    }
+
+    if (kind === "headFlare") {
+      const side = segment.metadata?.side ?? 1;
+      const noseShoulderZ = torpedoBodyLength * 0.5;
+      const noseShoulderX = 0.102 * torpedoThicknessScale * torpedoVisualScale;
+      const sideWakeLength = 0.38 * torpedoWakeVisualScale;
+      const sideWakeSpread = 0.018 * torpedoWakeVisualScale;
+      positionTorpedoWakeSegment(
+        segment,
+        torpedo,
+        side * noseShoulderX,
+        noseShoulderZ,
+        side * (noseShoulderX + sideWakeSpread),
+        noseShoulderZ - sideWakeLength,
+        -0.031
+      );
+      segment.visibility = 0.55;
+      segment.scaling.x = 1 + Math.sin(time * 6.4 + side) * 0.06;
+      return;
+    }
+
+    const distanceBehind = torpedoTailBackwardOffset + (0.72 + row * 0.58) * torpedoWakeVisualScale * torpedoSternWakeLengthScale;
     segment.position.copyFrom(
       torpedo.root.position
         .subtract(torpedo.forward.scale(distanceBehind))
         .add(new Vector3(0, -0.035, 0))
     );
-    segment.rotation.y = torpedo.heading + Math.sin(time * 3.2 + index) * 0.035;
-    segment.scaling.x = 1 + index * 0.16;
-    segment.scaling.z = 1 + Math.sin(time * 4.5 + index) * 0.08;
+    segment.rotation.y = torpedo.heading + Math.sin(time * 3.2 + row) * 0.035;
+    segment.scaling.x = 1 + row * 0.16;
+    segment.scaling.z = 1 + Math.sin(time * 4.5 + row) * 0.08;
   });
+}
+
+function positionTorpedoWakeSegment(segment, torpedo, startX, startZ, endX, endZ, yOffset) {
+  const right = getRightVector(torpedo.heading);
+  const centerX = (startX + endX) * 0.5;
+  const centerZ = (startZ + endZ) * 0.5;
+  const dx = endX - startX;
+  const dz = endZ - startZ;
+  const length = Math.max(0.001, Math.hypot(dx, dz));
+
+  segment.position.copyFrom(
+    torpedo.root.position
+      .add(right.scale(centerX))
+      .add(torpedo.forward.scale(centerZ))
+      .add(new Vector3(0, yOffset, 0))
+  );
+  segment.rotation.y = torpedo.heading + Math.atan2(dx, dz);
+  segment.scaling.z = length / (segment.metadata?.baseDepth ?? 1);
 }
 
 function createRangeSplash(system, position, heading) {
@@ -4334,66 +10303,232 @@ function createRangeSplash(system, position, heading) {
   }
 }
 
-function createHitChurn(system, position, heading) {
+function createAirDroppedTorpedoSplash(system, position, heading) {
+  const splashPosition = new Vector3(position.x, 0.06, position.z);
   const forward = getForwardVector(heading);
   const right = getRightVector(heading);
-  createExplosionLightFlash(system, position);
-  createExplosionSkyFlash(system, position);
-  createExplosionCoreFlash(system, position);
+  const effectId = system.nextId++;
+  createExplosionLightFlash(system, splashPosition);
 
-  for (let i = 0; i < 4; i += 1) {
-    const wall = createJaggedHitWall(`torpedo_hit_wall_${system.hits}_${i}`, system.scene, 1.0 + i * 0.28, 1.35 + i * 0.32, i);
+  for (let i = 0; i < 10; i += 1) {
+    const patch = createJaggedSurfacePatch(`air_torpedo_splash_${effectId}_${i}`, system.scene, 0.9 + i * 0.18, 0.58 + i * 0.09, effectId + i * 19);
+    patch.parent = system.root;
+    patch.material = system.materials.foam;
+    patch.position.copyFrom(
+      splashPosition
+        .add(forward.scale((i - 2) * 0.08))
+        .add(right.scale(((i % 3) - 1) * 0.14))
+        .add(new Vector3(0, 0.006 + i * 0.003, 0))
+    );
+    patch.rotation.y = heading + i * 0.47;
+    system.hitEffects.push({
+      mesh: patch,
+      age: 0,
+      lifetime: 1.05 + i * 0.045,
+      origin: patch.position.clone(),
+      velocity: forward.scale(-0.052 * i).add(right.scale(((i % 2) * 2 - 1) * 0.085)).add(new Vector3(0, 0.042, 0)),
+      gravity: 0.035,
+      baseScale: patch.scaling.clone(),
+      grow: new Vector3(2.15 + i * 0.18, 0.12, 1.5 + i * 0.13),
+      seed: effectId + i
+    });
+  }
+
+  for (let i = 0; i < 9; i += 1) {
+    const spray = createJaggedHitWall(`air_torpedo_spray_${effectId}_${i}`, system.scene, 0.24 + i * 0.034, 0.66 + i * 0.1, effectId + i * 23);
+    spray.parent = system.root;
+    spray.material = system.materials.foam;
+    spray.position.copyFrom(splashPosition.add(new Vector3(0, 0.2 + i * 0.035, 0)));
+    spray.rotation.y = heading + (i - 2.5) * 0.22;
+    system.hitEffects.push({
+      mesh: spray,
+      age: 0,
+      lifetime: 0.7 + i * 0.04,
+      origin: spray.position.clone(),
+      velocity: forward.scale(0.2 + i * 0.034).add(right.scale((i - 4) * 0.145)).add(new Vector3(0, 0.82 + i * 0.065, 0)),
+      gravity: 0.72,
+      baseScale: spray.scaling.clone(),
+      grow: new Vector3(0.96, 0.54, 0.96),
+      seed: effectId + 60 + i
+    });
+  }
+}
+
+function createAirDroppedTorpedoSurfaceWake(system, position, heading) {
+  const surfacePosition = new Vector3(position.x, 0.055, position.z);
+  const forward = getForwardVector(heading);
+  const right = getRightVector(heading);
+  const effectId = system.nextId++;
+
+  for (let i = 0; i < 5; i += 1) {
+    const patch = createJaggedSurfacePatch(`air_torpedo_surface_${effectId}_${i}`, system.scene, 0.46 + i * 0.1, 0.3 + i * 0.045, effectId + i * 29);
+    patch.parent = system.root;
+    patch.material = system.materials.foam;
+    patch.position.copyFrom(
+      surfacePosition
+        .add(forward.scale(-0.18 - i * 0.08))
+        .add(right.scale((i - 2) * 0.07))
+        .add(new Vector3(0, 0.004 + i * 0.002, 0))
+    );
+    patch.rotation.y = heading + i * 0.36;
+    system.hitEffects.push({
+      mesh: patch,
+      age: 0,
+      lifetime: 0.55 + i * 0.035,
+      origin: patch.position.clone(),
+      velocity: forward.scale(-0.08 - i * 0.02).add(right.scale((i - 2) * 0.025)),
+      gravity: 0.02,
+      baseScale: patch.scaling.clone(),
+      grow: new Vector3(1.1 + i * 0.12, 0.06, 0.78 + i * 0.08),
+      seed: effectId + i
+    });
+  }
+}
+
+function createTorpedoShipWaterColumn(system, position, heading) {
+  const forward = getForwardVector(heading);
+  const right = getRightVector(heading);
+  const effectId = system.hits;
+  createExplosionLightFlash(system, position, 1.15);
+  createExplosionSkyFlash(system, position, 0.82);
+
+  for (let i = 0; i < 9; i += 1) {
+    const width = 2.2 + i * 0.46;
+    const height = 5.4 + i * 0.78;
+    const wall = createJaggedHitWall(`torpedo_ship_water_column_${effectId}_${i}`, system.scene, width, height, effectId + i * 17);
     wall.parent = system.root;
     wall.material = system.materials.foam;
-    wall.position.copyFrom(position.add(forward.scale(i * 0.06)).add(new Vector3(0, 0.45 + i * 0.12, 0)));
-    wall.rotation.y = heading + i * 0.74;
+    wall.position.copyFrom(
+      position
+        .add(forward.scale((i - 3) * 0.16))
+        .add(right.scale(((i % 3) - 1) * 0.24))
+        .add(new Vector3(0, 1.8 + i * 0.46, 0))
+    );
+    wall.rotation.y = heading + i * 0.37;
     system.hitEffects.push({
       mesh: wall,
       age: 0,
-      lifetime: 0.72 + i * 0.08,
+      lifetime: 1.28 + i * 0.075,
       origin: wall.position.clone(),
-      velocity: new Vector3(0, 0.42 + i * 0.12, 0),
-      gravity: 0.28 + i * 0.05,
+      velocity: forward.scale(0.06 + i * 0.018).add(right.scale(((i % 2) * 2 - 1) * (0.08 + i * 0.018))).add(new Vector3(0, 2.15 + i * 0.18, 0)),
+      gravity: 1.18 + i * 0.055,
       baseScale: wall.scaling.clone(),
-      grow: new Vector3(0.55 + i * 0.1, 0.28 + i * 0.05, 0.55 + i * 0.1),
+      grow: new Vector3(0.58 + i * 0.055, 0.82 + i * 0.045, 0.58 + i * 0.055),
+      seed: effectId + i
+    });
+  }
+
+  for (let i = 0; i < 14; i += 1) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const row = Math.floor(i / 2);
+    const spray = createJaggedHitWall(`torpedo_ship_side_spray_${effectId}_${i}`, system.scene, 0.52 + row * 0.075, 1.35 + row * 0.18, effectId + i * 23);
+    spray.parent = system.root;
+    spray.material = system.materials.foam;
+    spray.position.copyFrom(
+      position
+        .add(right.scale(side * (0.45 + row * 0.28)))
+        .subtract(forward.scale(0.08 + row * 0.12))
+        .add(new Vector3(0, 0.34 + row * 0.07, 0))
+    );
+    spray.rotation.y = heading + side * (0.92 + row * 0.045);
+    system.hitEffects.push({
+      mesh: spray,
+      age: 0,
+      lifetime: 1.06 + row * 0.055,
+      origin: spray.position.clone(),
+      velocity: right.scale(side * (1.05 + row * 0.16)).add(forward.scale(-0.22 - row * 0.04)).add(new Vector3(0, 1.22 + row * 0.11, 0)),
+      gravity: 0.92,
+      baseScale: spray.scaling.clone(),
+      grow: new Vector3(0.9 + row * 0.07, 0.46, 0.72 + row * 0.055),
+      seed: effectId + 90 + i
+    });
+  }
+
+  for (let i = 0; i < 11; i += 1) {
+    const surface = createJaggedSurfacePatch(`torpedo_ship_surface_burst_${effectId}_${i}`, system.scene, 2.4 + i * 0.48, 1.2 + i * 0.24, effectId + i * 31);
+    surface.parent = system.root;
+    surface.material = system.materials.foam;
+    surface.position.copyFrom(
+      position
+        .add(forward.scale((i - 4) * 0.12))
+        .add(right.scale(((i % 4) - 1.5) * 0.24))
+        .add(new Vector3(0, 0.058 + i * 0.002, 0))
+    );
+    surface.rotation.y = heading + i * 0.32;
+    system.hitEffects.push({
+      mesh: surface,
+      age: 0,
+      lifetime: 1.62 + i * 0.06,
+      origin: surface.position.clone(),
+      velocity: forward.scale(-0.08 * i).add(right.scale(((i % 2) * 2 - 1) * 0.11)).add(new Vector3(0, 0.03, 0)),
+      gravity: 0.035,
+      baseScale: surface.scaling.clone(),
+      grow: new Vector3(3.2 + i * 0.26, 0.15, 2.2 + i * 0.18),
+      seed: effectId + 140 + i
+    });
+  }
+}
+
+function createHitChurn(system, position, heading, scale = 1) {
+  const forward = getForwardVector(heading);
+  const right = getRightVector(heading);
+  createExplosionLightFlash(system, position, scale);
+  createExplosionSkyFlash(system, position, scale);
+  createExplosionCoreFlash(system, position, scale);
+
+  for (let i = 0; i < 5; i += 1) {
+    const wall = createJaggedHitWall(`torpedo_hit_wall_${system.hits}_${i}`, system.scene, (1.35 + i * 0.36) * scale, (2.4 + i * 0.7) * scale, i);
+    wall.parent = system.root;
+    wall.material = system.materials.foam;
+    wall.position.copyFrom(position.add(forward.scale(i * 0.08 * scale)).add(new Vector3(0, (0.78 + i * 0.28) * scale, 0)));
+    wall.rotation.y = heading + i * 0.58;
+    system.hitEffects.push({
+      mesh: wall,
+      age: 0,
+      lifetime: 0.92 + i * 0.09 + (scale - 1) * 0.16,
+      origin: wall.position.clone(),
+      velocity: new Vector3(0, (1.08 + i * 0.16) * scale, 0),
+      gravity: (0.64 + i * 0.08) * scale,
+      baseScale: wall.scaling.clone(),
+      grow: new Vector3(0.72 + i * 0.1, 0.36 + i * 0.06, 0.72 + i * 0.1),
       seed: i
     });
   }
 
-  for (let i = 0; i < 6; i += 1) {
-    const surface = createJaggedSurfacePatch(`torpedo_hit_surface_${system.hits}_${i}`, system.scene, 0.85 + i * 0.28, 0.62 + i * 0.18, i);
+  for (let i = 0; i < 8; i += 1) {
+    const surface = createJaggedSurfacePatch(`torpedo_hit_surface_${system.hits}_${i}`, system.scene, (1.15 + i * 0.34) * scale, (0.78 + i * 0.22) * scale, i);
     surface.parent = system.root;
     surface.material = system.materials.foam;
-    surface.position.copyFrom(position.add(forward.scale((i - 2) * 0.08)).add(right.scale(((i % 3) - 1) * 0.12)).add(new Vector3(0, 0.055 + i * 0.002, 0)));
+    surface.position.copyFrom(position.add(forward.scale((i - 2) * 0.08 * scale)).add(right.scale(((i % 3) - 1) * 0.12 * scale)).add(new Vector3(0, 0.055 + i * 0.002, 0)));
     surface.rotation.y = heading + i * 0.43;
     system.hitEffects.push({
       mesh: surface,
       age: 0,
-      lifetime: 1.18 + i * 0.06,
+      lifetime: 1.35 + i * 0.07 + (scale - 1) * 0.18,
       origin: surface.position.clone(),
-      velocity: forward.scale(-0.04 * i).add(right.scale(((i % 2) * 2 - 1) * 0.08)).add(new Vector3(0, 0.02, 0)),
+      velocity: forward.scale(-0.04 * i * scale).add(right.scale(((i % 2) * 2 - 1) * 0.08 * scale)).add(new Vector3(0, 0.02, 0)),
       gravity: 0.03,
       baseScale: surface.scaling.clone(),
-      grow: new Vector3(2.1 + i * 0.25, 0.12, 1.5 + i * 0.18),
+      grow: new Vector3(2.65 + i * 0.28, 0.14, 1.85 + i * 0.2),
       seed: i + 20
     });
   }
 
-  for (let i = 0; i < 18; i += 1) {
+  for (let i = 0; i < 22; i += 1) {
     const side = i % 2 === 0 ? -1 : 1;
     const row = Math.floor(i / 2);
-    const spray = createJaggedHitWall(`torpedo_hit_spray_${system.hits}_${i}`, system.scene, 0.24 + row * 0.03, 0.46 + row * 0.06, i + 10);
+    const spray = createJaggedHitWall(`torpedo_hit_spray_${system.hits}_${i}`, system.scene, (0.3 + row * 0.035) * scale, (0.78 + row * 0.095) * scale, i + 10);
     spray.parent = system.root;
     spray.material = system.materials.foam;
-    spray.position.copyFrom(position.add(right.scale(side * (0.2 + row * 0.13))).subtract(forward.scale(row * 0.07)).add(new Vector3(0, 0.18 + row * 0.035, 0)));
+    spray.position.copyFrom(position.add(right.scale(side * (0.2 + row * 0.13) * scale)).subtract(forward.scale(row * 0.07 * scale)).add(new Vector3(0, (0.18 + row * 0.035) * scale, 0)));
     spray.rotation.y = heading + side * (0.82 + row * 0.06);
     system.hitEffects.push({
       mesh: spray,
       age: 0,
-      lifetime: 0.92 + row * 0.04,
+      lifetime: 1.08 + row * 0.045 + (scale - 1) * 0.14,
       origin: spray.position.clone(),
-      velocity: right.scale(side * (0.62 + row * 0.12)).add(forward.scale(-0.14 - row * 0.035)).add(new Vector3(0, 0.46 + row * 0.045, 0)),
-      gravity: 0.52,
+      velocity: right.scale(side * (0.72 + row * 0.13) * scale).add(forward.scale((-0.16 - row * 0.04) * scale)).add(new Vector3(0, (0.86 + row * 0.075) * scale, 0)),
+      gravity: 0.74 * scale,
       baseScale: spray.scaling.clone(),
       grow: new Vector3(0.9 + row * 0.08, 0.38, 0.65 + row * 0.06),
       seed: i + 10
@@ -4401,9 +10536,9 @@ function createHitChurn(system, position, heading) {
   }
 }
 
-function createExplosionCoreFlash(system, position) {
+function createExplosionCoreFlash(system, position, scale = 1) {
   const core = MeshBuilder.CreateSphere(`torpedo_hit_core_${system.hits}`, {
-    diameter: 0.62,
+    diameter: 0.62 * scale,
     segments: 10
   }, system.scene);
   core.parent = system.root;
@@ -4415,7 +10550,7 @@ function createExplosionCoreFlash(system, position) {
     mesh: core,
     coreFlash: true,
     age: 0,
-    lifetime: 0.42,
+    lifetime: 0.42 + (scale - 1) * 0.08,
     origin: core.position.clone(),
     baseScale: new Vector3(1, 1, 1),
     grow: new Vector3(1.05, 0.38, 1.05),
@@ -4424,7 +10559,7 @@ function createExplosionCoreFlash(system, position) {
   });
 }
 
-function createExplosionLightFlash(system, position) {
+function createExplosionLightFlash(system, position, scale = 1) {
   if (isExplosionLightOccludedFromPlayer(position)) {
     return;
   }
@@ -4434,17 +10569,17 @@ function createExplosionLightFlash(system, position) {
     effect.age = effect.lifetime;
   });
 
-  const light = new PointLight(`torpedo_flash_${system.hits}`, position.add(new Vector3(0, 3.8, 0)), system.scene);
+  const light = new PointLight(`torpedo_flash_${system.hits}`, position.add(new Vector3(0, 3.8 * scale, 0)), system.scene);
   light.diffuse = new Color3(0.82, 0.92, 1.0);
   light.specular = new Color3(0.88, 0.96, 1.0);
   light.intensity = 0;
-  light.range = 145;
+  light.range = 145 * scale;
   system.hitEffects.push({
     light,
     age: 0,
-    lifetime: 0.86,
-    intensity: 5.4,
-    range: 145
+    lifetime: 0.86 + (scale - 1) * 0.1,
+    intensity: 5.4 * scale,
+    range: 145 * scale
   });
 }
 
@@ -4456,7 +10591,7 @@ function isExplosionLightOccludedFromPlayer(position) {
   return isLineBlockedByLand(position, playerPosition, blockedWaters);
 }
 
-function createExplosionSkyFlash(system, position) {
+function createExplosionSkyFlash(system, position, scale = 1) {
   const activeSkyFlashes = system.hitEffects.filter((effect) => effect.skyFlash);
   activeSkyFlashes.slice(0, Math.max(0, activeSkyFlashes.length - 2)).forEach((effect) => {
     effect.age = effect.lifetime;
@@ -4473,7 +10608,7 @@ function createExplosionSkyFlash(system, position) {
   material.fogEnabled = false;
   material.backFaceCulling = false;
 
-  const flash = MeshBuilder.CreatePlane(`torpedo_sky_flash_${system.hits}`, { width: 210, height: 118 }, system.scene);
+  const flash = MeshBuilder.CreatePlane(`torpedo_sky_flash_${system.hits}`, { width: 210 * scale, height: 118 * scale }, system.scene);
   flash.parent = system.root;
   flash.position.copyFrom(position.add(new Vector3(0, 68, 0)));
   flash.billboardMode = Mesh.BILLBOARDMODE_ALL;
@@ -4490,7 +10625,7 @@ function createExplosionSkyFlash(system, position) {
     disposeTexture: true,
     disposeMaterial: true,
     age: 0,
-    lifetime: 1.02,
+    lifetime: 1.02 + (scale - 1) * 0.1,
     origin: flash.position.clone(),
     baseScale: new Vector3(1, 1, 1),
     grow: new Vector3(0.62, 0.42, 0.62),
@@ -4580,6 +10715,27 @@ function easeInOutCubic(value) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
+function createFleetPartMaterial(scene, fleetId, part, palette) {
+  const material = new StandardMaterial(`${fleetId}_party_${part}_material`, scene);
+  material.diffuseColor = new Color3(...palette.diffuse);
+  material.specularColor = new Color3(...palette.specular);
+  if (palette.emissive) {
+    material.emissiveColor = new Color3(...palette.emissive);
+  }
+  material.backFaceCulling = true;
+  return material;
+}
+
+function createFleetMaterials(scene, fleetId, palette) {
+  const bodyMaterial = createFleetPartMaterial(scene, fleetId, "body", palette.body);
+  return {
+    hull: bodyMaterial,
+    deck: bodyMaterial,
+    cabin: bodyMaterial,
+    funnel: bodyMaterial
+  };
+}
+
 function createMaterials(scene) {
   const water = new StandardMaterial("water_material", scene);
   water.diffuseColor = new Color3(0.18, 0.36, 0.4);
@@ -4593,6 +10749,7 @@ function createMaterials(scene) {
   const sand = new StandardMaterial("sand_material", scene);
   sand.diffuseColor = new Color3(0.58, 0.58, 0.5);
   sand.specularColor = new Color3(0.035, 0.038, 0.035);
+  sand.zOffset = -2;
 
   const grass = new StandardMaterial("grass_material", scene);
   grass.diffuseColor = new Color3(0.19, 0.38, 0.29);
@@ -4639,110 +10796,34 @@ function createMaterials(scene) {
   glass.alpha = 0.42;
   glass.backFaceCulling = false;
 
-  const lightHull = new StandardMaterial("light_party_hull_material", scene);
-  lightHull.diffuseColor = new Color3(0.47, 0.47, 0.47);
-  lightHull.specularColor = new Color3(0.12, 0.14, 0.14);
-  lightHull.backFaceCulling = false;
+  const lightBridgeWindow = new StandardMaterial("light_bridge_window_material", scene);
+  lightBridgeWindow.diffuseColor = new Color3(0.09, 0.1, 0.105);
+  lightBridgeWindow.emissiveColor = new Color3(0.012, 0.014, 0.016);
+  lightBridgeWindow.specularColor = new Color3(0.32, 0.36, 0.38);
+  lightBridgeWindow.backFaceCulling = false;
 
-  const lightDeck = new StandardMaterial("light_party_deck_material", scene);
-  lightDeck.diffuseColor = new Color3(0.52, 0.52, 0.52);
-  lightDeck.specularColor = new Color3(0.13, 0.15, 0.15);
-  lightDeck.backFaceCulling = false;
+  const darkBridgeWindow = new StandardMaterial("dark_bridge_window_material", scene);
+  darkBridgeWindow.diffuseColor = new Color3(0.025, 0.06, 0.095);
+  darkBridgeWindow.emissiveColor = new Color3(0.004, 0.014, 0.028);
+  darkBridgeWindow.specularColor = new Color3(0.18, 0.28, 0.36);
+  darkBridgeWindow.backFaceCulling = false;
 
-  const lightCabin = new StandardMaterial("light_party_cabin_material", scene);
-  lightCabin.diffuseColor = new Color3(0.64, 0.64, 0.64);
-  lightCabin.specularColor = new Color3(0.16, 0.18, 0.18);
-  lightCabin.backFaceCulling = false;
-
-  const lightFunnel = new StandardMaterial("light_party_funnel_material", scene);
-  lightFunnel.diffuseColor = new Color3(0.53, 0.53, 0.53);
-  lightFunnel.specularColor = new Color3(0.13, 0.15, 0.15);
-  lightFunnel.backFaceCulling = false;
-
-  const playerLightHull = new StandardMaterial("player_light_hull_material", scene);
-  playerLightHull.diffuseColor = new Color3(0.36, 0.36, 0.36);
-  playerLightHull.specularColor = new Color3(0.1, 0.12, 0.12);
-  playerLightHull.backFaceCulling = false;
-
-  const playerLightDeck = new StandardMaterial("player_light_deck_material", scene);
-  playerLightDeck.diffuseColor = new Color3(0.38, 0.38, 0.38);
-  playerLightDeck.specularColor = new Color3(0.1, 0.12, 0.12);
-  playerLightDeck.backFaceCulling = false;
-
-  const playerLightCabin = new StandardMaterial("player_light_cabin_material", scene);
-  playerLightCabin.diffuseColor = new Color3(0.46, 0.46, 0.46);
-  playerLightCabin.specularColor = new Color3(0.12, 0.14, 0.14);
-  playerLightCabin.backFaceCulling = false;
-
-  const playerLightFunnel = new StandardMaterial("player_light_funnel_material", scene);
-  playerLightFunnel.diffuseColor = new Color3(0.38, 0.38, 0.38);
-  playerLightFunnel.specularColor = new Color3(0.1, 0.12, 0.12);
-  playerLightFunnel.backFaceCulling = false;
-
-  const darkHull = new StandardMaterial("dark_party_hull_material", scene);
-  darkHull.diffuseColor = new Color3(0.12, 0.14, 0.14);
-  darkHull.specularColor = new Color3(0.05, 0.06, 0.06);
-  darkHull.backFaceCulling = false;
-
-  const darkDeck = new StandardMaterial("dark_party_deck_material", scene);
-  darkDeck.diffuseColor = new Color3(0.1, 0.12, 0.12);
-  darkDeck.specularColor = new Color3(0.04, 0.05, 0.05);
-  darkDeck.backFaceCulling = false;
-
-  const darkCabin = new StandardMaterial("dark_party_cabin_material", scene);
-  darkCabin.diffuseColor = new Color3(0.17, 0.18, 0.18);
-  darkCabin.specularColor = new Color3(0.08, 0.09, 0.09);
-  darkCabin.backFaceCulling = false;
-
-  const darkFunnel = new StandardMaterial("dark_party_funnel_material", scene);
-  darkFunnel.diffuseColor = new Color3(0.1, 0.11, 0.11);
-  darkFunnel.specularColor = new Color3(0.04, 0.04, 0.04);
-  darkFunnel.backFaceCulling = false;
-
-  const greenHull = new StandardMaterial("green_party_hull_material", scene);
-  greenHull.diffuseColor = new Color3(0.18, 0.3, 0.23);
-  greenHull.specularColor = new Color3(0.06, 0.08, 0.06);
-  greenHull.backFaceCulling = false;
-
-  const greenDeck = new StandardMaterial("green_party_deck_material", scene);
-  greenDeck.diffuseColor = new Color3(0.2, 0.34, 0.25);
-  greenDeck.specularColor = new Color3(0.06, 0.08, 0.06);
-  greenDeck.backFaceCulling = false;
-
-  const greenCabin = new StandardMaterial("green_party_cabin_material", scene);
-  greenCabin.diffuseColor = new Color3(0.26, 0.4, 0.3);
-  greenCabin.specularColor = new Color3(0.08, 0.1, 0.08);
-  greenCabin.backFaceCulling = false;
-
-  const greenFunnel = new StandardMaterial("green_party_funnel_material", scene);
-  greenFunnel.diffuseColor = new Color3(0.15, 0.25, 0.19);
-  greenFunnel.specularColor = new Color3(0.05, 0.06, 0.05);
-  greenFunnel.backFaceCulling = false;
-
-  const sandHull = new StandardMaterial("sand_party_hull_material", scene);
-  sandHull.diffuseColor = new Color3(0.45, 0.39, 0.28);
-  sandHull.specularColor = new Color3(0.1, 0.08, 0.05);
-  sandHull.backFaceCulling = false;
-
-  const sandDeck = new StandardMaterial("sand_party_deck_material", scene);
-  sandDeck.diffuseColor = new Color3(0.5, 0.44, 0.31);
-  sandDeck.specularColor = new Color3(0.1, 0.08, 0.05);
-  sandDeck.backFaceCulling = false;
-
-  const sandCabin = new StandardMaterial("sand_party_cabin_material", scene);
-  sandCabin.diffuseColor = new Color3(0.58, 0.51, 0.37);
-  sandCabin.specularColor = new Color3(0.12, 0.1, 0.06);
-  sandCabin.backFaceCulling = false;
-
-  const sandFunnel = new StandardMaterial("sand_party_funnel_material", scene);
-  sandFunnel.diffuseColor = new Color3(0.42, 0.36, 0.26);
-  sandFunnel.specularColor = new Color3(0.08, 0.07, 0.05);
-  sandFunnel.backFaceCulling = false;
+  const lightFleetMaterials = createFleetMaterials(scene, "light", shipFleetMaterialPalettes.light);
+  const playerLightFleetMaterials = createFleetMaterials(scene, "player_light", shipFleetMaterialPalettes.light);
+  const darkFleetMaterials = createFleetMaterials(scene, "dark", shipFleetMaterialPalettes.dark);
+  const greenFleetMaterials = createFleetMaterials(scene, "green", shipFleetMaterialPalettes.green);
+  const sandFleetMaterials = createFleetMaterials(scene, "sand", shipFleetMaterialPalettes.sand);
 
   const foam = new StandardMaterial("foam_material", scene);
   foam.diffuseColor = new Color3(0.84, 0.91, 0.94);
   foam.emissiveColor = new Color3(0.26, 0.29, 0.31);
   foam.specularColor = new Color3(0.03, 0.035, 0.04);
+
+  const torpedoWakeBody = new StandardMaterial("torpedo_wake_body_material", scene);
+  torpedoWakeBody.diffuseColor = new Color3(0.11, 0.18, 0.18);
+  torpedoWakeBody.emissiveColor = new Color3(0.01, 0.018, 0.018);
+  torpedoWakeBody.specularColor = new Color3(0.03, 0.045, 0.045);
+  torpedoWakeBody.alpha = 0.42;
 
   const volcanicSmoke = new StandardMaterial("volcanic_smoke_material", scene);
   volcanicSmoke.diffuseColor = new Color3(0.19, 0.21, 0.2);
@@ -4783,6 +10864,39 @@ function createMaterials(scene) {
   explosionCore.specularColor = new Color3(0.95, 1.0, 1.0);
   explosionCore.disableLighting = true;
 
+  const flakTracer = new StandardMaterial("flak_tracer_material", scene);
+  flakTracer.diffuseColor = new Color3(0.96, 0.98, 1.0);
+  flakTracer.emissiveColor = new Color3(1.18, 1.3, 1.42);
+  flakTracer.specularColor = new Color3(1.0, 1.0, 1.0);
+  flakTracer.disableLighting = true;
+
+  const flakTracerTrail = new StandardMaterial("flak_tracer_trail_material", scene);
+  flakTracerTrail.diffuseColor = new Color3(0.86, 0.94, 1.0);
+  flakTracerTrail.emissiveColor = new Color3(0.68, 0.88, 1.12);
+  flakTracerTrail.specularColor = new Color3(0.65, 0.75, 0.9);
+  flakTracerTrail.alpha = 0.68;
+  flakTracerTrail.disableLighting = true;
+
+  const cannonTracer = new StandardMaterial("cannon_tracer_material", scene);
+  cannonTracer.diffuseColor = new Color3(0.98, 1.0, 1.0);
+  cannonTracer.emissiveColor = new Color3(1.45, 1.52, 1.58);
+  cannonTracer.specularColor = new Color3(1.0, 1.0, 1.0);
+  cannonTracer.disableLighting = true;
+
+  const cannonTracerTrail = new StandardMaterial("cannon_tracer_trail_material", scene);
+  cannonTracerTrail.diffuseColor = new Color3(0.92, 0.97, 1.0);
+  cannonTracerTrail.emissiveColor = new Color3(0.88, 1.02, 1.18);
+  cannonTracerTrail.specularColor = new Color3(0.85, 0.92, 1.0);
+  cannonTracerTrail.alpha = 0.7;
+  cannonTracerTrail.disableLighting = true;
+
+  const flakFlash = new StandardMaterial("flak_flash_material", scene);
+  flakFlash.diffuseColor = new Color3(0.96, 0.98, 1.0);
+  flakFlash.emissiveColor = new Color3(0.92, 0.96, 1.08);
+  flakFlash.specularColor = new Color3(0.95, 0.98, 1.0);
+  flakFlash.alpha = 0.72;
+  flakFlash.disableLighting = true;
+
   const beaconGlow = new StandardMaterial("beacon_glow_material", scene);
   beaconGlow.diffuseColor = new Color3(1.0, 0.98, 0.82);
   beaconGlow.emissiveColor = new Color3(1.15, 1.16, 1.04);
@@ -4797,6 +10911,15 @@ function createMaterials(scene) {
   beaconBeam.disableLighting = true;
   beaconBeam.backFaceCulling = false;
 
+  const flakHitboxDebug = new StandardMaterial("flak_hitbox_debug_material", scene);
+  flakHitboxDebug.diffuseColor = new Color3(0.38, 0.95, 1.0);
+  flakHitboxDebug.emissiveColor = new Color3(0.18, 0.62, 0.72);
+  flakHitboxDebug.specularColor = Color3.Black();
+  flakHitboxDebug.alpha = 0.18;
+  flakHitboxDebug.wireframe = true;
+  flakHitboxDebug.disableLighting = true;
+  flakHitboxDebug.backFaceCulling = false;
+
   return {
     water,
     sand,
@@ -4809,27 +10932,30 @@ function createMaterials(scene) {
     cabin,
     funnel,
     glass,
-    lightHull,
-    lightDeck,
-    lightCabin,
-    lightFunnel,
-    playerLightHull,
-    playerLightDeck,
-    playerLightCabin,
-    playerLightFunnel,
-    darkHull,
-    darkDeck,
-    darkCabin,
-    darkFunnel,
-    greenHull,
-    greenDeck,
-    greenCabin,
-    greenFunnel,
-    sandHull,
-    sandDeck,
-    sandCabin,
-    sandFunnel,
+    lightBridgeWindow,
+    darkBridgeWindow,
+    lightHull: lightFleetMaterials.hull,
+    lightDeck: lightFleetMaterials.deck,
+    lightCabin: lightFleetMaterials.cabin,
+    lightFunnel: lightFleetMaterials.funnel,
+    playerLightHull: playerLightFleetMaterials.hull,
+    playerLightDeck: playerLightFleetMaterials.deck,
+    playerLightCabin: playerLightFleetMaterials.cabin,
+    playerLightFunnel: playerLightFleetMaterials.funnel,
+    darkHull: darkFleetMaterials.hull,
+    darkDeck: darkFleetMaterials.deck,
+    darkCabin: darkFleetMaterials.cabin,
+    darkFunnel: darkFleetMaterials.funnel,
+    greenHull: greenFleetMaterials.hull,
+    greenDeck: greenFleetMaterials.deck,
+    greenCabin: greenFleetMaterials.cabin,
+    greenFunnel: greenFleetMaterials.funnel,
+    sandHull: sandFleetMaterials.hull,
+    sandDeck: sandFleetMaterials.deck,
+    sandCabin: sandFleetMaterials.cabin,
+    sandFunnel: sandFleetMaterials.funnel,
     foam,
+    torpedoWakeBody,
     volcanicSmoke,
     volcanicSmokeWarm,
     volcanicGlow,
@@ -4837,8 +10963,14 @@ function createMaterials(scene) {
     lighthouseCap,
     lighthouseStripe,
     explosionCore,
+    flakTracer,
+    flakTracerTrail,
+    cannonTracer,
+    cannonTracerTrail,
+    flakFlash,
     beaconGlow,
-    beaconBeam
+    beaconBeam,
+    flakHitboxDebug
   };
 }
 
@@ -4852,7 +10984,7 @@ function createWaterTexture(scene) {
     const y = 8 + i * 8;
     context.beginPath();
     context.strokeStyle = i % 2 === 0 ? "rgba(214, 231, 230, 0.22)" : "rgba(62, 98, 103, 0.15)";
-    context.lineWidth = i % 3 === 0 ? 2 : 1;
+    context.lineWidth = i % 3 === 0 ? 1.35 : 0.75;
 
     for (let x = -20; x <= 276; x += 12) {
       const wave = Math.sin((x + i * 19) * 0.045) * 4;
@@ -4885,15 +11017,15 @@ function createFoamPatches(scene, materials, parent) {
 
   const count = 128;
   const windAngle = Math.PI * 0.56;
-  const windSpeed = 0.775;
   const waveTravelAngle = windAngle + Math.PI / 2;
 
   for (let i = 0; i < count; i += 1) {
     const seed = seededFoam(i);
+    const foamLength = openSeaFoamLengthMin + seed.length * openSeaFoamLengthVariance;
     const patch = MeshBuilder.CreateBox(`foam_patch_${i}`, {
-      width: 0.025 + seed.width * 0.018,
-      height: 0.012,
-      depth: 0.42 + seed.length * 0.85
+      width: openSeaFoamWidthMin + seed.width * openSeaFoamWidthVariance,
+      height: openSeaFoamHeight,
+      depth: foamLength
     }, scene);
     patch.parent = root;
     patch.material = materials.foam;
@@ -4904,11 +11036,11 @@ function createFoamPatches(scene, materials, parent) {
       mesh: patch,
       x: (seed.x - 0.5) * area,
       z: (seed.z - 0.5) * area,
-      checkLength: 0.42 + seed.length * 0.85,
-      driftX: Math.sin(waveTravelAngle) * windSpeed + (seed.driftX - 0.5) * 0.28,
-      driftZ: Math.cos(waveTravelAngle) * windSpeed + (seed.driftZ - 0.5) * 0.28,
+      checkLength: foamLength,
+      driftX: Math.sin(waveTravelAngle) * openSeaFoamDriftSpeed + (seed.driftX - 0.5) * openSeaFoamRandomDrift,
+      driftZ: Math.cos(waveTravelAngle) * openSeaFoamDriftSpeed + (seed.driftZ - 0.5) * openSeaFoamRandomDrift,
       baseAngle: windAngle,
-      baseLength: 1 + seed.length * 0.34,
+      baseLength: 0.86 + seed.length * 0.18,
       phase: seed.spin * Math.PI * 2,
       nextWaterCheckAt: seed.spin * 0.18,
       isOverWater: true
@@ -5009,45 +11141,40 @@ function getPlayerShipTeamMaterials(materials, teamId) {
 
 // Player ship is only the visible foredeck. It still uses absolute team colors,
 // otherwise every client would incorrectly see its own party as the light one.
-function createPlayerBow(scene, materials, name = "player_bow", teamId = "light") {
+function createPlayerBow(scene, materials, name = "player_bow", teamId = "light", designation = "") {
   const root = new TransformNode(name, scene);
+  root.scaling.setAll(torpedoBoatVisualScale);
   const teamMaterials = getPlayerShipTeamMaterials(materials, teamId);
   const hullMaterial = teamMaterials.hull;
   const deckMaterial = teamMaterials.deck;
   const tubeMaterial = teamMaterials.hull;
 
-  const hull = createTaperedHull(`${name}_hull`, scene, [
-    { z: -1.35, width: 1.7, top: 0.72, bottom: 0.12 },
-    { z: 1.95, width: 1.08, top: 0.68, bottom: 0.02 },
-    { z: 3.65, width: 0.18, top: 0.62, bottom: 0.0 }
-  ]);
+  const hull = createBoatHullMesh(`${name}_hull`, scene);
   hull.parent = root;
   hull.material = hullMaterial;
 
-  const deck = createTaperedDeck(`${name}_foredeck`, scene, [
-    { z: -1.08, width: 1.35, y: 0.78 },
-    { z: 1.95, width: 0.88, y: 0.76 },
-    { z: 3.32, width: 0.26, y: 0.72 }
-  ]);
+  const deck = createBoatDeckMesh(`${name}_deck`, scene);
   deck.parent = root;
   deck.material = deckMaterial;
-
-  const rearDeck = MeshBuilder.CreateBox(`${name}_rear_deck`, { width: 1.42, height: 0.12, depth: 0.72 }, scene);
-  rearDeck.parent = root;
-  rearDeck.position.y = 0.82;
-  rearDeck.position.z = -1.02;
-  rearDeck.material = deckMaterial;
+  const bowBulwarkCap = createBoatBowBulwarkCapMesh(`${name}_bow_bulwark_cap`, scene);
+  bowBulwarkCap.parent = root;
+  bowBulwarkCap.material = hullMaterial;
+  const sternBulwarkCap = createBoatSternBulwarkCapMesh(`${name}_stern_bulwark_cap`, scene);
+  sternBulwarkCap.parent = root;
+  sternBulwarkCap.position.y = 0.006;
+  sternBulwarkCap.material = hullMaterial;
+  const superstructureMeshes = createTorpedoBoatSuperstructure(scene, materials, root, name, teamMaterials, true);
 
   for (let i = 0; i < 2; i += 1) {
     const tube = MeshBuilder.CreateCylinder(`${name}_torpedo_tube_${i}`, {
-      diameter: 0.14,
-      height: 2.35,
+      diameter: 0.168,
+      height: 1.76,
       tessellation: 12
     }, scene);
     tube.parent = root;
-    tube.position.x = i === 0 ? -0.32 : 0.32;
+    tube.position.x = i === 0 ? -0.56 : 0.56;
     tube.position.y = 0.795;
-    tube.position.z = 0.98;
+    tube.position.z = 1.38;
     tube.rotation.x = Math.PI / 2;
     tube.material = tubeMaterial;
 
@@ -5056,38 +11183,197 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
       saddle.parent = root;
       saddle.position.x = tube.position.x;
       saddle.position.y = 0.755;
-      saddle.position.z = 0.34 + j * 0.9;
+      saddle.position.z = 0.8 + j * 0.74;
       saddle.material = hullMaterial;
     }
 
     const cap = MeshBuilder.CreateCylinder(`${name}_tube_cap_${i}`, {
-      diameter: 0.17,
+      diameter: 0.204,
       height: 0.08,
       tessellation: 12
     }, scene);
     cap.parent = root;
     cap.position.x = tube.position.x;
     cap.position.y = tube.position.y;
-    cap.position.z = 2.15;
+    cap.position.z = 2.26;
     cap.rotation.x = Math.PI / 2;
     cap.material = tubeMaterial;
   }
 
-  createRailSegment(`${name}_deck_edge_left`, scene, hullMaterial, root, -0.58, -1.09, -0.58, 1.58, 0.76);
-  createRailSegment(`${name}_deck_edge_right`, scene, hullMaterial, root, 0.58, -1.09, 0.58, 1.58, 0.76);
-
-  createRailSegment(`${name}_bow_rail_left_a`, scene, hullMaterial, root, -0.58, 1.58, -0.38, 2.45, 0.76);
-  createRailSegment(`${name}_bow_rail_left_b`, scene, hullMaterial, root, -0.16, 2.86, 0, 3.22, 0.76);
-  createRailSegment(`${name}_bow_rail_right_a`, scene, hullMaterial, root, 0.58, 1.58, 0.38, 2.45, 0.76);
-  createRailSegment(`${name}_bow_rail_right_b`, scene, hullMaterial, root, 0.16, 2.86, 0, 3.22, 0.76);
-
   const hatch = MeshBuilder.CreateBox(`${name}_deck_hatch`, { width: 0.46, height: 0.11, depth: 0.52 }, scene);
   hatch.parent = root;
   hatch.position.y = 0.91;
-  hatch.position.z = -0.36;
+  hatch.position.z = -0.56;
   hatch.material = teamMaterials.cabin;
 
-  return { root };
+  const bowCannon = createBowCannon(scene, materials, root, name, teamMaterials, 2.54, true);
+  const sternFlak = createSternFlak(scene, materials, root, name, teamMaterials, playerSternFlakZ, true);
+
+  return {
+    root,
+    bowCannon,
+    sternFlak,
+    flakDeckView: null,
+    flakViewHiddenMeshes: sternFlak.viewHiddenMeshes ?? [],
+    cannonViewHiddenMeshes: bowCannon.viewHiddenMeshes ?? [],
+    bridgeViewHiddenMeshes: superstructureMeshes.filter((mesh) => (
+      mesh.name.includes("_bridge_base")
+      || mesh.name.includes("_bridge_house")
+      || mesh.name.includes("_bridge_window")
+    ))
+  };
+}
+
+function createScoutPlane(scene, materials, name = "scout_plane", teamId = "light", isPlayer = false) {
+  const root = new TransformNode(name, scene);
+  root.scaling.setAll(scoutPlaneVisualScale);
+  const teamMaterials = isPlayer ? getPlayerShipTeamMaterials(materials, teamId) : getShipTeamMaterials(materials, teamId);
+  const bodyMaterial = createScoutPlaneMaterial(scene, `${name}_body_material`, teamMaterials.cabin.diffuseColor, 1);
+  const wingMaterial = createScoutPlaneMaterial(scene, `${name}_wing_material`, teamMaterials.hull.diffuseColor, 1);
+
+  const fuselage = MeshBuilder.CreateBox(`${name}_fuselage`, { width: 0.95, height: 0.48, depth: 7.15 }, scene);
+  fuselage.parent = root;
+  fuselage.position.z = -0.1;
+  fuselage.material = bodyMaterial;
+
+  const nose = MeshBuilder.CreateCylinder(`${name}_nose`, {
+    diameterTop: 0.12,
+    diameterBottom: 0.9,
+    height: 0.92,
+    tessellation: 12
+  }, scene);
+  nose.parent = root;
+  nose.position.z = 3.95;
+  nose.rotation.x = Math.PI / 2;
+  nose.material = bodyMaterial;
+
+  const noseCanopy = MeshBuilder.CreateSphere(`${name}_nose_canopy`, {
+    diameterX: 0.62,
+    diameterY: 0.42,
+    diameterZ: 0.52,
+    segments: 12
+  }, scene);
+  noseCanopy.parent = root;
+  noseCanopy.position.y = 0.02;
+  noseCanopy.position.z = 3.58;
+  noseCanopy.material = materials.glass;
+
+  const cockpit = MeshBuilder.CreateBox(`${name}_cockpit`, { width: 0.56, height: 0.28, depth: 1.05 }, scene);
+  cockpit.parent = root;
+  cockpit.position.y = 0.36;
+  cockpit.position.z = 1.2;
+  cockpit.material = bodyMaterial;
+
+  const wing = MeshBuilder.CreateBox(`${name}_wing`, { width: 10.8, height: 0.14, depth: 1.38 }, scene);
+  wing.parent = root;
+  wing.position.z = 0.28;
+  wing.material = wingMaterial;
+
+  const bombBay = MeshBuilder.CreateBox(`${name}_bomb_bay`, { width: 0.64, height: 0.08, depth: 1.35 }, scene);
+  bombBay.parent = root;
+  bombBay.position.y = -0.28;
+  bombBay.position.z = -0.45;
+  bombBay.material = materials.funnel;
+
+  const tailWing = MeshBuilder.CreateBox(`${name}_tail_wing`, { width: 3.45, height: 0.1, depth: 0.66 }, scene);
+  tailWing.parent = root;
+  tailWing.position.z = -3.36;
+  tailWing.position.y = 0.08;
+  tailWing.material = wingMaterial;
+
+  const fin = MeshBuilder.CreateBox(`${name}_fin`, { width: 0.14, height: 0.94, depth: 0.7 }, scene);
+  fin.parent = root;
+  fin.position.y = 0.54;
+  fin.position.z = -3.68;
+  fin.material = wingMaterial;
+
+  const propellerRoots = [-2.35, 2.35].map((x, index) => {
+    const engine = MeshBuilder.CreateCylinder(`${name}_engine_${index + 1}`, {
+      diameter: 0.58,
+      height: 1.18,
+      tessellation: 14
+    }, scene);
+    engine.parent = root;
+    engine.position.x = x;
+    engine.position.y = -0.03;
+    engine.position.z = 0.76;
+    engine.rotation.x = Math.PI / 2;
+    engine.material = bodyMaterial;
+
+    const cowling = MeshBuilder.CreateCylinder(`${name}_engine_cowling_${index + 1}`, {
+      diameterTop: 0.5,
+      diameterBottom: 0.62,
+      height: 0.28,
+      tessellation: 14
+    }, scene);
+    cowling.parent = root;
+    cowling.position.x = x;
+    cowling.position.y = -0.03;
+    cowling.position.z = 1.47;
+    cowling.rotation.x = Math.PI / 2;
+    cowling.material = materials.funnel;
+
+    const propellerRoot = new TransformNode(`${name}_propeller_root_${index + 1}`, scene);
+    propellerRoot.parent = root;
+    propellerRoot.position.x = x;
+    propellerRoot.position.y = -0.03;
+    propellerRoot.position.z = 1.66;
+    const propellerA = MeshBuilder.CreateBox(`${name}_propeller_${index + 1}_a`, { width: 0.13, height: 1.34, depth: 0.04 }, scene);
+    propellerA.parent = propellerRoot;
+    propellerA.material = materials.funnel;
+    const propellerB = MeshBuilder.CreateBox(`${name}_propeller_${index + 1}_b`, { width: 1.34, height: 0.13, depth: 0.04 }, scene);
+    propellerB.parent = propellerRoot;
+    propellerB.material = materials.funnel;
+    return propellerRoot;
+  });
+
+  if (flakHitboxDebugEnabled) {
+    addScoutPlaneFlakHitboxDebug(scene, materials, root, name);
+  }
+
+  return { root, propellerRoot: propellerRoots[0], propellerRoots };
+}
+
+function addScoutPlaneFlakHitboxDebug(scene, materials, root, name) {
+  const verticalSize = 4.5;
+  const parts = [
+    { suffix: "fuselage", width: 3.3, height: verticalSize, depth: 9.2, z: 0 },
+    { suffix: "wing", width: 10.5, height: verticalSize, depth: 3.6, z: 0.25 },
+    { suffix: "tail", width: 5.1, height: verticalSize, depth: 2.95, z: -2.475 }
+  ];
+
+  parts.forEach((part) => {
+    const box = MeshBuilder.CreateBox(`${name}_flak_hitbox_${part.suffix}`, {
+      width: part.width,
+      height: part.height,
+      depth: part.depth
+    }, scene);
+    box.parent = root;
+    box.position.z = part.z;
+    box.material = materials.flakHitboxDebug;
+    box.isPickable = false;
+  });
+}
+
+function createScoutPlaneMaterial(scene, name, color, alpha) {
+  const material = new StandardMaterial(name, scene);
+  material.diffuseColor = color;
+  material.specularColor = new Color3(0.08, 0.09, 0.09);
+  material.alpha = alpha;
+  material.backFaceCulling = alpha < 1 ? false : true;
+  return material;
+}
+
+function updateScoutPlaneVisual(plane, speed, time) {
+  const roots = plane.propellerRoots ?? (plane.propellerRoot ? [plane.propellerRoot] : []);
+  const propellerRate = Math.max(16, Math.abs(speed) * 11.5);
+  roots.forEach((propellerRoot, index) => {
+    const direction = index % 2 === 0 ? 1 : -1;
+    propellerRoot.rotation.z = direction * (time * propellerRate + index * Math.PI * 0.5);
+  });
+  if (!plane.propellerRoot && roots[0]) {
+    plane.propellerRoot = roots[0];
+  }
 }
 
 function createRailSegment(name, scene, material, parent, x1, z1, x2, z2, y, height = 0.12) {
@@ -5131,7 +11417,7 @@ function createTaperedHull(name, scene, sections) {
   const last = (sections.length - 1) * 4;
   pushQuad(indices, last, last + 1, last + 3, last + 2);
 
-  return createMeshFromData(name, scene, positions, indices);
+  return createMeshFromData(name, scene, positions, indices, { reverseFaces: true });
 }
 
 function createTaperedDeck(name, scene, sections) {
@@ -5149,121 +11435,864 @@ function createTaperedDeck(name, scene, sections) {
   for (let i = 0; i < sections.length - 1; i += 1) {
     const a = i * 2;
     const b = (i + 1) * 2;
-    pushQuad(indices, a, a + 1, b + 1, b);
+    pushOrientedQuad(indices, positions, a, a + 1, b + 1, b, Vector3.Up());
   }
 
-  return createMeshFromData(name, scene, positions, indices);
+  return createMeshFromData(name, scene, positions, indices, { reverseFaces: true });
+}
+
+function torpedoBoatHullSections() {
+  return [
+    { z: -4.2, topWidth: 0.62, chineWidth: 0.5, top: 0.52, chine: 0.2, keel: 0.02 },
+    { z: -3.45, topWidth: 1.06, chineWidth: 0.86, top: 0.54, chine: 0.18, keel: -0.02 },
+    { z: -2.25, topWidth: 1.46, chineWidth: 1.18, top: 0.56, chine: 0.16, keel: -0.04 },
+    { z: -1.1, topWidth: 1.58, chineWidth: 1.28, top: 0.57, chine: 0.15, keel: -0.05 },
+    { z: -0.22, topWidth: 1.58, chineWidth: 1.28, top: 0.57, chine: 0.15, keel: -0.05 },
+    { z: -0.04, topWidth: 1.56, chineWidth: 1.24, top: 0.74, chine: 0.15, keel: -0.05 },
+    { z: 1.25, topWidth: 1.34, chineWidth: 1.06, top: 0.74, chine: 0.14, keel: -0.04 },
+    { z: 2.42, topWidth: 0.872, chineWidth: 0.67, top: 0.74, chine: 0.121, keel: -0.021 },
+    { z: 2.452, topWidth: 0.859, chineWidth: 0.658, top: 0.74, chine: 0.12, keel: -0.02 },
+    { z: 2.469, topWidth: 0.849, chineWidth: 0.651, top: 0.74, chine: 0.119, keel: -0.019 },
+    { z: 2.72, topWidth: 0.7, chineWidth: 0.52, top: 0.736, chine: 0.112, keel: -0.008 },
+    { z: 3.18, topWidth: 0.42, chineWidth: 0.28, top: 0.73, chine: 0.1, keel: 0.01 },
+    { z: 3.68, topWidth: 0, chineWidth: 0, top: 0.73, chine: 0.1, keel: 0.04 }
+  ];
+}
+
+function getTorpedoBoatDeckY(z) {
+  const sections = torpedoBoatHullSections();
+  if (z <= sections[0].z) return sections[0].top;
+  for (let i = 0; i < sections.length - 1; i += 1) {
+    const from = sections[i];
+    const to = sections[i + 1];
+    if (z <= to.z) {
+      const t = (z - from.z) / (to.z - from.z);
+      return from.top + (to.top - from.top) * t;
+    }
+  }
+  return sections[sections.length - 1].top;
+}
+
+function interpolateTorpedoBoatHullSection(z) {
+  const sections = torpedoBoatHullSections();
+  if (z <= sections[0].z) return { ...sections[0], z };
+  for (let i = 0; i < sections.length - 1; i += 1) {
+    const from = sections[i];
+    const to = sections[i + 1];
+    if (z <= to.z) {
+      const t = (z - from.z) / (to.z - from.z);
+      return {
+        z,
+        topWidth: from.topWidth + (to.topWidth - from.topWidth) * t,
+        chineWidth: from.chineWidth + (to.chineWidth - from.chineWidth) * t,
+        top: from.top + (to.top - from.top) * t,
+        chine: from.chine + (to.chine - from.chine) * t,
+        keel: from.keel + (to.keel - from.keel) * t
+      };
+    }
+  }
+  return { ...sections[sections.length - 1], z };
+}
+
+function getTorpedoBoatBowBulwarkLift(z) {
+  const lift = torpedoBoatBowBulwarkHeight;
+  const rampAngle = 67.5 * Math.PI / 180;
+  const aftDropEndZ = 2.42;
+  const flatFrontStartZ = aftDropEndZ + lift / Math.tan(rampAngle);
+  if (z <= aftDropEndZ) return 0;
+  if (z >= flatFrontStartZ) return lift;
+  return ((z - aftDropEndZ) / (flatFrontStartZ - aftDropEndZ)) * lift;
+}
+
+function getTorpedoBoatSternBulwarkLift(z) {
+  const lift = torpedoBoatSternBulwarkHeight;
+  const rampAngle = 67.5 * Math.PI / 180;
+  const rampStartZ = -0.58;
+  const rampEndZ = rampStartZ + lift / Math.tan(rampAngle);
+  if (z <= rampStartZ) return lift;
+  if (z >= rampEndZ) return 0;
+  return lift * (1 - (z - rampStartZ) / (rampEndZ - rampStartZ));
+}
+
+function torpedoBoatSternBulwarkSections() {
+  const rampStartZ = -0.58;
+  const rampEndZ = rampStartZ + torpedoBoatSternBulwarkHeight / Math.tan(67.5 * Math.PI / 180);
+  return [
+    ...torpedoBoatHullSections().filter((section) => section.z < rampStartZ),
+    interpolateTorpedoBoatHullSection(rampStartZ),
+    interpolateTorpedoBoatHullSection(rampEndZ)
+  ];
+}
+
+function createBoatHullMesh(name, scene) {
+  const sections = torpedoBoatHullSections();
+  const positions = [];
+  const indices = [];
+
+  sections.forEach((section) => {
+    const top = section.topWidth / 2;
+    const chine = section.chineWidth / 2;
+    const topY = section.top + getTorpedoBoatBowBulwarkLift(section.z);
+    positions.push(
+      -top, topY, section.z,
+      top, topY, section.z,
+      -chine, section.chine, section.z,
+      chine, section.chine, section.z,
+      0, section.keel, section.z
+    );
+  });
+
+  for (let i = 0; i < sections.length - 1; i += 1) {
+    const a = i * 5;
+    const b = (i + 1) * 5;
+    pushOrientedQuad(indices, positions, a, a + 2, b + 2, b, new Vector3(-1, 0, 0));
+    pushOrientedQuad(indices, positions, a + 1, b + 1, b + 3, a + 3, new Vector3(1, 0, 0));
+    pushOrientedQuad(indices, positions, a + 2, a + 4, b + 4, b + 2, new Vector3(-1, -0.2, 0));
+    pushOrientedQuad(indices, positions, a + 3, b + 3, b + 4, a + 4, new Vector3(1, -0.2, 0));
+  }
+
+  pushOrientedTriangle(indices, positions, 0, 2, 4, new Vector3(0, 0, -1));
+  pushOrientedTriangle(indices, positions, 0, 4, 3, new Vector3(0, 0, -1));
+  pushOrientedTriangle(indices, positions, 0, 3, 1, new Vector3(0, 0, -1));
+  const last = (sections.length - 1) * 5;
+  pushOrientedTriangle(indices, positions, last, last + 4, last + 2, new Vector3(0, 0, 1));
+  pushOrientedTriangle(indices, positions, last, last + 3, last + 4, new Vector3(0, 0, 1));
+  pushOrientedTriangle(indices, positions, last, last + 1, last + 3, new Vector3(0, 0, 1));
+
+  return createMeshFromData(name, scene, positions, indices, { reverseFaces: true });
+}
+
+function createBoatDeckMesh(name, scene) {
+  const sections = torpedoBoatHullSections();
+  const positions = [];
+  const indices = [];
+
+  sections.forEach((section) => {
+    const halfWidth = Math.max(0, section.topWidth / 2 - 0.001);
+    positions.push(
+      -halfWidth, section.top + 0.0015, section.z,
+      halfWidth, section.top + 0.0015, section.z
+    );
+  });
+
+  for (let i = 0; i < sections.length - 1; i += 1) {
+    const a = i * 2;
+    const b = (i + 1) * 2;
+    pushOrientedQuad(indices, positions, a, a + 1, b + 1, b, Vector3.Up());
+  }
+
+  return createMeshFromData(name, scene, positions, indices, { reverseFaces: true });
+}
+
+function createBoatBowBulwarkCapMesh(name, scene) {
+  const sections = torpedoBoatHullSections().filter((section) => section.z >= 2.42);
+  const positions = [];
+  const indices = [];
+
+  [-1, 1].forEach((side) => {
+    const start = positions.length / 3;
+    sections.forEach((section) => {
+      const halfWidth = section.topWidth * 0.5;
+      const rimWidth = Math.min(torpedoBoatBowBulwarkRimWidth, halfWidth * 0.55);
+      const outerX = side * halfWidth;
+      const innerX = side * Math.max(0, halfWidth - rimWidth);
+      const topY = section.top + getTorpedoBoatBowBulwarkLift(section.z);
+      positions.push(
+        outerX, topY, section.z,
+        innerX, topY, section.z,
+        innerX, section.top + 0.006, section.z
+      );
+    });
+
+    for (let i = 0; i < sections.length - 1; i += 1) {
+      const a = start + i * 3;
+      const b = a + 3;
+      pushOrientedQuad(indices, positions, a, b, b + 1, a + 1, Vector3.Up());
+      pushOrientedQuad(indices, positions, a + 1, b + 1, b + 2, a + 2, new Vector3(-side, 0, 0));
+    }
+  });
+
+  return createMeshFromData(name, scene, positions, indices, { reverseFaces: true });
+}
+
+function createBoatSternBulwarkCapMesh(name, scene) {
+  const sections = torpedoBoatSternBulwarkSections();
+  const positions = [];
+  const indices = [];
+
+  [-1, 1].forEach((side) => {
+    const start = positions.length / 3;
+    sections.forEach((section) => {
+      const halfWidth = section.topWidth * 0.5;
+      const rimWidth = Math.min(torpedoBoatSternBulwarkRimWidth, halfWidth * 0.55);
+      const outerX = side * halfWidth;
+      const innerX = side * Math.max(0, halfWidth - rimWidth);
+      const topY = section.top + getTorpedoBoatSternBulwarkLift(section.z);
+      positions.push(
+        outerX, topY, section.z,
+        innerX, topY, section.z,
+        innerX, section.top - 0.006, section.z,
+        outerX, section.top - 0.006, section.z
+      );
+    });
+
+    for (let i = 0; i < sections.length - 1; i += 1) {
+      const a = start + i * 4;
+      const b = a + 4;
+      pushOrientedQuad(indices, positions, a, b, b + 1, a + 1, Vector3.Up());
+      pushOrientedQuad(indices, positions, a + 1, b + 1, b + 2, a + 2, new Vector3(-side, 0, 0));
+      pushOrientedQuad(indices, positions, a, a + 3, b + 3, b, new Vector3(side, 0, 0));
+      pushOrientedQuad(indices, positions, a + 2, b + 2, b + 3, a + 3, Vector3.Down());
+    }
+
+    pushOrientedQuad(indices, positions, start, start + 1, start + 2, start + 3, new Vector3(0, 0, -1));
+    const front = start + (sections.length - 1) * 4;
+    pushOrientedQuad(indices, positions, front, front + 1, front + 2, front + 3, new Vector3(0, 0, 1));
+  });
+
+  const stern = sections[0];
+  const sternHalfWidth = stern.topWidth * 0.5;
+  const sternRimWidth = Math.min(torpedoBoatSternBulwarkRimWidth, sternHalfWidth * 0.55);
+  const sternTopY = stern.top + getTorpedoBoatSternBulwarkLift(stern.z);
+  const sternStart = positions.length / 3;
+  const sternInnerZ = stern.z + sternRimWidth;
+  positions.push(
+    -sternHalfWidth, sternTopY, stern.z,
+    sternHalfWidth, sternTopY, stern.z,
+    sternHalfWidth, sternTopY, sternInnerZ,
+    -sternHalfWidth, sternTopY, sternInnerZ,
+    -sternHalfWidth, stern.top - 0.006, stern.z,
+    sternHalfWidth, stern.top - 0.006, stern.z,
+    sternHalfWidth, stern.top - 0.006, sternInnerZ,
+    -sternHalfWidth, stern.top - 0.006, sternInnerZ
+  );
+  pushOrientedQuad(indices, positions, sternStart, sternStart + 1, sternStart + 2, sternStart + 3, Vector3.Up());
+  pushOrientedQuad(indices, positions, sternStart, sternStart + 4, sternStart + 5, sternStart + 1, new Vector3(0, 0, -1));
+  pushOrientedQuad(indices, positions, sternStart + 3, sternStart + 2, sternStart + 6, sternStart + 7, new Vector3(0, 0, 1));
+  pushOrientedQuad(indices, positions, sternStart + 4, sternStart + 7, sternStart + 6, sternStart + 5, Vector3.Down());
+  pushOrientedQuad(indices, positions, sternStart, sternStart + 3, sternStart + 7, sternStart + 4, new Vector3(-1, 0, 0));
+  pushOrientedQuad(indices, positions, sternStart + 1, sternStart + 5, sternStart + 6, sternStart + 2, new Vector3(1, 0, 0));
+
+  return createMeshFromData(name, scene, positions, indices, { reverseFaces: true });
+}
+
+function createDeckFittedBox(name, scene, width, height, depth, z, extra = -0.004) {
+  const halfWidth = width * 0.5;
+  const backZ = z - depth * 0.5;
+  const frontZ = z + depth * 0.5;
+  const backBottomY = getTorpedoBoatDeckY(backZ) + extra;
+  const frontBottomY = getTorpedoBoatDeckY(frontZ) + extra;
+  const topY = Math.max(backBottomY, frontBottomY) + height;
+  const mesh = createBoxMeshFromCorners(name, scene, {
+    minX: -halfWidth,
+    maxX: halfWidth,
+    backBottomY,
+    frontBottomY,
+    topY,
+    backZ,
+    frontZ
+  });
+  mesh.metadata = { ...(mesh.metadata ?? {}), deckTopY: topY };
+  return mesh;
+}
+
+function createDeckStandingBox(name, scene, width, height, depth, z, extra = -0.004) {
+  const halfWidth = width * 0.5;
+  const backZ = z - depth * 0.5;
+  const frontZ = z + depth * 0.5;
+  const bottomY = Math.min(getTorpedoBoatDeckY(backZ), getTorpedoBoatDeckY(frontZ)) + extra;
+  const topY = bottomY + height;
+  const mesh = createBoxMeshFromCorners(name, scene, {
+    minX: -halfWidth,
+    maxX: halfWidth,
+    backBottomY: bottomY,
+    frontBottomY: bottomY,
+    topY,
+    backZ,
+    frontZ
+  });
+  mesh.metadata = { ...(mesh.metadata ?? {}), deckTopY: topY };
+  return mesh;
+}
+
+function createBoxMeshFromCorners(name, scene, bounds) {
+  const { minX, maxX, backBottomY, frontBottomY, topY, backZ, frontZ } = bounds;
+  const positions = [
+    minX, backBottomY, backZ,
+    maxX, backBottomY, backZ,
+    minX, frontBottomY, frontZ,
+    maxX, frontBottomY, frontZ,
+    minX, topY, backZ,
+    maxX, topY, backZ,
+    minX, topY, frontZ,
+    maxX, topY, frontZ
+  ];
+  const indices = [];
+  pushOrientedQuad(indices, positions, 4, 5, 7, 6, Vector3.Up());
+  pushOrientedQuad(indices, positions, 0, 2, 6, 4, new Vector3(-1, 0, 0));
+  pushOrientedQuad(indices, positions, 1, 5, 7, 3, new Vector3(1, 0, 0));
+  pushOrientedQuad(indices, positions, 0, 4, 5, 1, new Vector3(0, 0, -1));
+  pushOrientedQuad(indices, positions, 2, 3, 7, 6, new Vector3(0, 0, 1));
+  pushOrientedQuad(indices, positions, 0, 1, 3, 2, Vector3.Down());
+
+  return createMeshFromData(name, scene, positions, indices, { flatShaded: true, reverseFaces: true });
+}
+
+function createShipDesignationPlates(scene, parent, name, designation) {
+  if (!designation) return [];
+
+  const material = createShipDesignationMaterial(scene, `${name}_designation_material`, designation);
+  const sternPlate = MeshBuilder.CreatePlane(`${name}_stern_designation_plate`, {
+    width: 0.5,
+    height: 0.2
+  }, scene);
+  sternPlate.parent = parent;
+  sternPlate.position.x = 0;
+  sternPlate.position.y = 0.39;
+  sternPlate.position.z = -4.214;
+  sternPlate.rotation.y = Math.PI;
+  sternPlate.scaling.x = -1;
+  sternPlate.material = material;
+  sternPlate.isPickable = false;
+
+  return [sternPlate];
+}
+
+function createShipDesignationMaterial(scene, name, designation) {
+  const texture = new DynamicTexture(`${name}_texture`, { width: 256, height: 96 }, scene, true);
+  texture.hasAlpha = true;
+  const ctx = texture.getContext();
+  ctx.clearRect(0, 0, 256, 96);
+  const maxTextWidth = 222;
+  let fontSize = 46;
+  do {
+    ctx.font = `800 ${fontSize}px Inter, Arial, sans-serif`;
+    fontSize -= 2;
+  } while (ctx.measureText(designation).width > maxTextWidth && fontSize >= 28);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineWidth = Math.max(4, Math.round(fontSize * 0.16));
+  ctx.strokeStyle = "rgba(3, 12, 16, 0.92)";
+  ctx.fillStyle = "rgba(235, 242, 238, 0.98)";
+  ctx.strokeText(designation, 128, 50);
+  ctx.fillText(designation, 128, 50);
+  texture.update(false);
+
+  const material = new StandardMaterial(name, scene);
+  material.diffuseTexture = texture;
+  material.emissiveTexture = texture;
+  material.useAlphaFromDiffuseTexture = true;
+  material.backFaceCulling = false;
+  material.specularColor = new Color3(0.04, 0.05, 0.05);
+  material.emissiveColor = new Color3(0.42, 0.46, 0.43);
+  return material;
+}
+
+function getBridgeWindowMaterial(materials, teamMaterials) {
+  const color = teamMaterials.cabin?.diffuseColor;
+  const brightness = color ? (color.r + color.g + color.b) / 3 : 0;
+  return brightness > 0.28
+    ? materials.lightBridgeWindow
+    : materials.darkBridgeWindow;
+}
+
+function createTorpedoBoatSuperstructure(scene, materials, parent, name, teamMaterials, includeWindows = true) {
+  const cabinMaterial = teamMaterials.cabin;
+  const funnelMaterial = teamMaterials.funnel;
+  const meshes = [];
+
+  const aftDeckhouse = createDeckFittedBox(`${name}_aft_deckhouse`, scene, 0.92, 0.18, 0.58, -0.02);
+  aftDeckhouse.parent = parent;
+  aftDeckhouse.material = cabinMaterial;
+  meshes.push(aftDeckhouse);
+
+  const bridgeBase = createDeckFittedBox(`${name}_bridge_base`, scene, 0.82, 0.414, 0.76, 0.64);
+  bridgeBase.parent = parent;
+  bridgeBase.material = cabinMaterial;
+  meshes.push(bridgeBase);
+
+  const bridgeHouseHeight = 0.2898;
+  const bridgeHouseWidth = 0.72;
+  const bridgeHouseDepth = 0.46;
+  const bridgeHouseZ = 0.72;
+  const bridgeHouseBottomY = bridgeBase.metadata.deckTopY;
+  const bridgeHouseTopY = bridgeHouseBottomY + bridgeHouseHeight;
+  const bridgeHouse = createBoxMeshFromCorners(`${name}_bridge_house`, scene, {
+    minX: -bridgeHouseWidth * 0.5,
+    maxX: bridgeHouseWidth * 0.5,
+    backBottomY: bridgeHouseBottomY,
+    frontBottomY: bridgeHouseBottomY,
+    topY: bridgeHouseTopY,
+    backZ: bridgeHouseZ - bridgeHouseDepth * 0.5,
+    frontZ: bridgeHouseZ + bridgeHouseDepth * 0.5
+  });
+  bridgeHouse.parent = parent;
+  bridgeHouse.material = cabinMaterial;
+  meshes.push(bridgeHouse);
+
+  if (includeWindows) {
+    const previousWindowHeight = 0.074;
+    const windowHeight = previousWindowHeight * 1.5;
+    const windowWidth = 0.15;
+    const windowDepth = 0.012;
+    const windowGap = 0.075;
+    const windowCount = 3;
+    const windowTopY = bridgeHouseBottomY + bridgeHouseHeight * 0.62 + previousWindowHeight * 0.5;
+    const windowMaterial = getBridgeWindowMaterial(materials, teamMaterials);
+    for (let i = 0; i < windowCount; i += 1) {
+      const window = MeshBuilder.CreateBox(`${name}_bridge_window_${i}`, {
+        width: windowWidth,
+        height: windowHeight,
+        depth: windowDepth
+      }, scene);
+      window.parent = parent;
+      window.position.x = (i - (windowCount - 1) * 0.5) * (windowWidth + windowGap);
+      window.position.y = windowTopY - windowHeight * 0.5;
+      window.position.z = bridgeHouseZ + bridgeHouseDepth * 0.5 - windowDepth * 0.5 + 0.003;
+      window.material = windowMaterial;
+      meshes.push(window);
+    }
+  }
+
+  const funnelBaseHeight = 0.34;
+  const funnelBase = createDeckStandingBox(`${name}_funnel_base`, scene, 0.64, funnelBaseHeight, 0.76, -0.5);
+  funnelBase.parent = parent;
+  funnelBase.material = cabinMaterial;
+  meshes.push(funnelBase);
+
+  const funnel = MeshBuilder.CreateCylinder(`${name}_funnel`, {
+    diameterTop: 0.31,
+    diameterBottom: 0.39,
+    height: 0.9,
+    tessellation: 12
+  }, scene);
+  funnel.parent = parent;
+  funnel.position.y = funnelBase.metadata.deckTopY + 0.45 - 0.001;
+  funnel.position.z = -0.44;
+  funnel.material = funnelMaterial;
+  meshes.push(funnel);
+
+  return meshes;
 }
 
 function pushQuad(indices, a, b, c, d) {
   indices.push(a, b, c, a, c, d);
 }
 
-function createMeshFromData(name, scene, positions, indices) {
+function pushOrientedQuad(indices, positions, a, b, c, d, expectedNormal) {
+  if (quadNormalDot(positions, a, b, c, expectedNormal) < 0) {
+    pushQuad(indices, a, d, c, b);
+  } else {
+    pushQuad(indices, a, b, c, d);
+  }
+}
+
+function pushOrientedTriangle(indices, positions, a, b, c, expectedNormal) {
+  if (quadNormalDot(positions, a, b, c, expectedNormal) < 0) {
+    indices.push(a, c, b);
+  } else {
+    indices.push(a, b, c);
+  }
+}
+
+function quadNormalDot(positions, a, b, c, expectedNormal) {
+  const ax = positions[a * 3];
+  const ay = positions[a * 3 + 1];
+  const az = positions[a * 3 + 2];
+  const ux = positions[b * 3] - ax;
+  const uy = positions[b * 3 + 1] - ay;
+  const uz = positions[b * 3 + 2] - az;
+  const vx = positions[c * 3] - ax;
+  const vy = positions[c * 3 + 1] - ay;
+  const vz = positions[c * 3 + 2] - az;
+  const nx = uy * vz - uz * vy;
+  const ny = uz * vx - ux * vz;
+  const nz = ux * vy - uy * vx;
+  return nx * expectedNormal.x + ny * expectedNormal.y + nz * expectedNormal.z;
+}
+
+function createMeshFromData(name, scene, positions, indices, options = {}) {
   const mesh = new Mesh(name, scene);
+  const meshIndices = options.reverseFaces ? reverseTriangleWinding(indices) : indices;
   const normals = [];
-  VertexData.ComputeNormals(positions, indices, normals);
+  VertexData.ComputeNormals(positions, meshIndices, normals);
 
   const vertexData = new VertexData();
   vertexData.positions = positions;
-  vertexData.indices = indices;
+  vertexData.indices = meshIndices;
   vertexData.normals = normals;
   vertexData.applyToMesh(mesh);
+  if (options.flatShaded) {
+    mesh.convertToFlatShadedMesh();
+  }
 
   return mesh;
 }
 
+function reverseTriangleWinding(indices) {
+  const reversed = [];
+  for (let index = 0; index < indices.length; index += 3) {
+    reversed.push(indices[index], indices[index + 2], indices[index + 1]);
+  }
+  return reversed;
+}
+
+function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2.35, isPlayer = false) {
+  const deckMaterial = teamMaterials.deck;
+  const turretMaterial = teamMaterials.cabin ?? teamMaterials.hull;
+  const metalMaterial = teamMaterials.funnel ?? materials.funnel;
+  const scale = isPlayer ? 0.648 : 0.78;
+  const cannonScale = scale * 1.045;
+  const platformHeight = 0.075 * cannonScale;
+  const platformY = getTorpedoBoatDeckY(bowZ) + platformHeight * 0.5 + 0.002;
+  const turretBaseHeight = 0.234 * cannonScale;
+
+  const platform = MeshBuilder.CreateCylinder(`${name}_cannon_platform`, {
+    diameter: 0.52 * cannonScale,
+    height: platformHeight,
+    tessellation: 28
+  }, scene);
+  platform.parent = parent;
+  platform.position.y = platformY;
+  platform.position.z = bowZ;
+  platform.material = deckMaterial;
+
+  const mount = new TransformNode(`${name}_cannon_mount`, scene);
+  mount.parent = parent;
+  mount.position.y = platform.position.y + platformHeight * 0.5;
+  mount.position.z = bowZ;
+
+  const turretBase = MeshBuilder.CreateCylinder(`${name}_cannon_turret_base`, {
+    diameter: 0.42 * cannonScale,
+    height: turretBaseHeight,
+    tessellation: 22
+  }, scene);
+  turretBase.parent = mount;
+  turretBase.position.y = turretBaseHeight * 0.5;
+  turretBase.material = turretMaterial;
+
+  const turretRoof = MeshBuilder.CreateSphere(`${name}_cannon_turret_roof`, {
+    diameter: 0.42 * cannonScale,
+    segments: 18
+  }, scene);
+  turretRoof.parent = mount;
+  turretRoof.position.y = turretBaseHeight;
+  turretRoof.scaling.y = 0.28;
+  turretRoof.material = turretMaterial;
+
+  const elevationRoot = new TransformNode(`${name}_cannon_elevation`, scene);
+  elevationRoot.parent = mount;
+  elevationRoot.position.y = turretBaseHeight * 0.92;
+  elevationRoot.position.z = 0.18 * cannonScale;
+
+  const barrelLength = 0.63 * cannonScale;
+  const barrel = MeshBuilder.CreateCylinder(`${name}_cannon_barrel`, {
+    diameter: 0.07 * cannonScale,
+    height: barrelLength,
+    tessellation: 14
+  }, scene);
+  barrel.parent = elevationRoot;
+  barrel.position.z = barrelLength * 0.34;
+  barrel.rotation.x = Math.PI / 2;
+  barrel.material = metalMaterial;
+
+  return {
+    mount,
+    elevationRoot,
+    barrel,
+    barrelBaseZ: barrel.position.z,
+    muzzleZ: barrel.position.z + barrelLength * 0.5,
+    viewHiddenMeshes: isPlayer ? [platform, turretBase, turretRoof, barrel] : []
+  };
+}
+
+function createSlottedFlakDome(name, scene, scale) {
+  const radius = 0.25 * scale;
+  const heightScale = 0.58;
+  const rings = 8;
+  const segments = 28;
+  const slotHalfAngle = 0.24;
+  const startAngle = slotHalfAngle;
+  const endAngle = Math.PI * 2 - slotHalfAngle;
+  const positions = [];
+  const indices = [];
+
+  for (let ring = 0; ring <= rings; ring += 1) {
+    const theta = (ring / rings) * (Math.PI / 2);
+    const y = Math.cos(theta) * radius * heightScale;
+    const ringRadius = Math.sin(theta) * radius;
+    for (let segment = 0; segment <= segments; segment += 1) {
+      const phi = startAngle + (segment / segments) * (endAngle - startAngle);
+      positions.push(
+        Math.sin(phi) * ringRadius,
+        y,
+        Math.cos(phi) * ringRadius
+      );
+    }
+  }
+
+  const row = segments + 1;
+  for (let ring = 0; ring < rings; ring += 1) {
+    for (let segment = 0; segment < segments; segment += 1) {
+      const a = ring * row + segment;
+      const b = a + row;
+      pushQuad(indices, a, a + 1, b + 1, b);
+    }
+  }
+
+  return createMeshFromData(name, scene, positions, indices, { reverseFaces: true });
+}
+
+function createOpenFlakTurretWall(name, scene, scale) {
+  const outerRadius = 0.29 * scale;
+  const innerRadius = 0.215 * scale;
+  const height = 0.145 * scale;
+  const segments = 9;
+  const arcs = [
+    { start: 0.74, end: 1.98 },
+    { start: Math.PI * 2 - 1.98, end: Math.PI * 2 - 0.74 }
+  ];
+  const positions = [];
+  const indices = [];
+
+  arcs.forEach((arc) => {
+    const base = positions.length / 3;
+    for (let segment = 0; segment <= segments; segment += 1) {
+      const phi = arc.start + (segment / segments) * (arc.end - arc.start);
+      const sin = Math.sin(phi);
+      const cos = Math.cos(phi);
+      positions.push(sin * outerRadius, 0, cos * outerRadius);
+      positions.push(sin * outerRadius, height, cos * outerRadius);
+      positions.push(sin * innerRadius, height, cos * innerRadius);
+      positions.push(sin * innerRadius, 0, cos * innerRadius);
+    }
+
+    for (let segment = 0; segment < segments; segment += 1) {
+      const a = base + segment * 4;
+      const b = a + 4;
+      pushQuad(indices, a, b, b + 1, a + 1);
+      pushQuad(indices, a + 1, b + 1, b + 2, a + 2);
+      pushQuad(indices, a + 2, b + 2, b + 3, a + 3);
+      pushQuad(indices, a + 3, b + 3, b, a);
+    }
+
+    const last = base + segments * 4;
+    pushQuad(indices, base, base + 1, base + 2, base + 3);
+    pushQuad(indices, last, last + 3, last + 2, last + 1);
+  });
+
+  return createMeshFromData(name, scene, positions, indices);
+}
+
+function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ = -3.45, isPlayer = false) {
+  const deckMaterial = teamMaterials.deck;
+  const metalMaterial = teamMaterials.funnel ?? materials.funnel;
+  const shieldMaterial = teamMaterials.cabin ?? teamMaterials.hull;
+  const scale = isPlayer ? playerSternFlakScale : 0.75;
+  const platformHeight = 0.12 * scale;
+  const platformY = getTorpedoBoatDeckY(sternZ) + platformHeight * 0.5 + 0.002;
+  const turretBaseHeight = 0.14 * scale;
+  const turretWallHeight = 0.145 * scale;
+  const turretTopY = platformY + platformHeight * 0.5 + turretBaseHeight + turretWallHeight;
+
+  const platform = MeshBuilder.CreateCylinder(`${name}_flak_platform`, {
+    diameter: 0.78 * scale,
+    height: platformHeight,
+    tessellation: 28
+  }, scene);
+  platform.parent = parent;
+  platform.position.y = platformY;
+  platform.position.z = sternZ;
+  platform.material = deckMaterial;
+
+  const pedestal = MeshBuilder.CreateCylinder(`${name}_flak_pedestal`, {
+    diameter: 0.54 * scale,
+    height: turretBaseHeight,
+    tessellation: 20
+  }, scene);
+  pedestal.parent = parent;
+  pedestal.position.y = platform.position.y + platformHeight * 0.5 + turretBaseHeight * 0.5;
+  pedestal.position.z = sternZ;
+  pedestal.material = shieldMaterial;
+
+  const mount = new TransformNode(`${name}_flak_mount`, scene);
+  mount.parent = parent;
+  mount.position.y = turretTopY;
+  mount.position.z = sternZ;
+  mount.rotation.y = Math.PI;
+
+  const turretWall = createOpenFlakTurretWall(`${name}_flak_turret_wall`, scene, scale);
+  turretWall.parent = mount;
+  turretWall.position.y = -turretWallHeight;
+  turretWall.material = shieldMaterial;
+
+  const cradle = MeshBuilder.CreateCylinder(`${name}_flak_cradle`, {
+    diameter: 0.105 * scale,
+    height: 0.34 * scale,
+    tessellation: 12
+  }, scene);
+  cradle.parent = mount;
+  cradle.position.y = -0.015 * scale;
+  cradle.position.z = -0.03 * scale;
+  cradle.rotation.z = Math.PI / 2;
+  cradle.material = metalMaterial;
+
+  const elevationRoot = new TransformNode(`${name}_flak_elevation`, scene);
+  elevationRoot.parent = mount;
+  elevationRoot.position.y = 0.03 * scale;
+  elevationRoot.position.z = 0.16 * scale;
+
+  const barrelLength = flakBarrelLength * scale;
+  const barrelHalfLength = barrelLength * 0.5;
+  const barrelCenterZ = flakBarrelCenterZ * scale;
+  const barrel = MeshBuilder.CreateCylinder(`${name}_flak_barrel`, {
+    diameter: 0.038 * scale,
+    height: barrelLength,
+    tessellation: 12
+  }, scene);
+  barrel.parent = elevationRoot;
+  barrel.position.z = barrelCenterZ;
+  barrel.rotation.x = Math.PI / 2;
+  barrel.material = metalMaterial;
+
+  const muzzle = MeshBuilder.CreateCylinder(`${name}_flak_muzzle`, {
+    diameter: 0.048 * scale,
+    height: 0.08 * scale,
+    tessellation: 10
+  }, scene);
+  muzzle.parent = barrel;
+  muzzle.position.y = barrelHalfLength;
+  muzzle.material = metalMaterial;
+
+  const sightYOffset = flakSightYOffsetFactor * scale;
+  const sightZ = 0.9 * scale;
+  const sight = MeshBuilder.CreateTorus(`${name}_flak_ring_sight`, {
+    diameter: 0.13 * scale,
+    thickness: 0.0035 * scale,
+    tessellation: 32
+  }, scene);
+  sight.parent = elevationRoot;
+  sight.position.y = sightYOffset;
+  sight.position.z = sightZ;
+  sight.rotation.x = Math.PI / 2;
+  sight.material = metalMaterial;
+
+  const sightSpokes = [
+    { x: -0.041, y: 0, width: 0.048, height: 0.002 },
+    { x: 0.041, y: 0, width: 0.048, height: 0.002 },
+    { x: 0, y: -0.041, width: 0.002, height: 0.048 },
+    { x: 0, y: 0.041, width: 0.002, height: 0.048 }
+  ];
+  sightSpokes.forEach((spoke, index) => {
+    const mesh = MeshBuilder.CreateBox(`${name}_flak_ring_sight_spoke_${index}`, {
+      width: spoke.width * scale,
+      height: spoke.height * scale,
+      depth: 0.006 * scale
+    }, scene);
+    mesh.parent = elevationRoot;
+    mesh.position.x = spoke.x * scale;
+    mesh.position.y = sightYOffset + spoke.y * scale;
+    mesh.position.z = sightZ;
+    mesh.material = metalMaterial;
+  });
+
+  const sightBracket = MeshBuilder.CreateBox(`${name}_flak_ring_sight_bracket`, {
+    width: 0.014 * scale,
+    height: 0.065 * scale,
+    depth: 0.012 * scale
+  }, scene);
+  sightBracket.parent = elevationRoot;
+  sightBracket.position.y = 0.043 * scale;
+  sightBracket.position.z = sightZ;
+  sightBracket.material = metalMaterial;
+
+  return {
+    mount,
+    elevationRoot,
+    muzzle,
+    viewHiddenMeshes: []
+  };
+}
+
 // Low-poly external ship model for opponents. Keep it cheap: enemies may appear in groups later.
-function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = "dark") {
+function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = "dark", designation = "", hasFlak = false) {
   const root = new TransformNode(name, scene);
+  root.scaling.setAll(torpedoBoatVisualScale);
   const teamMaterials = getShipTeamMaterials(materials, teamId);
   const hullMaterial = teamMaterials.hull;
+  const deckMaterial = teamMaterials.deck;
   const cabinMaterial = teamMaterials.cabin;
   const funnelMaterial = teamMaterials.funnel;
 
-  const body = createEnemyBoatBody(`${name}_body`, scene);
-  body.parent = root;
-  body.material = hullMaterial;
+  const hull = createBoatHullMesh(`${name}_hull`, scene);
+  hull.parent = root;
+  hull.material = hullMaterial;
 
-  const bridgeBase = MeshBuilder.CreateBox(`${name}_bridge_base`, { width: 0.96, height: 0.28, depth: 1.05 }, scene);
-  bridgeBase.parent = root;
-  bridgeBase.position.y = 0.75;
-  bridgeBase.position.z = 0.55;
-  bridgeBase.material = cabinMaterial;
+  const deck = createBoatDeckMesh(`${name}_deck`, scene);
+  deck.parent = root;
+  deck.material = deckMaterial;
+  const bowBulwarkCap = createBoatBowBulwarkCapMesh(`${name}_bow_bulwark_cap`, scene);
+  bowBulwarkCap.parent = root;
+  bowBulwarkCap.material = hullMaterial;
+  const sternBulwarkCap = createBoatSternBulwarkCapMesh(`${name}_stern_bulwark_cap`, scene);
+  sternBulwarkCap.parent = root;
+  sternBulwarkCap.position.y = 0.006;
+  sternBulwarkCap.material = hullMaterial;
 
-  const bridge = MeshBuilder.CreateBox(`${name}_bridge`, { width: 0.74, height: 0.48, depth: 0.72 }, scene);
-  bridge.parent = root;
-  bridge.position.y = 1.06;
-  bridge.position.z = 0.76;
-  bridge.material = cabinMaterial;
-
-  const window = MeshBuilder.CreateBox(`${name}_window`, { width: 0.58, height: 0.11, depth: 0.035 }, scene);
-  window.parent = root;
-  window.position.y = 1.17;
-  window.position.z = 1.13;
-  window.material = materials.glass;
-
-  const funnelBase = MeshBuilder.CreateBox(`${name}_funnel_base`, { width: 0.72, height: 0.22, depth: 0.58 }, scene);
-  funnelBase.parent = root;
-  funnelBase.position.y = 0.76;
-  funnelBase.position.z = 0.0;
-  funnelBase.material = cabinMaterial;
-
-  const funnel = MeshBuilder.CreateCylinder(`${name}_funnel`, {
-    diameter: 0.36,
-    height: 0.98,
-    tessellation: 10
-  }, scene);
-  funnel.parent = root;
-  funnel.position.y = 1.33;
-  funnel.position.z = 0.0;
-  funnel.material = funnelMaterial;
+  createTorpedoBoatSuperstructure(scene, materials, root, name, teamMaterials, true);
 
   for (let i = 0; i < 2; i += 1) {
     const tube = MeshBuilder.CreateCylinder(`${name}_tube_${i}`, {
-      diameter: 0.15,
-      height: 1.75,
+      diameter: 0.18,
+      height: 1.76,
       tessellation: 10
     }, scene);
     tube.parent = root;
-    tube.position.x = i === 0 ? -0.31 : 0.31;
+    tube.position.x = i === 0 ? -0.56 : 0.56;
     tube.position.y = 0.76;
-    tube.position.z = 1.65;
+    tube.position.z = 1.38;
     tube.rotation.x = Math.PI / 2;
     tube.material = funnelMaterial;
   }
 
-  const mast = MeshBuilder.CreateCylinder(`${name}_mast`, {
-    diameter: 0.045,
-    height: 1.35,
-    tessellation: 6
-  }, scene);
-  mast.parent = root;
-  mast.position.y = 1.66;
-  mast.position.z = 0.32;
-  mast.rotation.x = -0.16;
-  mast.material = funnelMaterial;
+  const bowCannon = createBowCannon(scene, materials, root, name, teamMaterials, 2.42, false);
+  const sternFlak = hasFlak
+    ? createSternFlak(scene, materials, root, name, teamMaterials, remoteSternFlakZ, false)
+    : null;
 
   const bowWake = createEnemyBowWake(scene, materials, root, name);
 
-  return { root, bowWake };
+  return { root, bowWake, bowCannon, sternFlak };
 }
 
 function createEnemyBowWake(scene, materials, parent, name) {
   const root = new TransformNode(`${name}_bow_wake`, scene);
-  root.parent = parent;
+  root.parent = parent.parent ?? null;
+  root.scaling.copyFrom(parent.scaling);
 
   const segments = [];
   const churn = [];
 
   for (let side = -1; side <= 1; side += 2) {
     for (let i = 0; i < 5; i += 1) {
-      const startX = side * (0.22 + i * 0.1);
-      const startZ = 4.48 - i * 0.12;
-      const endX = side * (1.1 + i * 0.5);
-      const endZ = 3.76 - i * 0.38;
+      const startX = side * (0.07 + i * 0.045);
+      const startZ = 3.7 - i * 0.04;
+      const endX = side * (0.48 + i * 0.22);
+      const endZ = 3.28 - i * 0.25;
       const segment = createWakeRibbon(`${name}_bow_wake_${side}_${i}`, scene, materials.foam, root, startX, startZ, endX, endZ);
-      segment.metadata = { row: i + 1 };
+      segment.metadata = { kind: "bow", row: i + 1 };
+      segments.push(segment);
+    }
+  }
+
+  for (let side = -1; side <= 1; side += 2) {
+    for (let i = 0; i < 4; i += 1) {
+      const startX = side * (0.72 + i * 0.035);
+      const startZ = -4.04 - i * 0.05;
+      const endX = side * (0.88 + i * 0.09);
+      const endZ = -4.84 - i * 0.48;
+      const segment = createWakeRibbon(`${name}_stern_edge_wake_${side}_${i}`, scene, materials.foam, root, startX, startZ, endX, endZ);
+      segment.metadata = { kind: "sternEdge", row: i + 1 };
       segments.push(segment);
     }
   }
@@ -5276,15 +12305,32 @@ function createEnemyBowWake(scene, materials, parent, name) {
     }, scene);
     patch.parent = root;
     patch.material = materials.foam;
-    patch.position.x = (i - 1.5) * 0.12;
+    patch.position.x = (i - 1.5) * 0.075;
     patch.position.y = enemyBowWakeSurfaceY;
-    patch.position.z = 4.54 + i * 0.05;
-    patch.rotation.y = -0.28 + i * 0.18;
+    patch.position.z = 3.64 - i * 0.035;
+    patch.rotation.y = -0.2 + i * 0.13;
+    patch.metadata = { kind: "bowChurn", row: i + 1 };
+    churn.push(patch);
+  }
+
+  for (let i = 0; i < 5; i += 1) {
+    const patch = MeshBuilder.CreateBox(`${name}_stern_churn_${i}`, {
+      width: 0.22 + (i % 2) * 0.1,
+      height: 0.014,
+      depth: 0.28 + i * 0.08
+    }, scene);
+    patch.parent = root;
+    patch.material = materials.foam;
+    patch.position.x = (i - 2) * 0.055;
+    patch.position.y = enemyBowWakeSurfaceY;
+    patch.position.z = -4.2 - i * 0.18;
+    patch.rotation.y = -0.08 + i * 0.04;
+    patch.metadata = { kind: "sternChurn", row: i + 1 };
     churn.push(patch);
   }
 
   root.setEnabled(false);
-  return { root, segments, churn };
+  return { root, segments, churn, strength: 0, waterlineY: torpedoBoatWaterlineY };
 }
 
 function createWakeRibbon(name, scene, material, parent, startX, startZ, endX, endZ) {
@@ -5292,7 +12338,7 @@ function createWakeRibbon(name, scene, material, parent, startX, startZ, endX, e
   const dz = endZ - startZ;
   const length = Math.sqrt(dx * dx + dz * dz);
   const ribbon = MeshBuilder.CreateBox(name, {
-    width: 0.07,
+    width: 0.045,
     height: 0.012,
     depth: length
   }, scene);
@@ -5303,46 +12349,6 @@ function createWakeRibbon(name, scene, material, parent, startX, startZ, endX, e
   ribbon.position.z = (startZ + endZ) / 2;
   ribbon.rotation.y = Math.atan2(dx, dz);
   return ribbon;
-}
-
-function createEnemyBoatBody(name, scene) {
-  const sections = [
-    { z: -4.05, topWidth: 0.78, chineWidth: 0.62, top: 0.52, chine: 0.24, keel: 0.02 },
-    { z: -2.3, topWidth: 1.22, chineWidth: 1.02, top: 0.66, chine: 0.2, keel: -0.03 },
-    { z: 1.55, topWidth: 1.32, chineWidth: 1.05, top: 0.68, chine: 0.18, keel: -0.04 },
-    { z: 3.25, topWidth: 0.62, chineWidth: 0.42, top: 0.56, chine: 0.14, keel: -0.02 },
-    { z: 4.45, topWidth: 0.08, chineWidth: 0.04, top: 0.43, chine: 0.11, keel: 0.02 }
-  ];
-  const positions = [];
-  const indices = [];
-
-  sections.forEach((section) => {
-    const top = section.topWidth / 2;
-    const chine = section.chineWidth / 2;
-    positions.push(
-      -top, section.top, section.z,
-      top, section.top, section.z,
-      -chine, section.chine, section.z,
-      chine, section.chine, section.z,
-      0, section.keel, section.z
-    );
-  });
-
-  for (let i = 0; i < sections.length - 1; i += 1) {
-    const a = i * 5;
-    const b = (i + 1) * 5;
-    pushQuad(indices, a, b, b + 1, a + 1); // deck
-    pushQuad(indices, a, a + 2, b + 2, b); // port side
-    pushQuad(indices, a + 1, b + 1, b + 3, a + 3); // starboard side
-    pushQuad(indices, a + 2, a + 4, b + 4, b + 2); // port bottom
-    pushQuad(indices, a + 3, b + 3, b + 4, a + 4); // starboard bottom
-  }
-
-  indices.push(0, 2, 4, 0, 4, 3, 0, 3, 1);
-  const last = (sections.length - 1) * 5;
-  indices.push(last, last + 4, last + 2, last, last + 3, last + 4, last, last + 1, last + 3);
-
-  return createMeshFromData(name, scene, positions, indices);
 }
 
 // Legacy full-ship prototype kept only for comparison while the enemy model evolves.
@@ -5429,7 +12435,7 @@ function createBoat(scene, materials, name = "boat") {
 
   for (let i = 0; i < 2; i += 1) {
     const tube = MeshBuilder.CreateCylinder(`${name}_torpedo_tube_${i}`, {
-      diameter: 0.17,
+      diameter: 0.204,
       height: 1.7,
       tessellation: 10
     }, scene);
@@ -5759,8 +12765,8 @@ function createLighthouse(land, index, scene, materials, parent, visualEffects) 
 
 function lighthouseScaleFor(land) {
   const name = String(land.name ?? "");
-  if (name.includes("western")) return 1.18;
-  return 1.55;
+  const baseScale = name.includes("western") ? 1.18 : 1.55;
+  return baseScale * lighthouseVisualScale;
 }
 
 function isStripedLighthouse(land) {
@@ -6137,10 +13143,12 @@ function createCoastline(land, position, scene, materials, parent) {
   const heightScale = land.heightScale ?? 1;
   const peakBoost = land.peakBoost ?? 0;
 
-  const beach = createCoastlineBeachMesh(`${name}_beach`, land, rx, rz, scene);
-  beach.parent = parent;
-  beach.position = position;
-  beach.material = materials.sand;
+  if (!hideBeachDebug) {
+    const beach = createCoastlineBeachMesh(`${name}_beach`, land, rx, rz, scene);
+    beach.parent = parent;
+    beach.position = position;
+    beach.material = materials.sand;
+  }
 
   const terrain = createCoastlineTerrainMesh(`${name}_terrain`, land, rx, rz, heightScale, peakBoost, scene);
   terrain.parent = parent;
@@ -6343,16 +13351,18 @@ function createIsland(land, position, scene, materials, parent) {
 }
 
 function createSmallIslandSurface(land, rx, rz, heightScale, scene, materials, parent) {
-  const beach = MeshBuilder.CreateCylinder(`${land.name}_island_beach`, {
-    diameter: 2,
-    height: 0.05,
-    tessellation: 64
-  }, scene);
-  beach.parent = parent;
-  beach.position.y = 0.045;
-  beach.scaling.x = rx * 1.02;
-  beach.scaling.z = rz * 1.02;
-  beach.material = materials.sand;
+  if (!hideBeachDebug) {
+    const beach = MeshBuilder.CreateCylinder(`${land.name}_island_beach`, {
+      diameter: 2,
+      height: 0.05,
+      tessellation: 64
+    }, scene);
+    beach.parent = parent;
+    beach.position.y = 0.045;
+    beach.scaling.x = rx * 1.02;
+    beach.scaling.z = rz * 1.02;
+    beach.material = materials.sand;
+  }
 
   const terrain = MeshBuilder.CreateCylinder(`${land.name}_island_terrain`, {
     diameterTop: 1.55,
@@ -6510,11 +13520,11 @@ function getPeakLift(nx, nz, ring, peakBoost, land) {
 }
 
 function getCoastRadiusFactor(angle, land) {
-  const roughness = land.coastRoughness ?? 0.16;
+  const roughness = (land.coastRoughness ?? 0.16) * 0.72;
   const seed = getNameSeed(land.name) * 0.013;
   const broad = Math.sin(angle * 2 + seed) * 0.62;
   const bays = Math.sin(angle * 4 - seed * 0.7) * 0.42;
-  const small = Math.sin(angle * 7 + seed * 1.4) * 0.2;
+  const small = Math.sin(angle * 7 + seed * 1.4) * 0.07;
   let fjordBite = 0;
 
   (land.fjords ?? []).forEach((fjord) => {

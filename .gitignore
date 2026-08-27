@@ -3,3 +3,6 @@ dist/
 .idea/
 .DS_Store
 npm-debug.log*
+test-artifacts/
+test-results/
+playwright-report/
