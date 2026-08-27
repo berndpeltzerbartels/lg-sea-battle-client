@@ -7,8 +7,8 @@ body {
   --instrument-panel-padding: 14px;
   --instrument-panel-gap: 10px;
   --instrument-panel-inner-width: calc(var(--instrument-panel-width) - var(--instrument-panel-padding) * 2);
-  --control-panel-width: min(390px, calc(100vw - var(--view-left) - 44px));
-  --control-panel-height: 78px;
+  --control-panel-width: min(430px, calc(100vw - var(--view-left) - 44px));
+  --control-panel-height: 86px;
   --battle-station-height: 78px;
   --radar-size: calc(var(--instrument-panel-inner-width) - 20px);
   --radar-panel-extra-height: 53px;
@@ -2260,7 +2260,7 @@ body[data-player-vehicle="scout-plane"] .altimeter {
   left: calc(var(--view-left) + (100vw - var(--view-left)) / 2);
   bottom: var(--instrument-panel-padding);
   display: grid;
-  grid-template-columns: 104px minmax(0, 1fr);
+  grid-template-columns: 118px minmax(0, 1fr);
   width: var(--control-panel-width);
   height: var(--control-panel-height);
   box-sizing: border-box;
@@ -2280,7 +2280,7 @@ body[data-player-vehicle="scout-plane"] .altimeter {
   min-height: 0;
   height: 100%;
   box-sizing: border-box;
-  padding: 9px 10px 8px;
+  padding: 10px 12px 9px;
   border: 0;
   border-right: 1px solid rgb(155 229 223 / 18%);
   border-radius: 0;
@@ -2440,7 +2440,7 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
   min-height: 0;
   height: 100%;
   box-sizing: border-box;
-  padding: 9px 10px 8px;
+  padding: 10px 12px 9px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -2577,13 +2577,22 @@ body[data-hide-rudder-instrument="true"] .rudder {
   }
 }
 
+@media (max-width: 1160px) {
+  .weapon-aim-hints,
+  .weapon-elevation {
+    display: none !important;
+  }
+}
+
 .weapon-elevation {
   position: absolute;
-  left: calc(var(--instrument-panel-padding) + 286px);
-  bottom: 129px;
+  left: calc(var(--view-left) + (100vw - var(--view-left)) / 2 + var(--control-panel-width) / 2 + var(--instrument-panel-gap));
+  bottom: var(--instrument-panel-padding);
   display: none;
   width: 52px;
-  padding: 5px 7px;
+  height: var(--control-panel-height);
+  box-sizing: border-box;
+  padding: 7px 7px;
   border: 1px solid rgb(255 255 255 / 28%);
   border-radius: 8px;
   background: rgb(5 27 40 / 82%);
@@ -2593,16 +2602,25 @@ body[data-hide-rudder-instrument="true"] .rudder {
   pointer-events: none;
 }
 
+.cannon-elevation {
+  width: 118px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
+  gap: 2px 8px;
+  align-items: center;
+}
+
 .cannon-sight-readout {
-  position: absolute;
-  left: -160px;
-  bottom: 0;
+  position: static;
+  grid-column: 2;
+  grid-row: 1 / 4;
   display: grid;
   gap: 3px;
   align-items: center;
   justify-content: center;
-  width: 58px;
-  min-height: 36px;
+  width: auto;
+  height: 100%;
+  min-height: 0;
   padding: 5px 6px;
   border: 1px solid rgb(155 229 223 / 32%);
   border-radius: 5px;
@@ -2645,15 +2663,18 @@ body[data-hide-rudder-instrument="true"] .rudder {
   line-height: 1;
 }
 
-body[data-flak-view="active"] .flak-elevation,
-body[data-cannon-view="active"] .cannon-elevation {
+body[data-flak-view="active"] .flak-elevation {
   display: block;
+}
+
+body[data-cannon-view="active"] .cannon-elevation {
+  display: grid;
 }
 
 .weapon-aim-hints {
   position: absolute;
-  left: calc(var(--instrument-panel-padding) + 224px);
-  bottom: 129px;
+  left: calc(var(--view-left) + (100vw - var(--view-left)) / 2 - var(--control-panel-width) / 2 - 62px);
+  bottom: calc(var(--instrument-panel-padding) + (var(--control-panel-height) - 52px) / 2);
   display: none;
   width: 52px;
   height: 52px;

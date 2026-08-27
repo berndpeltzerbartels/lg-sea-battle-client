@@ -4658,6 +4658,7 @@ function updateOrCreateRemoteShip(ship) {
 
 function disposeRemoteMotion(motion) {
   motion.timers?.forEach((timer) => window.clearTimeout(timer));
+  hideEnemyWake(motion.bowWake);
   motion.bowWake?.root?.getChildMeshes?.().forEach((mesh) => mesh.dispose());
   motion.bowWake?.root?.dispose?.();
   motion.root?.getChildMeshes?.().forEach((mesh) => mesh.dispose());
@@ -6293,7 +6294,10 @@ function applyEnemyMotionEvent(motion, event) {
 }
 
 function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
-  if (motion.state === "sunk") return;
+  if (motion.state === "sunk") {
+    hideEnemyWake(motion.bowWake);
+    return;
+  }
 
   if (motion.state === "air-hit") {
     updateEnemyScoutPlaneAirHit(motion, dt, time);
@@ -6342,7 +6346,6 @@ function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
 }
 
 function updateServerEnemyMotion(motion, dt, time) {
-  const previousPosition = motion.root.position.clone();
   const snapshotAge = Math.max(0, time - (motion.serverSnapshotTime ?? time));
   const serverForward = new Vector3(Math.sin(motion.serverHeading), 0, Math.cos(motion.serverHeading));
   const projectedServerPosition = motion.serverPosition.add(serverForward.scale(motion.serverSpeed * snapshotAge));
@@ -6377,10 +6380,7 @@ function updateServerEnemyMotion(motion, dt, time) {
       motion.heading,
       roll
     );
-    const visualForwardSpeed = dt > 0
-      ? Vector3.Dot(motion.root.position.subtract(previousPosition), forward) / dt
-      : motion.speed;
-    const wakeSpeed = Math.max(0, motion.speed, motion.serverSpeed ?? 0, visualForwardSpeed);
+    const wakeSpeed = Math.max(0, motion.speed, motion.serverSpeed ?? 0);
     updateEnemyBowWake(motion.bowWake, wakeSpeed, time, dt, motion.root.position, motion.heading);
   }
 
@@ -6490,6 +6490,7 @@ function updateEnemySinking(motion, dt, time) {
   if (t >= 1) {
     motion.state = "sunk";
     motion.root.setEnabled(false);
+    hideEnemyWake(motion.bowWake);
   }
 
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
@@ -6791,6 +6792,20 @@ function updateEnemyBowWake(wake, speed, time, dt = 1 / 60, sourcePosition = nul
   });
 }
 
+function hideEnemyWake(wake) {
+  if (!wake) return;
+  wake.strength = 0;
+  wake.root?.setEnabled?.(false);
+  wake.segments?.forEach((segment) => {
+    segment.setEnabled(false);
+    segment.visibility = 0;
+  });
+  wake.churn?.forEach((patch) => {
+    patch.setEnabled(false);
+    patch.visibility = 0;
+  });
+}
+
 function wakeRowVisibility(strength, row) {
   return clamp(strength * 3.8 - (row - 1) * 0.52, 0, 1);
 }
@@ -7028,6 +7043,24 @@ function installScenarioTestHooks() {
       }
       motion.isServerControlled = false;
       motion.wakeTestOverrideUntil = time + 3;
+      return enemyWakeSnapshot(shipId);
+    },
+    setEnemyServerWakeCorrectionState(shipId, state = {}) {
+      const motion = enemyMotions.find((candidate) => candidate.id === shipId);
+      if (!motion) {
+        throw new Error(`Enemy motion not found: ${shipId}`);
+      }
+      const offset = Number.isFinite(Number(state.offset)) ? Number(state.offset) : 18;
+      motion.isServerControlled = true;
+      motion.state = "active";
+      motion.speed = 0;
+      motion.serverSpeed = 0;
+      motion.serverSnapshotTime = time;
+      motion.serverHeading = motion.heading;
+      motion.serverPosition.copyFrom(motion.root.position);
+      motion.root.position.x -= Math.sin(motion.heading) * offset;
+      motion.root.position.z -= Math.cos(motion.heading) * offset;
+      hideEnemyWake(motion.bowWake);
       return enemyWakeSnapshot(shipId);
     },
     enemyWakeSnapshot(shipId) {
@@ -11128,6 +11161,7 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
   bowBulwarkCap.material = hullMaterial;
   const sternBulwarkCap = createBoatSternBulwarkCapMesh(`${name}_stern_bulwark_cap`, scene);
   sternBulwarkCap.parent = root;
+  sternBulwarkCap.position.y = 0.006;
   sternBulwarkCap.material = hullMaterial;
   const superstructureMeshes = createTorpedoBoatSuperstructure(scene, materials, root, name, teamMaterials, true);
 
@@ -12202,6 +12236,7 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = 
   bowBulwarkCap.material = hullMaterial;
   const sternBulwarkCap = createBoatSternBulwarkCapMesh(`${name}_stern_bulwark_cap`, scene);
   sternBulwarkCap.parent = root;
+  sternBulwarkCap.position.y = 0.006;
   sternBulwarkCap.material = hullMaterial;
 
   createTorpedoBoatSuperstructure(scene, materials, root, name, teamMaterials, true);
