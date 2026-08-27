@@ -1,20 +1,24 @@
 html,
 body {
   --map-canvas-width: clamp(210px, 18vw, 300px);
-  --map-canvas-height: clamp(100px, 8vh, 132px);
   --map-meta-width: clamp(72px, 6vw, 104px);
   --compass-size: clamp(112px, 11vw, 168px);
   --instrument-panel-width: clamp(340px, 24vw, 430px);
   --instrument-panel-padding: 14px;
   --instrument-panel-gap: 10px;
-  --control-panel-height: 114px;
-  --battle-station-height: 104px;
-  --map-panel-height: calc(var(--map-canvas-height) + 104px);
+  --instrument-panel-inner-width: calc(var(--instrument-panel-width) - var(--instrument-panel-padding) * 2);
+  --control-panel-width: min(390px, calc(100vw - var(--view-left) - 44px));
+  --control-panel-height: 78px;
+  --battle-station-height: 78px;
+  --radar-size: calc(var(--instrument-panel-inner-width) - 20px);
   --radar-panel-extra-height: 53px;
-  --radar-size: min(
-    calc(var(--instrument-panel-width) - var(--instrument-panel-padding) * 2 - 20px),
-    calc(100vh - var(--instrument-panel-padding) * 2 - var(--map-panel-height) - var(--battle-station-height) - var(--control-panel-height) - var(--instrument-panel-gap) * 3 - var(--radar-panel-extra-height))
+  --map-panel-chrome-height: 92px;
+  --map-canvas-height: clamp(
+    72px,
+    calc(100vh - var(--instrument-panel-padding) * 2 - var(--radar-size) - var(--radar-panel-extra-height) - var(--battle-station-height) - var(--instrument-panel-gap) * 2 - var(--map-panel-chrome-height)),
+    220px
   );
+  --map-panel-height: calc(var(--map-canvas-height) + var(--map-panel-chrome-height));
   --view-left: var(--instrument-panel-width);
   width: 100%;
   height: 100%;
@@ -694,7 +698,7 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
   width: calc(var(--instrument-panel-width) - var(--instrument-panel-padding) * 2);
   height: var(--battle-station-height);
   box-sizing: border-box;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border: 1px solid rgb(155 229 223 / 26%);
   border-radius: 8px;
   background:
@@ -707,10 +711,10 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 
 .battle-station-hull {
   position: absolute;
-  left: 22px;
-  right: 22px;
-  top: 25px;
-  height: 32px;
+  left: 18px;
+  right: 18px;
+  top: 18px;
+  height: 25px;
   border: 1px solid rgb(155 229 223 / 22%);
   background:
     linear-gradient(180deg, rgb(250 255 255 / 14%), rgb(2 18 25 / 48%) 58%, rgb(0 0 0 / 38%)),
@@ -855,14 +859,14 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
   z-index: 1;
   display: grid;
   place-items: center;
-  min-width: 58px;
-  min-height: 28px;
-  padding: 3px 5px;
+  min-width: 52px;
+  min-height: 23px;
+  padding: 2px 5px;
   border: 1px solid transparent;
   border-radius: 7px;
   background: transparent;
   color: rgb(247 251 255 / 74%);
-  font: 800 8px/1.05 Inter, Arial, sans-serif;
+  font: 800 7px/1.05 Inter, Arial, sans-serif;
   letter-spacing: 0;
   text-align: center;
   text-transform: uppercase;
@@ -876,9 +880,9 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 }
 
 .battle-station kbd {
-  min-width: 14px;
+  min-width: 13px;
   margin-top: 2px;
-  padding: 1px 3px;
+  padding: 1px 2px;
   border: 1px solid rgb(247 251 255 / 22%);
   border-radius: 4px;
   background: rgb(247 251 255 / 8%);
@@ -918,25 +922,25 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 }
 
 .battle-station-cannon {
-  right: 13%;
-  top: 11px;
+  right: 12%;
+  top: 5px;
 }
 
 .battle-station-bridge {
   left: 37%;
-  top: 46px;
-  min-width: 84px;
+  top: 35px;
+  min-width: 78px;
 }
 
 .battle-station-flak {
   left: 7%;
-  top: 11px;
+  top: 5px;
 }
 
 .battle-station-torpedo-precision {
   right: 5%;
-  top: 42px;
-  min-width: 78px;
+  top: 35px;
+  min-width: 76px;
 }
 
 body[data-torpedo-view="active"] .battle-station-torpedo-precision {
@@ -964,13 +968,13 @@ body[data-player-vehicle="scout-plane"] .battle-station-panel {
   position: absolute;
   left: 10px;
   right: 10px;
-  bottom: 6px;
+  bottom: 4px;
   display: grid;
   grid-template-columns: auto 1fr 1.35fr;
-  gap: 6px;
+  gap: 5px;
   align-items: center;
   color: rgb(247 251 255 / 68%);
-  font: 800 8px/1 Inter, Arial, sans-serif;
+  font: 800 7px/1 Inter, Arial, sans-serif;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -2240,11 +2244,11 @@ body[data-player-vehicle="scout-plane"] .altimeter {
 
 .ship-controls-panel {
   position: absolute;
-  left: var(--instrument-panel-padding);
+  left: calc(var(--view-left) + (100vw - var(--view-left)) / 2);
   bottom: var(--instrument-panel-padding);
   display: grid;
-  grid-template-columns: 122px minmax(0, 1fr);
-  width: calc(var(--instrument-panel-width) - var(--instrument-panel-padding) * 2);
+  grid-template-columns: 104px minmax(0, 1fr);
+  width: var(--control-panel-width);
   height: var(--control-panel-height);
   box-sizing: border-box;
   overflow: hidden;
@@ -2253,6 +2257,7 @@ body[data-player-vehicle="scout-plane"] .altimeter {
   background: rgb(5 27 40 / 82%);
   box-shadow: 0 12px 38px rgb(1 15 24 / 22%);
   backdrop-filter: blur(7px);
+  transform: translateX(-50%);
   pointer-events: auto;
 }
 
@@ -2262,7 +2267,7 @@ body[data-player-vehicle="scout-plane"] .altimeter {
   min-height: 0;
   height: 100%;
   box-sizing: border-box;
-  padding: 11px 11px 10px;
+  padding: 9px 10px 8px;
   border: 0;
   border-right: 1px solid rgb(155 229 223 / 18%);
   border-radius: 0;
@@ -2273,8 +2278,8 @@ body[data-player-vehicle="scout-plane"] .altimeter {
 }
 
 .telegraph-title {
-  margin-bottom: 8px;
-  font-size: 11px;
+  margin-bottom: 5px;
+  font-size: 10px;
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
@@ -2286,7 +2291,7 @@ body[data-player-vehicle="scout-plane"] .altimeter {
   grid-template-columns: 1fr auto;
   gap: 5px 6px;
   align-items: end;
-  margin-bottom: 8px;
+  margin-bottom: 5px;
   color: #ffffff;
   line-height: 1;
 }
@@ -2295,7 +2300,7 @@ body[data-player-vehicle="scout-plane"] .altimeter {
   grid-column: 1 / -1;
   overflow: hidden;
   color: #ffffff;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 900;
   line-height: 1;
   text-overflow: ellipsis;
@@ -2305,14 +2310,14 @@ body[data-player-vehicle="scout-plane"] .altimeter {
 
 .telegraph-speed-readout span {
   min-width: 0;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 900;
   letter-spacing: 0;
 }
 
 .telegraph-speed-readout small {
   color: rgb(247 251 255 / 78%);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 900;
 }
 
@@ -2322,7 +2327,7 @@ body[data-player-vehicle="scout-plane"] .altimeter {
   justify-content: space-between;
   gap: 6px;
   color: rgb(247 251 255 / 72%);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 900;
   line-height: 1;
   text-transform: uppercase;
@@ -2347,8 +2352,8 @@ body[data-player-vehicle="scout-plane"] .altimeter {
 .rudder-key-hints kbd,
 .weapon-aim-ring kbd {
   display: inline-grid;
-  min-width: 17px;
-  height: 15px;
+  min-width: 15px;
+  height: 14px;
   place-items: center;
   padding: 0 3px;
   border: 1px solid rgb(155 229 223 / 46%);
@@ -2422,7 +2427,7 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
   min-height: 0;
   height: 100%;
   box-sizing: border-box;
-  padding: 12px 10px 11px;
+  padding: 9px 10px 8px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -2439,7 +2444,7 @@ body[data-hide-rudder-instrument="true"] .rudder {
 }
 
 .rudder-title {
-  margin-bottom: 8px;
+  margin-bottom: 5px;
   color: #9be5df;
   font-size: 10px;
   font-weight: 800;
@@ -2449,7 +2454,7 @@ body[data-hide-rudder-instrument="true"] .rudder {
 
 .rudder-gauge {
   position: relative;
-  height: 28px;
+  height: 24px;
   margin: 0 auto;
   border-bottom: 1px solid rgb(247 251 255 / 26%);
   cursor: ew-resize;
@@ -2522,7 +2527,7 @@ body[data-hide-rudder-instrument="true"] .rudder {
 
 .rudder strong {
   display: block;
-  margin-top: 7px;
+  margin-top: 5px;
   color: #ffffff;
   font-size: 10px;
   font-weight: 800;
@@ -2530,7 +2535,7 @@ body[data-hide-rudder-instrument="true"] .rudder {
   text-transform: uppercase;
 }
 
-@media (max-height: 860px) {
+@media (max-height: 735px) {
   body {
     --map-canvas-height: 0px;
     --map-panel-height: 0px;
@@ -2541,7 +2546,7 @@ body[data-hide-rudder-instrument="true"] .rudder {
   }
 }
 
-@media (max-height: 720px) {
+@media (max-height: 620px) {
   body {
     --control-panel-height: 0px;
   }
