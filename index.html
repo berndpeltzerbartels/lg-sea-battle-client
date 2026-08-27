@@ -436,32 +436,34 @@
           <strong id="depthValue">Deep</strong>
         </div>
       </div>
-      <div class="telegraph" aria-hidden="true">
-        <div class="telegraph-title">Engine</div>
-        <div class="telegraph-speed-readout">
-          <strong id="telegraphOrderValue">Stop</strong>
-          <span id="telegraphSpeedValue">0.0</span>
-          <small>kn</small>
+      <div class="ship-controls-panel" aria-hidden="true">
+        <div class="telegraph">
+          <div class="telegraph-title">Engine</div>
+          <div class="telegraph-speed-readout">
+            <strong id="telegraphOrderValue">Stop</strong>
+            <span id="telegraphSpeedValue">0.0</span>
+            <small>kn</small>
+          </div>
+          <div class="telegraph-key-hints" aria-hidden="true">
+            <span><kbd class="shift-hint">Shift</kbd><kbd>↑</kbd></span>
+            <span><kbd class="shift-hint">Shift</kbd><kbd>↓</kbd></span>
+          </div>
+          <div id="telegraphScale" class="telegraph-scale"></div>
         </div>
-        <div class="telegraph-key-hints" aria-hidden="true">
-          <span><kbd class="shift-hint">Shift</kbd><kbd>↑</kbd></span>
-          <span><kbd class="shift-hint">Shift</kbd><kbd>↓</kbd></span>
+        <div class="rudder" aria-hidden="true">
+          <div class="rudder-title">Rudder</div>
+          <div class="rudder-gauge">
+            <span class="rudder-mark rudder-mark-port">P 35</span>
+            <span class="rudder-mark rudder-mark-center">0</span>
+            <span class="rudder-mark rudder-mark-starboard">S 35</span>
+            <div id="rudderIndicator" class="rudder-indicator"></div>
+          </div>
+          <div class="rudder-key-hints" aria-hidden="true">
+            <span><kbd class="shift-hint">Shift</kbd><kbd>←</kbd></span>
+            <span><kbd class="shift-hint">Shift</kbd><kbd>→</kbd></span>
+          </div>
+          <strong id="rudderValue">0°</strong>
         </div>
-        <div id="telegraphScale" class="telegraph-scale"></div>
-      </div>
-      <div class="rudder" aria-hidden="true">
-        <div class="rudder-title">Rudder</div>
-        <div class="rudder-gauge">
-          <span class="rudder-mark rudder-mark-port">P 35</span>
-          <span class="rudder-mark rudder-mark-center">0</span>
-          <span class="rudder-mark rudder-mark-starboard">S 35</span>
-          <div id="rudderIndicator" class="rudder-indicator"></div>
-        </div>
-        <div class="rudder-key-hints" aria-hidden="true">
-          <span><kbd class="shift-hint">Shift</kbd><kbd>←</kbd></span>
-          <span><kbd class="shift-hint">Shift</kbd><kbd>→</kbd></span>
-        </div>
-        <strong id="rudderValue">0°</strong>
       </div>
       <div class="weapon-elevation flak-elevation" aria-hidden="true">
         <div class="flak-elevation-title">EL</div>
