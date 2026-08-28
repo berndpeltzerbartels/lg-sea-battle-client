@@ -3,7 +3,7 @@ body {
   --map-canvas-width: clamp(210px, 18vw, 300px);
   --map-meta-width: clamp(72px, 6vw, 104px);
   --compass-size: clamp(92px, 8vw, 128px);
-  --instrument-panel-width: clamp(340px, 24vw, 430px);
+  --instrument-panel-width: min(clamp(340px, 24vw, 430px), 42vw);
   --instrument-panel-padding: 14px;
   --instrument-panel-gap: 10px;
   --instrument-panel-inner-width: calc(var(--instrument-panel-width) - var(--instrument-panel-padding) * 2);
