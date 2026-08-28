@@ -2825,6 +2825,7 @@ body[data-cannon-view="active"] .weapon-aim-hints {
 
 @media (pointer: coarse) and (orientation: landscape) and (max-height: 560px) {
   body {
+    --battle-station-height: 64px;
     --compass-size: clamp(76px, 10vw, 94px);
   }
 
@@ -2855,9 +2856,79 @@ body[data-cannon-view="active"] .weapon-aim-hints {
     font-size: 10px;
   }
 
-  .fleet-status,
-  .player-list {
+  .fleet-status {
     display: none;
+  }
+
+  .player-list {
+    top: 8px;
+    right: 8px;
+    display: block;
+    width: min(128px, calc(100vw - var(--view-left) - 96px));
+    max-height: 142px;
+    overflow: hidden;
+    padding: 5px;
+    border-radius: 6px;
+    font-size: 7px;
+  }
+
+  .player-list-title {
+    margin-bottom: 4px;
+    font-size: 7px;
+  }
+
+  .player-list-rows {
+    gap: 2px;
+  }
+
+  .player-list-row {
+    grid-template-columns: 10px 25px 18px 12px;
+    gap: 3px;
+    min-height: 14px;
+    font-size: 6px;
+  }
+
+  .player-list-row span:nth-of-type(2),
+  .player-list-bearing {
+    display: none;
+  }
+
+  .player-list-row strong,
+  .player-list-row small {
+    font-size: 7px;
+  }
+
+  .kill-feed {
+    margin-top: 4px;
+    padding-top: 4px;
+  }
+
+  .kill-feed-title {
+    margin-bottom: 3px;
+    font-size: 6px;
+  }
+
+  .kill-feed-rows {
+    gap: 1px;
+  }
+
+  .kill-feed-row {
+    grid-template-columns: 13px minmax(0, 1fr);
+    min-height: 13px;
+    padding: 1px 2px;
+    column-gap: 3px;
+    font-size: 6px;
+  }
+
+  .kill-feed-number,
+  .kill-feed-separator {
+    font-size: 6px;
+  }
+
+  .kill-feed-row strong,
+  .kill-feed-empty,
+  .player-list-empty {
+    font-size: 7px;
   }
 
   .speed {
@@ -2868,15 +2939,16 @@ body[data-cannon-view="active"] .weapon-aim-hints {
   }
 
   .battle-station-hull {
-    left: 10px;
-    right: 10px;
-    top: 22px;
-    height: 22px;
+    left: 28px;
+    right: 28px;
+    top: 23px;
+    height: 12px;
+    opacity: 0.72;
   }
 
   .battle-station {
     min-width: 34px;
-    min-height: 24px;
+    min-height: 18px;
     padding: 2px 4px;
     font-size: 7px;
   }
@@ -2897,9 +2969,9 @@ body[data-cannon-view="active"] .weapon-aim-hints {
   }
 
   .battle-station-bridge {
-    left: 34%;
-    top: 36px;
-    min-width: 68px;
+    left: 36%;
+    top: 23px;
+    min-width: 54px;
   }
 
   .battle-station-flak {
@@ -2909,22 +2981,12 @@ body[data-cannon-view="active"] .weapon-aim-hints {
 
   .battle-station-torpedo-precision {
     right: 5%;
-    top: 38px;
-    min-width: 62px;
+    top: 36px;
+    min-width: 58px;
   }
 
   .align-weapons-group {
-    bottom: 4px;
-    left: 6px;
-    right: 6px;
-    grid-template-columns: 1fr 0.8fr 1.2fr;
-    gap: 4px;
-    font-size: 6px;
-  }
-
-  .align-weapons-button {
-    min-height: 16px;
-    font-size: 6px;
+    display: none;
   }
 
   .torpedo-scope-glass {
