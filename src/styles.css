@@ -1675,7 +1675,7 @@ body.big-map .map-meta span {
   position: absolute;
   top: calc(30px + var(--compass-size));
   right: 18px;
-  width: clamp(150px, 11vw, 190px);
+  width: clamp(170px, 12vw, 230px);
   padding: 7px;
   border: 1px solid rgb(255 255 255 / 30%);
   border-radius: 8px;
@@ -1725,7 +1725,7 @@ body.big-map .map-meta span {
 
 .player-list-row {
   display: grid;
-  grid-template-columns: 12px minmax(34px, auto) 28px 20px 18px 30px;
+  grid-template-columns: 12px minmax(34px, 1fr) minmax(24px, auto) 20px 18px 30px;
   gap: 5px;
   align-items: center;
   min-height: 20px;
@@ -2857,14 +2857,37 @@ body[data-cannon-view="active"] .weapon-aim-hints {
   }
 
   .fleet-status {
-    display: none;
+    top: 8px;
+    left: calc(var(--view-left) + 8px);
+    display: flex;
+    gap: 4px;
+    transform: none;
+  }
+
+  .fleet-status-row {
+    grid-template-columns: 6px auto;
+    gap: 4px;
+    min-width: 0;
+    padding: 4px 6px;
+    border-radius: 6px;
+    font-size: 6px;
+  }
+
+  .fleet-status-row::before {
+    width: 6px;
+    height: 6px;
+  }
+
+  .fleet-status-row strong {
+    font-size: 8px;
+    white-space: nowrap;
   }
 
   .player-list {
-    top: 8px;
+    top: 36px;
     right: 8px;
     display: block;
-    width: min(160px, calc(100vw - var(--view-left) - 88px));
+    width: min(180px, calc(100vw - var(--view-left) - 16px));
     max-height: 158px;
     overflow: hidden;
     padding: 5px;
@@ -2882,8 +2905,8 @@ body[data-cannon-view="active"] .weapon-aim-hints {
   }
 
   .player-list-row {
-    grid-template-columns: 10px 25px 18px 12px;
-    gap: 3px;
+    grid-template-columns: 10px minmax(28px, 1fr) 20px 14px;
+    gap: 4px;
     min-height: 14px;
     font-size: 6px;
   }

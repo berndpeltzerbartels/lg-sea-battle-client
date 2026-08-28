@@ -534,129 +534,19 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (playerActive && isInputKey(event, "up")) {
-    if (cannonViewActive && !event.shiftKey) {
-      if (!event.repeat || heldCannonPitchDirection !== 1) {
-        heldCannonPitchStartTime = time;
-      }
-      heldCannonPitchDirection = 1;
-      event.preventDefault();
-      return;
-    }
-    if (flakViewActive && !event.shiftKey) {
-      if (!event.repeat || heldFlakPitchDirection !== 1) {
-        heldFlakPitchStartTime = time;
-      }
-      heldFlakPitchDirection = 1;
-      event.preventDefault();
-      return;
-    }
-    if (scoutPlaneMode) {
-      if (event.shiftKey) {
-        heldElevatorDirection = -1;
-      } else {
-        if (!event.repeat) {
-          changeScoutPlaneTargetSpeed(1);
-        }
-      }
-    } else {
-      heldEngineDirection = 1;
-      if (!event.repeat) {
-        heldEngineStopGuardDirection = engineOrder === 2 ? 0 : 1;
-        changeEngineOrder(1);
-        nextEngineHoldChangeTime = time + engineHoldInitialDelaySeconds;
-      } else {
-        nextEngineHoldChangeTime = Math.min(nextEngineHoldChangeTime, time);
-      }
-    }
+    pressDirectionalInput("up", { repeat: event.repeat, shiftKey: event.shiftKey });
     event.preventDefault();
   }
   if (playerActive && isInputKey(event, "down")) {
-    if (cannonViewActive && !event.shiftKey) {
-      if (!event.repeat || heldCannonPitchDirection !== -1) {
-        heldCannonPitchStartTime = time;
-      }
-      heldCannonPitchDirection = -1;
-      event.preventDefault();
-      return;
-    }
-    if (flakViewActive && !event.shiftKey) {
-      if (!event.repeat || heldFlakPitchDirection !== -1) {
-        heldFlakPitchStartTime = time;
-      }
-      heldFlakPitchDirection = -1;
-      event.preventDefault();
-      return;
-    }
-    if (scoutPlaneMode) {
-      if (event.shiftKey) {
-        heldElevatorDirection = 1;
-      } else {
-        if (!event.repeat) {
-          changeScoutPlaneTargetSpeed(-1);
-        }
-      }
-    } else {
-      heldEngineDirection = -1;
-      if (!event.repeat) {
-        heldEngineStopGuardDirection = engineOrder === 2 ? 0 : -1;
-        changeEngineOrder(-1);
-        nextEngineHoldChangeTime = time + engineHoldInitialDelaySeconds;
-      } else {
-        nextEngineHoldChangeTime = Math.min(nextEngineHoldChangeTime, time);
-      }
-    }
+    pressDirectionalInput("down", { repeat: event.repeat, shiftKey: event.shiftKey });
     event.preventDefault();
   }
   if (playerActive && isInputKey(event, "left")) {
-    if (cannonViewActive && !event.shiftKey) {
-      if (!event.repeat || heldCannonDirection !== -1) {
-        heldCannonStartTime = time;
-      }
-      heldCannonDirection = -1;
-      event.preventDefault();
-      return;
-    }
-    if (flakViewActive && !event.shiftKey) {
-      if (!event.repeat || heldFlakDirection !== -1) {
-        heldFlakStartTime = time;
-      }
-      heldFlakDirection = -1;
-      event.preventDefault();
-      return;
-    }
-    heldRudderDirection = -1;
-    if (!event.repeat) {
-      rudderDegrees = stepRudderDegrees(rudderDegrees, -1);
-      nextRudderHoldChangeTime = time + rudderHoldInitialDelaySeconds;
-    } else {
-      nextRudderHoldChangeTime = Math.min(nextRudderHoldChangeTime, time);
-    }
+    pressDirectionalInput("left", { repeat: event.repeat, shiftKey: event.shiftKey });
     event.preventDefault();
   }
   if (playerActive && isInputKey(event, "right")) {
-    if (cannonViewActive && !event.shiftKey) {
-      if (!event.repeat || heldCannonDirection !== 1) {
-        heldCannonStartTime = time;
-      }
-      heldCannonDirection = 1;
-      event.preventDefault();
-      return;
-    }
-    if (flakViewActive && !event.shiftKey) {
-      if (!event.repeat || heldFlakDirection !== 1) {
-        heldFlakStartTime = time;
-      }
-      heldFlakDirection = 1;
-      event.preventDefault();
-      return;
-    }
-    heldRudderDirection = 1;
-    if (!event.repeat) {
-      rudderDegrees = stepRudderDegrees(rudderDegrees, 1);
-      nextRudderHoldChangeTime = time + rudderHoldInitialDelaySeconds;
-    } else {
-      nextRudderHoldChangeTime = Math.min(nextRudderHoldChangeTime, time);
-    }
+    pressDirectionalInput("right", { repeat: event.repeat, shiftKey: event.shiftKey });
     event.preventDefault();
   }
   if (playerActive && isTorpedoFireKey(event) && !event.repeat) {
@@ -684,62 +574,9 @@ window.addEventListener("keyup", (event) => {
     heldEngineStopGuardDirection = 0;
     heldRudderDirection = 0;
   }
-  if (isInputKey(event, "up") && heldEngineDirection > 0) {
-    heldEngineDirection = 0;
-    heldEngineStopGuardDirection = 0;
-    event.preventDefault();
-  }
-  if (isInputKey(event, "up") && heldFlakPitchDirection > 0) {
-    heldFlakPitchDirection = 0;
-    event.preventDefault();
-  }
-  if (isInputKey(event, "up") && heldCannonPitchDirection > 0) {
-    heldCannonPitchDirection = 0;
-    event.preventDefault();
-  }
-  if (isInputKey(event, "up") && heldElevatorDirection < 0) {
-    heldElevatorDirection = 0;
-    event.preventDefault();
-  }
-  if (isInputKey(event, "down") && heldEngineDirection < 0) {
-    heldEngineDirection = 0;
-    heldEngineStopGuardDirection = 0;
-    event.preventDefault();
-  }
-  if (isInputKey(event, "down") && heldFlakPitchDirection < 0) {
-    heldFlakPitchDirection = 0;
-    event.preventDefault();
-  }
-  if (isInputKey(event, "down") && heldCannonPitchDirection < 0) {
-    heldCannonPitchDirection = 0;
-    event.preventDefault();
-  }
-  if (isInputKey(event, "down") && heldElevatorDirection > 0) {
-    heldElevatorDirection = 0;
-    event.preventDefault();
-  }
-  if (isInputKey(event, "left") && heldRudderDirection < 0) {
-    heldRudderDirection = 0;
-    event.preventDefault();
-  }
-  if (isInputKey(event, "left") && heldFlakDirection < 0) {
-    heldFlakDirection = 0;
-    event.preventDefault();
-  }
-  if (isInputKey(event, "left") && heldCannonDirection < 0) {
-    heldCannonDirection = 0;
-    event.preventDefault();
-  }
-  if (isInputKey(event, "right") && heldRudderDirection > 0) {
-    heldRudderDirection = 0;
-    event.preventDefault();
-  }
-  if (isInputKey(event, "right") && heldFlakDirection > 0) {
-    heldFlakDirection = 0;
-    event.preventDefault();
-  }
-  if (isInputKey(event, "right") && heldCannonDirection > 0) {
-    heldCannonDirection = 0;
+  for (const direction of ["up", "down", "left", "right"]) {
+    if (!isInputKey(event, direction)) continue;
+    releaseDirectionalInput(direction);
     event.preventDefault();
   }
   if (isTorpedoFireKey(event) && heldFlakFire) {
@@ -813,6 +650,7 @@ window.addEventListener("pointercancel", () => {
   debugOrbitDragActive = false;
   debugOrbitPointerId = null;
   rightMouseRudderActive = false;
+  stopMobileSwipeControl();
   heldElevatorDirection = 0;
 });
 
@@ -821,6 +659,7 @@ window.addEventListener("blur", () => {
   debugOrbitDragActive = false;
   debugOrbitPointerId = null;
   rightMouseRudderActive = false;
+  stopMobileSwipeControl();
   heldElevatorDirection = 0;
 });
 
@@ -1034,6 +873,10 @@ let nextWorldDeltaEventTime = 0;
 let rightMouseRudderActive = false;
 let rightMouseRudderStartX = 0;
 let rightMouseRudderStartDegrees = 0;
+let mobileSwipePointerId = null;
+let mobileSwipeStartX = 0;
+let mobileSwipeStartY = 0;
+let mobileSwipeDirection = null;
 let cameraPosition = camera.position.clone();
 let cameraTarget = boat.root.position.clone();
 let time = 0;
@@ -1128,6 +971,7 @@ const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
 setupTelegraphDragControl(telegraphScale);
 setupRudderDragControl(document.querySelector(".rudder-gauge"));
 setupMobileFireButton(mobileFireButton);
+setupMobileSwipeControl(canvas);
 updateFleetStatus(gameState.ships, gameState.destroyedShipsByTeam);
 updatePlayerList(gameState.ships, gameState.killsByPlayer);
 updateKillFeedFromSnapshot(gameState);
@@ -2566,6 +2410,71 @@ function setupMobileFireButton(button) {
   });
 }
 
+function setupMobileSwipeControl(targetCanvas) {
+  if (!targetCanvas) return;
+
+  targetCanvas.addEventListener("pointerdown", (event) => {
+    if (!isTouchPointerEvent(event) || playerDamageState !== "active") return;
+    mobileSwipePointerId = event.pointerId;
+    mobileSwipeStartX = event.clientX;
+    mobileSwipeStartY = event.clientY;
+    mobileSwipeDirection = null;
+    targetCanvas.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  });
+
+  targetCanvas.addEventListener("pointermove", (event) => {
+    if (event.pointerId !== mobileSwipePointerId || playerDamageState !== "active") return;
+    const direction = mobileSwipeDirectionFromDelta(event.clientX - mobileSwipeStartX, event.clientY - mobileSwipeStartY);
+    if (direction && direction !== mobileSwipeDirection) {
+      if (mobileSwipeDirection) releaseDirectionalInput(mobileSwipeDirection);
+      pressDirectionalInput(direction, { repeat: false, shiftKey: false });
+      mobileSwipeDirection = direction;
+      document.body.dataset.mobileSwipeDirection = direction;
+    } else if (direction && direction === mobileSwipeDirection) {
+      pressDirectionalInput(direction, { repeat: true, shiftKey: false });
+    }
+    event.preventDefault();
+  });
+
+  targetCanvas.addEventListener("pointerup", (event) => {
+    if (event.pointerId !== mobileSwipePointerId) return;
+    stopMobileSwipeControl();
+    targetCanvas.releasePointerCapture?.(event.pointerId);
+    event.preventDefault();
+  });
+
+  targetCanvas.addEventListener("pointercancel", (event) => {
+    if (event.pointerId !== mobileSwipePointerId) return;
+    stopMobileSwipeControl();
+  });
+}
+
+function stopMobileSwipeControl() {
+  if (mobileSwipeDirection) {
+    releaseDirectionalInput(mobileSwipeDirection);
+  }
+  mobileSwipePointerId = null;
+  mobileSwipeDirection = null;
+  document.body.dataset.mobileSwipeDirection = "none";
+}
+
+function mobileSwipeDirectionFromDelta(dx, dy) {
+  const threshold = 28;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < threshold) return null;
+  if (Math.abs(dx) > Math.abs(dy) * 1.15) {
+    return dx < 0 ? "left" : "right";
+  }
+  if (Math.abs(dy) > Math.abs(dx) * 1.15) {
+    return dy < 0 ? "up" : "down";
+  }
+  return null;
+}
+
+function isTouchPointerEvent(event) {
+  return event.pointerType === "touch";
+}
+
 function updateMeasuredSpeed(position, now) {
   const elapsed = now - measuredSpeedSample.time;
   if (elapsed < 1) return;
@@ -2986,6 +2895,154 @@ function formatInputEvent(event) {
   const code = event.code ?? "";
   const key = event.key ?? "";
   return `${code || "-"} / ${key || "-"} / ${keyCode || "-"}`;
+}
+
+function pressDirectionalInput(direction, options = {}) {
+  const repeat = Boolean(options.repeat);
+  const shiftKey = Boolean(options.shiftKey);
+
+  if (direction === "up") {
+    if (cannonViewActive && !shiftKey) {
+      if (!repeat || heldCannonPitchDirection !== 1) {
+        heldCannonPitchStartTime = time;
+      }
+      heldCannonPitchDirection = 1;
+      return;
+    }
+    if (flakViewActive && !shiftKey) {
+      if (!repeat || heldFlakPitchDirection !== 1) {
+        heldFlakPitchStartTime = time;
+      }
+      heldFlakPitchDirection = 1;
+      return;
+    }
+    if (scoutPlaneMode) {
+      if (shiftKey) {
+        heldElevatorDirection = -1;
+      } else if (!repeat) {
+        changeScoutPlaneTargetSpeed(1);
+      }
+      return;
+    }
+    heldEngineDirection = 1;
+    if (!repeat) {
+      heldEngineStopGuardDirection = engineOrder === 2 ? 0 : 1;
+      changeEngineOrder(1);
+      nextEngineHoldChangeTime = time + engineHoldInitialDelaySeconds;
+    } else {
+      nextEngineHoldChangeTime = Math.min(nextEngineHoldChangeTime, time);
+    }
+    return;
+  }
+
+  if (direction === "down") {
+    if (cannonViewActive && !shiftKey) {
+      if (!repeat || heldCannonPitchDirection !== -1) {
+        heldCannonPitchStartTime = time;
+      }
+      heldCannonPitchDirection = -1;
+      return;
+    }
+    if (flakViewActive && !shiftKey) {
+      if (!repeat || heldFlakPitchDirection !== -1) {
+        heldFlakPitchStartTime = time;
+      }
+      heldFlakPitchDirection = -1;
+      return;
+    }
+    if (scoutPlaneMode) {
+      if (shiftKey) {
+        heldElevatorDirection = 1;
+      } else if (!repeat) {
+        changeScoutPlaneTargetSpeed(-1);
+      }
+      return;
+    }
+    heldEngineDirection = -1;
+    if (!repeat) {
+      heldEngineStopGuardDirection = engineOrder === 2 ? 0 : -1;
+      changeEngineOrder(-1);
+      nextEngineHoldChangeTime = time + engineHoldInitialDelaySeconds;
+    } else {
+      nextEngineHoldChangeTime = Math.min(nextEngineHoldChangeTime, time);
+    }
+    return;
+  }
+
+  if (direction === "left") {
+    if (cannonViewActive && !shiftKey) {
+      if (!repeat || heldCannonDirection !== -1) {
+        heldCannonStartTime = time;
+      }
+      heldCannonDirection = -1;
+      return;
+    }
+    if (flakViewActive && !shiftKey) {
+      if (!repeat || heldFlakDirection !== -1) {
+        heldFlakStartTime = time;
+      }
+      heldFlakDirection = -1;
+      return;
+    }
+    heldRudderDirection = -1;
+    if (!repeat) {
+      rudderDegrees = stepRudderDegrees(rudderDegrees, -1);
+      nextRudderHoldChangeTime = time + rudderHoldInitialDelaySeconds;
+    } else {
+      nextRudderHoldChangeTime = Math.min(nextRudderHoldChangeTime, time);
+    }
+    return;
+  }
+
+  if (direction === "right") {
+    if (cannonViewActive && !shiftKey) {
+      if (!repeat || heldCannonDirection !== 1) {
+        heldCannonStartTime = time;
+      }
+      heldCannonDirection = 1;
+      return;
+    }
+    if (flakViewActive && !shiftKey) {
+      if (!repeat || heldFlakDirection !== 1) {
+        heldFlakStartTime = time;
+      }
+      heldFlakDirection = 1;
+      return;
+    }
+    heldRudderDirection = 1;
+    if (!repeat) {
+      rudderDegrees = stepRudderDegrees(rudderDegrees, 1);
+      nextRudderHoldChangeTime = time + rudderHoldInitialDelaySeconds;
+    } else {
+      nextRudderHoldChangeTime = Math.min(nextRudderHoldChangeTime, time);
+    }
+  }
+}
+
+function releaseDirectionalInput(direction) {
+  if (direction === "up") {
+    if (heldEngineDirection > 0) heldEngineDirection = 0;
+    if (heldFlakPitchDirection > 0) heldFlakPitchDirection = 0;
+    if (heldCannonPitchDirection > 0) heldCannonPitchDirection = 0;
+    if (heldElevatorDirection < 0) heldElevatorDirection = 0;
+  } else if (direction === "down") {
+    if (heldEngineDirection < 0) heldEngineDirection = 0;
+    if (heldFlakPitchDirection < 0) heldFlakPitchDirection = 0;
+    if (heldCannonPitchDirection < 0) heldCannonPitchDirection = 0;
+    if (heldElevatorDirection > 0) heldElevatorDirection = 0;
+  } else if (direction === "left") {
+    if (heldRudderDirection < 0) heldRudderDirection = 0;
+    if (heldFlakDirection < 0) heldFlakDirection = 0;
+    if (heldCannonDirection < 0) heldCannonDirection = 0;
+  } else if (direction === "right") {
+    if (heldRudderDirection > 0) heldRudderDirection = 0;
+    if (heldFlakDirection > 0) heldFlakDirection = 0;
+    if (heldCannonDirection > 0) heldCannonDirection = 0;
+  }
+
+  if (direction === "up" || direction === "down") {
+    heldEngineStopGuardDirection = 0;
+  }
 }
 
 function changeEngineOrder(direction) {
