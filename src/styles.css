@@ -3,16 +3,16 @@ body {
   --map-canvas-width: clamp(210px, 18vw, 300px);
   --map-meta-width: clamp(72px, 6vw, 104px);
   --compass-size: clamp(92px, 8vw, 128px);
-  --instrument-panel-width: min(clamp(340px, 24vw, 430px), 42vw);
+  --instrument-panel-width: min(clamp(340px, 24vw, 520px), 42vw, calc(100vh - var(--radar-panel-extra-height) - var(--battle-station-height) - var(--instrument-panel-gap) + 20px));
   --instrument-panel-padding: 14px;
-  --instrument-panel-gap: 10px;
+  --instrument-panel-gap: 14px;
   --instrument-panel-inner-width: calc(var(--instrument-panel-width) - var(--instrument-panel-padding) * 2);
   --control-panel-width: min(430px, calc(100vw - var(--view-left) - 44px));
   --control-panel-height: 86px;
   --battle-station-height: 78px;
   --radar-size: calc(var(--instrument-panel-inner-width) - 20px);
   --radar-panel-extra-height: 53px;
-  --map-panel-chrome-height: 92px;
+  --map-panel-chrome-height: 112px;
   --map-canvas-height: clamp(
     72px,
     calc(100vh - var(--instrument-panel-padding) * 2 - var(--radar-size) - var(--radar-panel-extra-height) - var(--battle-station-height) - var(--instrument-panel-gap) * 2 - var(--map-panel-chrome-height)),
@@ -2825,28 +2825,7 @@ body[data-cannon-view="active"] .weapon-aim-hints {
 
 @media (pointer: coarse) and (orientation: landscape) and (max-height: 560px) {
   body {
-    --radar-size: clamp(128px, 18vw, 168px);
     --compass-size: clamp(76px, 10vw, 94px);
-    --instrument-panel-width: 0px;
-    --view-left: 0px;
-  }
-
-  #renderCanvas {
-    left: 0;
-    width: 100%;
-  }
-
-  .hud::before {
-    display: none;
-  }
-
-  .sinking-water-overlay,
-  .plane-hit-flash {
-    left: 0;
-  }
-
-  .nav-panel {
-    display: none;
   }
 
   .nav-instrument {
@@ -2859,14 +2838,6 @@ body[data-cannon-view="active"] .weapon-aim-hints {
 
   .map-control {
     display: none;
-  }
-
-  .nav-instrument-radar {
-    top: 10px;
-    left: 10px;
-    bottom: auto;
-    width: var(--radar-size);
-    padding: 7px;
   }
 
   .nav-instrument-radar canvas {
@@ -2894,14 +2865,6 @@ body[data-cannon-view="active"] .weapon-aim-hints {
     bottom: 12px;
     min-width: 82px;
     padding: 9px 10px 8px;
-  }
-
-  .battle-station-panel {
-    left: 102px;
-    bottom: 12px;
-    width: calc(var(--radar-size) + 16px);
-    height: 78px;
-    padding: 6px 8px;
   }
 
   .battle-station-hull {
@@ -3059,13 +3022,6 @@ body[data-cannon-view="active"] .weapon-aim-hints {
   .rudder-gauge {
     height: 34px;
     touch-action: none;
-  }
-
-  .weapon-aim-hints {
-    left: calc(50% + 128px);
-    bottom: 23px;
-    width: 48px;
-    height: 48px;
   }
 
   .weapon-aim-ring {
