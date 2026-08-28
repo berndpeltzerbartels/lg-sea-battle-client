@@ -3898,7 +3898,7 @@ function renderKillFeed() {
 
     const separator = document.createElement("span");
     separator.className = "kill-feed-separator";
-    separator.textContent = ">";
+    separator.textContent = "→";
 
     const victim = document.createElement("strong");
     victim.className = "kill-feed-party";

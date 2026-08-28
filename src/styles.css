@@ -2864,8 +2864,8 @@ body[data-cannon-view="active"] .weapon-aim-hints {
     top: 8px;
     right: 8px;
     display: block;
-    width: min(128px, calc(100vw - var(--view-left) - 96px));
-    max-height: 142px;
+    width: min(160px, calc(100vw - var(--view-left) - 88px));
+    max-height: 158px;
     overflow: hidden;
     padding: 5px;
     border-radius: 6px;
@@ -2913,16 +2913,37 @@ body[data-cannon-view="active"] .weapon-aim-hints {
   }
 
   .kill-feed-row {
-    grid-template-columns: 13px minmax(0, 1fr);
-    min-height: 13px;
+    grid-template-columns: 15px minmax(0, 1fr);
+    min-height: 18px;
     padding: 1px 2px;
-    column-gap: 3px;
+    column-gap: 4px;
     font-size: 6px;
   }
 
-  .kill-feed-number,
+  .kill-feed-number {
+    min-width: 15px;
+    font-size: 7px;
+    line-height: 1.05;
+  }
+
+  .kill-feed-parties {
+    grid-template-columns: minmax(0, 1fr) 13px minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .kill-feed-party,
+  .kill-feed-detail {
+    min-width: 0;
+  }
+
   .kill-feed-separator {
+    justify-self: center;
     font-size: 6px;
+  }
+
+  .kill-feed-detail {
+    font-size: 6px;
+    line-height: 1.05;
   }
 
   .kill-feed-row strong,
