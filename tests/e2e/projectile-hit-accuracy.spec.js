@@ -134,9 +134,16 @@ test('cannon hull-height shot hits the visible side of a ship', async ({ page, r
   expect(shot.fire).toBe('ok');
   expect(Math.abs(shot.aim.miss)).toBeLessThan(0.08);
   await page.waitForFunction(() => document.body.dataset.cannonFireSync === 'ok');
-  await captureFrames(page, testInfo, 'cannon-flight', 10, 140);
-
   await expectVehicleState(request, 'dark-S2', 'sunk', 'cannon hull hit should sink dark-S2');
+  await page.waitForFunction(() => window.seaBattleScenarioTest.vehicleVisual('dark-S2')?.visualState === 'ship-cannon-hit');
+  const impact = await page.evaluate(() => window.seaBattleScenarioTest.vehicleVisual('dark-S2'));
+  expect(Math.abs(impact.roll), 'cannon ship hit should explode while the ship is still upright').toBeLessThan(0.08);
+  await captureFrames(page, testInfo, 'cannon-flight', 8, 120);
+
+  await page.waitForFunction(() => {
+    const visual = window.seaBattleScenarioTest.vehicleVisual('dark-S2');
+    return visual?.visualState === 'sinking' || visual?.visualState === 'sunk';
+  }, null, { timeout: 4_000 });
 });
 
 extendedTest('cannon side-hit matrix covers the visible hull instead of only a single point', async ({ page, request }, testInfo) => {

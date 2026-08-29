@@ -905,6 +905,7 @@ let killFeedShipLabels = new Map();
 let nextKillFeedNumber = 1;
 let reportedLocalPlaneHitIds = new Set();
 let pendingCriticalFlakShipHitsByTarget = new Map();
+let pendingCannonShipHitsByTarget = new Map();
 let radarTorpedoSnapshots = Array.isArray(gameState.torpedoes) ? gameState.torpedoes : [];
 let scoutPlaneFlakHitStartTime = 0;
 let scoutPlaneFlakHitExploded = false;
@@ -4345,6 +4346,7 @@ function applyServerGameSnapshot(snapshot) {
   const snapshotClientTime = getSnapshotClientTime(snapshot);
   serverShipsById = indexShipsById(snapshot.ships);
   pendingCriticalFlakShipHitsByTarget = indexCriticalFlakShipHitsByTarget(snapshot.flakHits);
+  pendingCannonShipHitsByTarget = indexCannonShipHitsByTarget(snapshot.flakHits);
   updateFleetStatus(snapshot.ships, snapshot.destroyedShipsByTeam);
   updatePlayerList(snapshot.ships, snapshot.killsByPlayer);
   updateKillFeedFromSnapshot(snapshot);
@@ -4489,7 +4491,7 @@ function syncServerFlakHitEffects(hits, ownShip = null) {
     }
     if (isCannonServerProjectile(hit.id)) {
       if (targetMotion && !isScoutPlaneMotion(targetMotion)) {
-        createCannonShipHitEffect(flakSystem, targetMotion, getFlakHitPosition(hit));
+        beginEnemyCannonShipHit(targetMotion, hit, time);
       } else {
         createScoutPlaneCriticalHitSequence(flakSystem, getFlakHitPosition(hit));
       }
@@ -4516,6 +4518,19 @@ function indexCriticalFlakShipHitsByTarget(hits) {
   if (!Array.isArray(hits)) return result;
   hits.forEach((hit) => {
     if (!hit?.targetShipId || isCannonServerProjectile(hit.id)) return;
+    const existing = result.get(hit.targetShipId);
+    if (!existing || (Number(hit.t) || 0) >= (Number(existing.t) || 0)) {
+      result.set(hit.targetShipId, hit);
+    }
+  });
+  return result;
+}
+
+function indexCannonShipHitsByTarget(hits) {
+  const result = new Map();
+  if (!Array.isArray(hits)) return result;
+  hits.forEach((hit) => {
+    if (!hit?.targetShipId || !isCannonServerProjectile(hit.id)) return;
     const existing = result.get(hit.targetShipId);
     if (!existing || (Number(hit.t) || 0) >= (Number(existing.t) || 0)) {
       result.set(hit.targetShipId, hit);
@@ -4780,6 +4795,7 @@ function disposeRemoteMotion(motion) {
 function applyServerShipSnapshot(motion, ship) {
   if (motion.state === "air-hit") return;
   if (motion.state === "ship-critical-hit") return;
+  if (motion.state === "ship-cannon-hit") return;
   if (motion.state === "sinking") return;
 
   if (ship.state === "sunk") {
@@ -4801,6 +4817,12 @@ function applyServerShipSnapshot(motion, ship) {
     if (criticalFlakHit && !flakSystem.hitEffectIds.has(criticalFlakHit.id)) {
       flakSystem.hitEffectIds.add(criticalFlakHit.id);
       beginEnemyShipCriticalHit(motion, criticalFlakHit, time);
+      return;
+    }
+    const cannonHit = pendingCannonShipHitsByTarget.get(motion.id);
+    if (cannonHit && !flakSystem.hitEffectIds.has(cannonHit.id)) {
+      flakSystem.hitEffectIds.add(cannonHit.id);
+      beginEnemyCannonShipHit(motion, cannonHit, time);
       return;
     }
     beginEnemySinking(motion, getStableSinkSide(motion.id), time);
@@ -6423,6 +6445,11 @@ function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
     return;
   }
 
+  if (motion.state === "ship-cannon-hit") {
+    updateEnemyCannonShipHit(motion, dt, time);
+    return;
+  }
+
   if (motion.state === "air-hit") {
     updateEnemyScoutPlaneAirHit(motion, dt, time);
     return;
@@ -6578,19 +6605,20 @@ function updateEnemyHelmTowardTarget(motion, playerPosition, landZones, time) {
 }
 
 function beginEnemySinking(motion, side, time) {
-  if (motion.state !== "active" && motion.state !== "ship-critical-hit") return;
+  if (motion.state !== "active" && motion.state !== "ship-critical-hit" && motion.state !== "ship-cannon-hit") return;
 
   const fromCriticalShipHit = motion.state === "ship-critical-hit";
+  const fromCannonShipHit = motion.state === "ship-cannon-hit";
   motion.state = "sinking";
   motion.sinkAge = 0;
   motion.sinkSide = side || -1;
   motion.sinkStartY = motion.root.position.y;
   motion.engineOrder = 0;
   motion.rudder = 0;
-  motion.rollImpulse = motion.sinkSide * (fromCriticalShipHit ? 0.06 : 0.5);
-  motion.sinkRollStart = fromCriticalShipHit ? 0.0 : 0.12;
-  motion.sinkRollAmount = fromCriticalShipHit ? 1.08 : 1.45;
-  motion.sinkDuration = fromCriticalShipHit ? 6.6 : 5.2;
+  motion.rollImpulse = motion.sinkSide * (fromCriticalShipHit ? 0.06 : fromCannonShipHit ? 0.12 : 0.5);
+  motion.sinkRollStart = fromCriticalShipHit ? 0.0 : fromCannonShipHit ? 0.03 : 0.12;
+  motion.sinkRollAmount = fromCriticalShipHit ? 1.08 : fromCannonShipHit ? 1.28 : 1.45;
+  motion.sinkDuration = fromCriticalShipHit ? 6.6 : fromCannonShipHit ? 4.6 : 5.2;
   motion.timers.forEach((timer) => window.clearTimeout(timer));
   motion.timers = [];
   if (motion.bowWake) {
@@ -6631,6 +6659,45 @@ function beginEnemyShipCriticalHit(motion, hit, now) {
     motion.bowWake.strength = 0;
   }
   updateEnemyBowWake(motion.bowWake, 0, now, 1 / 60, motion.root.position, motion.heading);
+}
+
+function beginEnemyCannonShipHit(motion, hit, now) {
+  if (motion.state !== "active" && motion.state !== "sinking") return;
+
+  const position = getFlakHitPosition(hit);
+  const anchor = createShipDamageAnchor(flakSystem, motion, position, 4.2, {
+    visibleShipEvent: true,
+    minLocalY: 1.0
+  });
+  motion.state = "ship-cannon-hit";
+  motion.cannonHitAge = 0;
+  motion.cannonHitAnchor = anchor;
+  motion.cannonHitSinkSide = getStableSinkSide(motion.id);
+  motion.sinkStartY = motion.root.position.y;
+  motion.rollImpulse = 0;
+  motion.engineOrder = 0;
+  motion.rudder = 0;
+  createCannonShipHitEffect(flakSystem, anchor);
+  if (motion.bowWake) {
+    motion.bowWake.strength = 0;
+  }
+  updateEnemyBowWake(motion.bowWake, 0, now, 1 / 60, motion.root.position, motion.heading);
+}
+
+function updateEnemyCannonShipHit(motion, dt, now) {
+  motion.cannonHitAge += dt;
+  motion.speed *= Math.max(0, 1 - dt * 1.7);
+
+  const forward = new Vector3(Math.sin(motion.heading), 0, Math.cos(motion.heading));
+  motion.root.position.addInPlace(forward.scale(motion.speed * dt));
+  motion.root.position.y = motion.sinkStartY + Math.sin(now * 2.7) * 0.008;
+  motion.root.rotationQuaternion = Quaternion.FromEulerAngles(0, motion.heading, 0);
+
+  if (motion.cannonHitAge >= 0.58) {
+    beginEnemySinking(motion, motion.cannonHitSinkSide, now);
+  }
+
+  updateEnemyBowWake(motion.bowWake, 0, now, dt, motion.root.position, motion.heading);
 }
 
 function updateEnemyShipCriticalHit(motion, dt, now) {
@@ -8647,11 +8714,7 @@ function createShipDamageAnchor(system, motion, worldPosition, lifetime = 6, opt
   return anchor;
 }
 
-function createCannonShipHitEffect(system, motion, worldPosition) {
-  const anchor = createShipDamageAnchor(system, motion, worldPosition, 4.2, {
-    visibleShipEvent: true,
-    minLocalY: 1.0
-  });
+function createCannonShipHitEffect(system, anchor) {
   createShipSuperstructureExplosion(system, Vector3.Zero(), anchor, {
     scale: 1.12,
     lightRange: 148,
