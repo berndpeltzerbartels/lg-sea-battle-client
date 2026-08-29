@@ -222,7 +222,7 @@ const bombBayZoomFov = 0.84;
 const bombBayImpactFocusExtraSeconds = 1.5;
 const airTorpedoSightReleaseOffset = 10;
 const airTorpedoSightRunSeconds = 7.5;
-const airTorpedoSightMinRunDistance = 150;
+const airTorpedoSightMinRunDistance = 95;
 const airTorpedoSightMaxRunDistance = 360;
 const scoutPlaneExperimentShowAllFlak = true;
 const scoutPlaneExperimentFlakDemo = urlParams.get("flak-demo") === "1";
