@@ -7145,6 +7145,16 @@ function installScenarioTestHooks() {
         fire: document.body.dataset.fireTorpedoSync ?? ""
       };
     },
+    async dropBomb() {
+      setBattleStation("bridge");
+      document.body.dataset.dropBombSync = "";
+      await requestPlayerBombDrop();
+      return {
+        station: stationSnapshot(),
+        drop: document.body.dataset.dropBombSync ?? "",
+        error: document.body.dataset.dropBombSyncError ?? ""
+      };
+    },
     airDropTorpedoVisuals() {
       return Array.from(torpedoSystem.serverVisuals.values())
         .filter((visual) => visual.launchMode === "air-drop")
@@ -7167,6 +7177,56 @@ function installScenarioTestHooks() {
             : null,
           surfaced: visual.airDropSurfaced !== false,
           splashCreated: Boolean(visual.airDropSplashCreated)
+        }));
+    },
+    vehicleVisual(vehicleId) {
+      if (vehicleId === playerServerShipId || vehicleId === pendingPlayerServerShip?.id) {
+        return {
+          id: playerServerShipId ?? pendingPlayerServerShip?.id,
+          x: Number(boat.root.position.x.toFixed(3)),
+          y: Number(boat.root.position.y.toFixed(3)),
+          z: Number(boat.root.position.z.toFixed(3)),
+          heading: Number(heading.toFixed(3)),
+          speed: Number((speed ?? 0).toFixed(3))
+        };
+      }
+      const motion = enemyMotions.find((candidate) => candidate.id === vehicleId);
+      if (!motion) return null;
+      return {
+        id: motion.id,
+        x: Number(motion.root.position.x.toFixed(3)),
+        y: Number(motion.root.position.y.toFixed(3)),
+        z: Number(motion.root.position.z.toFixed(3)),
+        heading: Number(motion.heading.toFixed(3)),
+        speed: Number((motion.speed ?? 0).toFixed(3))
+      };
+    },
+    bombVisuals() {
+      return Array.from(bombSystem.serverVisuals.values())
+        .map((visual) => ({
+          id: visual.id,
+          shooterId: visual.shooterId ?? null,
+          x: Number(visual.root.position.x.toFixed(3)),
+          y: Number(visual.root.position.y.toFixed(3)),
+          z: Number(visual.root.position.z.toFixed(3)),
+          startX: Number(visual.launchStart.x.toFixed(3)),
+          startY: Number(visual.launchStart.y.toFixed(3)),
+          startZ: Number(visual.launchStart.z.toFixed(3)),
+          snapshotLaunchX: visual.snapshotLaunchPosition
+            ? Number(visual.snapshotLaunchPosition.x.toFixed(3))
+            : null,
+          snapshotLaunchY: visual.snapshotLaunchPosition
+            ? Number(visual.snapshotLaunchPosition.y.toFixed(3))
+            : null,
+          snapshotLaunchZ: visual.snapshotLaunchPosition
+            ? Number(visual.snapshotLaunchPosition.z.toFixed(3))
+            : null,
+          serverX: Number(visual.serverPosition.x.toFixed(3)),
+          serverY: Number(visual.serverPosition.y.toFixed(3)),
+          serverZ: Number(visual.serverPosition.z.toFixed(3)),
+          age: Number.isFinite(visual.droppedAt) && Number.isFinite(lastServerSnapshotTime)
+            ? Number(Math.max(0, lastServerSnapshotTime - visual.droppedAt).toFixed(3))
+            : null
         }));
     },
     async state() {
@@ -9526,6 +9586,7 @@ function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
 
   const visual = {
     id: snapshot.id,
+    shooterId: snapshot.shipId ?? null,
     root,
     body,
     nose,
@@ -9536,8 +9597,10 @@ function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
     serverPosition,
     serverSnapshotTime: snapshotClientTime,
     launchStart: launch.start.clone(),
+    snapshotLaunchPosition: getServerBombLaunchPosition(snapshot),
     launchBlendUntil: launch.blendUntil,
-    launchBlendDuration: launch.blendDuration
+    launchBlendDuration: launch.blendDuration,
+    droppedAt: Number.isFinite(snapshot.droppedAt) ? snapshot.droppedAt : null
   };
   system.serverVisuals.set(snapshot.id, visual);
   return visual;
@@ -9548,10 +9611,16 @@ function getServerBombLaunch(snapshot, serverPosition, snapshotClientTime = time
   if (!start) {
     return { start: serverPosition, blendUntil: 0, blendDuration: 0 };
   }
+  const serverBombAge = Number.isFinite(snapshot.droppedAt) && Number.isFinite(lastServerSnapshotTime)
+    ? Math.max(0, lastServerSnapshotTime - snapshot.droppedAt)
+    : 0;
+  if (serverBombAge > 0.8) {
+    return { start: serverPosition, blendUntil: 0, blendDuration: 0 };
+  }
   return {
-    start: serverPosition,
-    blendUntil: 0,
-    blendDuration: 0
+    start,
+    blendUntil: snapshotClientTime + 0.24,
+    blendDuration: 0.24
   };
 }
 
@@ -9581,6 +9650,9 @@ function applyServerBombSnapshot(visual, snapshot, snapshotClientTime = time) {
   }
   visual.serverPosition = nextServerPosition;
   visual.serverSnapshotTime = snapshotClientTime;
+  visual.shooterId = snapshot.shipId ?? visual.shooterId ?? null;
+  visual.snapshotLaunchPosition = getServerBombLaunchPosition(snapshot) ?? visual.snapshotLaunchPosition;
+  visual.droppedAt = Number.isFinite(snapshot.droppedAt) ? snapshot.droppedAt : visual.droppedAt;
   visual.heading = Number.isFinite(snapshot.heading) ? snapshot.heading : visual.heading;
   visual.speed = Number.isFinite(snapshot.speed) ? snapshot.speed : visual.speed;
   if (!visual.root.rotationQuaternion) {
