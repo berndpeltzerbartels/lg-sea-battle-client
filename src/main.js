@@ -6603,7 +6603,10 @@ function beginEnemyShipCriticalHit(motion, hit, now) {
   if (motion.state !== "active" && motion.state !== "sinking") return;
 
   const position = getFlakHitPosition(hit);
-  const anchor = createShipDamageAnchor(flakSystem, motion, position, 7.5);
+  const anchor = createShipDamageAnchor(flakSystem, motion, position, 7.5, {
+    visibleShipEvent: true,
+    minLocalY: 1.18
+  });
   motion.state = "ship-critical-hit";
   motion.criticalHitAge = 0;
   motion.criticalHitAnchor = anchor;
@@ -8621,13 +8624,19 @@ function createFlakLandImpactEffect(system, position, metalSpark = false) {
   });
 }
 
-function createShipDamageAnchor(system, motion, worldPosition, lifetime = 6) {
+function createShipDamageAnchor(system, motion, worldPosition, lifetime = 6, options = {}) {
   const anchor = new TransformNode(`ship_damage_anchor_${motion.id}_${system.nextId++}`, system.scene);
   anchor.parent = motion.root;
   motion.root.computeWorldMatrix(true);
   const inverse = motion.root.getWorldMatrix().clone();
   inverse.invert();
-  anchor.position.copyFrom(Vector3.TransformCoordinates(worldPosition, inverse));
+  const localPosition = Vector3.TransformCoordinates(worldPosition, inverse);
+  if (options.visibleShipEvent) {
+    localPosition.x = clamp(localPosition.x, -0.42, 0.42);
+    localPosition.y = Math.max(localPosition.y, options.minLocalY ?? 1.08);
+    localPosition.z = clamp(localPosition.z, -3.45, 3.25);
+  }
+  anchor.position.copyFrom(localPosition);
   const inheritedScale = Math.max(0.001, motion.root.scaling?.x ?? 1);
   anchor.scaling.setAll(1 / inheritedScale);
   system.airHitEffects.push({
@@ -8639,18 +8648,21 @@ function createShipDamageAnchor(system, motion, worldPosition, lifetime = 6) {
 }
 
 function createCannonShipHitEffect(system, motion, worldPosition) {
-  const anchor = createShipDamageAnchor(system, motion, worldPosition, 4.2);
-  createShipSuperstructureExplosion(system, Vector3.Zero(), anchor, {
-    scale: 0.92,
-    lightRange: 124,
-    intensity: 7.4,
-    lifetime: 0.74,
-    sparkDiameter: 1.85,
-    fireCount: 8,
-    smokeCount: 7
+  const anchor = createShipDamageAnchor(system, motion, worldPosition, 4.2, {
+    visibleShipEvent: true,
+    minLocalY: 1.0
   });
-  createShipSuperstructureFire(system, Vector3.Zero(), 4, 1.08, anchor);
-  createShipSuperstructureSmoke(system, Vector3.Zero(), 4, 1.08, anchor);
+  createShipSuperstructureExplosion(system, Vector3.Zero(), anchor, {
+    scale: 1.12,
+    lightRange: 148,
+    intensity: 8.8,
+    lifetime: 0.86,
+    sparkDiameter: 2.3,
+    fireCount: 9,
+    smokeCount: 8
+  });
+  createShipSuperstructureFire(system, Vector3.Zero(), 5, 1.22, anchor);
+  createShipSuperstructureSmoke(system, Vector3.Zero(), 5, 1.16, anchor);
 }
 
 function createShipImpactSpark(system, position, diameter = 0.42, lifetime = 0.22, parent = null) {
