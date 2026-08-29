@@ -6614,7 +6614,15 @@ function beginEnemyShipCriticalHit(motion, hit, now) {
   motion.rollImpulse = 0;
   motion.engineOrder = 0;
   motion.rudder = 0;
-  createFlakImpactFlash(flakSystem, flakSystem.nextId++, position.add(new Vector3(0, 0.28, 0)), 0.42, 58, 3.8);
+  createShipSuperstructureExplosion(flakSystem, Vector3.Zero(), anchor, {
+    scale: 0.82,
+    lightRange: 92,
+    intensity: 5.6,
+    lifetime: 0.62,
+    sparkDiameter: 1.48,
+    fireCount: 7,
+    smokeCount: 8
+  });
   createShipSuperstructureHitSequence(flakSystem, Vector3.Zero(), anchor);
   if (motion.bowWake) {
     motion.bowWake.strength = 0;
@@ -6642,7 +6650,15 @@ function updateEnemyShipCriticalHit(motion, dt, now) {
 
   if (!motion.criticalHitExploded && motion.criticalHitAge >= 2.45) {
     motion.criticalHitExploded = true;
-    createShipSuperstructureExplosion(flakSystem, Vector3.Zero(), motion.criticalHitAnchor);
+    createShipSuperstructureExplosion(flakSystem, Vector3.Zero(), motion.criticalHitAnchor, {
+      scale: 1.18,
+      lightRange: 138,
+      intensity: 8.2,
+      lifetime: 1.08,
+      sparkDiameter: 2.28,
+      fireCount: 12,
+      smokeCount: 14
+    });
   }
 
   if (motion.criticalHitAge >= 3.0) {
@@ -8704,16 +8720,46 @@ function updateScheduledHitEffect(system, effect, dt) {
   return false;
 }
 
-function createShipSuperstructureExplosion(system, position, parent = null) {
-  const center = position.add(new Vector3(0, 0.24, 0));
+function createShipSuperstructureExplosion(system, position, parent = null, options = {}) {
+  const scale = options.scale ?? 1;
+  const center = position.add(new Vector3(0, 0.24 * scale, 0));
   parent?.computeWorldMatrix(true);
   const lightPosition = parent
     ? Vector3.TransformCoordinates(center, parent.getWorldMatrix())
     : center;
-  createFlakImpactFlash(system, system.nextId++, lightPosition, 0.94, 118, 7.2);
-  createShipImpactSpark(system, center, 1.82, 0.46, parent);
-  createShipSuperstructureFire(system, center, 10, 1.62, parent);
-  createShipSuperstructureSmoke(system, center, 12, 1.85, parent);
+  createFlakImpactFlash(
+    system,
+    system.nextId++,
+    lightPosition,
+    options.lifetime ?? 0.94,
+    options.lightRange ?? 118,
+    options.intensity ?? 7.2
+  );
+  createShipExplosionCore(system, center, options.sparkDiameter ?? (1.82 * scale), options.lifetime ?? 0.94, parent);
+  createShipImpactSpark(system, center, options.sparkDiameter ?? (1.82 * scale), 0.46 * scale, parent);
+  createShipSuperstructureFire(system, center, options.fireCount ?? 10, 1.62 * scale, parent);
+  createShipSuperstructureSmoke(system, center, options.smokeCount ?? 12, 1.85 * scale, parent);
+}
+
+function createShipExplosionCore(system, position, diameter, lifetime, parent = null) {
+  const core = MeshBuilder.CreateSphere(`ship_explosion_core_${system.nextId}_${system.airHitEffects.length}`, {
+    diameter,
+    segments: 12
+  }, system.scene);
+  core.parent = parent ?? system.root;
+  core.material = system.materials.flakFlash;
+  core.position.copyFrom(position);
+  core.isPickable = false;
+  system.airHitEffects.push({
+    mesh: core,
+    age: 0,
+    lifetime,
+    origin: core.position.clone(),
+    velocity: new Vector3(0, 0.16, 0),
+    baseScale: new Vector3(0.48, 0.48, 0.48),
+    grow: new Vector3(1.9, 1.55, 1.9),
+    alpha: 0.98
+  });
 }
 
 function createShipSuperstructureFire(system, position, count, scale = 1, parent = null) {
