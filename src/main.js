@@ -7434,6 +7434,33 @@ function installScenarioTestHooks() {
       motion.wakeTestOverrideUntil = time + 3;
       return enemyWakeSnapshot(shipId);
     },
+    setEnemyVisualState(shipId, state) {
+      const motion = enemyMotions.find((candidate) => candidate.id === shipId);
+      if (!motion) {
+        throw new Error(`Enemy motion not found: ${shipId}`);
+      }
+      if (Number.isFinite(Number(state?.x))) {
+        motion.root.position.x = Number(state.x);
+        motion.serverPosition.x = Number(state.x);
+      }
+      if (Number.isFinite(Number(state?.y))) {
+        motion.root.position.y = Number(state.y);
+        motion.serverPosition.y = Number(state.y);
+      }
+      if (Number.isFinite(Number(state?.z))) {
+        motion.root.position.z = Number(state.z);
+        motion.serverPosition.z = Number(state.z);
+      }
+      if (Number.isFinite(Number(state?.heading))) {
+        motion.heading = Number(state.heading);
+        motion.serverHeading = Number(state.heading);
+      }
+      if (Number.isFinite(Number(state?.speed))) {
+        motion.speed = Number(state.speed);
+        motion.serverSpeed = Number(state.speed);
+      }
+      return window.seaBattleScenarioTest.vehicleVisual(shipId);
+    },
     setEnemyServerWakeCorrectionState(shipId, state = {}) {
       const motion = enemyMotions.find((candidate) => candidate.id === shipId);
       if (!motion) {
@@ -7601,6 +7628,11 @@ function installScenarioTestHooks() {
               : null
           };
         });
+    },
+    syncBombSnapshot(snapshot) {
+      const snapshotTime = Number.isFinite(lastServerSnapshotTime) ? lastServerSnapshotTime : time;
+      syncServerBombs([{ ...snapshot, droppedAt: Number.isFinite(snapshot?.droppedAt) ? snapshotTime + Number(snapshot.droppedAt) : snapshotTime }], [], time);
+      return window.seaBattleScenarioTest.bombVisuals();
     },
     async state() {
       const response = await fetch(getGameStateEndpoint(), { cache: "no-store" });
@@ -10165,6 +10197,7 @@ function createServerBombVisual(system, snapshot, snapshotClientTime = time) {
     Number.isFinite(snapshot.z) ? snapshot.z : 0
   );
   const launch = getServerBombLaunch(snapshot, serverPosition, snapshotClientTime);
+  clampFreshBombToVisibleShooter(snapshot, launch.start, snapshotClientTime);
   root.position.copyFrom(launch.start);
   root.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI / 2, Number.isFinite(snapshot.heading) ? snapshot.heading : 0, 0);
 
@@ -10276,7 +10309,8 @@ function updateServerBombVisuals(system, dt, now) {
     const snapshotAge = Math.max(0, now - (visual.serverSnapshotTime ?? now));
     const projected = visual.serverPosition.add(forward.scale(visual.speed * snapshotAge));
     const verticalSpeed = Number.isFinite(visual.verticalSpeed) ? visual.verticalSpeed : 0;
-    const projectedY = visual.serverPosition.y + verticalSpeed * snapshotAge - 0.5 * bombGravity * snapshotAge * snapshotAge;
+    let projectedY = visual.serverPosition.y + verticalSpeed * snapshotAge - 0.5 * bombGravity * snapshotAge * snapshotAge;
+    projectedY = clampFreshBombYToVisibleShooter(visual, projectedY, now);
 
     if (now < (visual.launchBlendUntil ?? 0)) {
       const duration = visual.launchBlendDuration || 0.24;
@@ -10297,6 +10331,7 @@ function updateServerBombVisuals(system, dt, now) {
     visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 4.5);
     visual.root.position.y += (projectedY - visual.root.position.y) * Math.min(1, dt * 2);
     visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 4.5);
+    clampFreshBombToVisibleShooter(visual, visual.root.position, now);
     if (visual.root.position.y <= 0) {
       const impactKey = `visual-water:${visual.id}`;
       if (!system.serverImpactIds.has(impactKey)) {
@@ -10314,6 +10349,44 @@ function updateServerBombVisuals(system, dt, now) {
     disposeServerBombVisual(visual);
     system.serverVisuals.delete(id);
   });
+}
+
+function clampFreshBombYToVisibleShooter(visual, y, now) {
+  const shooterY = visibleBombShooterY(visual.shooterId);
+  if (!Number.isFinite(shooterY) || !isFreshVisibleBomb(visual, now)) return y;
+  return Math.min(y, shooterY - 0.9);
+}
+
+function clampFreshBombToVisibleShooter(source, position, now) {
+  if (!position) return;
+  const shooterId = source?.shooterId ?? source?.shipId ?? null;
+  const shooterY = visibleBombShooterY(shooterId);
+  if (!Number.isFinite(shooterY)) return;
+  const visualAge = visibleBombAge(source, now);
+  if (Number.isFinite(visualAge) && visualAge > 0.9) return;
+  position.y = Math.min(position.y, shooterY - 0.9);
+}
+
+function visibleBombShooterY(shooterId) {
+  if (!shooterId) return null;
+  if ((shooterId === playerServerShipId || shooterId === pendingPlayerServerShip?.id) && boat?.root?.position) {
+    return boat.root.position.y;
+  }
+  const motion = enemyMotions.find((candidate) => candidate.id === shooterId);
+  return motion?.root?.position ? motion.root.position.y : null;
+}
+
+function isFreshVisibleBomb(visual, now) {
+  const age = visibleBombAge(visual, now);
+  return !Number.isFinite(age) || age <= 0.9;
+}
+
+function visibleBombAge(source, now) {
+  if (!Number.isFinite(source?.droppedAt)) return null;
+  if (Number.isFinite(lastServerSnapshotTime)) {
+    return Math.max(0, lastServerSnapshotTime - source.droppedAt);
+  }
+  return Math.max(0, now - source.droppedAt);
 }
 
 function updateBombSightMarker(system, forward) {

@@ -152,6 +152,21 @@ objects:
 1: plane, light, bot [orientation: 0°, speed: 30knt, height: 85m]
 `;
 
+const BOT_PLANE_BOMB_VISUAL_SCENARIO = `
+scenario: playwright-bot-plane-bomb-visual
+version: 9417
+cell: 40
+map:
+.......
+...2...
+.......
+...1...
+.......
+objects:
+1: ship, light, bot [orientation: 180°, speed: 0knt]
+2: plane, dark, bot [orientation: 0°, speed: 30knt, height: 110m]
+`;
+
 test('cannon hull-height shot hits the visible side of a ship', async ({ page, request }, testInfo) => {
   await openScenario(page, request, CANNON_HULL_HIT_SCENARIO, testInfo);
   await captureFrames(page, testInfo, 'cannon-before', 1, 0);
@@ -574,6 +589,45 @@ test('plane bomb visuals stay below the dropping plane in external view', async 
     });
     expect(abovePlaneBombs, `no bomb may render above the dropping plane in frame ${frame}`).toEqual([]);
     await captureFrames(page, testInfo, `bot-bomb-visual-${String(frame).padStart(2, '0')}`, 1, 140);
+  }
+});
+
+test('bot plane bomb visuals stay below the visible dropping plane', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, BOT_PLANE_BOMB_VISUAL_SCENARIO, testInfo);
+
+  await page.evaluate(() => {
+    window.seaBattleScenarioTest.setEnemyVisualState('dark-F2', {
+      x: 0,
+      y: 106,
+      z: -20,
+      heading: 0,
+      speed: 30
+    });
+    window.seaBattleScenarioTest.syncBombSnapshot({
+      id: 'test-bot-bomb-1',
+      teamId: 'dark',
+      shipId: 'dark-F2',
+      x: 0,
+      y: 109.5,
+      z: -18,
+      launchX: 0,
+      launchY: 109.5,
+      launchZ: -20,
+      heading: 0,
+      speed: 30,
+      droppedAt: 0
+    });
+  });
+
+  for (let frame = 0; frame < 12; frame += 1) {
+    const aboveVisiblePlaneBombs = await page.evaluate(() => {
+      const plane = window.seaBattleScenarioTest.vehicleVisual('dark-F2');
+      if (!plane) return [{ reason: 'missing-plane' }];
+      return window.seaBattleScenarioTest.bombVisuals()
+        .filter((bomb) => bomb.shooterId === 'dark-F2' && bomb.topY > plane.y + 0.5);
+    });
+    expect(aboveVisiblePlaneBombs, `no bot bomb may render above the visible plane in frame ${frame}`).toEqual([]);
+    await captureFrames(page, testInfo, `bot-plane-bomb-visual-${String(frame).padStart(2, '0')}`, 1, 140);
   }
 });
 
