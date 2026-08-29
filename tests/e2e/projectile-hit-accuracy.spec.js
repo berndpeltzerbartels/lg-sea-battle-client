@@ -134,10 +134,24 @@ test('cannon hull-height shot hits the visible side of a ship', async ({ page, r
   expect(shot.fire).toBe('ok');
   expect(Math.abs(shot.aim.miss)).toBeLessThan(0.08);
   await page.waitForFunction(() => document.body.dataset.cannonFireSync === 'ok');
-  await expectVehicleState(request, 'dark-S2', 'sunk', 'cannon hull hit should sink dark-S2');
   await page.waitForFunction(() => window.seaBattleScenarioTest.vehicleVisual('dark-S2')?.visualState === 'ship-cannon-hit');
   const impact = await page.evaluate(() => window.seaBattleScenarioTest.vehicleVisual('dark-S2'));
-  expect(Math.abs(impact.roll), 'cannon ship hit should explode while the ship is still upright').toBeLessThan(0.08);
+  const hitState = await gameState(request);
+  const targetShip = hitState.ships.find((ship) => ship.id === 'dark-S2');
+  const cannonHit = hitState.flakHits?.find((hit) => hit.targetShipId === 'dark-S2' && String(hit.id).startsWith('cannon-'));
+  expect(targetShip, 'target ship should still be visible while the cannon effect starts').toBeTruthy();
+  expect(cannonHit, 'server should expose the cannon hit position').toBeTruthy();
+  expect(Math.abs(impact.roll), 'cannon ship hit should explode before visible sinking roll takes over').toBeLessThan(0.16);
+  expect(impact.damageAnchor, 'cannon hit should expose the ship-bound explosion anchor').not.toBeNull();
+  expect(
+    distance3d(impact.damageAnchor, cannonHit),
+    `cannon explosion should use the server hit point, got ${JSON.stringify({ anchor: impact.damageAnchor, cannonHit })}`
+  ).toBeLessThan(0.85);
+  expect(
+    Math.abs(impact.damageAnchor.worldY - cannonHit.y),
+    `cannon explosion should stay near the hit height, got ${JSON.stringify({ anchor: impact.damageAnchor, cannonHit })}`
+  ).toBeLessThan(0.3);
+  await expectVehicleState(request, 'dark-S2', 'sunk', 'cannon hull hit should sink dark-S2');
   await captureFrames(page, testInfo, 'cannon-flight', 8, 120);
 
   await page.waitForFunction(() => {
@@ -676,6 +690,13 @@ async function captureFrames(page, testInfo, prefix, count, delayMs) {
       await page.waitForTimeout(delayMs);
     }
   }
+}
+
+function distance3d(anchor, point) {
+  const dx = Number(anchor.worldX ?? 0) - Number(point.x ?? 0);
+  const dy = Number(anchor.worldY ?? 0) - Number(point.y ?? 0);
+  const dz = Number(anchor.worldZ ?? 0) - Number(point.z ?? 0);
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
 }
 
 function formatGridValue(value) {

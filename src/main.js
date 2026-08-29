@@ -4431,7 +4431,7 @@ function applyServerGameSnapshot(snapshot) {
     snapshotClientTime
   );
   syncServerFlakImpacts(Array.isArray(snapshot.flakImpacts) ? snapshot.flakImpacts : []);
-  syncServerFlakHitEffects(Array.isArray(snapshot.flakHits) ? snapshot.flakHits : [], ownShip);
+  syncServerProjectileHitEffects(Array.isArray(snapshot.flakHits) ? snapshot.flakHits : [], ownShip);
   syncServerOwnFlakHits(Array.isArray(snapshot.flakHits) ? snapshot.flakHits : [], ownShip);
   document.body.dataset.remoteShips = String(snapshot.ships.length);
   document.body.dataset.serverTorpedoes = String(Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes.length : 0);
@@ -4472,7 +4472,7 @@ function syncServerFlakImpacts(impacts) {
   }
 }
 
-function syncServerFlakHitEffects(hits, ownShip = null) {
+function syncServerProjectileHitEffects(hits, ownShip = null) {
   if (!Array.isArray(hits)) return;
   const ownShipId = ownShip?.id ?? playerServerShipId ?? pendingPlayerServerShip?.id;
   hits.forEach((hit) => {
@@ -4493,7 +4493,7 @@ function syncServerFlakHitEffects(hits, ownShip = null) {
       if (targetMotion && !isScoutPlaneMotion(targetMotion)) {
         beginEnemyCannonShipHit(targetMotion, hit, time);
       } else {
-        createScoutPlaneCriticalHitSequence(flakSystem, getFlakHitPosition(hit));
+        createScoutPlaneCriticalHitSequence(flakSystem, getProjectileHitPosition(hit));
       }
       return;
     }
@@ -4501,11 +4501,11 @@ function syncServerFlakHitEffects(hits, ownShip = null) {
       beginEnemyShipCriticalHit(targetMotion, hit, time);
       return;
     }
-    createScoutPlaneCriticalHitSequence(flakSystem, getFlakHitPosition(hit));
+    createScoutPlaneCriticalHitSequence(flakSystem, getProjectileHitPosition(hit));
   });
 }
 
-function getFlakHitPosition(hit) {
+function getProjectileHitPosition(hit) {
   return new Vector3(
     Number.isFinite(hit?.x) ? hit.x : boat.root.position.x,
     Number.isFinite(hit?.y) ? hit.y : boat.root.position.y,
@@ -6548,7 +6548,7 @@ function beginEnemyScoutPlaneAirHit(motion, hit, now) {
   motion.airHitHeading = motion.heading;
   motion.airHitSpeed = Math.max(7.5, Math.abs(motion.speed) || motion.serverSpeed || scoutPlaneCruiseSpeed);
   motion.root.setEnabled(true);
-  createScoutPlaneCriticalHitSequence(flakSystem, getFlakHitPosition(hit));
+  createScoutPlaneCriticalHitSequence(flakSystem, getProjectileHitPosition(hit));
 }
 
 function updateEnemyScoutPlaneAirHit(motion, dt, now) {
@@ -6630,7 +6630,7 @@ function beginEnemySinking(motion, side, time) {
 function beginEnemyShipCriticalHit(motion, hit, now) {
   if (motion.state !== "active" && motion.state !== "sinking") return;
 
-  const position = getFlakHitPosition(hit);
+  const position = getProjectileHitPosition(hit);
   const anchor = createShipDamageAnchor(flakSystem, motion, position, 7.5, {
     visibleShipEvent: true,
     minLocalY: 1.18
@@ -6664,10 +6664,15 @@ function beginEnemyShipCriticalHit(motion, hit, now) {
 function beginEnemyCannonShipHit(motion, hit, now) {
   if (motion.state !== "active" && motion.state !== "sinking") return;
 
-  const position = getFlakHitPosition(hit);
+  const position = getProjectileHitPosition(hit);
   const anchor = createShipDamageAnchor(flakSystem, motion, position, 4.2, {
     visibleShipEvent: true,
-    minLocalY: 1.0
+    preserveHitHeight: true,
+    preserveHitSide: true,
+    preserveHitForward: true,
+    maxLocalX: 1.08,
+    minLocalZ: -4.05,
+    maxLocalZ: 4.15
   });
   motion.state = "ship-cannon-hit";
   motion.cannonHitAge = 0;
@@ -7412,7 +7417,8 @@ function installScenarioTestHooks() {
         speed: Number((motion.speed ?? 0).toFixed(3)),
         visualState: motion.state,
         roll: Number((rotation?.z ?? 0).toFixed(3)),
-        criticalHitAge: Number((motion.criticalHitAge ?? 0).toFixed(3))
+        criticalHitAge: Number((motion.criticalHitAge ?? 0).toFixed(3)),
+        damageAnchor: serializeShipDamageAnchor(motion.cannonHitAnchor ?? motion.criticalHitAnchor)
       };
     },
     bombVisuals() {
@@ -8699,9 +8705,26 @@ function createShipDamageAnchor(system, motion, worldPosition, lifetime = 6, opt
   inverse.invert();
   const localPosition = Vector3.TransformCoordinates(worldPosition, inverse);
   if (options.visibleShipEvent) {
-    localPosition.x = clamp(localPosition.x, -0.42, 0.42);
-    localPosition.y = Math.max(localPosition.y, options.minLocalY ?? 1.08);
-    localPosition.z = clamp(localPosition.z, -3.45, 3.25);
+    if (options.preserveHitSide) {
+      const side = Math.sign(localPosition.x);
+      const maxLocalX = options.maxLocalX ?? 0.92;
+      localPosition.x = clamp(localPosition.x, -maxLocalX, maxLocalX);
+      if (side !== 0) {
+        localPosition.x = clamp(localPosition.x + side * (options.outwardOffset ?? 0), -maxLocalX, maxLocalX);
+      }
+    } else {
+      localPosition.x = clamp(localPosition.x, -0.42, 0.42);
+    }
+    if (options.preserveHitHeight) {
+      localPosition.y = clamp(localPosition.y, options.minLocalY ?? 0.08, options.maxLocalY ?? 1.92);
+    } else {
+      localPosition.y = Math.max(localPosition.y, options.minLocalY ?? 1.08);
+    }
+    if (options.preserveHitForward) {
+      localPosition.z = clamp(localPosition.z, options.minLocalZ ?? -4.05, options.maxLocalZ ?? 3.45);
+    } else {
+      localPosition.z = clamp(localPosition.z, -3.45, 3.25);
+    }
   }
   anchor.position.copyFrom(localPosition);
   const inheritedScale = Math.max(0.001, motion.root.scaling?.x ?? 1);
@@ -8712,6 +8735,20 @@ function createShipDamageAnchor(system, motion, worldPosition, lifetime = 6, opt
     lifetime
   });
   return anchor;
+}
+
+function serializeShipDamageAnchor(anchor) {
+  if (!anchor) return null;
+  anchor.computeWorldMatrix(true);
+  const worldPosition = anchor.getAbsolutePosition();
+  return {
+    x: Number(anchor.position.x.toFixed(3)),
+    y: Number(anchor.position.y.toFixed(3)),
+    z: Number(anchor.position.z.toFixed(3)),
+    worldX: Number(worldPosition.x.toFixed(3)),
+    worldY: Number(worldPosition.y.toFixed(3)),
+    worldZ: Number(worldPosition.z.toFixed(3))
+  };
 }
 
 function createCannonShipHitEffect(system, anchor) {
