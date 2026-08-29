@@ -5225,6 +5225,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   const radarRange = range;
   const targetMode = options.targetMode === true;
   const scale = radius / radarRange;
+  const contactMarkerScale = getRadarContactMarkerScale(radius);
 
   ctx.clearRect(0, 0, width, height);
   ctx.save();
@@ -5247,7 +5248,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   const visibleContacts = contacts.filter((contact) => !contact.blocked);
   visibleContacts.forEach((contact) => {
     const contactPoint = worldToRadarPoint(contact.position, playerPosition, centerX, centerY, scale, heading);
-    drawRadarContactMarker(ctx, contactPoint.x, contactPoint.y, contact.team, false, contact.heading, heading, contact.label, contact.vehicleType);
+    drawRadarContactMarker(ctx, contactPoint.x, contactPoint.y, contact.team, false, contact.heading, heading, contact.label, contact.vehicleType, contactMarkerScale);
   });
 
   if (Array.isArray(options.radarTorpedoes) && options.radarTorpedoes.length > 0) {
@@ -5290,7 +5291,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
     if (statusElement) statusElement.textContent = `Clear ${formatWorldDistance(radarRange)}`;
   }
 
-  drawRadarContactMarker(ctx, centerX, centerY, "light", true);
+  drawRadarContactMarker(ctx, centerX, centerY, "light", true, null, heading, "", "torpedo-boat", contactMarkerScale);
   drawRadarOwnHeadingMarker(ctx, centerX, centerY);
   ctx.restore();
 
@@ -5819,36 +5820,40 @@ function mapShipColor(ship) {
   return "#ff6b4a";
 }
 
-function drawRadarContactMarker(ctx, x, y, team, isPlayer = false, contactHeading = null, radarHeading = 0, label = "", vehicleType = "torpedo-boat") {
+function drawRadarContactMarker(ctx, x, y, team, isPlayer = false, contactHeading = null, radarHeading = 0, label = "", vehicleType = "torpedo-boat", markerScale = 1) {
   const color = team === "light" ? "#7fd7ff" : "#ff6b4a";
   const ring = team === "light" ? "rgba(127, 215, 255, 0.42)" : "rgba(255, 107, 74, 0.48)";
-  const radius = isPlayer ? 4.2 : 4;
+  const scaledMarker = Number.isFinite(markerScale) && markerScale > 0 ? markerScale : 1;
+  const radius = (isPlayer ? 4.2 : 4) * scaledMarker;
 
   if (!isPlayer && Number.isFinite(contactHeading)) {
     const relativeHeading = contactHeading - radarHeading;
     if (vehicleType === "scout-plane") {
-      drawRadarPlaneMarker(ctx, x, y, color, relativeHeading);
+      drawRadarPlaneMarker(ctx, x, y, color, relativeHeading, scaledMarker);
     } else {
-      drawRadarShipMarker(ctx, x, y, color, relativeHeading);
+      drawRadarShipMarker(ctx, x, y, color, relativeHeading, scaledMarker);
     }
   } else {
     drawInstrumentMarker(ctx, x, y, color, radius);
   }
   ctx.strokeStyle = ring;
-  ctx.lineWidth = 1.2;
+  ctx.lineWidth = clamp(1.2 * scaledMarker, 0.8, 1.4);
   ctx.beginPath();
-  ctx.arc(x, y, radius + 3.2, 0, Math.PI * 2);
+  ctx.arc(x, y, radius + 3.2 * scaledMarker, 0, Math.PI * 2);
   ctx.stroke();
 
   if (!isPlayer && label) {
-    ctx.font = "700 9px Inter, Arial, sans-serif";
+    const labelSize = clamp(9 * scaledMarker, 7, 10);
+    const labelOffsetX = 9 * scaledMarker;
+    const labelOffsetY = -8 * scaledMarker;
+    ctx.font = `700 ${labelSize}px Inter, Arial, sans-serif`;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.lineWidth = 3;
+    ctx.lineWidth = clamp(3 * scaledMarker, 2, 3.2);
     ctx.strokeStyle = "rgba(2, 16, 21, 0.92)";
-    ctx.strokeText(label, x + 9, y - 8);
+    ctx.strokeText(label, x + labelOffsetX, y + labelOffsetY);
     ctx.fillStyle = color;
-    ctx.fillText(label, x + 9, y - 8);
+    ctx.fillText(label, x + labelOffsetX, y + labelOffsetY);
   }
 }
 
@@ -6011,11 +6016,11 @@ function drawRadarOwnHeadingMarker(ctx, centerX, centerY) {
   ctx.restore();
 }
 
-function drawRadarShipMarker(ctx, x, y, color, relativeHeading) {
-  const toPoint = createRadarMarkerPointMapper(x, y, relativeHeading);
+function drawRadarShipMarker(ctx, x, y, color, relativeHeading, markerScale = 1) {
+  const toPoint = createRadarMarkerPointMapper(x, y, relativeHeading, markerScale);
   ctx.fillStyle = color;
   ctx.strokeStyle = "rgba(2, 16, 21, 0.86)";
-  ctx.lineWidth = 1.3;
+  ctx.lineWidth = clamp(1.3 * markerScale, 0.8, 1.45);
   ctx.beginPath();
   moveToRadarMarkerPoint(ctx, toPoint, 0, 7.2);
   lineToRadarMarkerPoint(ctx, toPoint, 2.5, 2.2);
@@ -6028,11 +6033,11 @@ function drawRadarShipMarker(ctx, x, y, color, relativeHeading) {
   ctx.fill();
 }
 
-function drawRadarPlaneMarker(ctx, x, y, color, relativeHeading) {
-  const toPoint = createRadarMarkerPointMapper(x, y, relativeHeading);
+function drawRadarPlaneMarker(ctx, x, y, color, relativeHeading, markerScale = 1) {
+  const toPoint = createRadarMarkerPointMapper(x, y, relativeHeading, markerScale);
   ctx.fillStyle = color;
   ctx.strokeStyle = "rgba(2, 16, 21, 0.86)";
-  ctx.lineWidth = 1.2;
+  ctx.lineWidth = clamp(1.2 * markerScale, 0.8, 1.35);
   ctx.beginPath();
   moveToRadarMarkerPoint(ctx, toPoint, 0, 7.5);
   lineToRadarMarkerPoint(ctx, toPoint, 1.3, 1.2);
@@ -6051,15 +6056,21 @@ function drawRadarPlaneMarker(ctx, x, y, color, relativeHeading) {
   ctx.fill();
 }
 
-function createRadarMarkerPointMapper(x, y, relativeHeading) {
+function createRadarMarkerPointMapper(x, y, relativeHeading, markerScale = 1) {
   const forwardX = Math.sin(relativeHeading);
   const forwardY = -Math.cos(relativeHeading);
   const rightX = Math.cos(relativeHeading);
   const rightY = Math.sin(relativeHeading);
+  const scale = Number.isFinite(markerScale) && markerScale > 0 ? markerScale : 1;
   return (side, forward) => ({
-    x: x + rightX * side + forwardX * forward,
-    y: y + rightY * side + forwardY * forward
+    x: x + (rightX * side + forwardX * forward) * scale,
+    y: y + (rightY * side + forwardY * forward) * scale
   });
+}
+
+function getRadarContactMarkerScale(radius) {
+  if (!Number.isFinite(radius) || radius <= 0) return 1;
+  return clamp(radius / 225, 0.62, 1.15);
 }
 
 function moveToRadarMarkerPoint(ctx, toPoint, side, forward) {
