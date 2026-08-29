@@ -264,7 +264,6 @@ const playerFlakSightYOffset = flakSightYOffsetFactor * playerSternFlakScale;
 const playerFlakEyeZ = flakEyeZFactor * playerSternFlakScale;
 const cannonMinPitch = -0.087;
 const cannonMaxPitch = 45 * Math.PI / 180;
-const cannonYawLimit = 2.62;
 const cannonHoldMediumDelaySeconds = 0.24;
 const cannonHoldFastDelaySeconds = 0.68;
 const cannonHoldVeryFastDelaySeconds = 1.08;
@@ -1019,11 +1018,7 @@ scene.onBeforeRenderObservable.add(() => {
   }
   if (playerActive && cannonViewActive && heldCannonDirection !== 0) {
     cancelWeaponAlignment();
-    cannonYaw = clamp(
-      cannonYaw + heldCannonDirection * getHeldCannonSpeed(heldCannonStartTime, cannonYawFineSpeed, cannonYawExtremeSpeed) * dt,
-      -cannonYawLimit,
-      cannonYawLimit
-    );
+    cannonYaw = normalizeAngle(cannonYaw + heldCannonDirection * getHeldCannonSpeed(heldCannonStartTime, cannonYawFineSpeed, cannonYawExtremeSpeed) * dt);
   }
   if (playerActive && cannonViewActive && heldCannonPitchDirection !== 0) {
     cancelWeaponAlignment();
@@ -1453,7 +1448,7 @@ function holdWeaponWorldHeading(previousHeading, nextHeading) {
     flakYaw = normalizeAngle(flakYaw - headingDelta);
   }
   if (cannonViewActive) {
-    cannonYaw = clamp(cannonYaw - headingDelta, -cannonYawLimit, cannonYawLimit);
+    cannonYaw = normalizeAngle(cannonYaw - headingDelta);
   }
 }
 
@@ -7283,6 +7278,24 @@ function installScenarioTestHooks() {
     aimCannonAt(target) {
       return aimPlayerCannonAtWorldPoint(target);
     },
+    cannonShotLineAt(angles) {
+      setBattleStation("cannon");
+      cannonYaw = normalizeAngle(Number(angles?.yaw ?? 0));
+      cannonPitch = clamp(Number(angles?.pitch ?? 0), cannonMinPitch, cannonMaxPitch);
+      updatePlayerCannonMount();
+      const shot = getPlayerCannonShot();
+      return {
+        yaw: cannonYaw,
+        pitch: cannonPitch,
+        blocked: cannonShotWouldHitOwnBoat(shot),
+        shot: shot
+          ? {
+            position: { x: shot.position.x, y: shot.position.y, z: shot.position.z },
+            direction: { x: shot.direction.x, y: shot.direction.y, z: shot.direction.z }
+          }
+          : null
+      };
+    },
     async fireCannonAt(target) {
       setBattleStation("cannon");
       const aim = aimPlayerCannonAtWorldPoint(target);
@@ -7581,7 +7594,7 @@ function aimPlayerCannonAtWorldPoint(target) {
   for (let correction = 0; correction < 3; correction += 1) {
     const localTarget = worldToLocalShipPointWithoutTilt(worldTarget);
     const desiredLocalYaw = Math.atan2(localTarget.x - boat.bowCannon.mount.position.x, localTarget.z - boat.bowCannon.mount.position.z);
-    cannonYaw = clamp(desiredLocalYaw, -cannonYawLimit, cannonYawLimit);
+    cannonYaw = normalizeAngle(desiredLocalYaw);
     updatePlayerCannonMount();
 
     cannonPitch = bestCannonPitchForWorldPoint(worldTarget);
@@ -7803,15 +7816,7 @@ function updateCannonBarrelRecoil(cannon, now) {
 }
 
 function cannonShotWouldHitOwnBoat(shot) {
-  if (!shot?.position || !shot?.direction || !boat?.root) return true;
-  for (let distance = 0.65; distance <= 7.5; distance += 0.85) {
-    const worldPoint = shot.position.add(shot.direction.scale(distance));
-    const localPoint = worldToLocalShipPointWithoutTilt(worldPoint);
-    if (ownBoatFlakHitArea(localPoint) === "critical") {
-      return true;
-    }
-  }
-  return false;
+  return shotWouldHitOwnBoat(shot, 0.7, 26, "cannon");
 }
 
 async function reportPlayerCannonShot(shot) {
@@ -7923,30 +7928,95 @@ function getPlayerFlakShot() {
 }
 
 function flakShotWouldHitOwnBoat(shot) {
-  if (!shot?.position || !shot?.direction || !boat?.root) return true;
-  for (let distance = 0.35; distance <= 8.0; distance += 1.5) {
-    const worldPoint = shot.position.add(shot.direction.scale(distance));
-    const localPoint = worldToLocalShipPointWithoutTilt(worldPoint);
-    if (ownBoatFlakHitArea(localPoint) !== "miss") {
-      return true;
-    }
+  return shotWouldHitOwnBoat(shot, 0.45, 24, "flak");
+}
+
+function shotWouldHitOwnBoat(shot, startDistance, length, weapon) {
+  if (!shot?.position || !shot?.direction || !boat?.root || !scene) return true;
+  const direction = shot.direction.normalizeToNew();
+  const origin = shot.position.add(direction.scale(startDistance));
+  const blockers = scene.meshes.filter((mesh) => isOwnBoatShotBlocker(mesh, weapon));
+  const hullBlocker = shotRayIntersectsOwnBoatHull(origin, direction, length) ? "player_bow_hull" : "";
+  const blocker = hullBlocker ? null : blockers.find((mesh) => shotRayIntersectsMeshBounds(origin, direction, length, mesh));
+  document.body.dataset.ownShotBlocker = blocker?.name ?? "";
+  if (hullBlocker) {
+    document.body.dataset.ownShotBlocker = hullBlocker;
+  }
+  return Boolean(hullBlocker || blocker);
+}
+
+function isOwnBoatShotBlocker(mesh, weapon = "") {
+  if (!mesh || mesh === boat.root || !isNodeDescendantOf(mesh, boat.root)) return false;
+  if (typeof mesh.isEnabled === "function" && !mesh.isEnabled()) return false;
+  if (mesh.isVisible === false || mesh.isPickable === false) return false;
+  const name = String(mesh.name ?? "");
+  if (weapon === "flak" && name.includes("_flak_")) return false;
+  if (weapon === "cannon" && name.includes("_cannon_")) return false;
+  if (name.endsWith("_hull") || name.endsWith("_deck")) return false;
+  return !(
+    name.includes("_designation_plate")
+    || name.includes("_wake_")
+    || name.includes("_ring_sight")
+    || name.includes("_sight_spoke")
+    || name.includes("_sight_bracket")
+  );
+}
+
+function isNodeDescendantOf(node, ancestor) {
+  const visited = new Set();
+  for (let current = node; current; current = current.parent) {
+    if (visited.has(current)) return false;
+    visited.add(current);
+    if (current === ancestor) return true;
   }
   return false;
 }
 
-function ownBoatFlakHitArea(point) {
-  const absRight = Math.abs(point.x);
-  if (point.y >= 0.72 && point.y <= 1.72 && point.z >= 0.32 && point.z <= 1.24 && absRight <= 0.62) {
-    return "critical";
+function shotRayIntersectsOwnBoatHull(origin, direction, length) {
+  const step = 0.18 * torpedoBoatVisualScale;
+  for (let distance = 0; distance <= length; distance += step) {
+    const localPoint = worldToLocalShipPointWithoutTilt(origin.add(direction.scale(distance)));
+    if (ownBoatHullContainsShotPoint(localPoint)) return true;
   }
-  if (point.y >= 0.78 && point.y <= 1.92 && point.z >= -1.5 && point.z <= 0.24 && absRight <= 0.26) {
-    return "critical";
+  return false;
+}
+
+function ownBoatHullContainsShotPoint(point) {
+  const zMargin = 0.04;
+  if (!isForwardInsideTorpedoBoatHull(point.z, zMargin)) return false;
+  const halfWidth = getTorpedoBoatHullTopHalfWidthAt(point.z) + 0.035;
+  if (Math.abs(point.x) > halfWidth) return false;
+  const topY = getTorpedoBoatDeckY(point.z)
+    + Math.max(getTorpedoBoatBowBulwarkLift(point.z), getTorpedoBoatSternBulwarkLift(point.z))
+    + 0.025;
+  return point.y >= torpedoBoatModelWaterlineY - 0.08 && point.y <= topY;
+}
+
+function shotRayIntersectsMeshBounds(origin, direction, length, mesh) {
+  if (typeof mesh.computeWorldMatrix === "function") {
+    mesh.computeWorldMatrix(true);
   }
-  const deckClearance = getTorpedoBoatDeckY(point.z) + 0.025;
-  if (point.y >= 0.1 && point.y <= deckClearance && isForwardInsideTorpedoBoatHull(point.z, 0.18) && absRight <= getTorpedoBoatHullTopHalfWidthAt(point.z) + 0.18) {
-    return "surface";
+  const bounds = mesh.getBoundingInfo?.().boundingBox;
+  if (!bounds?.minimumWorld || !bounds?.maximumWorld) return false;
+  return rayIntersectsBounds(origin, direction, length, bounds.minimumWorld, bounds.maximumWorld);
+}
+
+function rayIntersectsBounds(origin, direction, maxDistance, min, max) {
+  let near = 0;
+  let far = maxDistance;
+  for (const axis of ["x", "y", "z"]) {
+    const axisDirection = direction[axis];
+    if (Math.abs(axisDirection) < 0.000001) {
+      if (origin[axis] < min[axis] || origin[axis] > max[axis]) return false;
+      continue;
+    }
+    const first = (min[axis] - origin[axis]) / axisDirection;
+    const second = (max[axis] - origin[axis]) / axisDirection;
+    near = Math.max(near, Math.min(first, second));
+    far = Math.min(far, Math.max(first, second));
+    if (near > far) return false;
   }
-  return "miss";
+  return far >= 0 && near <= maxDistance;
 }
 
 function isForwardInsideTorpedoBoatHull(forward, margin = 0) {

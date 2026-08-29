@@ -88,6 +88,20 @@ objects:
 2: plane, dark, scenario [orientation: 180°, speed: 0knt, height: 16m]
 `;
 
+const CANNON_OWN_SHIP_LINE_SCENARIO = `
+scenario: playwright-cannon-own-ship-line
+version: 9417
+cell: 30
+map:
+.......
+...2...
+...1...
+.......
+objects:
+1: ship, light, bot [orientation: 0°, speed: 0knt]
+2: ship, dark, scenario [orientation: 180°, speed: 0knt]
+`;
+
 const TORPEDO_HULL_HIT_SCENARIO = `
 scenario: playwright-projectile-torpedo-hull
 version: 9403
@@ -248,19 +262,33 @@ test('weapon view and projectile start stay on the visible weapon with and witho
   }
 });
 
-test('flak hull impacts do not sink a nearby ship directly astern', async ({ page, request }, testInfo) => {
-  await openScenario(page, request, FLAK_ASTERN_BOAT_SCENARIO, testInfo);
-  await page.evaluate(() => window.seaBattleScenarioTest.setPlayerNavigationState({
-    heading: 0,
-    speed: 0,
-    engineOrder: 2
+test('cannon fire is blocked by the actual own-ship shot line instead of fixed yaw limits', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, CANNON_OWN_SHIP_LINE_SCENARIO, testInfo);
+
+  const blocked = await page.evaluate(() => window.seaBattleScenarioTest.cannonShotLineAt({
+    yaw: Math.PI,
+    pitch: 0.02
   }));
+  expect(blocked.blocked).toBe(true);
+
+  const clear = await page.evaluate(() => window.seaBattleScenarioTest.cannonShotLineAt({
+    yaw: Math.PI,
+    pitch: 0.48
+  }));
+  expect(clear.blocked).toBe(false);
+  expect(Math.abs(Math.abs(clear.yaw) - Math.PI)).toBeLessThan(0.04);
+  expect(clear.shot.direction.z).toBeLessThan(-0.7);
+  expect(clear.shot.direction.y).toBeGreaterThan(0.16);
+});
+
+test('flak hull impacts do not sink a nearby ship when the own-ship shot line is clear', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, FLAK_FAST_BOAT_SCENARIO, testInfo);
 
   const target = await targetPoint(request, 'dark-S2', { y: 0.42 });
   const shot = await fireWeaponAt(page, 'flak', target);
-  await captureFrames(page, testInfo, 'flak-astern-ship-hit', 8, 120);
+  await captureFrames(page, testInfo, 'flak-clear-line-ship-hit', 8, 120);
 
-  expect(shot.fire).toBe('ok');
+  expect(shot.fire, `unexpected own-ship blocker: ${shot.blocker}`).toBe('ok');
   expect(Math.abs(shot.aim?.miss ?? 99)).toBeLessThan(0.08);
   await expectVehicleState(request, 'dark-S2', 'active', 'flak hull impacts should not sink dark-S2');
   const scenarioState = await gameState(request);
@@ -573,6 +601,10 @@ async function fireWeaponAt(page, weapon, target) {
     }
     throw new Error(`Unknown weapon: ${weapon}`);
   }, { weapon, target });
+  result.blocker = await page.evaluate(() => document.body.dataset.ownShotBlocker ?? '');
+  if (result.fire !== 'ok') {
+    return result;
+  }
   if (weapon === 'cannon') {
     await page.waitForFunction(() => document.body.dataset.cannonFireSync === 'ok', { timeout: 5_000 }).catch(() => {});
   } else {
