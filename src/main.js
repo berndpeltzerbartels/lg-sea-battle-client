@@ -39,6 +39,7 @@ const scenarioTestMode = urlParams.get("scenarioTest") === "1";
 const directSideViewSandboxRequested = urlParams.get("setup") === "8"
   || urlParams.get("sandbox") === "side-view"
   || location.pathname.endsWith("/debug/side-view-sandbox");
+const shipContrastDebug = directSideViewSandboxRequested && urlParams.get("shipContrast") === "1";
 let debugMapEnabled = urlParams.get("debug") === "1";
 let debugMarkerMapEnabled = debugMapEnabled && urlParams.get("markers") === "1";
 let bigMapEnabled = debugMapEnabled && urlParams.get("bigMap") !== "0";
@@ -410,6 +411,14 @@ document.body.dataset.hardwareScalingLevel = renderQuality.hardwareScalingLevel.
 document.body.dataset.visualEffects = renderQuality.visualEffects;
 
 const materials = createMaterials(scene);
+if (shipContrastDebug) {
+  scene.clearColor = new Color4(0.82, 0.84, 0.78, 1);
+  materials.water.diffuseTexture.level = 0;
+  materials.water.diffuseColor = new Color3(0.78, 0.77, 0.66);
+  materials.water.emissiveColor = new Color3(0.26, 0.25, 0.2);
+  materials.water.specularColor = new Color3(0.04, 0.04, 0.035);
+  materials.sand.diffuseColor = new Color3(0.86, 0.82, 0.68);
+}
 const world = new TransformNode("world", scene);
 
 const sun = new DirectionalLight("sun", new Vector3(-0.45, -0.9, 0.32), scene);
@@ -7219,31 +7228,39 @@ function installScenarioTestHooks() {
     },
     bombVisuals() {
       return Array.from(bombSystem.serverVisuals.values())
-        .map((visual) => ({
-          id: visual.id,
-          shooterId: visual.shooterId ?? null,
-          x: Number(visual.root.position.x.toFixed(3)),
-          y: Number(visual.root.position.y.toFixed(3)),
-          z: Number(visual.root.position.z.toFixed(3)),
-          startX: Number(visual.launchStart.x.toFixed(3)),
-          startY: Number(visual.launchStart.y.toFixed(3)),
-          startZ: Number(visual.launchStart.z.toFixed(3)),
-          snapshotLaunchX: visual.snapshotLaunchPosition
-            ? Number(visual.snapshotLaunchPosition.x.toFixed(3))
-            : null,
-          snapshotLaunchY: visual.snapshotLaunchPosition
-            ? Number(visual.snapshotLaunchPosition.y.toFixed(3))
-            : null,
-          snapshotLaunchZ: visual.snapshotLaunchPosition
-            ? Number(visual.snapshotLaunchPosition.z.toFixed(3))
-            : null,
-          serverX: Number(visual.serverPosition.x.toFixed(3)),
-          serverY: Number(visual.serverPosition.y.toFixed(3)),
-          serverZ: Number(visual.serverPosition.z.toFixed(3)),
-          age: Number.isFinite(visual.droppedAt) && Number.isFinite(lastServerSnapshotTime)
-            ? Number(Math.max(0, lastServerSnapshotTime - visual.droppedAt).toFixed(3))
-            : null
-        }));
+        .map((visual) => {
+          const childMeshes = visual.root.getChildMeshes();
+          childMeshes.forEach((mesh) => mesh.computeWorldMatrix(true));
+          const topY = childMeshes.length
+            ? Math.max(...childMeshes.map((mesh) => mesh.getBoundingInfo().boundingBox.maximumWorld.y))
+            : visual.root.position.y;
+          return {
+            id: visual.id,
+            shooterId: visual.shooterId ?? null,
+            x: Number(visual.root.position.x.toFixed(3)),
+            y: Number(visual.root.position.y.toFixed(3)),
+            z: Number(visual.root.position.z.toFixed(3)),
+            topY: Number(topY.toFixed(3)),
+            startX: Number(visual.launchStart.x.toFixed(3)),
+            startY: Number(visual.launchStart.y.toFixed(3)),
+            startZ: Number(visual.launchStart.z.toFixed(3)),
+            snapshotLaunchX: visual.snapshotLaunchPosition
+              ? Number(visual.snapshotLaunchPosition.x.toFixed(3))
+              : null,
+            snapshotLaunchY: visual.snapshotLaunchPosition
+              ? Number(visual.snapshotLaunchPosition.y.toFixed(3))
+              : null,
+            snapshotLaunchZ: visual.snapshotLaunchPosition
+              ? Number(visual.snapshotLaunchPosition.z.toFixed(3))
+              : null,
+            serverX: Number(visual.serverPosition.x.toFixed(3)),
+            serverY: Number(visual.serverPosition.y.toFixed(3)),
+            serverZ: Number(visual.serverPosition.z.toFixed(3)),
+            age: Number.isFinite(visual.droppedAt) && Number.isFinite(lastServerSnapshotTime)
+              ? Number(Math.max(0, lastServerSnapshotTime - visual.droppedAt).toFixed(3))
+              : null
+          };
+        });
     },
     async state() {
       const response = await fetch(getGameStateEndpoint(), { cache: "no-store" });
@@ -11742,19 +11759,27 @@ function createBoatBowBulwarkCapMesh(name, scene) {
       const outerX = side * halfWidth;
       const innerX = side * Math.max(0, halfWidth - rimWidth);
       const topY = section.top + getTorpedoBoatBowBulwarkLift(section.z);
+      const bottomY = section.top + 0.006;
       positions.push(
         outerX, topY, section.z,
         innerX, topY, section.z,
-        innerX, section.top + 0.006, section.z
+        innerX, bottomY, section.z,
+        outerX, bottomY, section.z
       );
     });
 
     for (let i = 0; i < sections.length - 1; i += 1) {
-      const a = start + i * 3;
-      const b = a + 3;
+      const a = start + i * 4;
+      const b = a + 4;
       pushOrientedQuad(indices, positions, a, b, b + 1, a + 1, Vector3.Up());
       pushOrientedQuad(indices, positions, a + 1, b + 1, b + 2, a + 2, new Vector3(-side, 0, 0));
+      pushOrientedQuad(indices, positions, a, a + 3, b + 3, b, new Vector3(side, 0, 0));
+      pushOrientedQuad(indices, positions, a + 2, b + 2, b + 3, a + 3, Vector3.Down());
     }
+
+    pushOrientedQuad(indices, positions, start, start + 1, start + 2, start + 3, new Vector3(0, 0, -1));
+    const front = start + (sections.length - 1) * 4;
+    pushOrientedQuad(indices, positions, front, front + 1, front + 2, front + 3, new Vector3(0, 0, 1));
   });
 
   return createMeshFromData(name, scene, positions, indices, { reverseFaces: true });

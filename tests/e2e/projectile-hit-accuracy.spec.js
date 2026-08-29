@@ -113,6 +113,18 @@ objects:
 1: plane, light, bot [orientation: 90°, speed: 30knt, height: 160m]
 `;
 
+const PLANE_BOMB_VISUAL_SCENARIO = `
+scenario: playwright-plane-bomb-visual
+version: 9416
+cell: 40
+map:
+.......
+...1...
+.......
+objects:
+1: plane, light, bot [orientation: 0°, speed: 30knt, height: 85m]
+`;
+
 test('cannon hull-height shot hits the visible side of a ship', async ({ page, request }, testInfo) => {
   await openScenario(page, request, CANNON_HULL_HIT_SCENARIO, testInfo);
   await captureFrames(page, testInfo, 'cannon-before', 1, 0);
@@ -345,6 +357,33 @@ test('air-dropped torpedo falls from plane height without snapping forward at wa
 
   expect(afterWater.waterEntryJump).toBeLessThan(8);
   expect(afterWater.runDistanceAtSplash).toBeLessThan(1);
+});
+
+test('plane bomb visuals stay below the dropping plane in external view', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, PLANE_BOMB_VISUAL_SCENARIO, testInfo, { vehicleType: 'scout-plane' });
+  await page.evaluate(() => window.seaBattleScenarioTest.setPlayerNavigationState({
+    y: 85,
+    heading: 0,
+    speed: 30,
+    verticalSpeed: 0,
+    engineOrder: 7
+  }));
+
+  const drop = await page.evaluate(() => window.seaBattleScenarioTest.dropBomb());
+  expect(drop.drop).toBe('ok');
+  await page.waitForFunction(() => window.seaBattleScenarioTest.bombVisuals()
+    .some((bomb) => bomb.shooterId === 'light-F1'), null, { timeout: 8_000 });
+
+  for (let frame = 0; frame < 10; frame += 1) {
+    const abovePlaneBombs = await page.evaluate(() => {
+      const plane = window.seaBattleScenarioTest.vehicleVisual('light-F1');
+      if (!plane) return [{ reason: 'missing-plane' }];
+      return window.seaBattleScenarioTest.bombVisuals()
+        .filter((bomb) => bomb.shooterId === 'light-F1' && bomb.topY > plane.y + 0.5);
+    });
+    expect(abovePlaneBombs, `no bomb may render above the dropping plane in frame ${frame}`).toEqual([]);
+    await captureFrames(page, testInfo, `bot-bomb-visual-${String(frame).padStart(2, '0')}`, 1, 140);
+  }
 });
 
 test('ship wake follows actual speed while the engine is stopped', async ({ page, request }, testInfo) => {
