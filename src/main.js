@@ -904,6 +904,7 @@ let killFeedEvents = [];
 let killFeedShipLabels = new Map();
 let nextKillFeedNumber = 1;
 let reportedLocalPlaneHitIds = new Set();
+let pendingCriticalFlakShipHitsByTarget = new Map();
 let radarTorpedoSnapshots = Array.isArray(gameState.torpedoes) ? gameState.torpedoes : [];
 let scoutPlaneFlakHitStartTime = 0;
 let scoutPlaneFlakHitExploded = false;
@@ -4343,6 +4344,7 @@ function applyServerGameSnapshot(snapshot) {
   }
   const snapshotClientTime = getSnapshotClientTime(snapshot);
   serverShipsById = indexShipsById(snapshot.ships);
+  pendingCriticalFlakShipHitsByTarget = indexCriticalFlakShipHitsByTarget(snapshot.flakHits);
   updateFleetStatus(snapshot.ships, snapshot.destroyedShipsByTeam);
   updatePlayerList(snapshot.ships, snapshot.killsByPlayer);
   updateKillFeedFromSnapshot(snapshot);
@@ -4452,7 +4454,10 @@ function syncServerFlakImpacts(impacts) {
       Number.isFinite(impact.y) ? impact.y : 0,
       Number.isFinite(impact.z) ? impact.z : 0
     );
-    if (impact.reason === "land-hit" || impact.reason === "ship-hit" || impact.reason === "ship-critical-hit") {
+    if (impact.reason === "ship-critical-hit") {
+      return;
+    }
+    if (impact.reason === "land-hit" || impact.reason === "ship-hit") {
       createFlakLandImpactEffect(flakSystem, position, impact.reason !== "land-hit");
     } else if (isCannonServerProjectile(impact.id)) {
       createCannonWaterImpactEffect(flakSystem, position);
@@ -4482,7 +4487,15 @@ function syncServerFlakHitEffects(hits, ownShip = null) {
       }
       return;
     }
-    if (hit.reason === "ship-critical-hit" && targetMotion && !isScoutPlaneMotion(targetMotion)) {
+    if (isCannonServerProjectile(hit.id)) {
+      if (targetMotion && !isScoutPlaneMotion(targetMotion)) {
+        createCannonShipHitEffect(flakSystem, targetMotion, getFlakHitPosition(hit));
+      } else {
+        createScoutPlaneCriticalHitSequence(flakSystem, getFlakHitPosition(hit));
+      }
+      return;
+    }
+    if (targetMotion && !isScoutPlaneMotion(targetMotion)) {
       beginEnemyShipCriticalHit(targetMotion, hit, time);
       return;
     }
@@ -4496,6 +4509,19 @@ function getFlakHitPosition(hit) {
     Number.isFinite(hit?.y) ? hit.y : boat.root.position.y,
     Number.isFinite(hit?.z) ? hit.z : boat.root.position.z
   );
+}
+
+function indexCriticalFlakShipHitsByTarget(hits) {
+  const result = new Map();
+  if (!Array.isArray(hits)) return result;
+  hits.forEach((hit) => {
+    if (!hit?.targetShipId || isCannonServerProjectile(hit.id)) return;
+    const existing = result.get(hit.targetShipId);
+    if (!existing || (Number(hit.t) || 0) >= (Number(existing.t) || 0)) {
+      result.set(hit.targetShipId, hit);
+    }
+  });
+  return result;
 }
 
 function syncServerOwnFlakHits(hits, ownShip = null) {
@@ -4771,6 +4797,12 @@ function applyServerShipSnapshot(motion, ship) {
     motion.root.position.z = motion.serverPosition.z;
     motion.heading = Number.isFinite(ship.heading) ? ship.heading : motion.heading;
     motion.root.setEnabled(true);
+    const criticalFlakHit = pendingCriticalFlakShipHitsByTarget.get(motion.id);
+    if (criticalFlakHit && !flakSystem.hitEffectIds.has(criticalFlakHit.id)) {
+      flakSystem.hitEffectIds.add(criticalFlakHit.id);
+      beginEnemyShipCriticalHit(motion, criticalFlakHit, time);
+      return;
+    }
     beginEnemySinking(motion, getStableSinkSide(motion.id), time);
     return;
   }
@@ -6567,9 +6599,10 @@ function beginEnemyShipCriticalHit(motion, hit, now) {
   if (motion.state !== "active" && motion.state !== "sinking") return;
 
   const position = getFlakHitPosition(hit);
+  const anchor = createShipDamageAnchor(flakSystem, motion, position, 7.5);
   motion.state = "ship-critical-hit";
   motion.criticalHitAge = 0;
-  motion.criticalHitPosition = position.clone();
+  motion.criticalHitAnchor = anchor;
   motion.criticalHitSinkSide = getStableSinkSide(motion.id);
   motion.criticalHitNextSmokeTime = now;
   motion.criticalHitExploded = false;
@@ -6577,7 +6610,8 @@ function beginEnemyShipCriticalHit(motion, hit, now) {
   motion.rollImpulse = 0;
   motion.engineOrder = 0;
   motion.rudder = 0;
-  createShipSuperstructureHitSequence(flakSystem, position);
+  createFlakImpactFlash(flakSystem, flakSystem.nextId++, position.add(new Vector3(0, 0.28, 0)), 0.42, 58, 3.8);
+  createShipSuperstructureHitSequence(flakSystem, Vector3.Zero(), anchor);
   if (motion.bowWake) {
     motion.bowWake.strength = 0;
   }
@@ -6598,16 +6632,16 @@ function updateEnemyShipCriticalHit(motion, dt, now) {
   );
 
   if (now >= (motion.criticalHitNextSmokeTime ?? now)) {
-    createBurningDamageTrail(flakSystem, motion.criticalHitPosition ?? motion.root.position, new Vector3(0, 0.28, 0));
+    createBurningDamageTrail(flakSystem, Vector3.Zero(), new Vector3(0, 0.28, 0), motion.criticalHitAnchor);
     motion.criticalHitNextSmokeTime = now + 0.32;
   }
 
-  if (!motion.criticalHitExploded && motion.criticalHitAge >= 1.15) {
+  if (!motion.criticalHitExploded && motion.criticalHitAge >= 2.45) {
     motion.criticalHitExploded = true;
-    createShipSuperstructureExplosion(flakSystem, motion.criticalHitPosition ?? motion.root.position);
+    createShipSuperstructureExplosion(flakSystem, Vector3.Zero(), motion.criticalHitAnchor);
   }
 
-  if (motion.criticalHitAge >= 1.55) {
+  if (motion.criticalHitAge >= 3.0) {
     beginEnemySinking(motion, motion.criticalHitSinkSide, now);
   }
 
@@ -7278,13 +7312,17 @@ function installScenarioTestHooks() {
       }
       const motion = enemyMotions.find((candidate) => candidate.id === vehicleId);
       if (!motion) return null;
+      const rotation = motion.root.rotationQuaternion?.toEulerAngles?.();
       return {
         id: motion.id,
         x: Number(motion.root.position.x.toFixed(3)),
         y: Number(motion.root.position.y.toFixed(3)),
         z: Number(motion.root.position.z.toFixed(3)),
         heading: Number(motion.heading.toFixed(3)),
-        speed: Number((motion.speed ?? 0).toFixed(3))
+        speed: Number((motion.speed ?? 0).toFixed(3)),
+        visualState: motion.state,
+        roll: Number((rotation?.z ?? 0).toFixed(3)),
+        criticalHitAge: Number((motion.criticalHitAge ?? 0).toFixed(3))
       };
     },
     bombVisuals() {
@@ -8418,10 +8456,10 @@ function createScoutPlaneCriticalHitSequence(system, position) {
   });
 }
 
-function createShipSuperstructureHitSequence(system, position) {
-  createShipImpactSpark(system, position, 0.72, 0.32);
-  createShipSuperstructureFire(system, position, 4, 0.92);
-  createShipSuperstructureSmoke(system, position, 5, 1.12);
+function createShipSuperstructureHitSequence(system, position, parent = null) {
+  createShipImpactSpark(system, position, 0.72, 0.32, parent);
+  createShipSuperstructureFire(system, position, 4, 0.92, parent);
+  createShipSuperstructureSmoke(system, position, 5, 1.12, parent);
 }
 
 function createFlakWaterImpactEffect(system, position) {
@@ -8563,12 +8601,37 @@ function createFlakLandImpactEffect(system, position, metalSpark = false) {
   });
 }
 
-function createShipImpactSpark(system, position, diameter = 0.42, lifetime = 0.22) {
+function createShipDamageAnchor(system, motion, worldPosition, lifetime = 6) {
+  const anchor = new TransformNode(`ship_damage_anchor_${motion.id}_${system.nextId++}`, system.scene);
+  anchor.parent = motion.root;
+  motion.root.computeWorldMatrix(true);
+  const inverse = motion.root.getWorldMatrix().clone();
+  inverse.invert();
+  anchor.position.copyFrom(Vector3.TransformCoordinates(worldPosition, inverse));
+  const inheritedScale = Math.max(0.001, motion.root.scaling?.x ?? 1);
+  anchor.scaling.setAll(1 / inheritedScale);
+  system.airHitEffects.push({
+    anchor,
+    age: 0,
+    lifetime
+  });
+  return anchor;
+}
+
+function createCannonShipHitEffect(system, motion, worldPosition) {
+  const anchor = createShipDamageAnchor(system, motion, worldPosition, 4.2);
+  createFlakImpactFlash(system, system.nextId++, worldPosition.add(new Vector3(0, 0.32, 0)), 0.52, 92, 5.4);
+  createShipImpactSpark(system, Vector3.Zero(), 1.05, 0.28, anchor);
+  createShipSuperstructureFire(system, Vector3.Zero(), 5, 1.05, anchor);
+  createShipSuperstructureSmoke(system, Vector3.Zero(), 6, 1.18, anchor);
+}
+
+function createShipImpactSpark(system, position, diameter = 0.42, lifetime = 0.22, parent = null) {
   const spark = MeshBuilder.CreateSphere(`ship_impact_spark_${system.nextId}_${system.airHitEffects.length}`, {
     diameter,
     segments: 8
   }, system.scene);
-  spark.parent = system.root;
+  spark.parent = parent ?? system.root;
   spark.material = system.materials.explosionCore;
   spark.position.copyFrom(position.add(new Vector3(0, 0.05, 0)));
   spark.isPickable = false;
@@ -8637,21 +8700,25 @@ function updateScheduledHitEffect(system, effect, dt) {
   return false;
 }
 
-function createShipSuperstructureExplosion(system, position) {
+function createShipSuperstructureExplosion(system, position, parent = null) {
   const center = position.add(new Vector3(0, 0.24, 0));
-  createFlakImpactFlash(system, system.nextId++, center, 0.72, 82, 4.6);
-  createShipImpactSpark(system, center, 1.35, 0.34);
-  createShipSuperstructureFire(system, center, 7, 1.35);
-  createShipSuperstructureSmoke(system, center, 9, 1.55);
+  parent?.computeWorldMatrix(true);
+  const lightPosition = parent
+    ? Vector3.TransformCoordinates(center, parent.getWorldMatrix())
+    : center;
+  createFlakImpactFlash(system, system.nextId++, lightPosition, 0.72, 82, 4.6);
+  createShipImpactSpark(system, center, 1.35, 0.34, parent);
+  createShipSuperstructureFire(system, center, 7, 1.35, parent);
+  createShipSuperstructureSmoke(system, center, 9, 1.55, parent);
 }
 
-function createShipSuperstructureFire(system, position, count, scale = 1) {
+function createShipSuperstructureFire(system, position, count, scale = 1, parent = null) {
   for (let index = 0; index < count; index += 1) {
     const flame = MeshBuilder.CreateSphere(`ship_superstructure_fire_${system.nextId}_${index}_${system.airHitEffects.length}`, {
       diameter: (0.42 + index * 0.06) * scale,
       segments: 10
     }, system.scene);
-    flame.parent = system.root;
+    flame.parent = parent ?? system.root;
     flame.material = system.materials.volcanicSmokeWarm;
     flame.position.copyFrom(position.add(new Vector3(
       (stableUnitNoise(system.nextId + index * 23) - 0.5) * 0.9 * scale,
@@ -8676,13 +8743,13 @@ function createShipSuperstructureFire(system, position, count, scale = 1) {
   }
 }
 
-function createShipSuperstructureSmoke(system, position, count, scale = 1) {
+function createShipSuperstructureSmoke(system, position, count, scale = 1, parent = null) {
   for (let index = 0; index < count; index += 1) {
     const puff = MeshBuilder.CreateSphere(`ship_superstructure_smoke_${system.nextId}_${index}_${system.airHitEffects.length}`, {
       diameter: 0.74 * scale,
       segments: 10
     }, system.scene);
-    puff.parent = system.root;
+    puff.parent = parent ?? system.root;
     puff.material = index % 3 === 0 ? system.materials.volcanicSmokeWarm : system.materials.volcanicSmoke;
     puff.position.copyFrom(position.add(new Vector3(
       (stableUnitNoise(system.nextId + index * 11) - 0.5) * 0.75 * scale,
@@ -8738,14 +8805,14 @@ function createAirHitFire(system, position) {
   }
 }
 
-function createBurningDamageTrail(system, position, drift = Vector3.Zero()) {
-  createDamageSmokePuff(system, position.add(drift));
+function createBurningDamageTrail(system, position, drift = Vector3.Zero(), parent = null) {
+  createDamageSmokePuff(system, position.add(drift), parent);
   for (let index = 0; index < 2; index += 1) {
     const flame = MeshBuilder.CreateSphere(`burning_damage_flame_${system.nextId}_${system.airHitEffects.length}_${index}`, {
       diameter: 0.48 + stableUnitNoise(system.nextId + index * 19) * 0.28,
       segments: 10
     }, system.scene);
-    flame.parent = system.root;
+    flame.parent = parent ?? system.root;
     flame.material = system.materials.volcanicSmokeWarm;
     flame.position.copyFrom(position.add(drift).add(new Vector3(
       (stableUnitNoise(system.nextId + index * 23) - 0.5) * 0.8,
@@ -8770,13 +8837,13 @@ function createBurningDamageTrail(system, position, drift = Vector3.Zero()) {
   }
 }
 
-function createDamageSmokePuff(system, position) {
+function createDamageSmokePuff(system, position, parent = null) {
   const id = `${system.nextId}_${system.airHitEffects.length}`;
   const puff = MeshBuilder.CreateSphere(`damage_smoke_${id}`, {
     diameter: 1.0,
     segments: 10
   }, system.scene);
-  puff.parent = system.root;
+  puff.parent = parent ?? system.root;
   puff.material = system.materials.volcanicSmoke;
   puff.position.copyFrom(position.add(new Vector3(
     (stableUnitNoise(system.nextId + 17) - 0.5) * 1.2,
@@ -8956,6 +9023,7 @@ function updateAirHitEffect(effect, dt) {
 function disposeAirHitEffect(effect) {
   effect.mesh?.dispose();
   effect.light?.dispose();
+  effect.anchor?.dispose();
 }
 
 function disposeFlakProjectile(projectile) {

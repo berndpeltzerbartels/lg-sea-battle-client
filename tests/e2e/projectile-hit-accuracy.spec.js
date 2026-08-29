@@ -246,6 +246,35 @@ test('flak hull impacts do not sink a nearby ship directly astern', async ({ pag
   expect(scenarioState.flakHits ?? []).toEqual([]);
 });
 
+test('flak critical ship hits burn before the ship starts sinking', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, FLAK_ASTERN_BOAT_SCENARIO, testInfo);
+  await page.evaluate(() => window.seaBattleScenarioTest.setPlayerNavigationState({
+    heading: 0,
+    speed: 0,
+    engineOrder: 2
+  }));
+
+  const target = await targetPoint(request, 'dark-S2', { localZ: 2.4, y: 3.6 });
+  const shot = await fireFlakBurstAt(page, target, 4);
+  expect(shot.fire).toBe('ok');
+  expect(Math.abs(shot.aim?.miss ?? 99)).toBeLessThan(0.08);
+
+  await expectVehicleState(request, 'dark-S2', 'sunk', 'critical flak should still count as a ship kill on the server');
+  await page.waitForFunction(() => window.seaBattleScenarioTest.vehicleVisual('dark-S2')?.visualState === 'ship-critical-hit');
+  const early = await page.evaluate(() => window.seaBattleScenarioTest.vehicleVisual('dark-S2'));
+  expect(early.roll, 'ship should not take immediate heavy list from a bridge hit').toBeLessThan(0.08);
+  await page.waitForTimeout(800);
+  const burning = await page.evaluate(() => window.seaBattleScenarioTest.vehicleVisual('dark-S2'));
+  expect(burning.visualState).toBe('ship-critical-hit');
+  expect(burning.roll, 'ship should burn upright before the delayed explosion').toBeLessThan(0.08);
+  await captureFrames(page, testInfo, 'flak-critical-ship-burns-before-sinking', 4, 180);
+
+  await page.waitForFunction(() => {
+    const visual = window.seaBattleScenarioTest.vehicleVisual('dark-S2');
+    return visual?.visualState === 'sinking' || visual?.visualState === 'sunk';
+  }, null, { timeout: 5_000 });
+});
+
 extendedTest('flak plane-hit matrix is visible and works from several plane headings', async ({ page, request }, testInfo) => {
   const samples = [
     { heading: 0, localX: 0, localZ: 0, yOffset: 0, expected: 'sunk', label: 'center' },
