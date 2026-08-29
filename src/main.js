@@ -137,7 +137,7 @@ const shipFleetMaterialPalettes = {
     body: { diffuse: [0.62, 0.63, 0.62], specular: [0.11, 0.12, 0.12] }
   },
   dark: {
-    body: { diffuse: [0.2, 0.24, 0.26], specular: [0.045, 0.055, 0.06] }
+    body: { diffuse: [0.24, 0.31, 0.38], specular: [0.06, 0.085, 0.115] }
   },
   green: {
     body: { diffuse: [0.2, 0.34, 0.25], specular: [0.06, 0.08, 0.06] }
@@ -427,9 +427,9 @@ sun.diffuse = new Color3(0.83, 0.85, 0.83);
 sun.specular = new Color3(0.48, 0.55, 0.62);
 
 const ambient = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
-ambient.intensity = 0.34;
-ambient.diffuse = new Color3(0.46, 0.56, 0.66);
-ambient.groundColor = new Color3(0.16, 0.19, 0.21);
+ambient.intensity = 0.42;
+ambient.diffuse = new Color3(0.5, 0.6, 0.7);
+ambient.groundColor = new Color3(0.2, 0.24, 0.28);
 if (sideViewSandboxMode) {
   sun.direction = new Vector3(-0.55, -0.7, -0.45);
   sun.position = new Vector3(55, 70, 45);
@@ -790,7 +790,7 @@ function isTextEditingElement(element) {
       || element.isContentEditable;
 }
 
-const defaultEngineSpeeds = [-8.0, -2.2, 0, 0.69, 2.25, 4.75, 8.0, 12.0, 15.5];
+const defaultEngineSpeeds = [-8.0, -2.2, 0, 0.9, 2.93, 6.18, 10.4, 12.0, 15.5];
 const engineOrderLabels = [
   { label: "Astern Full", shortLabel: "Full Ast" },
   { label: "Astern Half", shortLabel: "Half Ast" },
@@ -799,8 +799,8 @@ const engineOrderLabels = [
   { label: "Ahead 1/3", shortLabel: "1/3" },
   { label: "Ahead Half", shortLabel: "Half" },
   { label: "Ahead 2/3", shortLabel: "2/3" },
-  { label: "Ahead Full", shortLabel: "Full" },
-  { label: "Flank" }
+  { label: "Ahead 3/4", shortLabel: "3/4" },
+  { label: "Ahead Full", shortLabel: "Full" }
 ];
 const engineSpeeds = Array.isArray(gameConfig.engineSpeeds) && gameConfig.engineSpeeds.length === engineOrderLabels.length
   ? gameConfig.engineSpeeds
@@ -967,6 +967,37 @@ const torpedoLaunchDefaults = {
   waterEntryZ: 2.62,
   runStartZ: 2.88
 };
+
+function shipTorpedoTubeLaunchPoints(origin, heading, tubeSide) {
+  const launchHeading = Number.isFinite(heading) ? heading : 0;
+  const forward = getForwardVector(launchHeading);
+  const right = getRightVector(launchHeading);
+  const side = tubeSide === -1 ? -1 : 1;
+  const tuning = torpedoLaunchDefaults;
+  const tubeX = side * tuning.tubeX * torpedoBoatVisualScale;
+  const tubeStartZ = tuning.startZ * torpedoBoatVisualScale;
+  const waterEntryZ = tuning.waterEntryZ * torpedoBoatVisualScale;
+  const runStartZ = tuning.runStartZ * torpedoBoatVisualScale;
+  const tubeStartY = tuning.startY * torpedoBoatVisualScale;
+  const at = (localZ, localY) => origin
+    .add(right.scale(tubeX))
+    .add(forward.scale(localZ))
+    .add(new Vector3(0, localY, 0));
+
+  return {
+    heading: launchHeading,
+    forward,
+    right,
+    tubeSide: side,
+    sideOffset: tubeX,
+    start: at(tubeStartZ, tubeStartY),
+    waterStart: at(waterEntryZ, 0.05),
+    launchEnd: at(waterEntryZ, -0.04),
+    puffPosition: at(waterEntryZ + 0.12, 0.02),
+    runStart: at(runStartZ, 0.05),
+    muzzlePosition: at(tubeStartZ, tubeStartY)
+  };
+}
 const airDroppedTorpedoFallSeconds = 1.55;
 const airDroppedTorpedoMaxVisualFallSeconds = 4.2;
 const airDroppedTorpedoSubmergedDistance = 20;
@@ -1266,7 +1297,12 @@ scene.onBeforeRenderObservable.add(() => {
   const displayedSpeed = Math.abs(speed) < 0.08 ? 0 : Math.abs(speed);
   speedValue.textContent = displayedSpeed.toFixed(1);
   if (telegraphSpeedValue) telegraphSpeedValue.textContent = displayedSpeed.toFixed(1);
-  if (telegraphOrderValue) telegraphOrderValue.textContent = engineOrders[engineOrder].shortLabel ?? engineOrders[engineOrder].label;
+  if (telegraphOrderValue) {
+    const currentEngineOrder = engineOrders[engineOrder];
+    telegraphOrderValue.textContent = currentEngineOrder.shortLabel ?? currentEngineOrder.label;
+    telegraphOrderValue.classList.toggle("is-stop", currentEngineOrder.speed === 0);
+    telegraphOrderValue.classList.toggle("is-astern", currentEngineOrder.speed < 0);
+  }
   updateAltimeter(scoutPlaneAltitude);
   engineValue.textContent = engineOrders[engineOrder].label;
   updateTelegraphSteps(telegraphSteps, engineOrder);
@@ -3129,7 +3165,7 @@ async function loadGameConfig() {
       torpedoBoat: 3,
       scoutPlane: 1.5
     },
-    engineSpeeds: [-8.0, -2.2, 0, 0.69, 2.25, 4.75, 8.0, 12.0, 15.5]
+    engineSpeeds: [-8.0, -2.2, 0, 0.9, 2.93, 6.18, 10.4, 12.0, 15.5]
   };
   if (directSideViewSandboxRequested) {
     return fallback;
@@ -4900,7 +4936,7 @@ function createTelegraphSteps(orders, parent) {
 
   return orders.map((order, index) => {
     const step = document.createElement("div");
-    step.className = `telegraph-step${order.speed === 0 ? " is-stop" : ""}`;
+    step.className = `telegraph-step${order.speed === 0 ? " is-stop" : ""}${order.speed < 0 ? " is-astern" : ""}`;
     step.textContent = order.shortLabel ?? order.label;
     step.dataset.order = String(index);
     parent.prepend(step);
@@ -7407,6 +7443,34 @@ function installScenarioTestHooks() {
           splashCreated: Boolean(visual.airDropSplashCreated)
         }));
     },
+    shipTorpedoMuzzleSmoke() {
+      return torpedoSystem.muzzleEffects
+        .filter((effect) => effect.kind === "steam")
+        .map((effect) => ({
+          torpedoId: effect.torpedoId ?? null,
+          mode: effect.mode ?? null,
+          x: Number(effect.mesh.position.x.toFixed(3)),
+          y: Number(effect.mesh.position.y.toFixed(3)),
+          z: Number(effect.mesh.position.z.toFixed(3)),
+          launchX: Number(effect.launchOrigin.x.toFixed(3)),
+          launchY: Number(effect.launchOrigin.y.toFixed(3)),
+          launchZ: Number(effect.launchOrigin.z.toFixed(3)),
+          verticalOffset: Number((effect.mesh.position.y - effect.launchOrigin.y).toFixed(3)),
+          diameter: Number((effect.diameter ?? 0).toFixed(3)),
+          burstSpeed: Number((effect.burstSpeed ?? 0).toFixed(3))
+        }));
+    },
+    serverTorpedoVisuals() {
+      return Array.from(torpedoSystem.serverVisuals.values())
+        .map((visual) => ({
+          id: visual.id,
+          launchMode: visual.launchMode,
+          shipId: visual.shipId ?? null,
+          startX: Number(visual.launchStart.x.toFixed(3)),
+          startY: Number(visual.launchStart.y.toFixed(3)),
+          startZ: Number(visual.launchStart.z.toFixed(3))
+        }));
+    },
     vehicleVisual(vehicleId) {
       if (vehicleId === playerServerShipId || vehicleId === pendingPlayerServerShip?.id) {
         return {
@@ -9419,39 +9483,12 @@ function firePlayerTorpedo(system, shipRoot, heading, turnVelocity, shipSpeed, n
   // Firing while turning is the normal attack maneuver. Aim very slightly into the current turn
   // so the shot feels tied to the tube direction, without making torpedoes steer after launch.
   const launchHeading = heading + clamp(turnVelocity, -0.42, 0.42) * 0.2;
-  const forward = getForwardVector(launchHeading);
-  const right = getRightVector(launchHeading);
-  const tuning = torpedoLaunchDefaults;
-  const tubeX = tubeSide * tuning.tubeX * torpedoBoatVisualScale;
-  const tubeStartZ = tuning.startZ * torpedoBoatVisualScale;
-  const waterEntryZ = tuning.waterEntryZ * torpedoBoatVisualScale;
-  const runStartZ = tuning.runStartZ * torpedoBoatVisualScale;
-  const tubeStartY = tuning.startY * torpedoBoatVisualScale;
-  const launchStart = shipRoot.position
-    .add(right.scale(tubeX))
-    .add(forward.scale(tubeStartZ))
-    .add(new Vector3(0, tubeStartY, 0));
-  const muzzleEffectStart = shipRoot.position
-    .add(right.scale(tubeX))
-    .add(forward.scale(tubeStartZ))
-    .add(new Vector3(0, tubeStartY, 0));
-  const launchEnd = shipRoot.position
-    .add(right.scale(tubeX))
-    .add(forward.scale(waterEntryZ))
-    .add(new Vector3(0, -0.04, 0));
-  const muzzlePuffPoint = shipRoot.position
-    .add(right.scale(tubeX))
-    .add(forward.scale(waterEntryZ + 0.12))
-    .add(new Vector3(0, 0.02, 0));
-  const runStart = shipRoot.position
-    .add(right.scale(tubeX))
-    .add(forward.scale(runStartZ))
-    .add(new Vector3(0, 0.06, 0));
+  const launch = shipTorpedoTubeLaunchPoints(shipRoot.position, launchHeading, tubeSide);
 
   const root = new TransformNode(`torpedo_${system.nextId}`, system.scene);
   root.parent = system.root;
   root.scaling.setAll(torpedoVisualScale);
-  root.position.copyFrom(launchStart);
+  root.position.copyFrom(launch.start);
   root.rotationQuaternion = Quaternion.FromEulerAngles(0, launchHeading, 0);
 
   const body = MeshBuilder.CreateCylinder(`${root.name}_body`, {
@@ -9481,10 +9518,10 @@ function firePlayerTorpedo(system, shipRoot, heading, turnVelocity, shipSpeed, n
     body,
     wake,
     heading: launchHeading,
-    forward,
-    launchStart,
-    launchEnd,
-    runStart,
+    forward: launch.forward,
+    launchStart: launch.start,
+    launchEnd: launch.launchEnd,
+    runStart: launch.runStart,
     age: 0,
     runDistance: 0,
     speed: shipTorpedoBaseSpeed + Math.max(0, shipSpeed) * shipTorpedoSpeedGain,
@@ -9496,8 +9533,8 @@ function firePlayerTorpedo(system, shipRoot, heading, turnVelocity, shipSpeed, n
   };
   system.nextId += 1;
   system.active.push(torpedo);
-  createLaunchPuff(system, muzzlePuffPoint, launchHeading, tubeSide);
-  createMuzzleEffect(system, muzzleEffectStart, launchHeading, tubeSide, shipSpeed);
+  createLaunchPuff(system, launch.puffPosition, launchHeading, tubeSide);
+  createMuzzleEffect(system, launch.muzzlePosition, launchHeading, tubeSide, shipSpeed);
   return true;
 }
 
@@ -9689,6 +9726,7 @@ function createServerTorpedoVisual(system, snapshot, snapshotReceivedAt = time, 
 
   const visual = {
     id: snapshot.id,
+    shipId: snapshot.shipId ?? null,
     root,
     body,
     nose,
@@ -9740,7 +9778,10 @@ function createServerTorpedoVisual(system, snapshot, snapshotReceivedAt = time, 
 
   if (launch.showMuzzleEffect) {
     createLaunchPuff(system, launch.puffPosition, launch.heading, launch.tubeSide);
-    createMuzzleEffect(system, launch.muzzlePosition, launch.heading, launch.tubeSide, launch.sourceSpeed);
+    createMuzzleEffect(system, launch.muzzlePosition, launch.heading, launch.tubeSide, launch.sourceSpeed, {
+      torpedoId: snapshot.id,
+      mode: launch.mode
+    });
   }
   return visual;
 }
@@ -9804,7 +9845,6 @@ function getServerTorpedoLaunch(system, snapshot, snapshotServerTime = null) {
 
   if (isOwnTorpedo && isFreshShipLaunch && boat?.root?.position && distance2D(boat.root.position, serverPosition) < 35) {
     const launchHeading = Number.isFinite(heading) ? heading : 0;
-    const forward = getForwardVector(launchHeading);
     const right = getRightVector(launchHeading);
     const tuning = torpedoLaunchDefaults;
     const serverOffset = serverPosition.subtract(boat.root.position);
@@ -9821,42 +9861,19 @@ function getServerTorpedoLaunch(system, snapshot, snapshotServerTime = null) {
       system.pendingOwnTubeSide = null;
     }
     system.nextTube = tubeSide < 0 ? 1 : 0;
-    const tubeX = tubeSide * tuning.tubeX * torpedoBoatVisualScale;
-    const tubeStartZ = tuning.startZ * torpedoBoatVisualScale;
-    const waterEntryZ = tuning.waterEntryZ * torpedoBoatVisualScale;
-    const tubeStartY = tuning.startY * torpedoBoatVisualScale;
-    const start = boat.root.position
-      .add(right.scale(tubeX))
-      .add(forward.scale(tubeStartZ))
-      .add(new Vector3(0, tubeStartY, 0));
-    const waterStart = boat.root.position
-      .add(right.scale(tubeX))
-      .add(forward.scale(waterEntryZ))
-      .add(new Vector3(0, 0.05, 0));
-    const runStart = boat.root.position
-      .add(right.scale(tubeX))
-      .add(forward.scale(tuning.runStartZ * torpedoBoatVisualScale))
-      .add(new Vector3(0, 0.05, 0));
-    const puffPosition = boat.root.position
-      .add(right.scale(tubeX))
-      .add(forward.scale(waterEntryZ + 0.12))
-      .add(new Vector3(0, 0.02, 0));
-    const muzzlePosition = boat.root.position
-      .add(right.scale(tubeX))
-      .add(forward.scale(tubeStartZ))
-      .add(new Vector3(0, tubeStartY, 0));
+    const launch = shipTorpedoTubeLaunchPoints(boat.root.position, launchHeading, tubeSide);
 
     document.body.dataset.ownServerTorpedoLaunch = "local";
     return {
       mode: "local-tube",
       heading: launchHeading,
-      start,
-      waterStart,
-      runStart,
-      puffPosition,
-      muzzlePosition,
+      start: launch.start,
+      waterStart: launch.waterStart,
+      runStart: launch.runStart,
+      puffPosition: launch.puffPosition,
+      muzzlePosition: launch.muzzlePosition,
       tubeSide,
-      sideOffset: tubeX,
+      sideOffset: launch.sideOffset,
       blendUntil: time + 0.35,
       blendDuration: 0.35,
       showMuzzleEffect: true,
@@ -9867,6 +9884,28 @@ function getServerTorpedoLaunch(system, snapshot, snapshotServerTime = null) {
 
   if (isAirDropped) {
     document.body.dataset.serverTorpedoLaunch = "air-drop-restored";
+  }
+
+  if (!isAirDropped && !isOwnTorpedo && isFreshShipLaunch) {
+    const shooterPosition = shooterMotion?.root?.position
+      ?? (shooterShip ? new Vector3(shooterShip.x, remoteVehicleY(shooterShip), shooterShip.z) : null);
+    if (shooterPosition) {
+      const tubeSide = snapshot.tubeSide === -1 || snapshot.tubeSide === 1 ? snapshot.tubeSide : 1;
+      const launch = shipTorpedoTubeLaunchPoints(shooterPosition, heading, tubeSide);
+      document.body.dataset.serverTorpedoLaunch = "remote-tube";
+      return {
+        mode: "server-position",
+        heading,
+        start: serverPosition,
+        puffPosition: launch.puffPosition,
+        muzzlePosition: launch.muzzlePosition,
+        tubeSide,
+        blendUntil: 0,
+        showMuzzleEffect: true,
+        sourceVehicleType: null,
+        sourceSpeed: Math.max(0, Number.isFinite(shooterShip?.speed) ? shooterShip.speed : shooterMotion?.speed ?? 0)
+      };
+    }
   }
 
   return {
@@ -10395,42 +10434,49 @@ function createLaunchPuff(system, position, heading, tubeSide) {
   }
 }
 
-function createMuzzleEffect(system, position, heading, tubeSide, sourceSpeed = 0) {
+function createMuzzleEffect(system, position, heading, tubeSide, sourceSpeed = 0, options = {}) {
   const forward = getForwardVector(heading);
   const right = getRightVector(heading);
   const side = tubeSide < 0 ? -1 : 1;
   const carriedForwardSpeed = Math.max(0, Number.isFinite(sourceSpeed) ? sourceSpeed : 0);
+  const launchOrigin = position.clone();
 
-  for (let i = 0; i < 4; i += 1) {
+  for (let i = 0; i < 3; i += 1) {
     const seed = system.nextId * 43 + i * 17;
-    const sizeJitter = 0.82 + stableUnitNoise(seed + 3) * 0.48;
-    const sideJitter = (stableUnitNoise(seed + 7) - 0.5) * 0.025;
-    const liftJitter = (stableUnitNoise(seed + 11) - 0.5) * 0.06;
+    const sizeJitter = 0.92 + stableUnitNoise(seed + 3) * 0.22;
+    const sideJitter = (stableUnitNoise(seed + 7) - 0.5) * 0.04;
+    const liftJitter = (stableUnitNoise(seed + 11) - 0.5) * 0.045;
+    const diameter = (0.56 + i * 0.08) * sizeJitter;
     const steam = MeshBuilder.CreateSphere(`torpedo_muzzle_steam_${system.nextId}_${i}`, {
-      diameter: (0.2 + i * 0.035) * sizeJitter,
+      diameter,
       segments: 8
     }, system.scene);
     steam.parent = system.root;
     steam.material = system.materials.foam;
     steam.position.copyFrom(
       position
-        .add(forward.scale(0.26 + i * 0.2 + stableUnitNoise(seed + 13) * 0.07))
-        .add(right.scale(side * (0.07 + i * 0.022) + sideJitter))
-        .add(new Vector3(0, 0.22 + i * 0.035 + liftJitter, 0))
+        .add(forward.scale(0.42 + i * 0.68 + stableUnitNoise(seed + 13) * 0.1))
+        .add(right.scale(side * (0.03 + i * 0.02) + sideJitter))
+        .add(new Vector3(0, 0.035 + i * 0.028 + liftJitter, 0))
     );
-    steam.scaling.x = 1.12 + stableUnitNoise(seed + 19) * 0.45;
-    steam.scaling.y = 0.72 + stableUnitNoise(seed + 23) * 0.24;
-    steam.scaling.z = 0.82 + stableUnitNoise(seed + 29) * 0.52;
-    steam.rotation.y = heading + (stableUnitNoise(seed + 31) - 0.5) * 0.42;
+    steam.scaling.x = 1.08 + stableUnitNoise(seed + 19) * 0.22;
+    steam.scaling.y = 0.74 + stableUnitNoise(seed + 23) * 0.16;
+    steam.scaling.z = 1.0 + stableUnitNoise(seed + 29) * 0.28;
+    steam.rotation.y = heading + (stableUnitNoise(seed + 31) - 0.5) * 0.55;
     system.muzzleEffects.push({
       mesh: steam,
       age: 0,
-      lifetime: 0.28 + stableUnitNoise(seed + 37) * 0.1,
+      lifetime: 0.18 + stableUnitNoise(seed + 37) * 0.06,
       seed: i + 1,
       kind: "steam",
       forward: forward.clone(),
       carriedForwardSpeed,
-      side
+      burstSpeed: Math.max(19 + i * 2.4, carriedForwardSpeed * 0.95 + 15 + i * 1.1),
+      side,
+      torpedoId: options.torpedoId ?? null,
+      mode: options.mode ?? null,
+      launchOrigin: launchOrigin.clone(),
+      diameter
     });
   }
 }
@@ -10498,12 +10544,16 @@ function updateTorpedoSystem(system, dt, time, enemyMotions, landZones, playerPo
       return false;
     }
     if (effect.kind === "steam") {
-      const grow = 1 + t * 1.25;
-      effect.mesh.scaling.x = grow;
-      effect.mesh.scaling.z = 1 + t * 1.65;
-      effect.mesh.position.addInPlace(effect.forward.scale(dt * ((effect.carriedForwardSpeed ?? 0) + 0.55 + effect.seed * 0.08)));
-      effect.mesh.position.y += dt * (0.09 + effect.seed * 0.01);
-      effect.mesh.rotation.y += dt * 0.18 * (effect.side || 1);
+      const burst = Math.max(0, 1 - t);
+      const grow = 1 + t * 1.15;
+      effect.mesh.scaling.x = grow * (1 + t * 0.18);
+      effect.mesh.scaling.z = grow * (1.05 + t * 0.55);
+      effect.mesh.position.addInPlace(effect.forward.scale(dt * (
+        (effect.carriedForwardSpeed ?? 0) * 0.08
+        + (effect.burstSpeed ?? 12) * (0.28 + burst * burst * 1.45)
+      )));
+      effect.mesh.position.y += dt * (0.08 + effect.seed * 0.012 + burst * 0.025);
+      effect.mesh.rotation.y += dt * 0.42 * (effect.side || 1);
     } else {
       const scale = effect.kind === "ring" ? 1 + t * 1.7 : 1 + t * 0.8;
       effect.mesh.scaling.x = scale;
@@ -11419,6 +11469,11 @@ function createMaterials(scene) {
   funnel.specularColor = new Color3(0.05, 0.05, 0.05);
   funnel.backFaceCulling = false;
 
+  const tubeOpening = new StandardMaterial("tube_opening_material", scene);
+  tubeOpening.diffuseColor = new Color3(0.006, 0.008, 0.011);
+  tubeOpening.emissiveColor = Color3.Black();
+  tubeOpening.specularColor = Color3.Black();
+
   const glass = new StandardMaterial("glass_material", scene);
   glass.diffuseColor = new Color3(0.18, 0.42, 0.54);
   glass.emissiveColor = new Color3(0.025, 0.09, 0.12);
@@ -11561,6 +11616,7 @@ function createMaterials(scene) {
     deck,
     cabin,
     funnel,
+    tubeOpening,
     glass,
     lightBridgeWindow,
     darkBridgeWindow,
@@ -11828,6 +11884,18 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
     cap.position.z = 2.26;
     cap.rotation.x = Math.PI / 2;
     cap.material = tubeMaterial;
+
+    const opening = MeshBuilder.CreateCylinder(`${name}_tube_opening_${i}`, {
+      diameter: 0.142,
+      height: 0.004,
+      tessellation: 12
+    }, scene);
+    opening.parent = root;
+    opening.position.x = tube.position.x;
+    opening.position.y = tube.position.y;
+    opening.position.z = 2.302;
+    opening.rotation.x = Math.PI / 2;
+    opening.material = materials.tubeOpening;
   }
 
   const hatch = MeshBuilder.CreateBox(`${name}_deck_hatch`, { width: 0.46, height: 0.11, depth: 0.52 }, scene);
@@ -12891,6 +12959,18 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = 
     tube.position.z = 1.38;
     tube.rotation.x = Math.PI / 2;
     tube.material = funnelMaterial;
+
+    const opening = MeshBuilder.CreateCylinder(`${name}_tube_opening_${i}`, {
+      diameter: 0.152,
+      height: 0.004,
+      tessellation: 10
+    }, scene);
+    opening.parent = root;
+    opening.position.x = tube.position.x;
+    opening.position.y = tube.position.y;
+    opening.position.z = 2.302;
+    opening.rotation.x = Math.PI / 2;
+    opening.material = materials.tubeOpening;
   }
 
   const bowCannon = createBowCannon(scene, materials, root, name, teamMaterials, 2.42, false);

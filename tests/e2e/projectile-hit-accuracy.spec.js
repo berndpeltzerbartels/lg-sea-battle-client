@@ -115,6 +115,19 @@ objects:
 2: ship, dark, scenario [orientation: 270°, speed: 0knt]
 `;
 
+const REMOTE_TORPEDO_MUZZLE_SMOKE_SCENARIO = `
+scenario: playwright-remote-torpedo-muzzle-smoke
+version: 9418
+cell: 30
+map:
+.......
+.1..2..
+.......
+objects:
+1: ship, light, bot [orientation: 90°, speed: 0knt]
+2: ship, dark, bot [orientation: 270°, speed: 0knt]
+`;
+
 const AIR_TORPEDO_DROP_SCENARIO = `
 scenario: playwright-air-torpedo-drop
 version: 9415
@@ -409,6 +422,31 @@ test('torpedo fired from the player ship hits a ship directly ahead', async ({ p
   await captureFrames(page, testInfo, 'torpedo-run', 16, 220);
 
   await expectVehicleState(request, 'dark-S2', 'sunk', 'torpedo should sink dark-S2');
+});
+
+test('remote ship torpedo smoke starts at the tube instead of above the boat', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, REMOTE_TORPEDO_MUZZLE_SMOKE_SCENARIO, testInfo);
+
+  await page.waitForFunction(() => (
+    window.seaBattleScenarioTest.shipTorpedoMuzzleSmoke()
+      .some((effect) => effect.mode === 'server-position')
+  ), null, { timeout: 10_000 });
+
+  const smoke = await page.evaluate(() => (
+    window.seaBattleScenarioTest.shipTorpedoMuzzleSmoke()
+      .filter((effect) => effect.mode === 'server-position')
+  ));
+  const launchHeights = smoke.map((effect) => effect.launchY);
+  const offsets = smoke.map((effect) => effect.verticalOffset);
+  const diameters = smoke.map((effect) => effect.diameter);
+  const burstSpeeds = smoke.map((effect) => effect.burstSpeed);
+
+  expect(smoke).toHaveLength(3);
+  expect(Math.min(...launchHeights), `remote tube launch heights: ${JSON.stringify(launchHeights)}`).toBeGreaterThan(1.35);
+  expect(Math.max(...launchHeights), `remote tube launch heights: ${JSON.stringify(launchHeights)}`).toBeLessThan(2.05);
+  expect(Math.max(...offsets), `muzzle smoke should begin close to the tube: ${JSON.stringify(offsets)}`).toBeLessThan(0.18);
+  expect(Math.min(...diameters), `muzzle smoke should be at least tube-sized: ${JSON.stringify(diameters)}`).toBeGreaterThan(0.42);
+  expect(Math.min(...burstSpeeds), `muzzle smoke should leave the tube as a burst: ${JSON.stringify(burstSpeeds)}`).toBeGreaterThan(18);
 });
 
 test('air-dropped torpedo falls from plane height without snapping forward at water entry', async ({ page, request }, testInfo) => {
