@@ -227,7 +227,7 @@ test('weapon view and projectile start stay on the visible weapon with and witho
   }
 });
 
-test('flak can sink a nearby ship directly astern', async ({ page, request }, testInfo) => {
+test('flak hull impacts do not sink a nearby ship directly astern', async ({ page, request }, testInfo) => {
   await openScenario(page, request, FLAK_ASTERN_BOAT_SCENARIO, testInfo);
   await page.evaluate(() => window.seaBattleScenarioTest.setPlayerNavigationState({
     heading: 0,
@@ -241,7 +241,9 @@ test('flak can sink a nearby ship directly astern', async ({ page, request }, te
 
   expect(shot.fire).toBe('ok');
   expect(Math.abs(shot.aim?.miss ?? 99)).toBeLessThan(0.08);
-  await expectVehicleState(request, 'dark-S2', 'sunk', 'flak should sink a nearby ship directly astern');
+  await expectVehicleState(request, 'dark-S2', 'active', 'flak hull impacts should not sink dark-S2');
+  const scenarioState = await gameState(request);
+  expect(scenarioState.flakHits ?? []).toEqual([]);
 });
 
 extendedTest('flak plane-hit matrix is visible and works from several plane headings', async ({ page, request }, testInfo) => {
