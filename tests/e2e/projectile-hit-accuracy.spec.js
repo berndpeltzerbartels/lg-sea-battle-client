@@ -273,6 +273,8 @@ test('flak critical ship hits burn before the ship starts sinking', async ({ pag
     const visual = window.seaBattleScenarioTest.vehicleVisual('dark-S2');
     return visual?.visualState === 'sinking' || visual?.visualState === 'sunk';
   }, null, { timeout: 5_000 });
+  const sinkingStart = await page.evaluate(() => window.seaBattleScenarioTest.vehicleVisual('dark-S2'));
+  expect(Math.abs(sinkingStart.roll), 'ship should start listing gently after a flak bridge kill').toBeLessThan(0.2);
 });
 
 extendedTest('flak plane-hit matrix is visible and works from several plane headings', async ({ page, request }, testInfo) => {

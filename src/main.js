@@ -6580,13 +6580,17 @@ function updateEnemyHelmTowardTarget(motion, playerPosition, landZones, time) {
 function beginEnemySinking(motion, side, time) {
   if (motion.state !== "active" && motion.state !== "ship-critical-hit") return;
 
+  const fromCriticalShipHit = motion.state === "ship-critical-hit";
   motion.state = "sinking";
   motion.sinkAge = 0;
   motion.sinkSide = side || -1;
   motion.sinkStartY = motion.root.position.y;
   motion.engineOrder = 0;
   motion.rudder = 0;
-  motion.rollImpulse = motion.sinkSide * 0.5;
+  motion.rollImpulse = motion.sinkSide * (fromCriticalShipHit ? 0.06 : 0.5);
+  motion.sinkRollStart = fromCriticalShipHit ? 0.0 : 0.12;
+  motion.sinkRollAmount = fromCriticalShipHit ? 1.08 : 1.45;
+  motion.sinkDuration = fromCriticalShipHit ? 6.6 : 5.2;
   motion.timers.forEach((timer) => window.clearTimeout(timer));
   motion.timers = [];
   if (motion.bowWake) {
@@ -6651,14 +6655,14 @@ function updateEnemyShipCriticalHit(motion, dt, now) {
 function updateEnemySinking(motion, dt, time) {
   motion.sinkAge += dt;
   motion.speed *= Math.max(0, 1 - dt * 1.55);
-  motion.rollImpulse += (0 - motion.rollImpulse) * Math.min(1, dt * 1.2);
+  motion.rollImpulse += (0 - motion.rollImpulse) * Math.min(1, dt * 1.8);
 
   const forward = new Vector3(Math.sin(motion.heading), 0, Math.cos(motion.heading));
   motion.root.position.addInPlace(forward.scale(motion.speed * dt));
 
-  const t = clamp(motion.sinkAge / 5.2, 0, 1);
+  const t = clamp(motion.sinkAge / (motion.sinkDuration ?? 5.2), 0, 1);
   const ease = easeInOutCubic(t);
-  const roll = motion.sinkSide * (0.12 + ease * 1.45) + motion.rollImpulse;
+  const roll = motion.sinkSide * ((motion.sinkRollStart ?? 0.12) + ease * (motion.sinkRollAmount ?? 1.45)) + motion.rollImpulse;
   const pitch = -ease * 0.28 + Math.sin(time * 1.7) * (1 - t) * 0.025;
   motion.root.position.y = motion.sinkStartY - ease * torpedoBoatSinkDepth + Math.sin(time * 3.1) * (1 - t) * 0.035;
   motion.root.rotationQuaternion = Quaternion.FromEulerAngles(pitch, motion.heading, roll);
@@ -8457,9 +8461,9 @@ function createScoutPlaneCriticalHitSequence(system, position) {
 }
 
 function createShipSuperstructureHitSequence(system, position, parent = null) {
-  createShipImpactSpark(system, position, 0.72, 0.32, parent);
-  createShipSuperstructureFire(system, position, 4, 0.92, parent);
-  createShipSuperstructureSmoke(system, position, 5, 1.12, parent);
+  createShipImpactSpark(system, position, 0.86, 0.36, parent);
+  createShipSuperstructureFire(system, position, 7, 1.18, parent);
+  createShipSuperstructureSmoke(system, position, 8, 1.34, parent);
 }
 
 function createFlakWaterImpactEffect(system, position) {
@@ -8706,10 +8710,10 @@ function createShipSuperstructureExplosion(system, position, parent = null) {
   const lightPosition = parent
     ? Vector3.TransformCoordinates(center, parent.getWorldMatrix())
     : center;
-  createFlakImpactFlash(system, system.nextId++, lightPosition, 0.72, 82, 4.6);
-  createShipImpactSpark(system, center, 1.35, 0.34, parent);
-  createShipSuperstructureFire(system, center, 7, 1.35, parent);
-  createShipSuperstructureSmoke(system, center, 9, 1.55, parent);
+  createFlakImpactFlash(system, system.nextId++, lightPosition, 0.94, 118, 7.2);
+  createShipImpactSpark(system, center, 1.82, 0.46, parent);
+  createShipSuperstructureFire(system, center, 10, 1.62, parent);
+  createShipSuperstructureSmoke(system, center, 12, 1.85, parent);
 }
 
 function createShipSuperstructureFire(system, position, count, scale = 1, parent = null) {
