@@ -8640,10 +8640,17 @@ function createShipDamageAnchor(system, motion, worldPosition, lifetime = 6) {
 
 function createCannonShipHitEffect(system, motion, worldPosition) {
   const anchor = createShipDamageAnchor(system, motion, worldPosition, 4.2);
-  createFlakImpactFlash(system, system.nextId++, worldPosition.add(new Vector3(0, 0.32, 0)), 0.52, 92, 5.4);
-  createShipImpactSpark(system, Vector3.Zero(), 1.05, 0.28, anchor);
-  createShipSuperstructureFire(system, Vector3.Zero(), 5, 1.05, anchor);
-  createShipSuperstructureSmoke(system, Vector3.Zero(), 6, 1.18, anchor);
+  createShipSuperstructureExplosion(system, Vector3.Zero(), anchor, {
+    scale: 0.92,
+    lightRange: 124,
+    intensity: 7.4,
+    lifetime: 0.74,
+    sparkDiameter: 1.85,
+    fireCount: 8,
+    smokeCount: 7
+  });
+  createShipSuperstructureFire(system, Vector3.Zero(), 4, 1.08, anchor);
+  createShipSuperstructureSmoke(system, Vector3.Zero(), 4, 1.08, anchor);
 }
 
 function createShipImpactSpark(system, position, diameter = 0.42, lifetime = 0.22, parent = null) {
