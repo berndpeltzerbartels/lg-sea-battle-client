@@ -9,7 +9,7 @@ body {
   --instrument-panel-inner-width: calc(var(--instrument-panel-width) - var(--instrument-panel-padding) * 2);
   --control-panel-width: min(430px, calc(100vw - var(--view-left) - 44px));
   --control-panel-height: 86px;
-  --battle-station-height: 78px;
+  --battle-station-height: 112px;
   --radar-size: calc(var(--instrument-panel-inner-width) - 20px);
   --radar-panel-extra-height: 53px;
   --map-panel-chrome-height: 112px;
@@ -698,7 +698,7 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
   width: calc(var(--instrument-panel-width) - var(--instrument-panel-padding) * 2);
   height: var(--battle-station-height);
   box-sizing: border-box;
-  padding: 6px 8px;
+  padding: 8px 8px;
   border: 1px solid rgb(155 229 223 / 26%);
   border-radius: 8px;
   background:
@@ -713,8 +713,8 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
   position: absolute;
   left: 18px;
   right: 18px;
-  top: 18px;
-  height: 25px;
+  top: 23px;
+  height: 34px;
   border: 1px solid rgb(155 229 223 / 22%);
   background:
     linear-gradient(180deg, rgb(250 255 255 / 14%), rgb(2 18 25 / 48%) 58%, rgb(0 0 0 / 38%)),
@@ -743,7 +743,7 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 
 .battle-station-bow {
   right: 16px;
-  top: 17px;
+  top: 23px;
   width: 32px;
   height: 6px;
   border-radius: 999px;
@@ -753,17 +753,17 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 .battle-station-deck {
   left: 23%;
   right: 18%;
-  top: 15px;
-  height: 10px;
+  top: 22px;
+  height: 12px;
   border-radius: 60% 12% 12% 60% / 50%;
   background: rgb(214 247 244 / 11%);
 }
 
 .battle-station-bridge-mark {
   left: 45%;
-  top: 7px;
+  top: 12px;
   width: 22px;
-  height: 18px;
+  height: 24px;
   border-radius: 3px;
   background: rgb(214 247 244 / 32%);
   box-shadow: 18px 2px 0 -7px rgb(214 247 244 / 18%);
@@ -771,7 +771,7 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 
 .battle-station-cabin {
   left: 39%;
-  top: 16px;
+  top: 27px;
   width: 42px;
   height: 9px;
   border-radius: 3px;
@@ -780,9 +780,9 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 
 .battle-station-funnel {
   left: 56%;
-  top: 2px;
+  top: 5px;
   width: 10px;
-  height: 21px;
+  height: 30px;
   border-radius: 2px;
   background: rgb(4 13 17 / 72%);
   box-shadow: 0 0 0 1px rgb(214 247 244 / 16%);
@@ -797,16 +797,16 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 }
 
 .battle-station-tubes-port {
-  top: 12px;
+  top: 18px;
 }
 
 .battle-station-tubes-starboard {
-  bottom: 12px;
+  bottom: 18px;
 }
 
 .battle-station-cannon-mark {
   right: 19%;
-  top: 16px;
+  top: 27px;
   width: 22px;
   height: 8px;
   border-radius: 999px;
@@ -826,16 +826,16 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 
 .battle-station-stern-mark {
   left: 13%;
-  top: 14px;
+  top: 24px;
   width: 18px;
-  height: 12px;
+  height: 15px;
   border-radius: 3px;
   background: rgb(214 247 244 / 16%);
 }
 
 .battle-station-flak-mark {
   left: 14%;
-  top: 15px;
+  top: 27px;
   width: 14px;
   height: 14px;
   border: 2px solid rgb(214 247 244 / 34%);
@@ -922,25 +922,28 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 }
 
 .battle-station-cannon {
-  right: 12%;
-  top: 5px;
+  right: 27%;
+  top: 8px;
+  min-width: 64px;
 }
 
 .battle-station-bridge {
-  left: 37%;
-  top: 35px;
-  min-width: 78px;
+  left: 43%;
+  top: 48px;
+  min-width: 70px;
+  transform: translateX(-50%);
 }
 
 .battle-station-flak {
   left: 7%;
-  top: 5px;
+  top: 8px;
+  min-width: 64px;
 }
 
 .battle-station-torpedo-precision {
-  right: 5%;
-  top: 35px;
-  min-width: 76px;
+  right: 3%;
+  top: 48px;
+  min-width: 92px;
 }
 
 body[data-torpedo-view="active"] .battle-station-torpedo-precision {
@@ -968,7 +971,7 @@ body[data-player-vehicle="scout-plane"] .battle-station-panel {
   position: absolute;
   left: 10px;
   right: 10px;
-  bottom: 4px;
+  bottom: 5px;
   display: grid;
   grid-template-columns: auto 1fr 1.35fr;
   gap: 5px;
@@ -3016,6 +3019,7 @@ body[data-cannon-view="active"] .weapon-aim-hints {
     left: 36%;
     top: 23px;
     min-width: 54px;
+    transform: none;
   }
 
   .battle-station-flak {

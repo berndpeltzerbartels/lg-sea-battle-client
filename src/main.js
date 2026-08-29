@@ -414,14 +414,14 @@ const world = new TransformNode("world", scene);
 
 const sun = new DirectionalLight("sun", new Vector3(-0.45, -0.9, 0.32), scene);
 sun.position = new Vector3(35, 80, -45);
-sun.intensity = 0.94;
-sun.diffuse = new Color3(0.66, 0.74, 0.82);
-sun.specular = new Color3(0.38, 0.48, 0.58);
+sun.intensity = 1.2;
+sun.diffuse = new Color3(0.83, 0.85, 0.83);
+sun.specular = new Color3(0.48, 0.55, 0.62);
 
 const ambient = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
-ambient.intensity = 0.42;
-ambient.diffuse = new Color3(0.52, 0.62, 0.72);
-ambient.groundColor = new Color3(0.2, 0.23, 0.25);
+ambient.intensity = 0.34;
+ambient.diffuse = new Color3(0.46, 0.56, 0.66);
+ambient.groundColor = new Color3(0.16, 0.19, 0.21);
 if (sideViewSandboxMode) {
   sun.direction = new Vector3(-0.55, -0.7, -0.45);
   sun.position = new Vector3(55, 70, 45);
@@ -2094,14 +2094,27 @@ function updateSideViewCameraControls() {
 
 function alignWeaponsForBridge(mode = "flat") {
   const airDefense = mode === "air-defense";
+  const trimPitch = getCurrentTorpedoBoatTrimPitch();
+  const flakWorldPitch = airDefense ? weaponAlignAirDefenseFlakPitch : weaponAlignFlatFlakPitch;
+  const cannonWorldPitch = airDefense ? weaponAlignAirDefenseCannonPitch : weaponAlignFlatCannonPitch;
   weaponAlignTarget = {
     flakYaw: Math.PI,
-    flakPitch: clamp(airDefense ? weaponAlignAirDefenseFlakPitch : weaponAlignFlatFlakPitch, flakMinPitch, flakMaxPitch),
+    flakWorldPitch,
+    flakPitch: trimAdjustedWeaponPitch(flakWorldPitch, trimPitch, flakMinPitch, flakMaxPitch),
     cannonYaw: 0,
-    cannonPitch: clamp(airDefense ? weaponAlignAirDefenseCannonPitch : weaponAlignFlatCannonPitch, cannonMinPitch, cannonMaxPitch),
+    cannonWorldPitch,
+    cannonPitch: trimAdjustedWeaponPitch(cannonWorldPitch, trimPitch, cannonMinPitch, cannonMaxPitch),
     mode: airDefense ? "air-defense" : "flat"
   };
   document.body.dataset.weaponAlign = weaponAlignTarget.mode;
+}
+
+function getCurrentTorpedoBoatTrimPitch() {
+  return scoutPlaneMode ? 0 : getTorpedoBoatTrimPitch(speed);
+}
+
+function trimAdjustedWeaponPitch(worldPitch, trimPitch, minPitch, maxPitch) {
+  return clamp(worldPitch + trimPitch, minPitch, maxPitch);
 }
 
 function cancelWeaponAlignment() {
@@ -2112,6 +2125,9 @@ function cancelWeaponAlignment() {
 
 function updateWeaponAlignment(dt) {
   if (!weaponAlignTarget) return;
+  const trimPitch = getCurrentTorpedoBoatTrimPitch();
+  weaponAlignTarget.flakPitch = trimAdjustedWeaponPitch(weaponAlignTarget.flakWorldPitch, trimPitch, flakMinPitch, flakMaxPitch);
+  weaponAlignTarget.cannonPitch = trimAdjustedWeaponPitch(weaponAlignTarget.cannonWorldPitch, trimPitch, cannonMinPitch, cannonMaxPitch);
   flakYaw = moveAngleToward(flakYaw, weaponAlignTarget.flakYaw, weaponAlignYawSpeed * dt);
   flakPitch = moveValueToward(flakPitch, weaponAlignTarget.flakPitch, weaponAlignPitchSpeed * dt);
   cannonYaw = moveValueToward(cannonYaw, weaponAlignTarget.cannonYaw, weaponAlignYawSpeed * dt);
