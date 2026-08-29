@@ -294,6 +294,77 @@ test('cannon fire is blocked by the actual own-ship shot line instead of fixed y
   expect(clear.shot.direction.y).toBeGreaterThan(0.16);
 });
 
+test('cannon own-ship safety uses narrow superstructure instead of broad bases', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, CANNON_OWN_SHIP_LINE_SCENARIO, testInfo);
+
+  const lowerBridgeBase = await page.evaluate(() => window.seaBattleScenarioTest.cannonShotLineAtLocalTarget({
+    x: 0.2,
+    y: 0.92,
+    z: 0.72
+  }));
+  const upperPortBridgeGap = await page.evaluate(() => window.seaBattleScenarioTest.cannonShotLineAtLocalTarget({
+    x: 0.47,
+    y: 1.3,
+    z: 0.72
+  }));
+  const upperStarboardBridgeGap = await page.evaluate(() => window.seaBattleScenarioTest.cannonShotLineAtLocalTarget({
+    x: -0.47,
+    y: 1.3,
+    z: 0.72
+  }));
+
+  expect(lowerBridgeBase.blocked, `bridge base material should block, blocker=${lowerBridgeBase.blocker}`).toBe(true);
+  expect(upperPortBridgeGap.blocked, `port upper bridge gap should be clear, blocker=${upperPortBridgeGap.blocker}`).toBe(false);
+  expect(upperStarboardBridgeGap.blocked, `starboard upper bridge gap should be clear, blocker=${upperStarboardBridgeGap.blocker}`).toBe(false);
+});
+
+test('flak own-ship safety allows low water shots beside the boat', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, CANNON_OWN_SHIP_LINE_SCENARIO, testInfo);
+
+  const portWater = await page.evaluate(() => window.seaBattleScenarioTest.flakShotLineAt({
+    yaw: -Math.PI / 2,
+    pitch: -0.12
+  }));
+  const starboardWater = await page.evaluate(() => window.seaBattleScenarioTest.flakShotLineAt({
+    yaw: Math.PI / 2,
+    pitch: -0.12
+  }));
+  const throughShip = await page.evaluate(() => window.seaBattleScenarioTest.flakShotLineAt({
+    yaw: 0,
+    pitch: -0.08
+  }));
+
+  expect(portWater.blocked, `port water shot should be clear, blocker=${portWater.blocker}`).toBe(false);
+  expect(starboardWater.blocked, `starboard water shot should be clear, blocker=${starboardWater.blocker}`).toBe(false);
+  expect(portWater.shot.direction.y).toBeLessThan(0);
+  expect(starboardWater.shot.direction.y).toBeLessThan(0);
+  expect(throughShip.blocked, 'flak should still block a real shot through the own boat').toBe(true);
+});
+
+test('flak own-ship safety still blocks the funnel base as real material', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, CANNON_OWN_SHIP_LINE_SCENARIO, testInfo);
+
+  const throughFunnelBase = await page.evaluate(() => window.seaBattleScenarioTest.flakShotLineAtLocalTarget({
+    x: 0,
+    y: 0.92,
+    z: -0.5
+  }));
+
+  expect(throughFunnelBase.blocked, `funnel base should block flak, blocker=${throughFunnelBase.blocker}`).toBe(true);
+});
+
+test('flak own-ship safety allows a tight shot just above the bridge', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, CANNON_OWN_SHIP_LINE_SCENARIO, testInfo);
+
+  const justAboveBridge = await page.evaluate(() => window.seaBattleScenarioTest.flakShotLineAtLocalTarget({
+    x: 0.36,
+    y: 1.48,
+    z: 0.72
+  }));
+
+  expect(justAboveBridge.blocked, `shot just above bridge should be clear, blocker=${justAboveBridge.blocker}`).toBe(false);
+});
+
 test('flak hull impacts do not sink a nearby ship when the own-ship shot line is clear', async ({ page, request }, testInfo) => {
   await openScenario(page, request, FLAK_FAST_BOAT_SCENARIO, testInfo);
 

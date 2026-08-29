@@ -8,6 +8,7 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Ray } from "@babylonjs/core/Culling/ray";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
@@ -7324,12 +7325,68 @@ function installScenarioTestHooks() {
         yaw: cannonYaw,
         pitch: cannonPitch,
         blocked: cannonShotWouldHitOwnBoat(shot),
+        blocker: document.body.dataset.ownShotBlocker ?? "",
         shot: shot
           ? {
             position: { x: shot.position.x, y: shot.position.y, z: shot.position.z },
             direction: { x: shot.direction.x, y: shot.direction.y, z: shot.direction.z }
           }
           : null
+      };
+    },
+    flakShotLineAt(angles) {
+      setBattleStation("flak");
+      flakYaw = normalizeAngle(Number(angles?.yaw ?? 0));
+      flakPitch = clamp(Number(angles?.pitch ?? 0), flakMinPitch, flakMaxPitch);
+      updatePlayerFlakMount();
+      const shot = getPlayerFlakShot();
+      return {
+        yaw: flakYaw,
+        pitch: flakPitch,
+        blocked: flakShotWouldHitOwnBoat(shot),
+        blocker: document.body.dataset.ownShotBlocker ?? "",
+        shot: shot
+          ? {
+            position: { x: shot.position.x, y: shot.position.y, z: shot.position.z },
+            direction: { x: shot.direction.x, y: shot.direction.y, z: shot.direction.z }
+          }
+          : null
+      };
+    },
+    cannonShotLineAtLocalTarget(target) {
+      const scale = Number(target?.scale ?? torpedoBoatVisualScale);
+      const localTarget = new Vector3(
+        Number(target?.x ?? 0),
+        Number(target?.y ?? 0),
+        Number(target?.z ?? 0)
+      ).scale(scale);
+      const worldTarget = boat.root.position.add(
+        Vector3.TransformCoordinates(localTarget, Matrix.RotationY(heading))
+      );
+      const aim = aimPlayerCannonAtWorldPoint(worldTarget);
+      const shot = getPlayerCannonShot();
+      return {
+        aim,
+        blocked: cannonShotWouldHitOwnBoat(shot),
+        blocker: document.body.dataset.ownShotBlocker ?? ""
+      };
+    },
+    flakShotLineAtLocalTarget(target) {
+      const scale = Number(target?.scale ?? torpedoBoatVisualScale);
+      const localTarget = new Vector3(
+        Number(target?.x ?? 0),
+        Number(target?.y ?? 0),
+        Number(target?.z ?? 0)
+      ).scale(scale);
+      const worldTarget = boat.root.position.add(
+        Vector3.TransformCoordinates(localTarget, Matrix.RotationY(heading))
+      );
+      const aim = aimPlayerFlakAtWorldPoint(worldTarget);
+      const shot = getPlayerFlakShot();
+      return {
+        aim,
+        blocked: flakShotWouldHitOwnBoat(shot),
+        blocker: document.body.dataset.ownShotBlocker ?? ""
       };
     },
     async fireCannonAt(target) {
@@ -7992,7 +8049,7 @@ function getPlayerFlakShot() {
 }
 
 function flakShotWouldHitOwnBoat(shot) {
-  return shotWouldHitOwnBoat(shot, 0.45, 24, "flak");
+  return shotWouldHitOwnBoat(shot, 0.72, 19, "flak");
 }
 
 function shotWouldHitOwnBoat(shot, startDistance, length, weapon) {
@@ -8000,13 +8057,14 @@ function shotWouldHitOwnBoat(shot, startDistance, length, weapon) {
   const direction = shot.direction.normalizeToNew();
   const origin = shot.position.add(direction.scale(startDistance));
   const blockers = scene.meshes.filter((mesh) => isOwnBoatShotBlocker(mesh, weapon));
-  const hullBlocker = shotRayIntersectsOwnBoatHull(origin, direction, length) ? "player_bow_hull" : "";
-  const blocker = hullBlocker ? null : blockers.find((mesh) => shotRayIntersectsMeshBounds(origin, direction, length, mesh));
+  const safetyRadius = ownShotSafetyRadius(weapon);
+  const blocker = blockers.find((mesh) => shotTubeIntersectsMesh(origin, direction, length, mesh, safetyRadius));
   document.body.dataset.ownShotBlocker = blocker?.name ?? "";
-  if (hullBlocker) {
-    document.body.dataset.ownShotBlocker = hullBlocker;
-  }
-  return Boolean(hullBlocker || blocker);
+  return Boolean(blocker);
+}
+
+function ownShotSafetyRadius(weapon) {
+  return 0.02;
 }
 
 function isOwnBoatShotBlocker(mesh, weapon = "") {
@@ -8016,7 +8074,6 @@ function isOwnBoatShotBlocker(mesh, weapon = "") {
   const name = String(mesh.name ?? "");
   if (weapon === "flak" && name.includes("_flak_")) return false;
   if (weapon === "cannon" && name.includes("_cannon_")) return false;
-  if (name.endsWith("_hull") || name.endsWith("_deck")) return false;
   return !(
     name.includes("_designation_plate")
     || name.includes("_wake_")
@@ -8036,33 +8093,34 @@ function isNodeDescendantOf(node, ancestor) {
   return false;
 }
 
-function shotRayIntersectsOwnBoatHull(origin, direction, length) {
-  const step = 0.18 * torpedoBoatVisualScale;
-  for (let distance = 0; distance <= length; distance += step) {
-    const localPoint = worldToLocalShipPointWithoutTilt(origin.add(direction.scale(distance)));
-    if (ownBoatHullContainsShotPoint(localPoint)) return true;
+function shotTubeIntersectsMesh(origin, direction, length, mesh, radius = 0) {
+  return shotTubeRayOrigins(origin, direction, radius)
+    .some((rayOrigin) => shotRayIntersectsMesh(rayOrigin, direction, length, mesh));
+}
+
+function shotTubeRayOrigins(origin, direction, radius) {
+  if (!Number.isFinite(radius) || radius <= 0.001) return [origin];
+  let side = Vector3.Cross(Vector3.Up(), direction);
+  if (side.lengthSquared() <= 0.0001) {
+    side = Vector3.Cross(Vector3.Right(), direction);
   }
-  return false;
+  side.normalize();
+  const vertical = Vector3.Cross(direction, side).normalize();
+  return [
+    origin,
+    origin.add(side.scale(radius)),
+    origin.add(side.scale(-radius)),
+    origin.add(vertical.scale(radius)),
+    origin.add(vertical.scale(-radius))
+  ];
 }
 
-function ownBoatHullContainsShotPoint(point) {
-  const zMargin = 0.04;
-  if (!isForwardInsideTorpedoBoatHull(point.z, zMargin)) return false;
-  const halfWidth = getTorpedoBoatHullTopHalfWidthAt(point.z) + 0.035;
-  if (Math.abs(point.x) > halfWidth) return false;
-  const topY = getTorpedoBoatDeckY(point.z)
-    + Math.max(getTorpedoBoatBowBulwarkLift(point.z), getTorpedoBoatSternBulwarkLift(point.z))
-    + 0.025;
-  return point.y >= torpedoBoatModelWaterlineY - 0.08 && point.y <= topY;
-}
-
-function shotRayIntersectsMeshBounds(origin, direction, length, mesh) {
+function shotRayIntersectsMesh(origin, direction, length, mesh) {
   if (typeof mesh.computeWorldMatrix === "function") {
     mesh.computeWorldMatrix(true);
   }
-  const bounds = mesh.getBoundingInfo?.().boundingBox;
-  if (!bounds?.minimumWorld || !bounds?.maximumWorld) return false;
-  return rayIntersectsBounds(origin, direction, length, bounds.minimumWorld, bounds.maximumWorld);
+  const pick = new Ray(origin, direction, length).intersectsMesh(mesh, false, null, false, undefined, false);
+  return Boolean(pick?.hit && Number.isFinite(pick.distance) && pick.distance >= 0 && pick.distance <= length);
 }
 
 function rayIntersectsBounds(origin, direction, maxDistance, min, max) {
