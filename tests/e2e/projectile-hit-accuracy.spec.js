@@ -513,6 +513,20 @@ test('cannon scout-plane kill appears in the kill feed as a plane target', async
   await expect(firstKill.locator('.kill-feed-party-target .unit-marker-plane')).toHaveCount(1);
 });
 
+test('flak scout-plane kill appears in the kill feed as a plane target', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, FLAK_PLANE_HIT_SCENARIO, testInfo);
+  const shot = await fireFlakTrackingBurstAtVehicle(page, request, 'dark-F2', { y: 24 }, 6);
+
+  expect(shot.fired).toBeGreaterThan(0);
+  await expectVehicleState(request, 'dark-F2', 'sunk', 'flak should sink dark-F2');
+
+  const firstKill = page.locator('.kill-feed-row').first();
+  await expect(firstKill).toContainText('F 82');
+  await expect(firstKill).toContainText('durch');
+  await expect(firstKill).toContainText('Flak');
+  await expect(firstKill.locator('.kill-feed-party-target .unit-marker-plane')).toHaveCount(1);
+});
+
 test('torpedo fired from the player ship hits a ship directly ahead', async ({ page, request }, testInfo) => {
   await openScenario(page, request, TORPEDO_HULL_HIT_SCENARIO, testInfo);
   await captureFrames(page, testInfo, 'torpedo-before', 1, 0);

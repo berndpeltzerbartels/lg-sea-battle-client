@@ -3952,7 +3952,7 @@ function getKillFeedShipLabel(shipId, ship = null, teamId = null) {
 }
 
 function getKillFeedShipInfo(shipId, ship = null, teamId = null) {
-  const target = ship ?? serverShipsById.get(shipId);
+  const target = ship ?? serverShipsById.get(shipId) ?? enemyMotions.find((motion) => motion.id === shipId);
   const cachedLabel = killFeedShipLabels.get(shipId);
   if (target && (isHumanController(target.controlledBy) || target.state === "active")) {
     return {
