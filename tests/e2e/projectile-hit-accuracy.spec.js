@@ -254,7 +254,7 @@ test('flak can hit planes from different plane headings', async ({ page, request
 test('weapon view and projectile start stay on the visible weapon with and without trim', async ({ page, request }, testInfo) => {
   const navigationStates = [
     { label: 'standing', speed: 0, engineOrder: 2 },
-    { label: 'flank-trim', speed: 15.5, engineOrder: 8 }
+    { label: 'full-trim', speed: 17.5, engineOrder: 8 }
   ];
 
   for (const navigationState of navigationStates) {

@@ -56,7 +56,7 @@ const torpedoBoatSternBulwarkHeight = 0.095;
 const torpedoBoatSternBulwarkRimWidth = torpedoBoatBowBulwarkRimWidth;
 const enemyTorpedoBoatBobAmplitude = 0.025;
 const enemyBowWakeSurfaceY = -torpedoBoatModelWaterlineY + 0.018;
-const enemyBowWakeFullSpeed = 15.5;
+const enemyBowWakeFullSpeed = 17.5;
 const torpedoBoatModelSinkDepth = 2.35;
 const gameConfig = await loadGameConfig();
 scene.clearColor = new Color4(0.38, 0.5, 0.6, 1);
@@ -181,7 +181,7 @@ const enemyTargetingRange = 945;
 const engineHoldInitialDelaySeconds = 0.22;
 const engineHoldRepeatSeconds = 0.1;
 const torpedoBoatTrimStartSpeed = 5.5;
-const torpedoBoatTrimFullSpeed = 15.5;
+const torpedoBoatTrimFullSpeed = 17.5;
 const torpedoBoatMaxTrimPitch = -0.052;
 const mouseWheelEngineStep = 100;
 const scoutPlaneSetupId = "scout-plane";
@@ -795,7 +795,7 @@ function isTextEditingElement(element) {
       || element.isContentEditable;
 }
 
-const defaultEngineSpeeds = [-8.0, -2.2, 0, 0.9, 2.93, 6.18, 10.4, 12.0, 15.5];
+const defaultEngineSpeeds = [-8.0, -2.2, 0, 0.9, 2.93, 6.18, 10.4, 12.0, 17.5];
 const engineOrderLabels = [
   { label: "Astern Full", shortLabel: "Full Ast" },
   { label: "Astern Half", shortLabel: "Half Ast" },
@@ -3170,7 +3170,7 @@ async function loadGameConfig() {
       torpedoBoat: 3,
       scoutPlane: 1.5
     },
-    engineSpeeds: [-8.0, -2.2, 0, 0.9, 2.93, 6.18, 10.4, 12.0, 15.5]
+    engineSpeeds: [-8.0, -2.2, 0, 0.9, 2.93, 6.18, 10.4, 12.0, 17.5]
   };
   if (directSideViewSandboxRequested) {
     return fallback;
