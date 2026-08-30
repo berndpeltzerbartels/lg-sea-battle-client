@@ -105,6 +105,10 @@ const flakElevationValue = document.getElementById("flakElevationValue");
 const cannonElevationIndicator = document.getElementById("cannonElevationIndicator");
 const cannonElevationValue = document.getElementById("cannonElevationValue");
 const cannonSightValue = document.getElementById("cannonSightValue");
+const airTorpedoRunValue = document.getElementById("airTorpedoRunValue");
+const airTorpedoMinRunValue = document.getElementById("airTorpedoMinRunValue");
+const airTorpedoFallValue = document.getElementById("airTorpedoFallValue");
+const airTorpedoRunBar = document.getElementById("airTorpedoRunBar");
 const sinkingWaterOverlay = document.getElementById("sinkingWaterOverlay");
 const planeHitFlash = document.getElementById("planeHitFlash");
 const fleetStatusRows = document.getElementById("fleetStatusRows");
@@ -10401,8 +10405,23 @@ function updateBombSightMarker(system, forward) {
   system.sightMarker.position.set(preview.sightCenter.x, 0.2, preview.sightCenter.z);
   system.sightMarker.rotation.y = preview.sightHeading;
   updateAirTorpedoSightPattern(system.sightMarker, preview);
+  updateAirTorpedoSightReadout(preview);
   system.sightMarker.setEnabled(true);
   document.body.dataset.bombSight = `${preview.centerImpact.x.toFixed(1)},${preview.centerImpact.z.toFixed(1)}`;
+}
+
+function updateAirTorpedoSightReadout(preview) {
+  const runDistance = Math.round(preview.waterRunDistance);
+  if (airTorpedoRunValue) airTorpedoRunValue.textContent = `${runDistance} m`;
+  if (airTorpedoMinRunValue) airTorpedoMinRunValue.textContent = String(airTorpedoSightMinRunDistance);
+  if (airTorpedoFallValue) airTorpedoFallValue.textContent = preview.fallSeconds.toFixed(1);
+  if (airTorpedoRunBar) {
+    const ratio = (preview.waterRunDistance - airTorpedoSightMinRunDistance)
+      / (airTorpedoSightMaxRunDistance - airTorpedoSightMinRunDistance);
+    airTorpedoRunBar.style.transform = `scaleX(${clamp(ratio, 0.04, 1).toFixed(3)})`;
+  }
+  document.body.dataset.airTorpedoSightRun = String(runDistance);
+  document.body.dataset.airTorpedoSightMinRun = String(airTorpedoSightMinRunDistance);
 }
 
 function updateAirTorpedoSightPattern(marker, preview) {
