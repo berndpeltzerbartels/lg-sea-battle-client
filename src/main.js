@@ -4030,11 +4030,15 @@ function renderKillFeed() {
 
     const targetCell = document.createElement("div");
     targetCell.className = "kill-feed-cell kill-feed-cell-target";
-    targetCell.append(target, detail);
+    targetCell.append(target);
+
+    const sourceLine = document.createElement("div");
+    sourceLine.className = "kill-feed-source-line";
+    sourceLine.append(separator, source);
 
     const sourceCell = document.createElement("div");
     sourceCell.className = "kill-feed-cell kill-feed-cell-source";
-    sourceCell.append(separator, source);
+    sourceCell.append(sourceLine, detail);
 
     row.append(number, targetCell, sourceCell);
     killFeedRows.append(row);

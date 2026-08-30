@@ -1911,7 +1911,7 @@ body.big-map .map-meta span {
 
 .kill-feed-row {
   display: grid;
-  grid-template-columns: 19px minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: 19px minmax(38px, 0.9fr) minmax(58px, 1.1fr);
   column-gap: 5px;
   min-height: 19px;
   padding: 2px 4px;
@@ -1944,6 +1944,15 @@ body.big-map .map-meta span {
   text-align: right;
 }
 
+.kill-feed-source-line {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
 .kill-feed-row.is-new {
   animation: kill-feed-glow 1.3s ease-out;
 }
@@ -1960,6 +1969,9 @@ body.big-map .map-meta span {
   display: flex;
   align-items: center;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kill-feed-party-source {
@@ -1967,13 +1979,12 @@ body.big-map .map-meta span {
 }
 
 .kill-feed-detail {
+  justify-self: end;
   color: rgb(247 251 255 / 58%);
 }
 
 .kill-feed-separator {
-  grid-column: 3;
-  align-self: center;
-  justify-self: center;
+  flex: 0 0 auto;
   color: rgb(155 229 223 / 62%);
   font-size: 8px;
   font-weight: 900;
@@ -3022,7 +3033,7 @@ body[data-cannon-view="active"] .weapon-aim-hints {
   }
 
   .kill-feed-row {
-    grid-template-columns: 13px minmax(0, 1fr) 22px minmax(0, 1fr);
+    grid-template-columns: 13px minmax(34px, 0.9fr) minmax(58px, 1.1fr);
     min-height: 18px;
     padding: 1px 2px;
     column-gap: 3px;
@@ -3040,8 +3051,11 @@ body[data-cannon-view="active"] .weapon-aim-hints {
     min-width: 0;
   }
 
+  .kill-feed-source-line {
+    gap: 2px;
+  }
+
   .kill-feed-separator {
-    justify-self: center;
     font-size: 5px;
   }
 
