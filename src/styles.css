@@ -1911,8 +1911,7 @@ body.big-map .map-meta span {
 
 .kill-feed-row {
   display: grid;
-  grid-template-columns: 19px minmax(0, 1fr);
-  gap: 2px;
+  grid-template-columns: 19px minmax(0, 1fr) auto minmax(0, 1fr);
   column-gap: 5px;
   min-height: 19px;
   padding: 2px 4px;
@@ -1934,18 +1933,15 @@ body.big-map .map-meta span {
   text-align: right;
 }
 
-.kill-feed-text {
+.kill-feed-cell {
   display: grid;
   gap: 1px;
   min-width: 0;
 }
 
-.kill-feed-parties {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 3px;
-  align-items: center;
-  min-width: 0;
+.kill-feed-cell-source {
+  justify-items: end;
+  text-align: right;
 }
 
 .kill-feed-row.is-new {
@@ -1966,11 +1962,18 @@ body.big-map .map-meta span {
   min-width: 0;
 }
 
+.kill-feed-party-source {
+  justify-content: flex-end;
+}
+
 .kill-feed-detail {
   color: rgb(247 251 255 / 58%);
 }
 
 .kill-feed-separator {
+  grid-column: 3;
+  align-self: center;
+  justify-self: center;
   color: rgb(155 229 223 / 62%);
   font-size: 8px;
   font-weight: 900;
@@ -3019,10 +3022,10 @@ body[data-cannon-view="active"] .weapon-aim-hints {
   }
 
   .kill-feed-row {
-    grid-template-columns: 15px minmax(0, 1fr);
+    grid-template-columns: 13px minmax(0, 1fr) 22px minmax(0, 1fr);
     min-height: 18px;
     padding: 1px 2px;
-    column-gap: 4px;
+    column-gap: 3px;
     font-size: 6px;
   }
 
@@ -3032,11 +3035,6 @@ body[data-cannon-view="active"] .weapon-aim-hints {
     line-height: 1.05;
   }
 
-  .kill-feed-parties {
-    grid-template-columns: minmax(0, 1fr) 13px minmax(0, 1fr);
-    gap: 2px;
-  }
-
   .kill-feed-party,
   .kill-feed-detail {
     min-width: 0;
@@ -3044,7 +3042,7 @@ body[data-cannon-view="active"] .weapon-aim-hints {
 
   .kill-feed-separator {
     justify-self: center;
-    font-size: 6px;
+    font-size: 5px;
   }
 
   .kill-feed-detail {

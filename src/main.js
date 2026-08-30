@@ -4006,37 +4006,37 @@ function renderKillFeed() {
     number.className = "kill-feed-number";
     number.textContent = `${event.number ?? ""}`;
 
-    const text = document.createElement("div");
-    text.className = "kill-feed-text";
-
-    const source = document.createElement("strong");
-    source.className = "kill-feed-party";
-    source.append(
-      createKillFeedMarker(event.sourceTeamId, event.sourceVehicleType),
-      document.createTextNode(event.sourceLabel)
+    const target = document.createElement("strong");
+    target.className = "kill-feed-party kill-feed-party-target";
+    target.append(
+      createKillFeedMarker(event.targetTeamId, event.targetVehicleType),
+      document.createTextNode(event.targetLabel)
     );
 
     const separator = document.createElement("span");
     separator.className = "kill-feed-separator";
-    separator.textContent = "→";
+    separator.textContent = "durch";
 
-    const victim = document.createElement("strong");
-    victim.className = "kill-feed-party";
-    victim.append(
-      createKillFeedMarker(event.targetTeamId, event.targetVehicleType),
-      document.createTextNode(event.targetLabel)
+    const source = document.createElement("strong");
+    source.className = "kill-feed-party kill-feed-party-source";
+    source.append(
+      createKillFeedMarker(event.sourceTeamId, event.sourceVehicleType),
+      document.createTextNode(event.sourceLabel)
     );
 
     const detail = document.createElement("span");
     detail.className = "kill-feed-detail";
     detail.textContent = event.weaponLabel;
 
-    const parties = document.createElement("div");
-    parties.className = "kill-feed-parties";
-    parties.append(source, separator, victim);
+    const targetCell = document.createElement("div");
+    targetCell.className = "kill-feed-cell kill-feed-cell-target";
+    targetCell.append(target, detail);
 
-    text.append(parties, detail);
-    row.append(number, text);
+    const sourceCell = document.createElement("div");
+    sourceCell.className = "kill-feed-cell kill-feed-cell-source";
+    sourceCell.append(separator, source);
+
+    row.append(number, targetCell, sourceCell);
     killFeedRows.append(row);
     event.highlight = false;
   });
@@ -4064,7 +4064,7 @@ function getRelativeUnitMarkerTeamClass(teamId) {
 }
 
 function isHumanController(controller) {
-  return typeof controller === "string" && controller.length > 0 && controller !== "bot";
+  return typeof controller === "string" && controller.startsWith("player-");
 }
 
 function getPlayerInitialsFromId(controller) {
@@ -6249,7 +6249,7 @@ function isSteepRockZone(zone) {
 
 function createShipDesignation(ship) {
   const controlledBy = ship?.controlledBy ?? "bot";
-  if (controlledBy && controlledBy !== "bot") {
+  if (isHumanController(controlledBy)) {
     return getPlayerInitials(controlledBy);
   }
   const match = String(ship.id ?? "").match(/(\d+)$/);
@@ -8075,6 +8075,9 @@ async function reportLocalPlaneHit(hit, weaponType) {
     if (response.status === 403) {
       expireActiveLogin("report-plane-hit-403");
       return;
+    }
+    if (response.ok) {
+      applyServerGameSnapshot(await response.json());
     }
     document.body.dataset.localPlaneHitSync = response.ok ? "ok" : `http-${response.status}`;
   } catch (error) {

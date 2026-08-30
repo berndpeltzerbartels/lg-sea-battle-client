@@ -498,6 +498,21 @@ extendedTest('cannon plane-hit matrix separates real aircraft hits from shots un
   expect(mismatches, `Unexpected cannon plane-grid results:\n${JSON.stringify(mismatches, null, 2)}`).toEqual([]);
 });
 
+test('cannon scout-plane kill appears in the kill feed as a plane target', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, CANNON_PLANE_HIT_SCENARIO, testInfo);
+  const target = await targetPoint(request, 'dark-F2');
+  const shot = await fireWeaponAt(page, 'cannon', target);
+
+  expect(shot.fire).toBe('ok');
+  await expectVehicleState(request, 'dark-F2', 'sunk', 'cannon should sink dark-F2');
+
+  const firstKill = page.locator('.kill-feed-row').first();
+  await expect(firstKill).toContainText('F 82');
+  await expect(firstKill).toContainText('durch');
+  await expect(firstKill).toContainText('Kanone');
+  await expect(firstKill.locator('.kill-feed-party-target .unit-marker-plane')).toHaveCount(1);
+});
+
 test('torpedo fired from the player ship hits a ship directly ahead', async ({ page, request }, testInfo) => {
   await openScenario(page, request, TORPEDO_HULL_HIT_SCENARIO, testInfo);
   await captureFrames(page, testInfo, 'torpedo-before', 1, 0);
