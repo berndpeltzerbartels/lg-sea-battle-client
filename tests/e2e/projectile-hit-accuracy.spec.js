@@ -527,6 +527,32 @@ test('flak scout-plane kill appears in the kill feed as a plane target', async (
   await expect(firstKill.locator('.kill-feed-party-target .unit-marker-plane')).toHaveCount(1);
 });
 
+test('kill feed fallback keeps high-numbered plane ids as planes', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, FLAK_PLANE_HIT_SCENARIO, testInfo);
+
+  const info = await page.evaluate(() => window.seaBattleScenarioTest.killFeedInfoFor('dark-F9', null, 'dark'));
+
+  expect(info.label).toBe('F 89');
+  expect(info.vehicleType).toBe('scout-plane');
+});
+
+test('kill feed cache accepts a later vehicle type change for the same id', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, FLAK_PLANE_HIT_SCENARIO, testInfo);
+
+  const labels = await page.evaluate(() => {
+    window.seaBattleScenarioTest.rememberKillFeedShips([
+      { id: 'dark-9', teamId: 'dark', controlledBy: 'bot', vehicleType: 'torpedo-boat', state: 'active' }
+    ]);
+    window.seaBattleScenarioTest.rememberKillFeedShips([
+      { id: 'dark-9', teamId: 'dark', controlledBy: 'bot', vehicleType: 'scout-plane', state: 'active' }
+    ]);
+    return window.seaBattleScenarioTest.killFeedInfoFor('dark-9', null, 'dark');
+  });
+
+  expect(labels.label).toBe('F 89');
+  expect(labels.vehicleType).toBe('scout-plane');
+});
+
 test('torpedo fired from the player ship hits a ship directly ahead', async ({ page, request }, testInfo) => {
   await openScenario(page, request, TORPEDO_HULL_HIT_SCENARIO, testInfo);
   await captureFrames(page, testInfo, 'torpedo-before', 1, 0);

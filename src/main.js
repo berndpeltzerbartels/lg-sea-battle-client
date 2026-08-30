@@ -3905,12 +3905,20 @@ function rememberKillFeedShipLabels(ships) {
     if (!ship?.id) return;
     const cached = killFeedShipLabels.get(ship.id);
     const controlledByHuman = isHumanController(ship.controlledBy);
-    if (controlledByHuman || !cached) {
+    const label = createShipDesignation(ship);
+    const vehicleType = getShipVehicleType(ship);
+    if (
+      controlledByHuman ||
+      !cached ||
+      cached.label !== label ||
+      cached.vehicleType !== vehicleType ||
+      cached.teamId !== ship.teamId
+    ) {
       killFeedShipLabels.set(ship.id, {
         controlledBy: ship.controlledBy,
-        label: createShipDesignation(ship),
+        label,
         teamId: ship.teamId,
-        vehicleType: getShipVehicleType(ship),
+        vehicleType,
         wasHuman: controlledByHuman
       });
     }
@@ -6394,7 +6402,15 @@ function createRemoteVehicleModel(scene, materials, name, ship) {
 }
 
 function getShipVehicleType(ship) {
-  return ship?.vehicleType === "scout-plane" ? "scout-plane" : "torpedo-boat";
+  if (ship?.vehicleType === "scout-plane") return "scout-plane";
+  if (ship?.vehicleType === "torpedo-boat") return "torpedo-boat";
+  return vehicleTypeFromShipId(ship?.id) ?? "torpedo-boat";
+}
+
+function vehicleTypeFromShipId(shipId) {
+  const match = String(shipId ?? "").match(/-[FS]\d+$/i);
+  if (!match) return null;
+  return match[0][1].toUpperCase() === "F" ? "scout-plane" : "torpedo-boat";
 }
 
 function isScoutPlaneShip(ship) {
@@ -7424,6 +7440,13 @@ function installScenarioTestHooks() {
     },
     weaponViewAlignment(weapon) {
       return weaponViewAlignmentSnapshot(weapon);
+    },
+    killFeedInfoFor(shipId, ship = null, teamId = null) {
+      return getKillFeedShipInfo(shipId, ship, teamId);
+    },
+    rememberKillFeedShips(ships) {
+      rememberKillFeedShipLabels(ships);
+      return ships.map((ship) => getKillFeedShipInfo(ship.id, null, ship.teamId));
     },
     setEnemyWakeState(shipId, state) {
       const motion = enemyMotions.find((candidate) => candidate.id === shipId);
