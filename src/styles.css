@@ -2770,6 +2770,45 @@ body[data-cannon-view="active"] .cannon-elevation {
   display: grid;
 }
 
+body[data-cannon-view="active"] {
+  --cannon-side-control-width: 300px;
+  --cannon-side-control-left: max(
+    calc(var(--view-left) + var(--instrument-panel-padding)),
+    calc(var(--view-left) + (100vw - var(--view-left) - 58vw) / 2 - var(--cannon-side-control-width) - 16px)
+  );
+}
+
+body[data-cannon-view="active"] .ship-controls-panel {
+  left: var(--cannon-side-control-left);
+  z-index: 5;
+  width: var(--cannon-side-control-width);
+  grid-template-columns: 96px minmax(0, 1fr);
+  background: rgb(5 27 40 / 98%);
+  transform: none;
+}
+
+body[data-cannon-view="active"] .telegraph,
+body[data-cannon-view="active"] .rudder {
+  padding-left: 9px;
+  padding-right: 9px;
+}
+
+body[data-cannon-view="active"] .telegraph-readout-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body[data-cannon-view="active"] .telegraph-scale {
+  display: none;
+}
+
+body[data-cannon-view="active"] .cannon-elevation {
+  left: auto;
+  right: var(--instrument-panel-padding);
+  z-index: 5;
+  width: 128px;
+  background: rgb(5 27 40 / 98%);
+}
+
 .weapon-aim-hints {
   position: absolute;
   left: calc(var(--view-left) + (100vw - var(--view-left)) / 2 - var(--control-panel-width) / 2 - 62px);
@@ -2784,6 +2823,12 @@ body[data-cannon-view="active"] .cannon-elevation {
 body[data-flak-view="active"] .weapon-aim-hints,
 body[data-cannon-view="active"] .weapon-aim-hints {
   display: block;
+}
+
+body[data-cannon-view="active"] .weapon-aim-hints {
+  left: var(--cannon-side-control-left);
+  bottom: calc(var(--instrument-panel-padding) + var(--control-panel-height) + 8px);
+  z-index: 5;
 }
 
 .weapon-aim-ring {
