@@ -2771,7 +2771,8 @@ body[data-cannon-view="active"] .cannon-elevation {
 }
 
 body[data-cannon-view="active"] {
-  --cannon-side-control-width: 300px;
+  --cannon-side-control-width: 252px;
+  --cannon-side-control-height: 132px;
   --cannon-side-control-left: max(
     calc(var(--view-left) + var(--instrument-panel-padding)),
     calc(var(--view-left) + (100vw - var(--view-left) - 58vw) / 2 - var(--cannon-side-control-width) - 16px)
@@ -2782,15 +2783,32 @@ body[data-cannon-view="active"] .ship-controls-panel {
   left: var(--cannon-side-control-left);
   z-index: 5;
   width: var(--cannon-side-control-width);
-  grid-template-columns: 96px minmax(0, 1fr);
+  height: var(--cannon-side-control-height);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 56px minmax(0, 1fr);
   background: rgb(5 27 40 / 98%);
   transform: none;
 }
 
 body[data-cannon-view="active"] .telegraph,
 body[data-cannon-view="active"] .rudder {
+  height: auto;
   padding-left: 9px;
   padding-right: 9px;
+}
+
+body[data-cannon-view="active"] .telegraph {
+  border-right: 0;
+  border-bottom: 1px solid rgb(155 229 223 / 18%);
+}
+
+body[data-cannon-view="active"] .telegraph-title,
+body[data-cannon-view="active"] .rudder-title {
+  margin-bottom: 3px;
+}
+
+body[data-cannon-view="active"] .rudder-key-hints {
+  margin-top: 5px;
 }
 
 body[data-cannon-view="active"] .telegraph-readout-row {
@@ -2805,7 +2823,9 @@ body[data-cannon-view="active"] .cannon-elevation {
   left: auto;
   right: var(--instrument-panel-padding);
   z-index: 5;
-  width: 128px;
+  width: 178px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 4px 8px;
   background: rgb(5 27 40 / 98%);
 }
 
@@ -2827,8 +2847,19 @@ body[data-cannon-view="active"] .weapon-aim-hints {
 
 body[data-cannon-view="active"] .weapon-aim-hints {
   left: var(--cannon-side-control-left);
-  bottom: calc(var(--instrument-panel-padding) + var(--control-panel-height) + 8px);
+  bottom: calc(var(--instrument-panel-padding) + var(--cannon-side-control-height) + 8px);
   z-index: 5;
+}
+
+@media (max-width: 1160px) {
+  body[data-cannon-view="active"] .cannon-elevation {
+    display: grid !important;
+    right: 8px;
+    bottom: 8px;
+    width: 150px;
+    height: 74px;
+    padding: 6px;
+  }
 }
 
 .weapon-aim-ring {
