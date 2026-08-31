@@ -335,6 +335,7 @@ updateBuildInfoPanel(clientBuildInfo, null);
 loadServerBuildInfo()
   .then((serverBuildInfo) => updateBuildInfoPanel(clientBuildInfo, serverBuildInfo))
   .catch((error) => updateBuildInfoPanel(clientBuildInfo, { version: "unavailable", commit: error.message }));
+setupResetGameControl(resetGameButton);
 const playerLogin = await requirePlayerLogin();
 const playerInitials = playerLogin.initials;
 await requireRegisteredGameSession(playerLogin);
@@ -399,7 +400,6 @@ installScenarioTestHooks();
 updateFleetStatus(gameState.ships, gameState.destroyedShipsByTeam);
 updatePlayerList(gameState.ships);
 updatePlayerTorpedoStock(playerTorpedoesRemaining);
-setupResetGameControl(resetGameButton);
 setupMapZoomControl(mapZoom);
 setupDebugMapMarkerPanel();
 setupDebugMapTeleport(mapCanvas);
@@ -1353,6 +1353,10 @@ function isFlakViewToggleKey(event) {
 
 function isSystemShortcutEvent(event) {
   return event.metaKey || event.ctrlKey;
+}
+
+function isHostSpecialMenuKey(event) {
+  return event.altKey && event.shiftKey && event.code === "KeyR";
 }
 
 function isStartupErrorVisible() {
@@ -3610,15 +3614,19 @@ function getRequestedPlayerTeamId(ships, selectedTeamId = "") {
 }
 
 function setupResetGameControl(button) {
+  if (setupResetGameControl.installed) return;
+  setupResetGameControl.installed = true;
+
   if (button) {
     button.hidden = true;
   }
 
   window.addEventListener("keydown", (event) => {
-    if (!(event.altKey && event.shiftKey && event.code === "KeyR")) return;
+    if (!isHostSpecialMenuKey(event) || event.repeat) return;
     event.preventDefault();
+    event.stopPropagation();
     openHostSpecialMenu();
-  });
+  }, { capture: true });
 }
 
 function openHostSpecialMenu() {
