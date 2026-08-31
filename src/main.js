@@ -847,6 +847,7 @@ let flakPitch = 0;
 let cannonYaw = 0;
 let cannonPitch = 0.04;
 let cannonSightLevelIndex = 0;
+let cannonSightCycleDirection = 1;
 let weaponAlignTarget = null;
 let heldFlakDirection = 0;
 let heldFlakPitchDirection = 0;
@@ -2224,14 +2225,21 @@ function updateBattleStationButtons() {
 }
 
 function cycleCannonSightLevel() {
-  changeCannonSightLevel(1, true);
+  if (cannonSightLevels.length <= 1) return;
+  let nextIndex = cannonSightLevelIndex + cannonSightCycleDirection;
+  if (nextIndex >= cannonSightLevels.length) {
+    cannonSightCycleDirection = -1;
+    nextIndex = cannonSightLevelIndex + cannonSightCycleDirection;
+  } else if (nextIndex < 0) {
+    cannonSightCycleDirection = 1;
+    nextIndex = cannonSightLevelIndex + cannonSightCycleDirection;
+  }
+  setCannonSightLevel(nextIndex);
 }
 
-function changeCannonSightLevel(direction, wrap = false) {
+function changeCannonSightLevel(direction) {
   const rawNextIndex = cannonSightLevelIndex + direction;
-  const nextIndex = wrap
-    ? (rawNextIndex + cannonSightLevels.length) % cannonSightLevels.length
-    : clamp(rawNextIndex, 0, cannonSightLevels.length - 1);
+  const nextIndex = clamp(rawNextIndex, 0, cannonSightLevels.length - 1);
   setCannonSightLevel(nextIndex);
 }
 
