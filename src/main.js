@@ -4527,7 +4527,11 @@ function syncServerFlakImpacts(impacts) {
       return;
     }
     if (impact.reason === "land-hit" || impact.reason === "ship-hit") {
-      createFlakLandImpactEffect(flakSystem, position, impact.reason !== "land-hit");
+      if (isCannonServerProjectile(impact.id)) {
+        createCannonLandImpactEffect(flakSystem, position, impact.reason !== "land-hit");
+      } else {
+        createFlakLandImpactEffect(flakSystem, position, impact.reason !== "land-hit");
+      }
     } else if (isCannonServerProjectile(impact.id)) {
       createCannonWaterImpactEffect(flakSystem, position);
     } else {
@@ -7332,7 +7336,9 @@ function firePlayerCannon() {
 
   nextCannonFireTime = time + cannonFireCooldownSeconds;
   triggerCannonBarrelRecoil(boat.bowCannon, time);
-  createCannonProjectile(cannonSystem, shot.position, shot.velocity, shot.direction);
+  createCannonProjectile(cannonSystem, shot.position, shot.velocity, shot.direction, {
+    renderTerrainImpact: !playerServerShipId
+  });
   createCannonMuzzleBlast(cannonSystem, shot.muzzle, shot.direction);
   reportPlayerCannonShot(shot);
   document.body.dataset.cannonFire = "ok";
@@ -8388,7 +8394,7 @@ function createFlakProjectile(system, position, velocity, direction, options = {
   return system.active[system.active.length - 1];
 }
 
-function createCannonProjectile(system, position, velocity, direction) {
+function createCannonProjectile(system, position, velocity, direction, options = {}) {
   const id = system.nextId;
   system.nextId += 1;
 
@@ -8434,6 +8440,7 @@ function createCannonProjectile(system, position, velocity, direction) {
     age: 0,
     lifetime: cannonProjectileLifetime,
     direction: direction.clone(),
+    renderTerrainImpact: options.renderTerrainImpact ?? true,
     samplePositions: Array.from({ length: 5 }, (_, index) => position.add(direction.scale(-0.28 - index * 0.42)))
   });
   return system.active[system.active.length - 1];
@@ -8468,7 +8475,7 @@ function createFlakMuzzleFlash(system, position, direction) {
 function createCannonMuzzleBlast(system, position, direction) {
   const flashId = system.nextId;
   const flash = MeshBuilder.CreateSphere(`cannon_muzzle_flash_${flashId}`, {
-    diameter: 0.68 * shipGunVisualScale,
+    diameter: 0.82 * shipGunVisualScale,
     segments: 12
   }, system.scene);
   flash.parent = system.root;
@@ -8477,18 +8484,18 @@ function createCannonMuzzleBlast(system, position, direction) {
   flash.isPickable = false;
 
   const light = new PointLight(`${flash.name}_light`, flash.position.clone(), system.scene);
-  light.diffuse = new Color3(1.0, 0.78, 0.42);
-  light.specular = new Color3(1.0, 0.86, 0.62);
-  light.intensity = 4.4;
-  light.range = 58 * Math.sqrt(shipGunVisualScale);
+  light.diffuse = new Color3(1.0, 0.84, 0.54);
+  light.specular = new Color3(1.0, 0.92, 0.72);
+  light.intensity = 5.2;
+  light.range = 66 * Math.sqrt(shipGunVisualScale);
 
   system.flashes.push({
     mesh: flash,
     light,
     origin: flash.position.clone(),
     age: 0,
-    lifetime: 0.24,
-    lightIntensity: 4.4,
+    lifetime: 0.22,
+    lightIntensity: 5.2,
     direction: direction.clone()
   });
 
@@ -8721,10 +8728,12 @@ function updateCannonSystem(system, dt, now, landZones) {
 
     const impact = getCannonProjectileImpact(projectile, landZones);
     if (impact) {
-      if (impact.kind === "land") {
-        createFlakLandImpactEffect(system, impact.position);
-      } else {
-        createCannonWaterImpactEffect(system, impact.position, projectile.direction);
+      if (projectile.renderTerrainImpact) {
+        if (impact.kind === "land") {
+          createCannonLandImpactEffect(system, impact.position);
+        } else {
+          createCannonWaterImpactEffect(system, impact.position, projectile.direction);
+        }
       }
       disposeFlakProjectile(projectile);
       return false;
@@ -8804,45 +8813,52 @@ function createCannonWaterImpactEffect(system, position, direction = null) {
   const right = getRightVector(heading);
   const effectId = system.nextId++;
 
-  for (let i = 0; i < 6; i += 1) {
-    const patch = createJaggedSurfacePatch(`cannon_water_churn_${effectId}_${i}`, system.scene, 0.62 + i * 0.16, 0.42 + i * 0.08, effectId + i * 31);
+  for (let i = 0; i < 8; i += 1) {
+    const patch = createJaggedSurfacePatch(`cannon_water_churn_${effectId}_${i}`, system.scene, 1.08 + i * 0.26, 0.68 + i * 0.14, effectId + i * 31);
     patch.parent = system.root;
     patch.material = system.materials.foam;
     patch.position.copyFrom(
       impactPosition
-        .add(forward.scale((i - 2) * 0.05))
-        .add(right.scale(((i % 3) - 1) * 0.1))
+        .add(forward.scale((i - 3) * 0.08))
+        .add(right.scale(((i % 3) - 1) * 0.16))
         .add(new Vector3(0, 0.006 + i * 0.003, 0))
     );
     patch.rotation.y = heading + i * 0.51;
     system.airHitEffects.push({
       mesh: patch,
       age: 0,
-      lifetime: 0.82 + i * 0.045,
+      lifetime: 0.94 + i * 0.045,
       origin: patch.position.clone(),
-      velocity: forward.scale(-0.035 * i).add(right.scale(((i % 2) * 2 - 1) * 0.055)).add(new Vector3(0, 0.02, 0)),
+      velocity: forward.scale(-0.052 * i).add(right.scale(((i % 2) * 2 - 1) * 0.085)).add(new Vector3(0, 0.028, 0)),
       gravity: 0.03,
       baseScale: patch.scaling.clone(),
-      grow: new Vector3(1.55 + i * 0.14, 0.08, 1.05 + i * 0.1),
+      grow: new Vector3(2.05 + i * 0.18, 0.12, 1.42 + i * 0.14),
       seed: effectId + i
     });
   }
 
-  for (let i = 0; i < 5; i += 1) {
-    const spray = createJaggedHitWall(`cannon_water_spray_${effectId}_${i}`, system.scene, 0.16 + i * 0.026, 0.42 + i * 0.08, effectId + i * 37);
+  for (let i = 0; i < 10; i += 1) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const row = Math.floor(i / 2);
+    const spray = createJaggedHitWall(`cannon_water_spray_${effectId}_${i}`, system.scene, 0.34 + row * 0.065, 0.98 + row * 0.2, effectId + i * 37);
     spray.parent = system.root;
     spray.material = system.materials.foam;
-    spray.position.copyFrom(impactPosition.add(new Vector3(0, 0.17 + i * 0.035, 0)));
-    spray.rotation.y = heading + (i - 2) * 0.28;
+    spray.position.copyFrom(
+      impactPosition
+        .add(right.scale(side * (0.16 + row * 0.14)))
+        .subtract(forward.scale(row * 0.045))
+        .add(new Vector3(0, 0.22 + row * 0.055, 0))
+    );
+    spray.rotation.y = heading + side * (0.58 + row * 0.08);
     system.airHitEffects.push({
       mesh: spray,
       age: 0,
-      lifetime: 0.55 + i * 0.04,
+      lifetime: 0.74 + row * 0.045,
       origin: spray.position.clone(),
-      velocity: forward.scale(0.05 + i * 0.025).add(right.scale((i - 2) * 0.09)).add(new Vector3(0, 0.48 + i * 0.065, 0)),
-      gravity: 0.42,
+      velocity: right.scale(side * (0.56 + row * 0.13)).add(forward.scale(-0.1 - row * 0.03)).add(new Vector3(0, 0.88 + row * 0.12, 0)),
+      gravity: 0.7,
       baseScale: spray.scaling.clone(),
-      grow: new Vector3(0.72, 0.42, 0.72),
+      grow: new Vector3(0.92 + row * 0.06, 0.46, 0.74 + row * 0.055),
       seed: effectId + 40 + i
     });
   }
@@ -9004,6 +9020,53 @@ function createFlakLandImpactEffect(system, position, metalSpark = false) {
   });
 }
 
+function createCannonLandImpactEffect(system, position, metalSpark = false) {
+  const effectId = system.nextId++;
+  createFlakImpactFlash(system, effectId, position.add(new Vector3(0, 0.5, 0)), 0.38, 42, 3.65);
+  if (metalSpark) {
+    createShipImpactSpark(system, position, 0.7, 0.24);
+  }
+
+  const core = MeshBuilder.CreateSphere(`cannon_land_impact_core_${effectId}`, {
+    diameter: 0.86,
+    segments: 10
+  }, system.scene);
+  core.parent = system.root;
+  core.material = system.materials.flakFlash;
+  core.position.copyFrom(position.add(new Vector3(0, 0.2, 0)));
+  core.isPickable = false;
+  system.airHitEffects.push({
+    mesh: core,
+    age: 0,
+    lifetime: 0.3,
+    origin: core.position.clone(),
+    velocity: new Vector3(0, 0.24, 0),
+    baseScale: new Vector3(0.74, 0.62, 0.74),
+    grow: new Vector3(1.9, 1.32, 1.9),
+    alpha: 0.98
+  });
+
+  const dust = MeshBuilder.CreateSphere(`cannon_land_impact_dust_${effectId}`, {
+    diameter: 0.86,
+    segments: 8
+  }, system.scene);
+  dust.parent = system.root;
+  dust.material = system.materials.volcanicSmokeWarm;
+  dust.position.copyFrom(position.add(new Vector3(0, 0.18, 0)));
+  dust.isPickable = false;
+  system.airHitEffects.push({
+    mesh: dust,
+    age: 0,
+    lifetime: 0.82,
+    origin: dust.position.clone(),
+    velocity: new Vector3(0, 0.48, 0),
+    gravity: 0.2,
+    baseScale: new Vector3(0.62, 0.42, 0.62),
+    grow: new Vector3(1.65, 0.96, 1.65),
+    alpha: 0.54
+  });
+}
+
 function createShipDamageAnchor(system, motion, worldPosition, lifetime = 6, options = {}) {
   const anchor = new TransformNode(`ship_damage_anchor_${motion.id}_${system.nextId++}`, system.scene);
   anchor.parent = motion.root;
@@ -9060,16 +9123,16 @@ function serializeShipDamageAnchor(anchor) {
 
 function createCannonShipHitEffect(system, anchor) {
   createShipSuperstructureExplosion(system, Vector3.Zero(), anchor, {
-    scale: 1.12,
-    lightRange: 148,
-    intensity: 8.8,
-    lifetime: 0.86,
-    sparkDiameter: 2.3,
-    fireCount: 9,
-    smokeCount: 8
+    scale: 1.26,
+    lightRange: 166,
+    intensity: 10.2,
+    lifetime: 0.92,
+    sparkDiameter: 2.65,
+    fireCount: 10,
+    smokeCount: 9
   });
-  createShipSuperstructureFire(system, Vector3.Zero(), 5, 1.22, anchor);
-  createShipSuperstructureSmoke(system, Vector3.Zero(), 5, 1.16, anchor);
+  createShipSuperstructureFire(system, Vector3.Zero(), 6, 1.32, anchor);
+  createShipSuperstructureSmoke(system, Vector3.Zero(), 6, 1.22, anchor);
 }
 
 function createShipImpactSpark(system, position, diameter = 0.42, lifetime = 0.22, parent = null) {
