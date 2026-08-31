@@ -2418,7 +2418,7 @@ body[data-player-vehicle="scout-plane"] .altimeter {
   color: #111313;
 }
 
-.telegraph-speed-readout span {
+.telegraph-speed-readout #telegraphSpeedValue {
   min-width: 0;
   font-size: 18px;
   font-weight: 900;
@@ -2430,7 +2430,18 @@ body[data-player-vehicle="scout-plane"] .altimeter {
   grid-template-columns: auto auto auto auto;
   align-items: center;
   justify-content: start;
-  gap: 6px;
+  gap: 5px;
+}
+
+.telegraph-speed-line .telegraph-key-hints {
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.telegraph-speed-line .telegraph-key-hints kbd {
+  min-width: 13px;
+  height: 13px;
+  padding: 0 2px;
 }
 
 .telegraph-speed-readout small {
@@ -2550,23 +2561,12 @@ body[data-hide-rudder-instrument="true"] .rudder {
 }
 
 .rudder-title {
-  display: inline-flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 8px;
   margin-bottom: 5px;
   color: #9be5df;
   font-size: 10px;
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
-}
-
-.rudder-title strong {
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1;
 }
 
 .rudder-gauge {
