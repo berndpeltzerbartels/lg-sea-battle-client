@@ -4965,6 +4965,7 @@ function createTelegraphSteps(orders, parent) {
   return Array.from({ length: barCount }, (_, barIndex) => {
     const step = document.createElement("div");
     step.className = `telegraph-step${barIndex === 0 ? " is-stop" : ""}`;
+    step.textContent = "I";
     const order = barIndex === 0
       ? orders[stopOrderIndex] ?? orders[0]
       : forwardOrders[Math.min(forwardOrders.length - 1, Math.ceil((barIndex / maxForwardBars) * forwardOrders.length) - 1)];

@@ -2383,8 +2383,8 @@ body[data-player-vehicle="scout-plane"] .altimeter {
 .telegraph-readout-row {
   display: grid;
   grid-template-columns: minmax(58px, 1fr) auto;
-  align-items: end;
-  gap: 9px;
+  align-items: start;
+  gap: 7px;
   margin-bottom: 5px;
 }
 
@@ -2489,48 +2489,34 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
 
 .telegraph-scale {
   display: grid;
-  grid-template-columns: repeat(6, 7px);
-  align-items: end;
-  gap: 3px;
-  height: 13px;
-  margin-bottom: 1px;
+  grid-template-columns: repeat(6, auto);
+  align-items: center;
+  gap: 2px;
+  height: 19px;
+  margin-top: 1px;
   cursor: ew-resize;
 }
 
 .telegraph-step {
-  display: grid;
-  width: 7px;
-  height: 9px;
-  align-items: end;
+  display: inline-block;
+  min-width: 4px;
+  height: 19px;
   padding: 0;
-  border-radius: 999px;
-  background: rgb(247 251 255 / 16%);
-  color: transparent;
-}
-
-.telegraph-step::before {
-  width: 100%;
-  height: 100%;
-  border-radius: 999px;
-  background: rgb(247 251 255 / 22%);
-  content: "";
+  overflow: hidden;
+  background: transparent;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  opacity: 0;
 }
 
 .telegraph-step.is-active {
-  background: rgb(155 229 223 / 24%);
+  opacity: 1;
 }
 
 .telegraph-step.is-stop {
-  background: rgb(247 251 255 / 12%);
-}
-
-.telegraph-step.is-active::before {
-  background: #9be5df;
-  box-shadow: 0 0 14px rgb(155 229 223 / 62%);
-}
-
-.telegraph-step.is-active.is-stop::before {
-  background: #ffffff;
+  opacity: 1;
 }
 
 .rudder {
