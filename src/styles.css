@@ -2515,10 +2515,6 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
   opacity: 1;
 }
 
-.telegraph-step.is-stop {
-  opacity: 1;
-}
-
 .rudder {
   position: static;
   width: auto;

@@ -4955,21 +4955,20 @@ function createTelegraphSteps(orders, parent) {
   if (!parent) return [];
 
   parent.textContent = "";
-  const stopOrderIndex = orders.findIndex((order) => order.speed === 0);
   const forwardOrders = orders
     .map((order, index) => ({ ...order, index }))
     .filter((order) => order.speed > 0)
     .sort((left, right) => left.speed - right.speed);
   const maxForwardBars = 5;
-  const barCount = maxForwardBars + 1;
-  return Array.from({ length: barCount }, (_, barIndex) => {
+  return Array.from({ length: maxForwardBars }, (_, barIndex) => {
     const step = document.createElement("div");
-    step.className = `telegraph-step${barIndex === 0 ? " is-stop" : ""}`;
+    step.className = "telegraph-step";
     step.textContent = "I";
-    const order = barIndex === 0
-      ? orders[stopOrderIndex] ?? orders[0]
-      : forwardOrders[Math.min(forwardOrders.length - 1, Math.ceil((barIndex / maxForwardBars) * forwardOrders.length) - 1)];
-    step.dataset.order = String(order?.index ?? stopOrderIndex);
+    const order = forwardOrders[Math.min(
+      forwardOrders.length - 1,
+      Math.ceil(((barIndex + 1) / maxForwardBars) * forwardOrders.length) - 1
+    )];
+    step.dataset.order = String(order?.index ?? orders.findIndex((candidate) => candidate.speed === 0));
     step.setAttribute("aria-label", order?.shortLabel ?? order?.label ?? "");
     parent.append(step);
     return step;
@@ -4983,10 +4982,10 @@ function updateTelegraphSteps(steps, activeOrder) {
     ? forwardOrders.findIndex((order) => order.speed === activeSpeed) + 1
     : 0;
   const activeForwardBars = activeSpeed > 0
-    ? clamp(Math.ceil((forwardRank / forwardOrders.length) * Math.max(0, steps.length - 1)), 1, Math.max(0, steps.length - 1))
+    ? clamp(Math.ceil((forwardRank / forwardOrders.length) * steps.length), 1, steps.length)
     : 0;
   steps.forEach((step, index) => {
-    step.classList.toggle("is-active", index === 0 || index <= activeForwardBars);
+    step.classList.toggle("is-active", index < activeForwardBars);
   });
 }
 
