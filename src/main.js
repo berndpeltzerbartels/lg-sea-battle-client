@@ -4959,7 +4959,7 @@ function createTelegraphSteps(orders, parent) {
     .map((order, index) => ({ ...order, index }))
     .filter((order) => order.speed > 0)
     .sort((left, right) => left.speed - right.speed);
-  const maxForwardBars = 5;
+  const maxForwardBars = forwardOrders.length;
   return Array.from({ length: maxForwardBars }, (_, barIndex) => {
     const step = document.createElement("div");
     step.className = "telegraph-step";

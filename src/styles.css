@@ -2489,9 +2489,11 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
 
 .telegraph-scale {
   display: grid;
-  grid-template-columns: repeat(6, auto);
+  grid-template-columns: repeat(6, 5px);
+  justify-content: start;
   align-items: center;
   gap: 2px;
+  min-width: 40px;
   height: 19px;
   margin-top: 1px;
   cursor: ew-resize;
@@ -2499,7 +2501,8 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
 
 .telegraph-step {
   display: inline-block;
-  min-width: 4px;
+  width: 5px;
+  min-width: 5px;
   height: 19px;
   padding: 0;
   overflow: hidden;
