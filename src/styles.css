@@ -2372,8 +2372,8 @@ body[data-player-vehicle="scout-plane"] .altimeter {
 
 .telegraph-speed-readout {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 5px 6px;
+  grid-template-columns: 1fr;
+  gap: 5px;
   align-items: end;
   margin-bottom: 5px;
   color: #ffffff;
@@ -2425,6 +2425,14 @@ body[data-player-vehicle="scout-plane"] .altimeter {
   letter-spacing: 0;
 }
 
+.telegraph-speed-line {
+  display: grid;
+  grid-template-columns: auto auto auto auto;
+  align-items: center;
+  justify-content: start;
+  gap: 6px;
+}
+
 .telegraph-speed-readout small {
   color: rgb(247 251 255 / 78%);
   font-size: 10px;
@@ -2445,6 +2453,7 @@ body[data-player-vehicle="scout-plane"] .altimeter {
 
 .telegraph-key-hints {
   margin: 0;
+  justify-content: start;
 }
 
 .rudder-key-hints {
@@ -2541,12 +2550,23 @@ body[data-hide-rudder-instrument="true"] .rudder {
 }
 
 .rudder-title {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
   margin-bottom: 5px;
   color: #9be5df;
   font-size: 10px;
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
+}
+
+.rudder-title strong {
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .rudder-gauge {
@@ -2620,16 +2640,6 @@ body[data-hide-rudder-instrument="true"] .rudder {
   background: #9be5df;
   box-shadow: 0 0 12px rgb(155 229 223 / 66%);
   transform: translateX(-50%);
-}
-
-.rudder strong {
-  display: block;
-  margin-top: 5px;
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1;
-  text-transform: uppercase;
 }
 
 @media (max-height: 735px) {
