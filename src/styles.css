@@ -2380,6 +2380,18 @@ body[data-player-vehicle="scout-plane"] .altimeter {
   line-height: 1;
 }
 
+.telegraph-readout-row {
+  display: grid;
+  grid-template-columns: minmax(58px, 1fr) auto;
+  align-items: end;
+  gap: 9px;
+  margin-bottom: 5px;
+}
+
+.telegraph-readout-row .telegraph-speed-readout {
+  margin-bottom: 0;
+}
+
 .telegraph-speed-readout strong {
   grid-column: 1 / -1;
   overflow: hidden;
@@ -2476,55 +2488,45 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
 }
 
 .telegraph-scale {
-  display: none;
-  gap: 4px;
-  cursor: ns-resize;
+  display: grid;
+  grid-template-columns: repeat(6, 7px);
+  align-items: end;
+  gap: 3px;
+  height: 13px;
+  margin-bottom: 1px;
+  cursor: ew-resize;
 }
 
 .telegraph-step {
   display: grid;
-  grid-template-columns: 18px 1fr;
-  align-items: center;
-  padding: 2px 4px;
-  border-radius: 5px;
-  min-height: 15px;
-  color: rgb(247 251 255 / 62%);
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1;
-  text-transform: uppercase;
+  width: 7px;
+  height: 9px;
+  align-items: end;
+  padding: 0;
+  border-radius: 999px;
+  background: rgb(247 251 255 / 16%);
+  color: transparent;
 }
 
 .telegraph-step::before {
-  width: 14px;
-  height: 4px;
+  width: 100%;
+  height: 100%;
   border-radius: 999px;
-  background: rgb(247 251 255 / 35%);
+  background: rgb(247 251 255 / 22%);
   content: "";
 }
 
 .telegraph-step.is-active {
-  color: #ffffff;
-}
-
-.telegraph-step.is-astern {
-  background: rgb(238 196 79 / 82%);
-  color: #111313;
+  background: rgb(155 229 223 / 24%);
 }
 
 .telegraph-step.is-stop {
-  background: rgb(166 38 34 / 82%);
-  color: #ffffff;
+  background: rgb(247 251 255 / 12%);
 }
 
 .telegraph-step.is-active::before {
-  height: 8px;
   background: #9be5df;
   box-shadow: 0 0 14px rgb(155 229 223 / 62%);
-}
-
-.telegraph-step.is-stop::before {
-  background: rgb(255 255 255 / 56%);
 }
 
 .telegraph-step.is-active.is-stop::before {
@@ -3203,13 +3205,12 @@ body[data-cannon-view="active"] .weapon-aim-hints {
   }
 
   .telegraph-scale {
-    gap: 5px;
+    gap: 3px;
     touch-action: none;
   }
 
   .telegraph-step {
-    min-height: 19px;
-    font-size: 9px;
+    min-height: 0;
   }
 
   .ship-controls-panel {

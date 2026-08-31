@@ -2396,9 +2396,12 @@ function setupTelegraphDragControl(scale) {
   const setOrderFromPointer = (event) => {
     if (playerDamageState !== "active") return;
     const rect = scale.getBoundingClientRect();
-    if (rect.height <= 0) return;
-    const ratio = clamp((event.clientY - rect.top) / rect.height, 0, 1);
-    engineOrder = clamp(engineOrders.length - 1 - Math.round(ratio * (engineOrders.length - 1)), 0, engineOrders.length - 1);
+    if (rect.width <= 0) return;
+    const ratio = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+    const stepIndex = clamp(Math.round(ratio * Math.max(0, telegraphSteps.length - 1)), 0, Math.max(0, telegraphSteps.length - 1));
+    const requestedOrder = Number(telegraphSteps[stepIndex]?.dataset.order);
+    if (!Number.isInteger(requestedOrder)) return;
+    engineOrder = clamp(requestedOrder, 0, engineOrders.length - 1);
     nextEngineHoldChangeTime = time + engineHoldInitialDelaySeconds;
   };
 
@@ -4951,19 +4954,38 @@ function escapeHtml(value) {
 function createTelegraphSteps(orders, parent) {
   if (!parent) return [];
 
-  return orders.map((order, index) => {
+  parent.textContent = "";
+  const stopOrderIndex = orders.findIndex((order) => order.speed === 0);
+  const forwardOrders = orders
+    .map((order, index) => ({ ...order, index }))
+    .filter((order) => order.speed > 0)
+    .sort((left, right) => left.speed - right.speed);
+  const maxForwardBars = 5;
+  const barCount = maxForwardBars + 1;
+  return Array.from({ length: barCount }, (_, barIndex) => {
     const step = document.createElement("div");
-    step.className = `telegraph-step${order.speed === 0 ? " is-stop" : ""}${order.speed < 0 ? " is-astern" : ""}`;
-    step.textContent = order.shortLabel ?? order.label;
-    step.dataset.order = String(index);
-    parent.prepend(step);
+    step.className = `telegraph-step${barIndex === 0 ? " is-stop" : ""}`;
+    const order = barIndex === 0
+      ? orders[stopOrderIndex] ?? orders[0]
+      : forwardOrders[Math.min(forwardOrders.length - 1, Math.ceil((barIndex / maxForwardBars) * forwardOrders.length) - 1)];
+    step.dataset.order = String(order?.index ?? stopOrderIndex);
+    step.setAttribute("aria-label", order?.shortLabel ?? order?.label ?? "");
+    parent.append(step);
     return step;
   });
 }
 
 function updateTelegraphSteps(steps, activeOrder) {
+  const activeSpeed = engineOrders[activeOrder]?.speed ?? 0;
+  const forwardOrders = engineOrders.filter((order) => order.speed > 0).sort((left, right) => left.speed - right.speed);
+  const forwardRank = activeSpeed > 0
+    ? forwardOrders.findIndex((order) => order.speed === activeSpeed) + 1
+    : 0;
+  const activeForwardBars = activeSpeed > 0
+    ? clamp(Math.ceil((forwardRank / forwardOrders.length) * Math.max(0, steps.length - 1)), 1, Math.max(0, steps.length - 1))
+    : 0;
   steps.forEach((step, index) => {
-    step.classList.toggle("is-active", index === activeOrder);
+    step.classList.toggle("is-active", index === 0 || index <= activeForwardBars);
   });
 }
 
