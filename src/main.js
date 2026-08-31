@@ -11679,9 +11679,9 @@ function createMaterials(scene) {
   lightBridgeWindow.backFaceCulling = false;
 
   const darkBridgeWindow = new StandardMaterial("dark_bridge_window_material", scene);
-  darkBridgeWindow.diffuseColor = new Color3(0.025, 0.06, 0.095);
-  darkBridgeWindow.emissiveColor = new Color3(0.004, 0.014, 0.028);
-  darkBridgeWindow.specularColor = new Color3(0.18, 0.28, 0.36);
+  darkBridgeWindow.diffuseColor = new Color3(0.04, 0.075, 0.115);
+  darkBridgeWindow.emissiveColor = new Color3(0.006, 0.018, 0.034);
+  darkBridgeWindow.specularColor = new Color3(0.2, 0.3, 0.38);
   darkBridgeWindow.backFaceCulling = false;
 
   const lightFleetMaterials = createFleetMaterials(scene, "light", shipFleetMaterialPalettes.light);
@@ -12542,7 +12542,6 @@ function createBoatSternBulwarkCapMesh(name, scene) {
       pushOrientedQuad(indices, positions, a + 2, b + 2, b + 3, a + 3, Vector3.Down());
     }
 
-    pushOrientedQuad(indices, positions, start, start + 1, start + 2, start + 3, new Vector3(0, 0, -1));
     const front = start + (sections.length - 1) * 4;
     pushOrientedQuad(indices, positions, front, front + 1, front + 2, front + 3, new Vector3(0, 0, 1));
   });
@@ -12731,22 +12730,22 @@ function createTorpedoBoatSuperstructure(scene, materials, parent, name, teamMat
     const previousWindowHeight = 0.074;
     const windowHeight = previousWindowHeight * 1.5;
     const windowWidth = 0.15;
-    const windowDepth = 0.012;
+    const windowOffset = 0.004;
     const windowGap = 0.075;
     const windowCount = 3;
     const windowTopY = bridgeHouseBottomY + bridgeHouseHeight * 0.62 + previousWindowHeight * 0.5;
     const windowMaterial = getBridgeWindowMaterial(materials, teamMaterials);
     for (let i = 0; i < windowCount; i += 1) {
-      const window = MeshBuilder.CreateBox(`${name}_bridge_window_${i}`, {
+      const window = MeshBuilder.CreatePlane(`${name}_bridge_window_${i}`, {
         width: windowWidth,
-        height: windowHeight,
-        depth: windowDepth
+        height: windowHeight
       }, scene);
       window.parent = parent;
       window.position.x = (i - (windowCount - 1) * 0.5) * (windowWidth + windowGap);
       window.position.y = windowTopY - windowHeight * 0.5;
-      window.position.z = bridgeHouseZ + bridgeHouseDepth * 0.5 - windowDepth * 0.5 + 0.003;
+      window.position.z = bridgeHouseZ + bridgeHouseDepth * 0.5 + windowOffset;
       window.material = windowMaterial;
+      window.isPickable = false;
       meshes.push(window);
     }
   }
