@@ -2521,6 +2521,7 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
   height: 19px;
   margin-top: 1px;
   cursor: ew-resize;
+  transform: translateX(-6px);
 }
 
 .telegraph-step {
