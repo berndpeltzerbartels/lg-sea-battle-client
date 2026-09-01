@@ -105,6 +105,7 @@ const cannonViewButton = document.getElementById("cannonViewButton");
 const bridgeViewButton = document.getElementById("bridgeViewButton");
 const alignWeaponsButton = document.getElementById("alignWeaponsButton");
 const alignAirDefenseButton = document.getElementById("alignAirDefenseButton");
+const alignWeaponsLabel = document.getElementById("alignWeaponsLabel");
 const torpedoAidButton = document.getElementById("torpedoAidButton");
 const flakHitAlert = document.getElementById("flakHitAlert");
 const rudderIndicator = document.getElementById("rudderIndicator");
@@ -411,6 +412,7 @@ document.body.dataset.debugMap = String(debugMapEnabled);
 document.body.dataset.debugMarkerMap = String(debugMarkerMapEnabled);
 document.body.dataset.sideViewSandbox = String(sideViewSandboxMode);
 document.body.dataset.bridgeViewWidth = bridgeViewWidth.toFixed(2);
+configureVehicleHud();
 installScenarioTestHooks();
 updateFleetStatus(gameState.ships, gameState.destroyedShipsByTeam);
 updatePlayerList(gameState.ships);
@@ -856,6 +858,7 @@ const engineOrders = engineOrderLabels.map((order, index) => ({
   speed: Number.isFinite(Number(engineSpeeds[index])) ? Number(engineSpeeds[index]) : defaultEngineSpeeds[index]
 }));
 const maxTorpedoBoatForwardSpeed = Math.max(...engineOrders.map((order) => order.speed).filter((orderSpeed) => orderSpeed > 0));
+const maxSubmarineForwardSpeed = 11;
 
 // Keep propulsion as discrete ship orders, not held-key throttle.
 // Later multiplayer can send this order index plus heading/speed instead of raw input.
@@ -1133,7 +1136,7 @@ scene.onBeforeRenderObservable.add(() => {
     const diveRatio = scoutPlaneMode ? clamp(-heldElevatorDirection, 0, 1) : 0;
     const maxForwardSpeed = scoutPlaneMode
       ? scoutPlaneMaxSpeed + (scoutPlaneMaxDiveSpeed - scoutPlaneMaxSpeed) * diveRatio
-      : maxTorpedoBoatForwardSpeed;
+      : (submarineMode ? maxSubmarineForwardSpeed : maxTorpedoBoatForwardSpeed);
     const engineTargetSpeed = engineOrders[engineOrder].speed;
     const targetSpeed = scoutPlaneMode
       ? scoutPlaneTargetSpeed + (scoutPlaneMaxDiveSpeed - scoutPlaneTargetSpeed) * diveRatio
@@ -1356,8 +1359,10 @@ scene.onBeforeRenderObservable.add(() => {
   engineValue.textContent = engineOrders[engineOrder].label;
   updateTelegraphSteps(telegraphSteps, engineOrder);
   updateMeasuredSpeed(boat.root.position, time);
-  depthValue.textContent = scoutPlaneMode ? "Air" : (nextWaterSafety.isBlocked ? "Ground" : "Sea");
-  depthGauge?.style.setProperty("--depth-ratio", scoutPlaneMode ? "0" : "1");
+  depthValue.textContent = scoutPlaneMode
+    ? "Air"
+    : (submarineMode ? "0 m" : (nextWaterSafety.isBlocked ? "Ground" : "Sea"));
+  depthGauge?.style.setProperty("--depth-ratio", scoutPlaneMode || submarineMode ? "0" : "1");
   document.body.dataset.measuredSpeed = measuredSpeedSample.speed.toFixed(2);
   compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
   if (compassHeading) compassHeading.textContent = `HDG ${formatHeadingDegrees(heading)}`;
@@ -1408,7 +1413,7 @@ function isStartupErrorVisible() {
 }
 
 function isCannonViewToggleKey(event) {
-  return !scoutPlaneMode && (event.code === "KeyC" || event.key === "c" || event.key === "C");
+  return !scoutPlaneMode && !submarineMode && (event.code === "KeyC" || event.key === "c" || event.key === "C");
 }
 
 function isBridgeViewKey(event) {
@@ -1416,7 +1421,7 @@ function isBridgeViewKey(event) {
 }
 
 function isTorpedoScopeToggleKey(event) {
-  return !scoutPlaneMode && (event.code === "KeyT" || event.key === "t" || event.key === "T");
+  return !scoutPlaneMode && !submarineMode && (event.code === "KeyT" || event.key === "t" || event.key === "T");
 }
 
 function isAlignWeaponsKey(event) {
@@ -1444,6 +1449,9 @@ function toggleCannonView() {
 }
 
 function setBattleStation(station) {
+  if (submarineMode && (station === "cannon" || station === "torpedo")) {
+    station = "bridge";
+  }
   flakViewActive = station === "flak";
   cannonViewActive = station === "cannon";
   if (!cannonViewActive) {
@@ -1476,15 +1484,15 @@ function updateSteeringModifierHint() {
 }
 
 function updateTorpedoViewState() {
-  if (torpedoScopeActive && (scoutPlaneMode || flakViewActive || cannonViewActive || bombBayViewActive || playerDamageState !== "active")) {
+  if (torpedoScopeActive && (scoutPlaneMode || submarineMode || flakViewActive || cannonViewActive || bombBayViewActive || playerDamageState !== "active")) {
     setTorpedoScope(false);
   }
-  const active = torpedoScopeActive && !scoutPlaneMode && !flakViewActive && !cannonViewActive && !bombBayViewActive && playerDamageState === "active";
+  const active = torpedoScopeActive && !scoutPlaneMode && !submarineMode && !flakViewActive && !cannonViewActive && !bombBayViewActive && playerDamageState === "active";
   document.body.dataset.torpedoView = active ? "active" : "hidden";
 }
 
 function setTorpedoScope(active) {
-  torpedoScopeActive = Boolean(active) && !scoutPlaneMode && !flakViewActive && !cannonViewActive && !bombBayViewActive && playerDamageState === "active";
+  torpedoScopeActive = Boolean(active) && !scoutPlaneMode && !submarineMode && !flakViewActive && !cannonViewActive && !bombBayViewActive && playerDamageState === "active";
   document.body.dataset.torpedoView = torpedoScopeActive ? "active" : "hidden";
 }
 
@@ -2056,6 +2064,21 @@ function setupBridgeViewControl(button) {
     button.blur();
     event.stopPropagation();
   });
+}
+
+function configureVehicleHud() {
+  if (!submarineMode) return;
+  if (alignWeaponsLabel) {
+    alignWeaponsLabel.textContent = "Flak ausrichten:";
+  }
+  if (cannonViewButton) {
+    cannonViewButton.disabled = true;
+    cannonViewButton.setAttribute("aria-hidden", "true");
+  }
+  if (torpedoAidButton) {
+    torpedoAidButton.disabled = true;
+    torpedoAidButton.setAttribute("aria-hidden", "true");
+  }
 }
 
 function setupCannonViewControl(button) {

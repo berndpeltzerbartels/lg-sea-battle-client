@@ -1000,6 +1000,44 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
   min-width: 92px;
 }
 
+.submarine-station-note {
+  position: absolute;
+  z-index: 1;
+  display: none;
+  align-items: center;
+  gap: 4px;
+  color: rgb(247 251 255 / 58%);
+  font: 800 7px/1 Inter, Arial, sans-serif;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.submarine-station-note kbd,
+.submarine-depth-actions kbd {
+  display: inline-grid;
+  min-width: 12px;
+  height: 12px;
+  place-items: center;
+  padding: 0 3px;
+  border: 1px solid rgb(155 229 223 / 22%);
+  border-radius: 4px;
+  background: rgb(155 229 223 / 7%);
+  color: #9be5df;
+  font: inherit;
+  line-height: 1;
+}
+
+.submarine-station-dive {
+  left: 7%;
+  bottom: 9px;
+}
+
+.submarine-station-periscope {
+  right: 7%;
+  bottom: 9px;
+}
+
 body[data-torpedo-view="active"] .battle-station-torpedo-precision {
   border-color: rgb(255 107 74 / 82%);
   background:
@@ -1019,6 +1057,68 @@ body[data-torpedo-view="active"] .battle-station-torpedo-precision kbd {
 
 body[data-player-vehicle="scout-plane"] .battle-station-panel {
   display: none;
+}
+
+body[data-player-vehicle="submarine"] .battle-station-hull {
+  left: 15px;
+  right: 15px;
+  top: 28px;
+  height: 21px;
+  clip-path: polygon(0 50%, 8% 28%, 34% 22%, 67% 22%, 92% 30%, 100% 50%, 92% 70%, 67% 78%, 34% 78%, 8% 72%);
+}
+
+body[data-player-vehicle="submarine"] .battle-station-bow,
+body[data-player-vehicle="submarine"] .battle-station-cabin,
+body[data-player-vehicle="submarine"] .battle-station-funnel,
+body[data-player-vehicle="submarine"] .battle-station-tubes,
+body[data-player-vehicle="submarine"] .battle-station-cannon-mark,
+body[data-player-vehicle="submarine"] .battle-station-stern-mark,
+body[data-player-vehicle="submarine"] .battle-station-cannon,
+body[data-player-vehicle="submarine"] .battle-station-torpedo-precision {
+  display: none;
+}
+
+body[data-player-vehicle="submarine"] .battle-station-deck {
+  left: 10%;
+  right: 10%;
+  top: 31px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgb(214 247 244 / 16%);
+}
+
+body[data-player-vehicle="submarine"] .battle-station-bridge-mark {
+  left: 48%;
+  top: 15px;
+  width: 17px;
+  height: 25px;
+  border-radius: 7px 7px 3px 3px;
+  background: rgb(214 247 244 / 30%);
+  box-shadow: none;
+  transform: translateX(-50%);
+}
+
+body[data-player-vehicle="submarine"] .battle-station-flak-mark {
+  left: 39%;
+  top: 22px;
+  width: 13px;
+  height: 13px;
+}
+
+body[data-player-vehicle="submarine"] .battle-station-bridge {
+  left: 51%;
+  top: 47px;
+  min-width: 62px;
+}
+
+body[data-player-vehicle="submarine"] .battle-station-flak {
+  left: 28%;
+  top: 7px;
+  min-width: 54px;
+}
+
+body[data-player-vehicle="submarine"] .submarine-station-note {
+  display: inline-flex;
 }
 
 .align-weapons-group {
@@ -2267,6 +2367,34 @@ body:not([data-player-vehicle="scout-plane"]) .boat-speed-readout {
 }
 
 body[data-player-vehicle="scout-plane"] .altimeter {
+  display: grid;
+}
+
+body[data-player-vehicle="submarine"] .speed {
+  display: grid;
+  min-width: 142px;
+}
+
+body[data-player-vehicle="submarine"] .depth-gauge {
+  display: grid;
+}
+
+body[data-player-vehicle="submarine"] .depth-gauge strong {
+  font-size: 14px;
+}
+
+.submarine-depth-actions {
+  display: none;
+  grid-column: 1 / -1;
+  gap: 5px;
+  margin-top: 4px;
+  color: rgb(247 251 255 / 64%);
+  font: 800 7px/1 Inter, Arial, sans-serif;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+body[data-player-vehicle="submarine"] .submarine-depth-actions {
   display: grid;
 }
 

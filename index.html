@@ -365,8 +365,16 @@
           <span>Flak</span>
           <kbd>F</kbd>
         </button>
+        <div class="submarine-station-note submarine-station-dive" aria-hidden="true">
+          <span>Tauchen</span>
+          <kbd>D</kbd>
+        </div>
+        <div class="submarine-station-note submarine-station-periscope" aria-hidden="true">
+          <span>Sehrohrtiefe</span>
+          <kbd>P</kbd>
+        </div>
         <div class="align-weapons-group" aria-label="Geschütze ausrichten">
-          <span>Geschütze ausrichten:</span>
+          <span id="alignWeaponsLabel">Geschütze ausrichten:</span>
           <button id="alignWeaponsButton" class="align-weapons-button align-weapons-flat" type="button">Flach <kbd>A</kbd></button>
           <button id="alignAirDefenseButton" class="align-weapons-button align-weapons-air" type="button">Flugabwehr <kbd>⇧A</kbd></button>
         </div>
@@ -441,6 +449,10 @@
             <span></span>
           </div>
           <strong id="depthValue">Deep</strong>
+          <div class="submarine-depth-actions" aria-hidden="true">
+            <span>Tauchen <kbd>D</kbd></span>
+            <span>Sehrohrtiefe <kbd>P</kbd></span>
+          </div>
         </div>
       </div>
       <div class="ship-controls-panel" aria-hidden="true">
