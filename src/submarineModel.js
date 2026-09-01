@@ -60,7 +60,6 @@ export function createSubmarineModel(scene, materials, {
   sail.scaling.setAll(sailScale);
   sail.material = submarineMaterials.tower;
   meshes.push(sail);
-  meshes.push(createSailBridgeFrontPlate(scene, root, submarineMaterials, name));
 
   if (debugInterior) {
     const sailInterior = createSailInteriorDebugMesh(`${name}_sail_interior_debug`, scene);
@@ -480,16 +479,16 @@ function addSailEndCap(positions, indices, section, direction) {
 
 function addSailFrontCoaming(positions, indices, sectionPoints) {
   const front = sectionPoints[sectionPoints.length - 1];
-  const previous = sectionPoints[sectionPoints.length - 4] ?? sectionPoints[sectionPoints.length - 2];
-  const bottomY = front.floorLeft.y + 0.04;
+  const previous = sectionPoints[sectionPoints.length - 7] ?? sectionPoints[sectionPoints.length - 2];
+  const bottomY = front.floorLeft.y + 0.02;
   const topY = front.innerRimLeft.y - 0.012;
   const backZ = previous.z;
   const frontZ = front.z;
-  const halfWidth = Math.max(Math.abs(previous.floorLeft.x), Math.abs(front.innerRimLeft.x));
+  const halfWidth = Math.max(Math.abs(previous.innerRimLeft.x), Math.abs(front.innerRimLeft.x), 0.092);
   const leftBack = { x: -halfWidth, y: bottomY, z: backZ };
   const rightBack = { x: halfWidth, y: bottomY, z: backZ };
-  const leftFront = { x: -Math.abs(front.innerRimLeft.x), y: bottomY, z: frontZ };
-  const rightFront = { x: Math.abs(front.innerRimRight.x), y: bottomY, z: frontZ };
+  const leftFront = { x: -halfWidth * 0.62, y: bottomY, z: frontZ };
+  const rightFront = { x: halfWidth * 0.62, y: bottomY, z: frontZ };
   const leftBackTop = { ...leftBack, y: topY };
   const rightBackTop = { ...rightBack, y: topY };
   const leftFrontTop = { ...leftFront, y: topY };
@@ -500,21 +499,6 @@ function addSailFrontCoaming(positions, indices, sectionPoints) {
   addQuadFacing(positions, indices, leftBackTop, leftFrontTop, rightFrontTop, rightBackTop, { x: 0, y: 1, z: 0 });
   addQuadFacing(positions, indices, leftFront, rightFront, rightFrontTop, leftFrontTop, { x: 0, y: 0, z: 1 });
   addQuadFacing(positions, indices, leftBack, leftBackTop, rightBackTop, rightBack, { x: 0, y: 0, z: -1 });
-}
-
-function createSailBridgeFrontPlate(scene, root, materials, name) {
-  const height = 0.14 * sailScale;
-  const plate = MeshBuilder.CreateBox(`${name}_sail_bridge_front_plate`, {
-    width: 0.2 * sailScale,
-    height,
-    depth: 0.028 * sailScale
-  }, scene);
-  plate.parent = root;
-  plate.position.x = 0;
-  plate.position.y = sailPositionY + (0.77 * sailScale);
-  plate.position.z = sailPositionZ + 0.72 * sailScale;
-  plate.material = materials.tower;
-  return plate;
 }
 
 function createTaperedSailMesh(name, scene, sections, height) {
