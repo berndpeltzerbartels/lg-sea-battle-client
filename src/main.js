@@ -24,6 +24,7 @@ import "@babylonjs/core/Shaders/depthBoxBlur.fragment";
 import "@babylonjs/core/Shaders/postprocess.vertex";
 import "@babylonjs/core/Materials/Textures/dynamicTexture";
 import "./styles.css";
+import { createSubmarineModel } from "./submarineModel.js";
 
 const canvas = document.getElementById("renderCanvas");
 prepareGameFocus(canvas);
@@ -40,6 +41,14 @@ const scenarioTestMode = urlParams.get("scenarioTest") === "1";
 const directSideViewSandboxRequested = urlParams.get("setup") === "8"
   || urlParams.get("sandbox") === "side-view"
   || location.pathname.endsWith("/debug/side-view-sandbox");
+function normalizeClientVehicleType(value) {
+  const vehicleType = String(value ?? "").trim().toLowerCase();
+  if (["torpedo-boat", "submarine", "scout-plane"].includes(vehicleType)) {
+    return vehicleType;
+  }
+  return "torpedo-boat";
+}
+
 const shipContrastDebug = directSideViewSandboxRequested && urlParams.get("shipContrast") === "1";
 let debugMapEnabled = urlParams.get("debug") === "1";
 let debugMarkerMapEnabled = debugMapEnabled && urlParams.get("markers") === "1";
@@ -154,6 +163,7 @@ const shipFleetMaterialPalettes = {
 const worldMetersPerUnit = 20;
 const vehicleScale = gameConfig.vehicleScale;
 const torpedoBoatVisualScale = vehicleScale.torpedoBoat;
+const submarineVisualScale = torpedoBoatVisualScale;
 const scoutPlaneVisualScale = vehicleScale.scoutPlane;
 const shipGunVisualScale = vehicleScale.torpedoBoat;
 const torpedoSpeedScale = Math.sqrt(torpedoBoatVisualScale);
@@ -168,6 +178,7 @@ const torpedoNoseLength = 0.28;
 const torpedoNoseForwardOffset = torpedoBodyLength * 0.5 + torpedoNoseLength;
 const torpedoTailBackwardOffset = torpedoBodyLength * 0.5;
 const torpedoBoatWaterlineY = torpedoBoatModelWaterlineY * torpedoBoatVisualScale;
+const submarineWaterlineY = torpedoBoatWaterlineY - 0.16 * submarineVisualScale;
 const torpedoBoatSinkDepth = torpedoBoatModelSinkDepth * torpedoBoatVisualScale;
 const killFeedLimit = 5;
 const torpedoLogLimit = 40;
@@ -350,15 +361,19 @@ document.body.dataset.serverTorpedoes = String(gameState.torpedoes.length);
 document.body.dataset.serverBombs = String(Array.isArray(gameState.bombs) ? gameState.bombs.length : 0);
 const sideViewSandboxMode = directSideViewSandboxRequested || gameState.sessionId === "side-view-sandbox";
 const bridgeViewWidth = clamp(Number(urlParams.get("bridgeViewWidth") ?? "0.86"), 0.42, 0.9);
+const selectedVehicleType = normalizeClientVehicleType(urlParams.get("vehicle") ?? readStoredValue("vehicleType"));
+const submarineSandboxRequested = selectedVehicleType === "submarine" || urlParams.get("model") === "submarine";
 const sideViewCameraFovDefault = clamp(Number(urlParams.get("viewFov") ?? "0.78"), 0.28, 1.2);
-const sideViewCameraDistanceDefault = clamp(Number(urlParams.get("viewDistance") ?? "11"), -32, 32);
-const sideViewCameraHeightDefault = clamp(Number(urlParams.get("viewHeight") ?? "0.72"), -0.2, 3.2);
+const sideViewCameraDistanceDefault = clamp(Number(urlParams.get("viewDistance") ?? (submarineSandboxRequested ? "19" : "11")), -32, 32);
+const sideViewCameraHeightDefault = clamp(Number(urlParams.get("viewHeight") ?? (submarineSandboxRequested ? "1.45" : "0.72")), -0.2, 3.2);
 const sideViewCameraModeDefault = urlParams.get("viewMode") === "ship" ? "ship" : "orbit";
 const sideViewCameraXDefault = clamp(Number(urlParams.get("viewX") ?? "0"), -3.2, 3.2);
-const sideViewCameraZDefault = clamp(Number(urlParams.get("viewZ") ?? "0.5"), -5.2, 5.2);
+const sideViewCameraZDefault = clamp(Number(urlParams.get("viewZ") ?? (submarineSandboxRequested ? "0" : "0.5")), -5.2, 5.2);
 const sideViewCameraYawDefault = clamp(Number(urlParams.get("viewYaw") ?? "0"), -180, 180);
-const selectedVehicleType = urlParams.get("vehicle") ?? readStoredValue("vehicleType");
+const botSubmarineMixRequested = urlParams.get("botSubmarines") !== "0" && urlParams.get("bot-submarines") !== "0";
 const scoutPlaneMode = gameState.sessionId === scoutPlaneSetupId || selectedVehicleType === "scout-plane";
+const submarineMode = selectedVehicleType === "submarine";
+const playerVehicleType = scoutPlaneMode ? "scout-plane" : (submarineMode ? "submarine" : "torpedo-boat");
 if (scoutPlaneMode) {
   scene.fogDensity = 0.0008;
 }
@@ -381,7 +396,7 @@ let playerTorpedoesRemaining = Number.isFinite(initialPlayerSpawn.torpedoesRemai
 document.body.dataset.playerTeam = playerTeamId;
 document.body.dataset.playerId = playerId;
 document.body.dataset.playerInitials = playerInitials;
-document.body.dataset.playerVehicle = scoutPlaneMode ? "scout-plane" : "torpedo-boat";
+document.body.dataset.playerVehicle = playerVehicleType;
 document.body.dataset.flakView = "bridge";
 document.body.dataset.cannonView = "bridge";
 document.body.dataset.cannonSight = "I";
@@ -469,17 +484,43 @@ if (renderQuality.visualEffects !== "low") {
 
 const boat = scoutPlaneMode
   ? createScoutPlane(scene, materials, "player_scout_plane", playerTeamId, true)
-  : createPlayerBow(
-    scene,
-    materials,
-    "player_bow",
-    playerTeamId,
-    initialPlayerShip ? createShipDesignation(initialPlayerShip) : ""
-  );
+  : (submarineMode
+    ? createSubmarineModel(scene, materials, {
+      name: "player_submarine",
+      teamMaterials: getShipTeamMaterials(materials, playerTeamId),
+      scale: submarineVisualScale,
+      debugInterior: sideViewSandboxMode
+    })
+    : createPlayerBow(
+      scene,
+      materials,
+      "player_bow",
+      playerTeamId,
+      initialPlayerShip ? createShipDesignation(initialPlayerShip) : ""
+    ));
 boat.root.position.copyFrom(initialPlayerSpawn.position);
 if (scoutPlaneMode) {
   boat.root.position.y = scoutPlaneCruiseAltitude;
+} else if (submarineMode) {
+  boat.root.position.y = submarineWaterlineY;
 }
+if (submarineMode && !boat.sternFlak && boat.flakMount) {
+  boat.sternFlak = createSternFlak(scene, materials, boat.root, "player_submarine", getShipTeamMaterials(materials, playerTeamId), boat.flakMount.z, true, {
+    deckY: boat.flakMount.deckY,
+    scale: boat.flakMount.scale,
+    platformDiameterScale: 0.34,
+    platformHeightScale: 1,
+    pedestalDiameterScale: 0.5,
+    pedestalHeightScale: 0.24
+  });
+  boat.flakViewHiddenMeshes = boat.sternFlak.viewHiddenMeshes ?? [];
+  document.body.dataset.submarineFlak = "1";
+}
+if (sideViewSandboxMode && submarineMode) {
+  createSubmarineCameraDebugMarker(scene, boat);
+  window.__seaBattleSideView = { scene, boat };
+}
+document.body.dataset.playerModelMeshes = String(boat.meshes?.length ?? 0);
 
 // Until SSE arrives, backend ships seed the visual fleet and local motion keeps them inspectable.
 const enemyMotions = createEnemyFleet(
@@ -866,7 +907,7 @@ let debugOrbitDragActive = false;
 let debugOrbitPointerId = null;
 let debugOrbitLastX = 0;
 let debugOrbitLastY = 0;
-let debugOrbitYaw = Math.PI / 2;
+let debugOrbitYaw = sideViewCameraYawDefault * Math.PI / 180;
 let debugOrbitPitch = 0.26;
 let debugOrbitRadius = sideViewCameraDistanceDefault;
 let debugOrbitTargetY = sideViewCameraHeightDefault;
@@ -1191,12 +1232,14 @@ scene.onBeforeRenderObservable.add(() => {
   if (playerActive) {
     boat.root.position.y = scoutPlaneMode
       ? scoutPlaneAltitude
-      : torpedoBoatWaterlineY + bob;
+      : (submarineMode ? submarineWaterlineY : torpedoBoatWaterlineY) + bob;
     const torpedoBoatTrimPitch = scoutPlaneMode ? 0 : getTorpedoBoatTrimPitch(speed);
+    const submarineMotionFactor = submarineMode ? 0.28 : 1;
+    const submarineRollFactor = submarineMode ? 0.16 : 1;
     boat.root.rotationQuaternion = Quaternion.FromEulerAngles(
-      scoutPlaneMode ? scoutPlanePitch : torpedoBoatTrimPitch + Math.sin(time * 2.6) * 0.025 * shipStabilization,
+      scoutPlaneMode ? scoutPlanePitch : (torpedoBoatTrimPitch + Math.sin(time * 2.6) * 0.025 * shipStabilization) * submarineMotionFactor,
       heading,
-      scoutPlaneMode ? -turnVelocity * 2.8 : (-turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018) * shipStabilization
+      scoutPlaneMode ? -turnVelocity * 2.8 : (-turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018) * shipStabilization * submarineRollFactor
     );
     if (scoutPlaneMode) {
       updateScoutPlaneVisual(boat, speed, time);
@@ -1593,9 +1636,12 @@ function getPlayerCameraSetup(forward) {
   }
 
   if (!scoutPlaneMode) {
-    const bridgeWindow = getBridgeWindowCameraLocalPosition();
-    const position = transformLocalShipPointWithoutTilt(bridgeWindow.position, torpedoBoatVisualScale);
-    const target = transformLocalShipPointWithoutTilt(bridgeWindow.target, torpedoBoatVisualScale);
+    const bridgeWindow = submarineMode
+      ? getSubmarineBridgeCameraLocalPosition()
+      : getBridgeWindowCameraLocalPosition();
+    const visualScale = submarineMode ? submarineVisualScale : torpedoBoatVisualScale;
+    const position = transformLocalShipPointWithoutTilt(bridgeWindow.position, visualScale);
+    const target = transformLocalShipPointWithoutTilt(bridgeWindow.target, visualScale);
     return { position, target };
   }
 
@@ -1633,6 +1679,13 @@ function getBridgeWindowCameraLocalPosition() {
   };
 }
 
+function getSubmarineBridgeCameraLocalPosition() {
+  return {
+    position: new Vector3(0, 1.64, 0.31),
+    target: new Vector3(0, 1.48, 82)
+  };
+}
+
 function transformLocalPlanePoint(localPoint) {
   const rotation = Quaternion.FromEulerAngles(scoutPlanePitch, heading, -turnVelocity * 2.8);
   const matrix = Matrix.Compose(
@@ -1665,6 +1718,13 @@ function worldToLocalShipPointWithoutTilt(worldPoint) {
 
 function getDebugOrbitCameraSetup() {
   if (debugCameraMode === "ship") {
+    if (submarineMode) {
+      const bridgeWindow = getSubmarineBridgeCameraLocalPosition();
+      return {
+        position: transformLocalShipPointWithoutTilt(bridgeWindow.position, submarineVisualScale),
+        target: transformLocalShipPointWithoutTilt(bridgeWindow.target, submarineVisualScale)
+      };
+    }
     const shipYaw = heading + debugShipCameraYaw * Math.PI / 180;
     const localRight = new Vector3(Math.cos(heading), 0, -Math.sin(heading));
     const localForward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
@@ -3354,6 +3414,13 @@ async function loadGameState() {
 }
 
 function createDirectSideViewSandboxState() {
+  const sandboxVehicleType = normalizeClientVehicleType(urlParams.get("vehicle")) === "submarine" || urlParams.get("model") === "submarine"
+    ? "submarine"
+    : "torpedo-boat";
+  const sandboxTeamId = sanitizeTeamId(urlParams.get("team")) || "light";
+  const sandboxHeading = Number.isFinite(Number(urlParams.get("headingDeg")))
+    ? Number(urlParams.get("headingDeg")) * Math.PI / 180
+    : 0;
   return {
     sessionId: "side-view-sandbox",
     state: "running",
@@ -3361,17 +3428,17 @@ function createDirectSideViewSandboxState() {
     ships: [
       {
         id: "sandbox-player",
-        teamId: "light",
+        teamId: sandboxTeamId,
         controlledBy: "player-BPB-sandbox",
         state: "active",
         x: 0,
         z: 0,
-        heading: 0,
+        heading: sandboxHeading,
         speed: 0,
         engineOrder: 0,
         rudderDegrees: 0,
         torpedoesRemaining: 12,
-        vehicleType: "torpedo-boat"
+        vehicleType: sandboxVehicleType
       }
     ],
     torpedoes: [],
@@ -3499,6 +3566,7 @@ function showClientLogin(prefill = {}) {
       <label>Name<input name="nickname" autocomplete="off" minlength="2" maxlength="40" required></label>
       <label>Kennung<input name="alias" autocomplete="off" autocapitalize="characters" maxlength="5" pattern="[A-Za-z0-9]{1,5}" required></label>
       <label>Flotte<select name="team" required><option value="light">Light</option><option value="dark">Dark</option></select></label>
+      <label>Fahrzeug<select name="vehicleType" required><option value="torpedo-boat">Torpedoboot</option><option value="submarine">U-Boot</option><option value="scout-plane">Flugzeug</option></select></label>
       <button type="submit">Einsteigen</button>
       <small data-login-error></small>
     </form>
@@ -3511,6 +3579,7 @@ function showClientLogin(prefill = {}) {
   form.elements.nickname.value = String(prefill.nickname ?? "").trim();
   form.elements.alias.value = String(prefill.alias ?? "").trim().toUpperCase();
   form.elements.team.value = sanitizeTeamId(prefill.team ?? readStoredValue("seaBattlePlayerTeamId")) || "light";
+  form.elements.vehicleType.value = normalizeClientVehicleType(prefill.vehicleType ?? readStoredValue("vehicleType"));
 
   return new Promise((resolve) => {
     form.addEventListener("submit", async (event) => {
@@ -3519,8 +3588,9 @@ function showClientLogin(prefill = {}) {
       const nickname = String(form.elements.nickname.value ?? "").trim();
       const alias = sanitizeInitials(form.elements.alias.value);
       const team = sanitizeTeamId(form.elements.team.value);
-      if (!nickname || nickname.length < 2 || !alias || !team) {
-        error.textContent = "Bitte Name, Kennung und Flotte setzen.";
+      const vehicleType = normalizeClientVehicleType(form.elements.vehicleType.value);
+      if (!nickname || nickname.length < 2 || !alias || !team || !vehicleType) {
+        error.textContent = "Bitte Name, Kennung, Flotte und Fahrzeug setzen.";
         return;
       }
 
@@ -3533,7 +3603,7 @@ function showClientLogin(prefill = {}) {
             nickname,
             alias,
             team,
-            vehicleType: "torpedo-boat"
+            vehicleType
           })
         });
         if (!response.ok) {
@@ -3552,7 +3622,7 @@ function showClientLogin(prefill = {}) {
         localStorage.setItem("seaBattlePlayerId", playerId);
         localStorage.setItem("seaBattlePlayerInitials", initials);
         localStorage.setItem("seaBattlePlayerTeamId", teamId);
-        localStorage.setItem("vehicleType", "torpedo-boat");
+        localStorage.setItem("vehicleType", vehicleType);
         document.body.classList.remove("login-active");
         screen.remove();
         resolve({ playerId, initials, teamId, freshLogin: true });
@@ -4273,7 +4343,7 @@ async function sendPlayerState() {
         cannonPitch,
         clientTime: performance.now() / 1000,
         debugTeleport,
-        vehicleType: scoutPlaneMode ? "scout-plane" : "torpedo-boat"
+        vehicleType: playerVehicleType
       })
     });
     if (!response.ok) {
@@ -4311,7 +4381,7 @@ async function requestPlayerTorpedoFire() {
   const fireRequest = {
     playerId,
     teamId: playerTeamId,
-    vehicleType: scoutPlaneMode ? "scout-plane" : "torpedo-boat",
+    vehicleType: playerVehicleType,
     x: boat.root.position.x,
     z: boat.root.position.z,
     heading,
@@ -5152,7 +5222,7 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, headi
   drawMapUnitMarker(ctx, playerPoint.x, playerPoint.y, {
     teamId: playerTeamId,
     controlledBy: playerId,
-    vehicleType: scoutPlaneMode ? "scout-plane" : "torpedo-boat"
+    vehicleType: playerVehicleType
   }, heading);
 
   if (mapSectorValue) mapSectorValue.textContent = formatMapSector(playerPosition);
@@ -6347,7 +6417,8 @@ function createShipDesignation(ship) {
   const match = String(ship.id ?? "").match(/(\d+)$/);
   const number = match ? Number.parseInt(match[1], 10) : 0;
   const base = getTeamDefinition(ship.teamId)?.shipBase ?? 50;
-  const prefix = getShipVehicleType(ship) === "scout-plane" ? "F" : "S";
+  const vehicleType = getShipVehicleType(ship);
+  const prefix = vehicleType === "scout-plane" ? "F" : (vehicleType === "submarine" ? "U" : "S");
   return `${prefix} ${base + number}`;
 }
 
@@ -6434,6 +6505,24 @@ function createStaticFlakDemoFleet(scene, materials, parent, playerPosition, pla
   });
 }
 
+function createSubmarineCameraDebugMarker(scene, boatModel) {
+  const bridgeCamera = getSubmarineBridgeCameraLocalPosition();
+  const material = new StandardMaterial("submarine_camera_debug_marker_material", scene);
+  material.diffuseColor = new Color3(1, 0.04, 0.02);
+  material.emissiveColor = new Color3(0.8, 0.02, 0.01);
+  material.specularColor = new Color3(0.2, 0.04, 0.02);
+
+  const marker = MeshBuilder.CreateSphere("submarine_camera_debug_marker", {
+    diameter: 0.14,
+    segments: 12
+  }, scene);
+  marker.parent = boatModel.root;
+  marker.position.copyFrom(bridgeCamera.position);
+  marker.material = material;
+  marker.isPickable = false;
+  document.body.dataset.submarineCameraMarker = "1";
+}
+
 function aimDemoFlakAtTarget(demoBoat, target) {
   const mount = demoBoat.sternFlak?.mount;
   const elevationRoot = demoBoat.sternFlak?.elevationRoot;
@@ -6469,28 +6558,62 @@ function createEnemyFleet(scene, materials, serverShips) {
 }
 
 function createRemoteVehicleModel(scene, materials, name, ship) {
-  return isScoutPlaneShip(ship)
-    ? createScoutPlane(scene, materials, name, ship.teamId, false)
-    : createEnemyTorpedoBoat(
+  if (isScoutPlaneShip(ship)) {
+    return createScoutPlane(scene, materials, name, ship.teamId, false);
+  }
+  if (getShipVehicleType(ship) === "submarine") {
+    return createSubmarineModel(scene, materials, {
+      name,
+      teamMaterials: getShipTeamMaterials(materials, ship.teamId),
+      scale: submarineVisualScale
+    });
+  }
+  return createEnemyTorpedoBoat(
       scene,
       materials,
       name,
       ship.teamId,
       createShipDesignation(ship),
       scoutPlaneExperimentShowAllFlak || isHumanController(ship?.controlledBy)
-    );
+  );
 }
 
 function getShipVehicleType(ship) {
   if (ship?.vehicleType === "scout-plane") return "scout-plane";
+  if (ship?.vehicleType === "submarine") return "submarine";
+  if (shouldRenderBotAsSubmarine(ship)) return "submarine";
   if (ship?.vehicleType === "torpedo-boat") return "torpedo-boat";
   return vehicleTypeFromShipId(ship?.id) ?? "torpedo-boat";
 }
 
+function shouldRenderBotAsSubmarine(ship) {
+  if (!botSubmarineMixRequested || !ship) return false;
+  if ((ship.controlledBy ?? "bot") !== "bot") return false;
+  const explicitType = String(ship.vehicleType ?? "").trim().toLowerCase();
+  if (explicitType === "scout-plane" || explicitType === "submarine") return false;
+  const match = String(ship.id ?? "").match(/(\d+)$/);
+  if (match) {
+    return Number.parseInt(match[1], 10) % 2 === 0;
+  }
+  return stableHashString(ship.id ?? "") % 2 === 0;
+}
+
+function stableHashString(value) {
+  let hash = 0;
+  const text = String(value ?? "");
+  for (let i = 0; i < text.length; i += 1) {
+    hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
 function vehicleTypeFromShipId(shipId) {
-  const match = String(shipId ?? "").match(/-[FS]\d+$/i);
+  const match = String(shipId ?? "").match(/-[FSU]\d+$/i);
   if (!match) return null;
-  return match[0][1].toUpperCase() === "F" ? "scout-plane" : "torpedo-boat";
+  const prefix = match[0][1].toUpperCase();
+  if (prefix === "F") return "scout-plane";
+  if (prefix === "U") return "submarine";
+  return "torpedo-boat";
 }
 
 function isScoutPlaneShip(ship) {
@@ -6502,7 +6625,9 @@ function isScoutPlaneMotion(motion) {
 }
 
 function remoteVehicleY(ship) {
-  if (!isScoutPlaneShip(ship)) return torpedoBoatWaterlineY;
+  const vehicleType = getShipVehicleType(ship);
+  if (vehicleType === "submarine") return submarineWaterlineY;
+  if (vehicleType !== "scout-plane") return torpedoBoatWaterlineY;
   return Number.isFinite(ship?.y) ? ship.y : scoutPlaneCruiseAltitude;
 }
 
@@ -13175,19 +13300,22 @@ function createOpenFlakTurretWall(name, scene, scale) {
   return createMeshFromData(name, scene, positions, indices);
 }
 
-function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ = -3.45, isPlayer = false) {
+function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ = -3.45, isPlayer = false, options = {}) {
   const deckMaterial = teamMaterials.deck;
   const metalMaterial = teamMaterials.funnel ?? materials.funnel;
   const shieldMaterial = teamMaterials.cabin ?? teamMaterials.hull;
-  const scale = isPlayer ? playerSternFlakScale : 0.75;
-  const platformHeight = 0.12 * scale;
-  const platformY = getTorpedoBoatDeckY(sternZ) + platformHeight * 0.5 + 0.002;
-  const turretBaseHeight = 0.14 * scale;
+  const scale = options.scale ?? (isPlayer ? playerSternFlakScale : 0.75);
+  const platformHeight = 0.12 * scale * (options.platformHeightScale ?? 1);
+  const platformBaseY = options.deckY ?? getTorpedoBoatDeckY(sternZ);
+  const platformY = platformBaseY + platformHeight * 0.5 + 0.002;
+  const turretBaseHeight = 0.14 * scale * (options.pedestalHeightScale ?? 1);
   const turretWallHeight = 0.145 * scale;
   const turretTopY = platformY + platformHeight * 0.5 + turretBaseHeight + turretWallHeight;
+  const platformDiameterScale = options.platformDiameterScale ?? 1;
+  const pedestalDiameterScale = options.pedestalDiameterScale ?? 1;
 
   const platform = MeshBuilder.CreateCylinder(`${name}_flak_platform`, {
-    diameter: 0.78 * scale,
+    diameter: 0.78 * scale * platformDiameterScale,
     height: platformHeight,
     tessellation: 28
   }, scene);
@@ -13197,7 +13325,7 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   platform.material = deckMaterial;
 
   const pedestal = MeshBuilder.CreateCylinder(`${name}_flak_pedestal`, {
-    diameter: 0.54 * scale,
+    diameter: 0.54 * scale * pedestalDiameterScale,
     height: turretBaseHeight,
     tessellation: 20
   }, scene);

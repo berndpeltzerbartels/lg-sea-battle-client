@@ -2770,6 +2770,38 @@ body[data-flak-view="active"] .flak-elevation {
   display: block;
 }
 
+body[data-flak-view="active"] .battle-station-panel {
+  width: min(420px, calc(100vw - var(--instrument-panel-padding) * 2));
+}
+
+body[data-flak-view="active"] .align-weapons-group {
+  grid-template-columns: max-content minmax(76px, 0.85fr) minmax(128px, 1.3fr);
+  gap: 8px;
+}
+
+body[data-flak-view="active"] .align-weapons-button {
+  padding-inline: 7px;
+  white-space: nowrap;
+}
+
+body[data-flak-view="active"] .align-weapons-button kbd {
+  margin-left: 4px;
+}
+
+body[data-flak-view="active"] .ship-controls-panel {
+  grid-template-columns: 192px minmax(0, 1fr);
+  width: min(530px, calc(100vw - var(--view-left) - 44px));
+}
+
+body[data-flak-view="active"] .telegraph-speed-line {
+  grid-template-columns: 52px 36px 16px 52px;
+}
+
+body[data-flak-view="active"] .telegraph-speed-line .telegraph-key-hints {
+  width: 52px;
+  min-width: 52px;
+}
+
 body[data-cannon-view="active"] .cannon-elevation {
   display: grid;
 }
@@ -2793,7 +2825,7 @@ body[data-cannon-view="active"] .ship-controls-panel {
   width: var(--cannon-side-control-width);
   height: var(--cannon-side-control-height);
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: 58px 74px;
+  grid-template-rows: 66px 66px;
   gap: 8px;
   overflow: visible;
   border: 0;
@@ -2808,7 +2840,7 @@ body[data-cannon-view="active"] .telegraph,
 body[data-cannon-view="active"] .rudder {
   height: auto;
   box-sizing: border-box;
-  padding: 9px 10px 8px;
+  padding: 8px 10px;
   border: 1px solid rgb(255 255 255 / 32%);
   border-radius: 8px;
   background: rgb(5 27 40 / 98%);
@@ -2831,7 +2863,7 @@ body[data-cannon-view="active"] .rudder-title {
 }
 
 body[data-cannon-view="active"] .rudder-key-hints {
-  margin-top: 5px;
+  margin-top: 3px;
 }
 
 body[data-cannon-view="active"] .telegraph-key-hints .shift-hint,
@@ -2842,6 +2874,38 @@ body[data-cannon-view="active"] .rudder-key-hints .shift-hint {
 body[data-cannon-view="active"] .telegraph-readout-row {
   grid-template-columns: minmax(0, 1fr);
   margin-bottom: 0;
+}
+
+body[data-cannon-view="active"] .telegraph-speed-readout {
+  gap: 4px;
+}
+
+body[data-cannon-view="active"] .telegraph-speed-line {
+  grid-template-columns: 18px 44px 17px 18px;
+  gap: 5px;
+}
+
+body[data-cannon-view="active"] .telegraph-speed-readout #telegraphSpeedValue {
+  width: 44px;
+  min-width: 44px;
+  font-size: 17px;
+  line-height: 1;
+}
+
+body[data-cannon-view="active"] .telegraph-speed-readout small {
+  font-size: 9px;
+  line-height: 1;
+}
+
+body[data-cannon-view="active"] .telegraph-speed-line .telegraph-key-hints {
+  width: 18px;
+  min-width: 18px;
+  overflow: visible;
+}
+
+body[data-cannon-view="active"] .telegraph-speed-line .telegraph-key-hints kbd {
+  width: 18px;
+  min-width: 18px;
 }
 
 body[data-cannon-view="active"] .telegraph-scale {
@@ -2890,7 +2954,7 @@ body[data-cannon-view="active"] .weapon-aim-hints {
 
 body[data-cannon-view="active"] .weapon-aim-hints {
   left: calc(var(--cannon-side-control-left) + var(--cannon-engine-panel-width) + 8px);
-  bottom: calc(var(--instrument-panel-padding) + 74px + 8px + 3px);
+  bottom: calc(var(--instrument-panel-padding) + 66px + 8px + 7px);
   z-index: 5;
 }
 
@@ -2902,11 +2966,11 @@ body[data-cannon-view="active"] .weapon-aim-hints {
   }
 
   body[data-cannon-view="active"] .ship-controls-panel {
-    grid-template-rows: 54px 66px;
+    grid-template-rows: 62px 58px;
   }
 
   body[data-cannon-view="active"] .weapon-aim-hints {
-    bottom: calc(var(--instrument-panel-padding) + 66px + 8px + 1px);
+    bottom: calc(var(--instrument-panel-padding) + 58px + 8px + 5px);
   }
 
   body[data-cannon-view="active"] .cannon-elevation {
