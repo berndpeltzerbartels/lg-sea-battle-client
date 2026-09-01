@@ -2146,27 +2146,18 @@ function updateSideViewCameraControls() {
 
 function alignWeaponsForBridge(mode = "flat") {
   const airDefense = mode === "air-defense";
-  const trimPitch = getCurrentTorpedoBoatTrimPitch();
   const flakWorldPitch = airDefense ? weaponAlignAirDefenseFlakPitch : weaponAlignFlatFlakPitch;
   const cannonWorldPitch = airDefense ? weaponAlignAirDefenseCannonPitch : weaponAlignFlatCannonPitch;
   weaponAlignTarget = {
     flakYaw: Math.PI,
     flakWorldPitch,
-    flakPitch: trimAdjustedWeaponPitch(flakWorldPitch, trimPitch, flakMinPitch, flakMaxPitch),
+    flakPitch: flakPitchForWorldPitch(Math.PI, flakWorldPitch),
     cannonYaw: 0,
     cannonWorldPitch,
-    cannonPitch: trimAdjustedWeaponPitch(cannonWorldPitch, trimPitch, cannonMinPitch, cannonMaxPitch),
+    cannonPitch: cannonPitchForWorldPitch(0, cannonWorldPitch),
     mode: airDefense ? "air-defense" : "flat"
   };
   document.body.dataset.weaponAlign = weaponAlignTarget.mode;
-}
-
-function getCurrentTorpedoBoatTrimPitch() {
-  return scoutPlaneMode ? 0 : getTorpedoBoatTrimPitch(speed);
-}
-
-function trimAdjustedWeaponPitch(worldPitch, trimPitch, minPitch, maxPitch) {
-  return clamp(worldPitch + trimPitch, minPitch, maxPitch);
 }
 
 function cancelWeaponAlignment() {
@@ -2177,9 +2168,8 @@ function cancelWeaponAlignment() {
 
 function updateWeaponAlignment(dt) {
   if (!weaponAlignTarget) return;
-  const trimPitch = getCurrentTorpedoBoatTrimPitch();
-  weaponAlignTarget.flakPitch = trimAdjustedWeaponPitch(weaponAlignTarget.flakWorldPitch, trimPitch, flakMinPitch, flakMaxPitch);
-  weaponAlignTarget.cannonPitch = trimAdjustedWeaponPitch(weaponAlignTarget.cannonWorldPitch, trimPitch, cannonMinPitch, cannonMaxPitch);
+  weaponAlignTarget.flakPitch = flakPitchForWorldPitch(weaponAlignTarget.flakYaw, weaponAlignTarget.flakWorldPitch);
+  weaponAlignTarget.cannonPitch = cannonPitchForWorldPitch(weaponAlignTarget.cannonYaw, weaponAlignTarget.cannonWorldPitch);
   flakYaw = moveAngleToward(flakYaw, weaponAlignTarget.flakYaw, weaponAlignYawSpeed * dt);
   flakPitch = moveValueToward(flakPitch, weaponAlignTarget.flakPitch, weaponAlignPitchSpeed * dt);
   cannonYaw = moveValueToward(cannonYaw, weaponAlignTarget.cannonYaw, weaponAlignYawSpeed * dt);
@@ -2192,6 +2182,54 @@ function updateWeaponAlignment(dt) {
   ) {
     weaponAlignTarget = null;
   }
+}
+
+function flakPitchForWorldPitch(yaw, worldPitch) {
+  return weaponPitchForWorldPitch(boat.sternFlak?.mount, boat.sternFlak?.elevationRoot, yaw, worldPitch, flakMinPitch, flakMaxPitch);
+}
+
+function cannonPitchForWorldPitch(yaw, worldPitch) {
+  return weaponPitchForWorldPitch(boat.bowCannon?.mount, boat.bowCannon?.elevationRoot, yaw, worldPitch, cannonMinPitch, cannonMaxPitch);
+}
+
+function weaponPitchForWorldPitch(mount, elevationRoot, yaw, worldPitch, minPitch, maxPitch) {
+  if (!mount || !elevationRoot) return clamp(worldPitch, minPitch, maxPitch);
+  const originalYaw = mount.rotation.y;
+  const originalPitchRotation = elevationRoot.rotation.x;
+  let low = minPitch;
+  let high = maxPitch;
+  let bestPitch = clamp(worldPitch, minPitch, maxPitch);
+  let bestError = Number.POSITIVE_INFINITY;
+  mount.rotation.y = yaw;
+
+  for (let step = 0; step < 18; step += 1) {
+    const mid = (low + high) / 2;
+    elevationRoot.rotation.x = -mid;
+    const shotWorldPitch = weaponWorldPitch(elevationRoot);
+    const error = shotWorldPitch - worldPitch;
+    const absError = Math.abs(error);
+    if (absError < bestError) {
+      bestError = absError;
+      bestPitch = mid;
+    }
+    if (error > 0) {
+      high = mid;
+    } else {
+      low = mid;
+    }
+  }
+
+  mount.rotation.y = originalYaw;
+  elevationRoot.rotation.x = originalPitchRotation;
+  mount.computeWorldMatrix?.(true);
+  elevationRoot.computeWorldMatrix?.(true);
+  return clamp(bestPitch, minPitch, maxPitch);
+}
+
+function weaponWorldPitch(elevationRoot) {
+  const worldMatrix = elevationRoot.computeWorldMatrix(true);
+  const direction = Vector3.TransformNormal(Vector3.Forward(), worldMatrix).normalize();
+  return Math.atan2(direction.y, Math.hypot(direction.x, direction.z));
 }
 
 function moveValueToward(value, target, maxStep) {
@@ -7389,6 +7427,29 @@ function installScenarioTestHooks() {
         speed,
         verticalSpeed: scoutPlaneVerticalSpeed,
         engineOrder
+      };
+    },
+    alignBridgeWeapons(mode = "flat") {
+      alignWeaponsForBridge(mode);
+      for (let step = 0; step < 180 && weaponAlignTarget; step += 1) {
+        updateWeaponAlignment(1 / 30);
+      }
+      updatePlayerFlakMount();
+      updatePlayerCannonMount();
+      const flakShot = getPlayerFlakShot();
+      const cannonShot = getPlayerCannonShot();
+      return {
+        mode: document.body.dataset.weaponAlign ?? "",
+        flak: flakShot ? {
+          yaw: flakYaw,
+          pitch: flakPitch,
+          direction: vectorSnapshot(flakShot.direction)
+        } : null,
+        cannon: cannonShot ? {
+          yaw: cannonYaw,
+          pitch: cannonPitch,
+          direction: vectorSnapshot(cannonShot.direction)
+        } : null
       };
     },
     aimCannonAt(target) {

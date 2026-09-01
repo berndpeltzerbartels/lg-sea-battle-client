@@ -290,6 +290,29 @@ test('weapon view and projectile start stay on the visible weapon with and witho
   }
 });
 
+test('bridge weapon alignment keeps stern flak level while the boat is trimmed', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, FLAK_FAST_BOAT_SCENARIO, testInfo);
+  await page.evaluate(() => window.seaBattleScenarioTest.setPlayerNavigationState({
+    heading: Math.PI / 2,
+    speed: 17.5,
+    engineOrder: 8
+  }));
+  await page.waitForTimeout(250);
+
+  const flat = await page.evaluate(() => window.seaBattleScenarioTest.alignBridgeWeapons('flat'));
+  const airDefense = await page.evaluate(() => window.seaBattleScenarioTest.alignBridgeWeapons('air-defense'));
+
+  expect(flat.flak, 'flat bridge alignment should expose a flak shot').toBeTruthy();
+  expect(
+    Math.abs(flat.flak.direction.y),
+    `flat flak alignment should stay level instead of pointing into the water: ${JSON.stringify(flat.flak)}`
+  ).toBeLessThan(0.025);
+  expect(
+    airDefense.flak.direction.y,
+    `air-defense flak alignment should still point upward: ${JSON.stringify(airDefense.flak)}`
+  ).toBeGreaterThan(0.22);
+});
+
 test('cannon fire is blocked by the actual own-ship shot line instead of fixed yaw limits', async ({ page, request }, testInfo) => {
   await openScenario(page, request, CANNON_OWN_SHIP_LINE_SCENARIO, testInfo);
 
