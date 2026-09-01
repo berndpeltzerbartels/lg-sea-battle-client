@@ -274,8 +274,8 @@ function createDeckDetails(scene, root, materials, name) {
   const details = [];
   const mastBaseY = sailPositionY + sailFloorY * sailScale - 0.012;
   [0.02, 0.2].forEach((z, index) => {
-    const height = (index === 0 ? 1.16 : 0.96) * sailScale;
-    const mast = MeshBuilder.CreateCylinder(`${name}_periscope_${index}`, { diameter: 0.045, height, tessellation: 8 }, scene);
+    const height = (index === 0 ? 0.986 : 0.816) * sailScale;
+    const mast = MeshBuilder.CreateCylinder(`${name}_periscope_${index}`, { diameter: 0.038, height, tessellation: 8 }, scene);
     mast.parent = root;
     mast.position.y = mastBaseY + height * 0.5;
     mast.position.z = sailPositionZ + (z - sailPositionZ) * sailScale;
