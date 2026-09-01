@@ -79,6 +79,8 @@ const altimeterHundredsHand = document.getElementById("altimeterHundredsHand");
 const altimeterThousandsHand = document.getElementById("altimeterThousandsHand");
 const depthValue = document.getElementById("depthValue");
 const depthGauge = document.querySelector(".depth-gauge");
+const submarineDiveButton = document.getElementById("submarineDiveButton");
+const submarinePeriscopeButton = document.getElementById("submarinePeriscopeButton");
 const engineValue = document.getElementById("engineValue");
 const telegraphSpeedValue = document.getElementById("telegraphSpeedValue");
 const telegraphOrderValue = document.getElementById("telegraphOrderValue");
@@ -135,6 +137,26 @@ const mapSectorSize = 600;
 const mapSectorOrigin = 5400;
 const mapZoomScales = [0.5, 1, 2, 4, 8, 16];
 const maxPlayerInitialsLength = 5;
+const submarineDepthStates = {
+  surface: "surface",
+  periscope: "periscope",
+  submerged: "submerged"
+};
+const submarineDepthLabels = {
+  surface: "0 m",
+  periscope: "Sehrohr",
+  submerged: "Getaucht"
+};
+const submarineDepthOffsets = {
+  surface: 0,
+  periscope: -1.28,
+  submerged: -2.2
+};
+const submarineBobbingRatios = {
+  surface: 1,
+  periscope: 0.14,
+  submerged: 0
+};
 const teamDefinitions = [
   { id: "light", label: "Light", className: "light", shipBase: 50 },
   { id: "dark", label: "Dark", className: "dark", shipBase: 80 },
@@ -375,6 +397,7 @@ const botSubmarineMixRequested = urlParams.get("botSubmarines") !== "0" && urlPa
 const scoutPlaneMode = gameState.sessionId === scoutPlaneSetupId || selectedVehicleType === "scout-plane";
 const submarineMode = selectedVehicleType === "submarine";
 const playerVehicleType = scoutPlaneMode ? "scout-plane" : (submarineMode ? "submarine" : "torpedo-boat");
+let playerSubmarineDepthState = submarineDepthStates.surface;
 if (scoutPlaneMode) {
   scene.fogDensity = 0.0008;
 }
@@ -398,6 +421,7 @@ document.body.dataset.playerTeam = playerTeamId;
 document.body.dataset.playerId = playerId;
 document.body.dataset.playerInitials = playerInitials;
 document.body.dataset.playerVehicle = playerVehicleType;
+document.body.dataset.playerDepthState = playerSubmarineDepthState;
 document.body.dataset.flakView = "bridge";
 document.body.dataset.cannonView = "bridge";
 document.body.dataset.cannonSight = "I";
@@ -504,7 +528,7 @@ boat.root.position.copyFrom(initialPlayerSpawn.position);
 if (scoutPlaneMode) {
   boat.root.position.y = scoutPlaneCruiseAltitude;
 } else if (submarineMode) {
-  boat.root.position.y = submarineWaterlineY;
+  boat.root.position.y = getPlayerSubmarineWaterlineY();
 }
 if (submarineMode && !boat.sternFlak && boat.flakMount) {
   boat.sternFlak = createSternFlak(scene, materials, boat.root, "player_submarine", getShipTeamMaterials(materials, playerTeamId), boat.flakMount.z, true, {
@@ -589,6 +613,16 @@ window.addEventListener("keydown", (event) => {
   }
   if (!singleRadarMode && playerActive && isRadarModeToggleKey(event) && !event.repeat) {
     setRadarMode(radarMode === "target" ? "radar" : "target");
+    event.preventDefault();
+    return;
+  }
+  if (playerActive && isSubmarinePeriscopeKey(event) && !event.repeat) {
+    toggleSubmarineDepthState(submarineDepthStates.periscope);
+    event.preventDefault();
+    return;
+  }
+  if (playerActive && isSubmarineDiveKey(event) && !event.repeat) {
+    toggleSubmarineDepthState(submarineDepthStates.submerged);
     event.preventDefault();
     return;
   }
@@ -1001,6 +1035,8 @@ setupCannonViewControl(cannonViewButton);
 setupAlignWeaponsControl(alignWeaponsButton);
 setupAlignWeaponsControl(alignAirDefenseButton, "air-defense");
 setupTorpedoAidControl(torpedoAidButton);
+setupSubmarineDepthControl(submarineDiveButton);
+setupSubmarineDepthControl(submarinePeriscopeButton);
 setupSideViewCameraTuner();
 let serverShipsById = indexShipsById(gameState.ships);
 let serverClockOffset = Number.isFinite(gameState.t) ? -gameState.t : null;
@@ -1243,7 +1279,7 @@ scene.onBeforeRenderObservable.add(() => {
   if (playerActive) {
     boat.root.position.y = scoutPlaneMode
       ? scoutPlaneAltitude
-      : (submarineMode ? submarineWaterlineY : torpedoBoatWaterlineY) + bob;
+      : (submarineMode ? getPlayerSubmarineWaterlineY() : torpedoBoatWaterlineY) + bob * getPlayerSubmarineBobbingRatio();
     const torpedoBoatTrimPitch = scoutPlaneMode ? 0 : getTorpedoBoatTrimPitch(speed);
     const submarineMotionFactor = submarineMode ? 0.08 : 1;
     const submarineRollFactor = submarineMode ? 0.04 : 1;
@@ -1253,7 +1289,8 @@ scene.onBeforeRenderObservable.add(() => {
       scoutPlaneMode ? -turnVelocity * 2.8 : (-turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018) * shipStabilization * submarineRollFactor
     );
     if (!scoutPlaneMode) {
-      updateEnemyBowWake(boat.bowWake, speed, time, dt, boat.root.position, heading);
+      const wakeSpeed = submarineMode && playerSubmarineDepthState !== submarineDepthStates.surface ? 0 : speed;
+      updateEnemyBowWake(boat.bowWake, wakeSpeed, time, dt, boat.root.position, heading);
     }
     if (scoutPlaneMode) {
       updateScoutPlaneVisual(boat, speed, time);
@@ -1331,10 +1368,12 @@ scene.onBeforeRenderObservable.add(() => {
   if (!sideViewSandboxMode && !scoutPlaneMode && !flakViewActive && !cannonViewActive) {
     camera.rotation.x = -Math.abs(camera.rotation.x);
   }
+  updateOwnSubmarineDepthVisibility();
   boat.flakDeckView?.setEnabled(flakViewActive);
   boat.flakViewHiddenMeshes?.forEach((mesh) => mesh.setEnabled(!flakViewActive));
   boat.cannonViewHiddenMeshes?.forEach((mesh) => mesh.setEnabled(!cannonViewActive));
   boat.bridgeViewHiddenMeshes?.forEach((mesh) => mesh.setEnabled(!bridgeInteriorViewActive));
+  hideOwnSubmarineBelowSurface();
   updateTorpedoViewState();
   document.body.dataset.camera = `${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)}`;
   document.body.dataset.frameMs = (rawFrameSeconds * 1000).toFixed(1);
@@ -1372,8 +1411,9 @@ scene.onBeforeRenderObservable.add(() => {
   updateMeasuredSpeed(boat.root.position, time);
   depthValue.textContent = scoutPlaneMode
     ? "Air"
-    : (submarineMode ? "0 m" : (nextWaterSafety.isBlocked ? "Ground" : "Sea"));
-  depthGauge?.style.setProperty("--depth-ratio", scoutPlaneMode || submarineMode ? "0" : "1");
+    : (submarineMode ? getPlayerSubmarineDepthLabel() : (nextWaterSafety.isBlocked ? "Ground" : "Sea"));
+  depthGauge?.style.setProperty("--depth-ratio", scoutPlaneMode ? "0" : getDepthGaugeRatio(nextWaterSafety));
+  updateSubmarineDepthUi();
   document.body.dataset.measuredSpeed = measuredSpeedSample.speed.toFixed(2);
   compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
   if (compassHeading) compassHeading.textContent = `HDG ${formatHeadingDegrees(heading)}`;
@@ -1447,6 +1487,14 @@ function isRadarModeToggleKey(event) {
   return !scoutPlaneMode && (event.code === "KeyR" || event.key === "r" || event.key === "R");
 }
 
+function isSubmarineDiveKey(event) {
+  return submarineMode && (event.code === "KeyD" || event.key === "d" || event.key === "D");
+}
+
+function isSubmarinePeriscopeKey(event) {
+  return submarineMode && (event.code === "KeyP" || event.key === "p" || event.key === "P");
+}
+
 function isCannonSightToggleKey(event) {
   return cannonViewActive && !scoutPlaneMode && (event.code === "KeyZ" || event.key === "z" || event.key === "Z");
 }
@@ -1461,6 +1509,9 @@ function toggleCannonView() {
 
 function setBattleStation(station) {
   if (submarineMode && (station === "cannon" || station === "torpedo")) {
+    station = "bridge";
+  }
+  if (submarineMode && playerSubmarineDepthState !== submarineDepthStates.surface && station === "flak") {
     station = "bridge";
   }
   flakViewActive = station === "flak";
@@ -1652,6 +1703,12 @@ function getPlayerCameraSetup(forward) {
       position,
       target
     };
+  }
+
+  if (!scoutPlaneMode && submarineMode && playerSubmarineDepthState === submarineDepthStates.periscope) {
+    const position = transformLocalShipPointWithoutTilt(new Vector3(0, 1.92, 0.02), submarineVisualScale);
+    const target = transformLocalShipPointWithoutTilt(new Vector3(0, 1.86, 88), submarineVisualScale);
+    return { position, target };
   }
 
   if (!scoutPlaneMode) {
@@ -2115,6 +2172,15 @@ function setupTorpedoAidControl(button) {
   if (!button) return;
   button.addEventListener("click", (event) => {
     setBattleStation("torpedo");
+    button.blur();
+    event.stopPropagation();
+  });
+}
+
+function setupSubmarineDepthControl(button) {
+  if (!button) return;
+  button.addEventListener("click", (event) => {
+    toggleSubmarineDepthState(button.dataset.depthState);
     button.blur();
     event.stopPropagation();
   });
@@ -3259,6 +3325,78 @@ function changeEngineOrder(direction) {
   engineOrder = clamp(engineOrder + direction, 0, engineOrders.length - 1);
 }
 
+function sanitizeSubmarineDepthState(depthState) {
+  const normalized = String(depthState ?? "").trim().toLowerCase();
+  return Object.values(submarineDepthStates).includes(normalized)
+    ? normalized
+    : submarineDepthStates.surface;
+}
+
+function toggleSubmarineDepthState(depthState) {
+  const nextDepthState = sanitizeSubmarineDepthState(depthState);
+  setPlayerSubmarineDepthState(
+    playerSubmarineDepthState === nextDepthState
+      ? submarineDepthStates.surface
+      : nextDepthState
+  );
+}
+
+function setPlayerSubmarineDepthState(depthState) {
+  if (!submarineMode) return;
+  playerSubmarineDepthState = sanitizeSubmarineDepthState(depthState);
+  document.body.dataset.playerDepthState = playerSubmarineDepthState;
+  updateSubmarineDepthUi();
+  updateOwnSubmarineDepthVisibility();
+  if (playerSubmarineDepthState !== submarineDepthStates.surface) {
+    setBattleStation("bridge");
+  }
+  if (playerDamageState === "active") {
+    nextPlayerStateSendTime = 0;
+  }
+}
+
+function getPlayerSubmarineWaterlineY() {
+  return submarineWaterlineY + (submarineDepthOffsets[playerSubmarineDepthState] ?? 0) * submarineVisualScale;
+}
+
+function getPlayerSubmarineBobbingRatio() {
+  return submarineBobbingRatios[playerSubmarineDepthState] ?? 1;
+}
+
+function getPlayerSubmarineDepthLabel() {
+  return submarineDepthLabels[playerSubmarineDepthState] ?? submarineDepthLabels.surface;
+}
+
+function getDepthGaugeRatio(waterSafety) {
+  if (submarineMode) {
+    if (playerSubmarineDepthState === submarineDepthStates.submerged) return "0.08";
+    if (playerSubmarineDepthState === submarineDepthStates.periscope) return "0.45";
+    return "0.9";
+  }
+  return waterSafety?.isBlocked ? "1" : "0";
+}
+
+function updateSubmarineDepthUi() {
+  if (!submarineMode) return;
+  submarineDiveButton?.classList.toggle("is-active", playerSubmarineDepthState === submarineDepthStates.submerged);
+  submarinePeriscopeButton?.classList.toggle("is-active", playerSubmarineDepthState === submarineDepthStates.periscope);
+}
+
+function updateOwnSubmarineDepthVisibility() {
+  if (!submarineMode) return;
+  const showSurfaceModel = playerSubmarineDepthState === submarineDepthStates.surface;
+  boat.periscopeHiddenMeshes?.forEach((mesh) => mesh.setEnabled(showSurfaceModel));
+  boat.flakViewHiddenMeshes?.forEach((mesh) => mesh.setEnabled(showSurfaceModel && !flakViewActive));
+  boat.flakDeckView?.setEnabled(showSurfaceModel && flakViewActive);
+}
+
+function hideOwnSubmarineBelowSurface() {
+  if (!submarineMode || playerSubmarineDepthState === submarineDepthStates.surface) return;
+  boat.periscopeHiddenMeshes?.forEach((mesh) => mesh.setEnabled(false));
+  boat.flakViewHiddenMeshes?.forEach((mesh) => mesh.setEnabled(false));
+  boat.flakDeckView?.setEnabled(false);
+}
+
 function updateAltimeter(altitudeUnits) {
   if (!altitudeValue || !altimeterHundredsHand || !altimeterThousandsHand) return;
 
@@ -4377,7 +4515,8 @@ async function sendPlayerState() {
         cannonPitch,
         clientTime: performance.now() / 1000,
         debugTeleport,
-        vehicleType: playerVehicleType
+        vehicleType: playerVehicleType,
+        depthState: submarineMode ? playerSubmarineDepthState : null
       })
     });
     if (!response.ok) {
@@ -7604,6 +7743,10 @@ function installScenarioTestHooks() {
       setBattleStation(String(station ?? "bridge"));
       return stationSnapshot();
     },
+    setSubmarineDepthState(depthState) {
+      setPlayerSubmarineDepthState(depthState);
+      return stationSnapshot();
+    },
     async setPlayerNavigationState(state) {
       if (Number.isFinite(Number(state?.x))) {
         boat.root.position.x = Number(state.x);
@@ -8061,7 +8204,8 @@ function stationSnapshot() {
   return {
     flak: flakViewActive,
     cannon: cannonViewActive,
-    torpedo: torpedoScopeActive
+    torpedo: torpedoScopeActive,
+    depthState: playerSubmarineDepthState
   };
 }
 

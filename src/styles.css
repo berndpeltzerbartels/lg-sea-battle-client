@@ -2388,10 +2388,32 @@ body[data-player-vehicle="submarine"] .depth-gauge strong {
   grid-column: 1 / -1;
   gap: 5px;
   margin-top: 4px;
-  color: rgb(247 251 255 / 64%);
   font: 800 7px/1 Inter, Arial, sans-serif;
   letter-spacing: 0;
   text-transform: uppercase;
+}
+
+.submarine-depth-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 20px;
+  padding: 0 6px;
+  border: 1px solid rgb(155 229 223 / 34%);
+  border-radius: 6px;
+  background: rgb(8 30 43 / 70%);
+  color: rgb(216 252 248 / 78%);
+  font: inherit;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.submarine-depth-actions button.is-active {
+  border-color: rgb(155 229 223 / 70%);
+  background: rgb(155 229 223 / 20%);
+  color: #f7fbff;
 }
 
 body[data-player-vehicle="submarine"] .submarine-depth-actions {
