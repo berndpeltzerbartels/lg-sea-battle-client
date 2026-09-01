@@ -307,10 +307,10 @@ function createRoundedSailMesh(name, scene) {
     { z: 0.56, width: 0.335 },
     { z: 0.63, width: 0.265 },
     { z: 0.69, width: 0.205 },
-    { z: 0.74, width: 0.155 },
-    { z: 0.785, width: 0.115 },
-    { z: 0.82, width: 0.085 },
-    { z: 0.845, width: 0.065 }
+    { z: 0.74, width: 0.18 },
+    { z: 0.785, width: 0.15 },
+    { z: 0.82, width: 0.13 },
+    { z: 0.845, width: 0.115 }
   ]);
   const baseY = -0.045;
   const floorY = 0.6;
@@ -353,6 +353,7 @@ function createRoundedSailMesh(name, scene) {
 
   addSailEndCap(positions, indices, sectionPoints[0], { x: 0, y: 0, z: -1 });
   addSailEndCap(positions, indices, sectionPoints[sectionPoints.length - 1], { x: 0, y: 0, z: 1 });
+  addSailFrontCoaming(positions, indices, sectionPoints);
   return createVertexMesh(name, scene, positions, indices);
 }
 
@@ -474,6 +475,30 @@ function addSailEndCap(positions, indices, section, direction) {
   addQuadFacing(positions, indices, section.outerRimLeft, section.outerRimRight, section.innerRimRight, section.innerRimLeft, { x: 0, y: 1, z: 0 });
   addQuadFacing(positions, indices, section.floorLeft, section.innerRimLeft, section.innerRimRight, section.floorRight, innerDirection);
   addQuadFacing(positions, indices, section.outerBottomLeft, section.floorLeft, section.floorRight, section.outerBottomRight, { x: 0, y: -1, z: 0 });
+}
+
+function addSailFrontCoaming(positions, indices, sectionPoints) {
+  const front = sectionPoints[sectionPoints.length - 1];
+  const previous = sectionPoints[sectionPoints.length - 4] ?? sectionPoints[sectionPoints.length - 2];
+  const bottomY = front.floorLeft.y + 0.04;
+  const topY = front.innerRimLeft.y - 0.012;
+  const backZ = previous.z;
+  const frontZ = front.z;
+  const halfWidth = Math.max(Math.abs(previous.floorLeft.x), Math.abs(front.innerRimLeft.x));
+  const leftBack = { x: -halfWidth, y: bottomY, z: backZ };
+  const rightBack = { x: halfWidth, y: bottomY, z: backZ };
+  const leftFront = { x: -Math.abs(front.innerRimLeft.x), y: bottomY, z: frontZ };
+  const rightFront = { x: Math.abs(front.innerRimRight.x), y: bottomY, z: frontZ };
+  const leftBackTop = { ...leftBack, y: topY };
+  const rightBackTop = { ...rightBack, y: topY };
+  const leftFrontTop = { ...leftFront, y: topY };
+  const rightFrontTop = { ...rightFront, y: topY };
+
+  addQuadFacing(positions, indices, leftBack, leftFront, leftFrontTop, leftBackTop, { x: -0.4, y: 0, z: 1 });
+  addQuadFacing(positions, indices, rightBack, rightBackTop, rightFrontTop, rightFront, { x: 0.4, y: 0, z: 1 });
+  addQuadFacing(positions, indices, leftBackTop, leftFrontTop, rightFrontTop, rightBackTop, { x: 0, y: 1, z: 0 });
+  addQuadFacing(positions, indices, leftFront, rightFront, rightFrontTop, leftFrontTop, { x: 0, y: 0, z: 1 });
+  addQuadFacing(positions, indices, leftBack, leftBackTop, rightBackTop, rightBack, { x: 0, y: 0, z: -1 });
 }
 
 function createTaperedSailMesh(name, scene, sections, height) {
