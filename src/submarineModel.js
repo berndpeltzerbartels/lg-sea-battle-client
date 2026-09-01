@@ -60,6 +60,7 @@ export function createSubmarineModel(scene, materials, {
   sail.scaling.setAll(sailScale);
   sail.material = submarineMaterials.tower;
   meshes.push(sail);
+  meshes.push(createSailBridgeFrontPlate(scene, root, submarineMaterials, name));
 
   if (debugInterior) {
     const sailInterior = createSailInteriorDebugMesh(`${name}_sail_interior_debug`, scene);
@@ -499,6 +500,21 @@ function addSailFrontCoaming(positions, indices, sectionPoints) {
   addQuadFacing(positions, indices, leftBackTop, leftFrontTop, rightFrontTop, rightBackTop, { x: 0, y: 1, z: 0 });
   addQuadFacing(positions, indices, leftFront, rightFront, rightFrontTop, leftFrontTop, { x: 0, y: 0, z: 1 });
   addQuadFacing(positions, indices, leftBack, leftBackTop, rightBackTop, rightBack, { x: 0, y: 0, z: -1 });
+}
+
+function createSailBridgeFrontPlate(scene, root, materials, name) {
+  const height = 0.14 * sailScale;
+  const plate = MeshBuilder.CreateBox(`${name}_sail_bridge_front_plate`, {
+    width: 0.2 * sailScale,
+    height,
+    depth: 0.028 * sailScale
+  }, scene);
+  plate.parent = root;
+  plate.position.x = 0;
+  plate.position.y = sailPositionY + (0.77 * sailScale);
+  plate.position.z = sailPositionZ + 0.72 * sailScale;
+  plate.material = materials.tower;
+  return plate;
 }
 
 function createTaperedSailMesh(name, scene, sections, height) {
