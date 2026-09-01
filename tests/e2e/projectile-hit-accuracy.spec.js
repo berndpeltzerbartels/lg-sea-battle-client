@@ -88,6 +88,19 @@ objects:
 2: plane, dark, scenario [orientation: 180°, speed: 0knt, height: 16m]
 `;
 
+const LIGHT_SHIP_CANNON_SIGHT_SCENARIO = `
+scenario: playwright-light-ship-cannon-sight
+version: 9419
+cell: 30
+map:
+.......
+.1..2..
+.......
+objects:
+1: ship, dark, bot [orientation: 90°, speed: 0knt]
+2: ship, light, scenario [orientation: 270°, speed: 0knt]
+`;
+
 const CANNON_OWN_SHIP_LINE_SCENARIO = `
 scenario: playwright-cannon-own-ship-line
 version: 9417
@@ -311,6 +324,35 @@ test('bridge weapon alignment keeps stern flak level while the boat is trimmed',
     airDefense.flak.direction.y,
     `air-defense flak alignment should still point upward: ${JSON.stringify(airDefense.flak)}`
   ).toBeGreaterThan(0.22);
+});
+
+test('light ship bridge windows stay depth-stable in cannon sight', async ({ page, request }, testInfo) => {
+  await openScenario(page, request, LIGHT_SHIP_CANNON_SIGHT_SCENARIO, testInfo, { team: 'dark' });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.evaluate(() => window.seaBattleScenarioTest.setPlayerNavigationState({
+    heading: Math.PI / 2,
+    speed: 0,
+    engineOrder: 2
+  }));
+  const target = await targetPoint(request, 'light-S2', { y: 0.98 });
+  await page.evaluate((point) => {
+    window.seaBattleScenarioTest.setStation('cannon');
+    window.seaBattleScenarioTest.setCannonSightLevelForTest(3);
+    return window.seaBattleScenarioTest.aimCannonAt(point);
+  }, target);
+  await page.waitForTimeout(500);
+  await page.screenshot({
+    path: testInfo.outputPath('light-ship-cannon-sight-windows.png'),
+    fullPage: false
+  });
+
+  const windowMaterials = await page.evaluate(() => window.seaBattleScenarioTest.bridgeWindowMaterialDepthInfo('light-S2'));
+  const tubeOpenings = await page.evaluate(() => window.seaBattleScenarioTest.tubeOpeningDepthInfo('light-S2'));
+
+  expect(windowMaterials.length, 'test setup should expose light ship bridge windows').toBeGreaterThan(0);
+  expect(windowMaterials.every((window) => window.zOffset <= -5.5), JSON.stringify(windowMaterials)).toBe(true);
+  expect(tubeOpenings.length, 'test setup should expose light ship torpedo tube openings').toBeGreaterThan(0);
+  expect(tubeOpenings.every((opening) => opening.zOffset <= -5.5 && opening.depth >= 0.01), JSON.stringify(tubeOpenings)).toBe(true);
 });
 
 test('cannon fire is blocked by the actual own-ship shot line instead of fixed yaw limits', async ({ page, request }, testInfo) => {
@@ -808,7 +850,7 @@ async function ensureLoggedIn(page, testInfo, options = {}) {
       input.dispatchEvent(new Event('change', { bubbles: true }));
     }, options.vehicleType);
   }
-  await loginCard.locator('select[name="team"]').selectOption('light');
+  await loginCard.locator('select[name="team"]').selectOption(options.team ?? 'light');
   await loginCard.locator('button[type="submit"]').click();
   await expect(loginCard).toHaveCount(0);
 }

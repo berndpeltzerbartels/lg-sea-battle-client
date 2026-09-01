@@ -7452,6 +7452,36 @@ function installScenarioTestHooks() {
         } : null
       };
     },
+    setCannonSightLevelForTest(index) {
+      setBattleStation("cannon");
+      setCannonSightLevel(Number(index ?? 0));
+      return currentCannonSightLevel();
+    },
+    bridgeWindowMaterialDepthInfo(vehicleId) {
+      const motion = enemyMotions.find((candidate) => candidate.id === vehicleId);
+      const root = motion?.root;
+      if (!root) return [];
+      return root.getChildMeshes(false)
+        .filter((mesh) => mesh.name.includes("_bridge_window_"))
+        .map((mesh) => ({
+          name: mesh.name,
+          material: mesh.material?.name ?? "",
+          zOffset: Number(mesh.material?.zOffset ?? 0)
+        }));
+    },
+    tubeOpeningDepthInfo(vehicleId) {
+      const motion = enemyMotions.find((candidate) => candidate.id === vehicleId);
+      const root = motion?.root;
+      if (!root) return [];
+      return root.getChildMeshes(false)
+        .filter((mesh) => mesh.name.includes("_tube_opening_"))
+        .map((mesh) => ({
+          name: mesh.name,
+          material: mesh.material?.name ?? "",
+          zOffset: Number(mesh.material?.zOffset ?? 0),
+          depth: Number(mesh.getBoundingInfo().boundingBox.extendSize.y * 2)
+        }));
+    },
     aimCannonAt(target) {
       return aimPlayerCannonAtWorldPoint(target);
     },
@@ -11826,6 +11856,7 @@ function createMaterials(scene) {
   tubeOpening.diffuseColor = new Color3(0.006, 0.008, 0.011);
   tubeOpening.emissiveColor = Color3.Black();
   tubeOpening.specularColor = Color3.Black();
+  tubeOpening.zOffset = -6;
 
   const glass = new StandardMaterial("glass_material", scene);
   glass.diffuseColor = new Color3(0.18, 0.42, 0.54);
@@ -11839,12 +11870,14 @@ function createMaterials(scene) {
   lightBridgeWindow.emissiveColor = new Color3(0.012, 0.014, 0.016);
   lightBridgeWindow.specularColor = new Color3(0.32, 0.36, 0.38);
   lightBridgeWindow.backFaceCulling = false;
+  lightBridgeWindow.zOffset = -6;
 
   const darkBridgeWindow = new StandardMaterial("dark_bridge_window_material", scene);
   darkBridgeWindow.diffuseColor = new Color3(0.04, 0.075, 0.115);
   darkBridgeWindow.emissiveColor = new Color3(0.006, 0.018, 0.034);
   darkBridgeWindow.specularColor = new Color3(0.2, 0.3, 0.38);
   darkBridgeWindow.backFaceCulling = false;
+  darkBridgeWindow.zOffset = -6;
 
   const lightFleetMaterials = createFleetMaterials(scene, "light", shipFleetMaterialPalettes.light);
   const playerLightFleetMaterials = createFleetMaterials(scene, "player_light", shipFleetMaterialPalettes.light);
@@ -12240,13 +12273,13 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
 
     const opening = MeshBuilder.CreateCylinder(`${name}_tube_opening_${i}`, {
       diameter: 0.142,
-      height: 0.004,
+      height: 0.012,
       tessellation: 12
     }, scene);
     opening.parent = root;
     opening.position.x = tube.position.x;
     opening.position.y = tube.position.y;
-    opening.position.z = 2.302;
+    opening.position.z = 2.308;
     opening.rotation.x = Math.PI / 2;
     opening.material = materials.tubeOpening;
   }
@@ -12701,7 +12734,6 @@ function createBoatSternBulwarkCapMesh(name, scene) {
       pushOrientedQuad(indices, positions, a, b, b + 1, a + 1, Vector3.Up());
       pushOrientedQuad(indices, positions, a + 1, b + 1, b + 2, a + 2, new Vector3(-side, 0, 0));
       pushOrientedQuad(indices, positions, a, a + 3, b + 3, b, new Vector3(side, 0, 0));
-      pushOrientedQuad(indices, positions, a + 2, b + 2, b + 3, a + 3, Vector3.Down());
     }
 
     const front = start + (sections.length - 1) * 4;
@@ -12727,7 +12759,6 @@ function createBoatSternBulwarkCapMesh(name, scene) {
   pushOrientedQuad(indices, positions, sternStart, sternStart + 1, sternStart + 2, sternStart + 3, Vector3.Up());
   pushOrientedQuad(indices, positions, sternStart, sternStart + 4, sternStart + 5, sternStart + 1, new Vector3(0, 0, -1));
   pushOrientedQuad(indices, positions, sternStart + 3, sternStart + 2, sternStart + 6, sternStart + 7, new Vector3(0, 0, 1));
-  pushOrientedQuad(indices, positions, sternStart + 4, sternStart + 7, sternStart + 6, sternStart + 5, Vector3.Down());
   pushOrientedQuad(indices, positions, sternStart, sternStart + 3, sternStart + 7, sternStart + 4, new Vector3(-1, 0, 0));
   pushOrientedQuad(indices, positions, sternStart + 1, sternStart + 5, sternStart + 6, sternStart + 2, new Vector3(1, 0, 0));
 
@@ -12892,20 +12923,22 @@ function createTorpedoBoatSuperstructure(scene, materials, parent, name, teamMat
     const previousWindowHeight = 0.074;
     const windowHeight = previousWindowHeight * 1.5;
     const windowWidth = 0.15;
-    const windowOffset = 0.004;
+    const windowDepth = 0.008;
+    const windowOffset = 0.006;
     const windowGap = 0.075;
     const windowCount = 3;
     const windowTopY = bridgeHouseBottomY + bridgeHouseHeight * 0.62 + previousWindowHeight * 0.5;
     const windowMaterial = getBridgeWindowMaterial(materials, teamMaterials);
     for (let i = 0; i < windowCount; i += 1) {
-      const window = MeshBuilder.CreatePlane(`${name}_bridge_window_${i}`, {
+      const window = MeshBuilder.CreateBox(`${name}_bridge_window_${i}`, {
         width: windowWidth,
-        height: windowHeight
+        height: windowHeight,
+        depth: windowDepth
       }, scene);
       window.parent = parent;
       window.position.x = (i - (windowCount - 1) * 0.5) * (windowWidth + windowGap);
       window.position.y = windowTopY - windowHeight * 0.5;
-      window.position.z = bridgeHouseZ + bridgeHouseDepth * 0.5 + windowOffset;
+      window.position.z = bridgeHouseZ + bridgeHouseDepth * 0.5 + windowOffset + windowDepth * 0.5;
       window.material = windowMaterial;
       window.isPickable = false;
       meshes.push(window);
@@ -13314,13 +13347,13 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = 
 
     const opening = MeshBuilder.CreateCylinder(`${name}_tube_opening_${i}`, {
       diameter: 0.152,
-      height: 0.004,
+      height: 0.012,
       tessellation: 10
     }, scene);
     opening.parent = root;
     opening.position.x = tube.position.x;
     opening.position.y = tube.position.y;
-    opening.position.z = 2.302;
+    opening.position.z = 2.308;
     opening.rotation.x = Math.PI / 2;
     opening.material = materials.tubeOpening;
   }
