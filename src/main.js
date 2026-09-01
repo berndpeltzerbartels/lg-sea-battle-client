@@ -518,6 +518,13 @@ if (submarineMode && !boat.sternFlak && boat.flakMount) {
   boat.flakViewHiddenMeshes = boat.sternFlak.viewHiddenMeshes ?? [];
   document.body.dataset.submarineFlak = "1";
 }
+if (!scoutPlaneMode && !boat.bowWake) {
+  boat.bowWake = createEnemyBowWake(scene, materials, boat.root, `${boat.root.name}_player`, {
+    waterlineY: submarineMode ? submarineWaterlineY : torpedoBoatWaterlineY,
+    lengthScale: submarineMode ? 1.1 : 1,
+    widthScale: submarineMode ? 0.72 : 1
+  });
+}
 if (sideViewSandboxMode && submarineMode) {
   createSubmarineCameraDebugMarker(scene, boat);
   window.__seaBattleSideView = { scene, boat };
@@ -1237,13 +1244,16 @@ scene.onBeforeRenderObservable.add(() => {
       ? scoutPlaneAltitude
       : (submarineMode ? submarineWaterlineY : torpedoBoatWaterlineY) + bob;
     const torpedoBoatTrimPitch = scoutPlaneMode ? 0 : getTorpedoBoatTrimPitch(speed);
-    const submarineMotionFactor = submarineMode ? 0.28 : 1;
-    const submarineRollFactor = submarineMode ? 0.16 : 1;
+    const submarineMotionFactor = submarineMode ? 0.18 : 1;
+    const submarineRollFactor = submarineMode ? 0.08 : 1;
     boat.root.rotationQuaternion = Quaternion.FromEulerAngles(
       scoutPlaneMode ? scoutPlanePitch : (torpedoBoatTrimPitch + Math.sin(time * 2.6) * 0.025 * shipStabilization) * submarineMotionFactor,
       heading,
       scoutPlaneMode ? -turnVelocity * 2.8 : (-turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018) * shipStabilization * submarineRollFactor
     );
+    if (!scoutPlaneMode) {
+      updateEnemyBowWake(boat.bowWake, speed, time, dt, boat.root.position, heading);
+    }
     if (scoutPlaneMode) {
       updateScoutPlaneVisual(boat, speed, time);
     }
@@ -6585,11 +6595,17 @@ function createRemoteVehicleModel(scene, materials, name, ship) {
     return createScoutPlane(scene, materials, name, ship.teamId, false);
   }
   if (getShipVehicleType(ship) === "submarine") {
-    return createSubmarineModel(scene, materials, {
+    const submarine = createSubmarineModel(scene, materials, {
       name,
       teamMaterials: getShipTeamMaterials(materials, ship.teamId),
       scale: submarineVisualScale
     });
+    submarine.bowWake = createEnemyBowWake(scene, materials, submarine.root, name, {
+      waterlineY: submarineWaterlineY,
+      lengthScale: 1.1,
+      widthScale: 0.72
+    });
+    return submarine;
   }
   return createEnemyTorpedoBoat(
       scene,
@@ -6776,7 +6792,9 @@ function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
 
   const forward = new Vector3(Math.sin(motion.heading), 0, Math.cos(motion.heading));
   motion.root.position.addInPlace(forward.scale(motion.speed * dt));
-  motion.root.position.y = torpedoBoatWaterlineY + Math.sin(time * 1.6 + 1.9) * enemyTorpedoBoatBobAmplitude;
+  const waterlineY = motion.vehicleType === "submarine" ? submarineWaterlineY : torpedoBoatWaterlineY;
+  const bobAmplitude = motion.vehicleType === "submarine" ? enemyTorpedoBoatBobAmplitude * 0.45 : enemyTorpedoBoatBobAmplitude;
+  motion.root.position.y = waterlineY + Math.sin(time * 1.6 + 1.9) * bobAmplitude;
   const trimPitch = getTorpedoBoatTrimPitch(motion.speed);
   const roll = -motion.turnVelocity * 0.42 + motion.rollImpulse + Math.sin(time * 1.4) * 0.01;
   motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
@@ -6818,7 +6836,9 @@ function updateServerEnemyMotion(motion, dt, time) {
     );
     updateScoutPlaneVisual(motion, Math.max(6, Math.abs(motion.speed)), time);
   } else {
-    motion.root.position.y = torpedoBoatWaterlineY + Math.sin(time * 1.6 + 1.9) * enemyTorpedoBoatBobAmplitude;
+    const waterlineY = motion.vehicleType === "submarine" ? submarineWaterlineY : torpedoBoatWaterlineY;
+    const bobAmplitude = motion.vehicleType === "submarine" ? enemyTorpedoBoatBobAmplitude * 0.45 : enemyTorpedoBoatBobAmplitude;
+    motion.root.position.y = waterlineY + Math.sin(time * 1.6 + 1.9) * bobAmplitude;
     const trimPitch = getTorpedoBoatTrimPitch(motion.speed);
     const roll = Math.sin(time * 1.4) * 0.01;
     motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
@@ -7211,6 +7231,7 @@ function respawnPlayerBoat(playerBoat) {
     document.body.dataset.playerShipId = playerServerShipId;
     document.body.dataset.pendingPlayerShipId = "";
     alignPlayerBoatToServerShip(nextShip);
+    resetWakeAtPosition(playerBoat.bowWake, playerBoat.root.position, heading);
     updatePlayerTorpedoStock(Number.isFinite(nextShip.torpedoesRemaining) ? nextShip.torpedoesRemaining : null);
     playerDamageState = "active";
     updateSinkingWaterOverlay(0);
@@ -7234,6 +7255,7 @@ function respawnPlayerBoat(playerBoat) {
   playerServerShipId = null;
   document.body.dataset.playerShipId = "pending";
   playerBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
+  resetWakeAtPosition(playerBoat.bowWake, playerBoat.root.position, heading);
   updateSinkingWaterOverlay(0);
   sendClientGameEvent("player-respawn-pending", {
     spawn: {
@@ -7338,7 +7360,7 @@ function updateEnemyBowWake(wake, speed, time, dt = 1 / 60, sourcePosition = nul
       segment.scaling.x = 0.38 + wakeIntensity * 1.22 + row * 0.06;
       segment.scaling.z = (0.42 + wakeIntensity * 0.64) * pulse;
     }
-    segment.position.y = enemyBowWakeSurfaceY + wakeLift + Math.sin(time * 2.0 + index) * 0.003;
+    segment.position.y = (wake.surfaceY ?? enemyBowWakeSurfaceY) + wakeLift + Math.sin(time * 2.0 + index) * 0.003;
   });
 
   wake.churn.forEach((patch, index) => {
@@ -7355,8 +7377,20 @@ function updateEnemyBowWake(wake, speed, time, dt = 1 / 60, sourcePosition = nul
       patch.scaling.x = (0.24 + wakeIntensity * 0.66) * pulse;
       patch.scaling.z = 0.22 + wakeIntensity * 0.65;
     }
-    patch.position.y = enemyBowWakeSurfaceY + wakeLift + Math.sin(time * 2.4 + index) * 0.004;
+    patch.position.y = (wake.surfaceY ?? enemyBowWakeSurfaceY) + wakeLift + Math.sin(time * 2.4 + index) * 0.004;
   });
+}
+
+function resetWakeAtPosition(wake, sourcePosition, sourceHeading = 0) {
+  if (!wake) return;
+  wake.strength = 0;
+  if (sourcePosition) {
+    wake.root.position.x = sourcePosition.x;
+    wake.root.position.y = wake.waterlineY;
+    wake.root.position.z = sourcePosition.z;
+  }
+  wake.root.rotationQuaternion = Quaternion.FromEulerAngles(0, sourceHeading, 0);
+  hideEnemyWake(wake);
 }
 
 function hideEnemyWake(wake) {
@@ -13519,21 +13553,25 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = 
   return { root, bowWake, bowCannon, sternFlak };
 }
 
-function createEnemyBowWake(scene, materials, parent, name) {
+function createEnemyBowWake(scene, materials, parent, name, options = {}) {
   const root = new TransformNode(`${name}_bow_wake`, scene);
   root.parent = parent.parent ?? null;
   root.scaling.copyFrom(parent.scaling);
+  const widthScale = Number.isFinite(options.widthScale) ? options.widthScale : 1;
+  const lengthScale = Number.isFinite(options.lengthScale) ? options.lengthScale : 1;
+  const waterlineY = Number.isFinite(options.waterlineY) ? options.waterlineY : torpedoBoatWaterlineY;
+  const surfaceY = -waterlineY / Math.max(0.001, root.scaling.y) + 0.018;
 
   const segments = [];
   const churn = [];
 
   for (let side = -1; side <= 1; side += 2) {
     for (let i = 0; i < 5; i += 1) {
-      const startX = side * (0.07 + i * 0.045);
-      const startZ = 3.7 - i * 0.04;
-      const endX = side * (0.48 + i * 0.22);
-      const endZ = 3.28 - i * 0.25;
-      const segment = createWakeRibbon(`${name}_bow_wake_${side}_${i}`, scene, materials.foam, root, startX, startZ, endX, endZ);
+      const startX = side * (0.07 + i * 0.045) * widthScale;
+      const startZ = (3.7 - i * 0.04) * lengthScale;
+      const endX = side * (0.48 + i * 0.22) * widthScale;
+      const endZ = (3.28 - i * 0.25) * lengthScale;
+      const segment = createWakeRibbon(`${name}_bow_wake_${side}_${i}`, scene, materials.foam, root, startX, startZ, endX, endZ, surfaceY);
       segment.metadata = { kind: "bow", row: i + 1 };
       segments.push(segment);
     }
@@ -13541,11 +13579,11 @@ function createEnemyBowWake(scene, materials, parent, name) {
 
   for (let side = -1; side <= 1; side += 2) {
     for (let i = 0; i < 4; i += 1) {
-      const startX = side * (0.72 + i * 0.035);
-      const startZ = -4.04 - i * 0.05;
-      const endX = side * (0.88 + i * 0.09);
-      const endZ = -4.84 - i * 0.48;
-      const segment = createWakeRibbon(`${name}_stern_edge_wake_${side}_${i}`, scene, materials.foam, root, startX, startZ, endX, endZ);
+      const startX = side * (0.72 + i * 0.035) * widthScale;
+      const startZ = (-4.04 - i * 0.05) * lengthScale;
+      const endX = side * (0.88 + i * 0.09) * widthScale;
+      const endZ = (-4.84 - i * 0.48) * lengthScale;
+      const segment = createWakeRibbon(`${name}_stern_edge_wake_${side}_${i}`, scene, materials.foam, root, startX, startZ, endX, endZ, surfaceY);
       segment.metadata = { kind: "sternEdge", row: i + 1 };
       segments.push(segment);
     }
@@ -13553,15 +13591,15 @@ function createEnemyBowWake(scene, materials, parent, name) {
 
   for (let i = 0; i < 4; i += 1) {
     const patch = MeshBuilder.CreateBox(`${name}_bow_churn_${i}`, {
-      width: 0.32 + (i % 2) * 0.14,
+      width: (0.32 + (i % 2) * 0.14) * widthScale,
       height: 0.014,
-      depth: 0.34 + i * 0.08
+      depth: (0.34 + i * 0.08) * lengthScale
     }, scene);
     patch.parent = root;
     patch.material = materials.foam;
-    patch.position.x = (i - 1.5) * 0.075;
-    patch.position.y = enemyBowWakeSurfaceY;
-    patch.position.z = 3.64 - i * 0.035;
+    patch.position.x = (i - 1.5) * 0.075 * widthScale;
+    patch.position.y = surfaceY;
+    patch.position.z = (3.64 - i * 0.035) * lengthScale;
     patch.rotation.y = -0.2 + i * 0.13;
     patch.metadata = { kind: "bowChurn", row: i + 1 };
     churn.push(patch);
@@ -13569,25 +13607,25 @@ function createEnemyBowWake(scene, materials, parent, name) {
 
   for (let i = 0; i < 5; i += 1) {
     const patch = MeshBuilder.CreateBox(`${name}_stern_churn_${i}`, {
-      width: 0.22 + (i % 2) * 0.1,
+      width: (0.22 + (i % 2) * 0.1) * widthScale,
       height: 0.014,
-      depth: 0.28 + i * 0.08
+      depth: (0.28 + i * 0.08) * lengthScale
     }, scene);
     patch.parent = root;
     patch.material = materials.foam;
-    patch.position.x = (i - 2) * 0.055;
-    patch.position.y = enemyBowWakeSurfaceY;
-    patch.position.z = -4.2 - i * 0.18;
+    patch.position.x = (i - 2) * 0.055 * widthScale;
+    patch.position.y = surfaceY;
+    patch.position.z = (-4.2 - i * 0.18) * lengthScale;
     patch.rotation.y = -0.08 + i * 0.04;
     patch.metadata = { kind: "sternChurn", row: i + 1 };
     churn.push(patch);
   }
 
   root.setEnabled(false);
-  return { root, segments, churn, strength: 0, waterlineY: torpedoBoatWaterlineY };
+  return { root, segments, churn, strength: 0, waterlineY, surfaceY };
 }
 
-function createWakeRibbon(name, scene, material, parent, startX, startZ, endX, endZ) {
+function createWakeRibbon(name, scene, material, parent, startX, startZ, endX, endZ, surfaceY = enemyBowWakeSurfaceY) {
   const dx = endX - startX;
   const dz = endZ - startZ;
   const length = Math.sqrt(dx * dx + dz * dz);
@@ -13599,7 +13637,7 @@ function createWakeRibbon(name, scene, material, parent, startX, startZ, endX, e
   ribbon.parent = parent;
   ribbon.material = material;
   ribbon.position.x = (startX + endX) / 2;
-  ribbon.position.y = enemyBowWakeSurfaceY;
+  ribbon.position.y = surfaceY;
   ribbon.position.z = (startZ + endZ) / 2;
   ribbon.rotation.y = Math.atan2(dx, dz);
   return ribbon;
