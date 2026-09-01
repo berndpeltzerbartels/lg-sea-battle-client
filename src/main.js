@@ -522,7 +522,8 @@ if (!scoutPlaneMode && !boat.bowWake) {
   boat.bowWake = createEnemyBowWake(scene, materials, boat.root, `${boat.root.name}_player`, {
     waterlineY: submarineMode ? submarineWaterlineY : torpedoBoatWaterlineY,
     lengthScale: submarineMode ? 1.1 : 1,
-    widthScale: submarineMode ? 0.72 : 1
+    widthScale: submarineMode ? 0.72 : 1,
+    vehicleType: playerVehicleType
   });
 }
 if (sideViewSandboxMode && submarineMode) {
@@ -1244,8 +1245,8 @@ scene.onBeforeRenderObservable.add(() => {
       ? scoutPlaneAltitude
       : (submarineMode ? submarineWaterlineY : torpedoBoatWaterlineY) + bob;
     const torpedoBoatTrimPitch = scoutPlaneMode ? 0 : getTorpedoBoatTrimPitch(speed);
-    const submarineMotionFactor = submarineMode ? 0.18 : 1;
-    const submarineRollFactor = submarineMode ? 0.08 : 1;
+    const submarineMotionFactor = submarineMode ? 0.08 : 1;
+    const submarineRollFactor = submarineMode ? 0.04 : 1;
     boat.root.rotationQuaternion = Quaternion.FromEulerAngles(
       scoutPlaneMode ? scoutPlanePitch : (torpedoBoatTrimPitch + Math.sin(time * 2.6) * 0.025 * shipStabilization) * submarineMotionFactor,
       heading,
@@ -6603,7 +6604,8 @@ function createRemoteVehicleModel(scene, materials, name, ship) {
     submarine.bowWake = createEnemyBowWake(scene, materials, submarine.root, name, {
       waterlineY: submarineWaterlineY,
       lengthScale: 1.1,
-      widthScale: 0.72
+      widthScale: 0.72,
+      vehicleType: "submarine"
     });
     return submarine;
   }
@@ -7331,6 +7333,7 @@ function updateEnemyBowWake(wake, speed, time, dt = 1 / 60, sourcePosition = nul
   if (!wake) return;
 
   const forwardSpeed = Math.max(0, speed);
+  const isSubmarineWake = wake.vehicleType === "submarine";
   const targetStrength = forwardSpeed <= 0.02
     ? 0
     : clamp(0.08 + smoothstep(0, enemyBowWakeFullSpeed, forwardSpeed) * 0.92, 0, 1);
@@ -7354,13 +7357,27 @@ function updateEnemyBowWake(wake, speed, time, dt = 1 / 60, sourcePosition = nul
     segment.setEnabled(visibility > 0.015);
     segment.visibility = visibility;
     if (kind === "sternEdge") {
-      segment.scaling.x = 0.32 + wakeIntensity * 0.58 + row * 0.035;
-      segment.scaling.z = (0.42 + wakeIntensity * 0.54) * pulse;
+      if (isSubmarineWake) {
+        segment.scaling.x = 0.14 + wakeIntensity * 0.22 + row * 0.012;
+        segment.scaling.z = (0.18 + wakeIntensity * 0.24) * pulse;
+      } else {
+        segment.scaling.x = 0.32 + wakeIntensity * 0.58 + row * 0.035;
+        segment.scaling.z = (0.42 + wakeIntensity * 0.54) * pulse;
+      }
     } else {
-      segment.scaling.x = 0.38 + wakeIntensity * 1.22 + row * 0.06;
-      segment.scaling.z = (0.42 + wakeIntensity * 0.64) * pulse;
+      if (isSubmarineWake) {
+        segment.scaling.x = 0.18 + wakeIntensity * 0.56 + row * 0.025;
+        segment.scaling.z = (0.32 + wakeIntensity * 0.42) * pulse;
+      } else {
+        segment.scaling.x = 0.38 + wakeIntensity * 1.22 + row * 0.06;
+        segment.scaling.z = (0.42 + wakeIntensity * 0.64) * pulse;
+      }
     }
     segment.position.y = (wake.surfaceY ?? enemyBowWakeSurfaceY) + wakeLift + Math.sin(time * 2.0 + index) * 0.003;
+    if (isSubmarineWake && kind === "sternEdge") {
+      segment.position.x = segment.metadata.baseX + Math.sin(time * 4.6 + index * 1.7) * 0.012 * wakeIntensity;
+      segment.rotation.y = segment.metadata.baseRotationY + Math.sin(time * 3.9 + index) * 0.025 * wakeIntensity;
+    }
   });
 
   wake.churn.forEach((patch, index) => {
@@ -7371,11 +7388,23 @@ function updateEnemyBowWake(wake, speed, time, dt = 1 / 60, sourcePosition = nul
     patch.setEnabled(visibility > 0.015);
     patch.visibility = visibility;
     if (kind === "sternChurn") {
-      patch.scaling.x = (0.24 + wakeIntensity * 0.86) * pulse;
-      patch.scaling.z = 0.18 + wakeIntensity * 0.5;
+      if (isSubmarineWake) {
+        patch.scaling.x = (0.12 + wakeIntensity * 0.32) * pulse;
+        patch.scaling.z = 0.12 + wakeIntensity * 0.26;
+        patch.position.x = patch.metadata.baseX + Math.sin(time * 5.1 + index * 1.3) * 0.018 * wakeIntensity;
+        patch.rotation.y = patch.metadata.baseRotationY + Math.sin(time * 4.4 + index) * 0.08 * wakeIntensity;
+      } else {
+        patch.scaling.x = (0.24 + wakeIntensity * 0.86) * pulse;
+        patch.scaling.z = 0.18 + wakeIntensity * 0.5;
+      }
     } else {
-      patch.scaling.x = (0.24 + wakeIntensity * 0.66) * pulse;
-      patch.scaling.z = 0.22 + wakeIntensity * 0.65;
+      if (isSubmarineWake) {
+        patch.scaling.x = (0.13 + wakeIntensity * 0.32) * pulse;
+        patch.scaling.z = 0.2 + wakeIntensity * 0.46;
+      } else {
+        patch.scaling.x = (0.24 + wakeIntensity * 0.66) * pulse;
+        patch.scaling.z = 0.22 + wakeIntensity * 0.65;
+      }
     }
     patch.position.y = (wake.surfaceY ?? enemyBowWakeSurfaceY) + wakeLift + Math.sin(time * 2.4 + index) * 0.004;
   });
@@ -13560,6 +13589,8 @@ function createEnemyBowWake(scene, materials, parent, name, options = {}) {
   const widthScale = Number.isFinite(options.widthScale) ? options.widthScale : 1;
   const lengthScale = Number.isFinite(options.lengthScale) ? options.lengthScale : 1;
   const waterlineY = Number.isFinite(options.waterlineY) ? options.waterlineY : torpedoBoatWaterlineY;
+  const vehicleType = options.vehicleType === "submarine" ? "submarine" : "torpedo-boat";
+  const isSubmarineWake = vehicleType === "submarine";
   const surfaceY = -waterlineY / Math.max(0.001, root.scaling.y) + 0.018;
 
   const segments = [];
@@ -13567,10 +13598,10 @@ function createEnemyBowWake(scene, materials, parent, name, options = {}) {
 
   for (let side = -1; side <= 1; side += 2) {
     for (let i = 0; i < 5; i += 1) {
-      const startX = side * (0.07 + i * 0.045) * widthScale;
-      const startZ = (3.7 - i * 0.04) * lengthScale;
-      const endX = side * (0.48 + i * 0.22) * widthScale;
-      const endZ = (3.28 - i * 0.25) * lengthScale;
+      const startX = side * (isSubmarineWake ? 0.025 + i * 0.018 : 0.07 + i * 0.045) * widthScale;
+      const startZ = (isSubmarineWake ? 4.18 - i * 0.02 : 3.7 - i * 0.04) * lengthScale;
+      const endX = side * (isSubmarineWake ? 0.22 + i * 0.075 : 0.48 + i * 0.22) * widthScale;
+      const endZ = (isSubmarineWake ? 3.92 - i * 0.16 : 3.28 - i * 0.25) * lengthScale;
       const segment = createWakeRibbon(`${name}_bow_wake_${side}_${i}`, scene, materials.foam, root, startX, startZ, endX, endZ, surfaceY);
       segment.metadata = { kind: "bow", row: i + 1 };
       segments.push(segment);
@@ -13578,51 +13609,53 @@ function createEnemyBowWake(scene, materials, parent, name, options = {}) {
   }
 
   for (let side = -1; side <= 1; side += 2) {
-    for (let i = 0; i < 4; i += 1) {
-      const startX = side * (0.72 + i * 0.035) * widthScale;
-      const startZ = (-4.04 - i * 0.05) * lengthScale;
-      const endX = side * (0.88 + i * 0.09) * widthScale;
-      const endZ = (-4.84 - i * 0.48) * lengthScale;
+    const sternRows = isSubmarineWake ? 3 : 4;
+    for (let i = 0; i < sternRows; i += 1) {
+      const startX = side * (isSubmarineWake ? 0.03 + i * 0.012 : 0.72 + i * 0.035) * widthScale;
+      const startZ = (isSubmarineWake ? -4.52 - i * 0.03 : -4.04 - i * 0.05) * lengthScale;
+      const endX = side * (isSubmarineWake ? 0.08 + i * 0.025 : 0.88 + i * 0.09) * widthScale;
+      const endZ = (isSubmarineWake ? -4.78 - i * 0.18 : -4.84 - i * 0.48) * lengthScale;
       const segment = createWakeRibbon(`${name}_stern_edge_wake_${side}_${i}`, scene, materials.foam, root, startX, startZ, endX, endZ, surfaceY);
-      segment.metadata = { kind: "sternEdge", row: i + 1 };
+      segment.metadata = { kind: "sternEdge", row: i + 1, baseX: segment.position.x, baseRotationY: segment.rotation.y };
       segments.push(segment);
     }
   }
 
   for (let i = 0; i < 4; i += 1) {
     const patch = MeshBuilder.CreateBox(`${name}_bow_churn_${i}`, {
-      width: (0.32 + (i % 2) * 0.14) * widthScale,
+      width: (isSubmarineWake ? 0.18 + (i % 2) * 0.08 : 0.32 + (i % 2) * 0.14) * widthScale,
       height: 0.014,
-      depth: (0.34 + i * 0.08) * lengthScale
+      depth: (isSubmarineWake ? 0.3 + i * 0.07 : 0.34 + i * 0.08) * lengthScale
     }, scene);
     patch.parent = root;
     patch.material = materials.foam;
-    patch.position.x = (i - 1.5) * 0.075 * widthScale;
+    patch.position.x = (i - 1.5) * (isSubmarineWake ? 0.035 : 0.075) * widthScale;
     patch.position.y = surfaceY;
-    patch.position.z = (3.64 - i * 0.035) * lengthScale;
+    patch.position.z = (isSubmarineWake ? 4.06 - i * 0.025 : 3.64 - i * 0.035) * lengthScale;
     patch.rotation.y = -0.2 + i * 0.13;
     patch.metadata = { kind: "bowChurn", row: i + 1 };
     churn.push(patch);
   }
 
-  for (let i = 0; i < 5; i += 1) {
+  const sternChurnRows = isSubmarineWake ? 4 : 5;
+  for (let i = 0; i < sternChurnRows; i += 1) {
     const patch = MeshBuilder.CreateBox(`${name}_stern_churn_${i}`, {
-      width: (0.22 + (i % 2) * 0.1) * widthScale,
+      width: (isSubmarineWake ? 0.13 + (i % 2) * 0.055 : 0.22 + (i % 2) * 0.1) * widthScale,
       height: 0.014,
-      depth: (0.28 + i * 0.08) * lengthScale
+      depth: (isSubmarineWake ? 0.16 + i * 0.045 : 0.28 + i * 0.08) * lengthScale
     }, scene);
     patch.parent = root;
     patch.material = materials.foam;
-    patch.position.x = (i - 2) * 0.055 * widthScale;
+    patch.position.x = (i - (sternChurnRows - 1) * 0.5) * (isSubmarineWake ? 0.028 : 0.055) * widthScale;
     patch.position.y = surfaceY;
-    patch.position.z = (-4.2 - i * 0.18) * lengthScale;
+    patch.position.z = (isSubmarineWake ? -4.62 - i * 0.11 : -4.2 - i * 0.18) * lengthScale;
     patch.rotation.y = -0.08 + i * 0.04;
-    patch.metadata = { kind: "sternChurn", row: i + 1 };
+    patch.metadata = { kind: "sternChurn", row: i + 1, baseX: patch.position.x, baseRotationY: patch.rotation.y };
     churn.push(patch);
   }
 
   root.setEnabled(false);
-  return { root, segments, churn, strength: 0, waterlineY, surfaceY };
+  return { root, segments, churn, strength: 0, waterlineY, surfaceY, vehicleType };
 }
 
 function createWakeRibbon(name, scene, material, parent, startX, startZ, endX, endZ, surfaceY = enemyBowWakeSurfaceY) {
