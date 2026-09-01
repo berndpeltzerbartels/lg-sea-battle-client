@@ -320,21 +320,24 @@ function createRoundedSailMesh(name, scene) {
   const positions = [];
   const indices = [];
 
-  const sectionPoints = sections.map((section) => {
+  const sectionPoints = sections.map((section, index) => {
     const rimY = getSailRimY(section.z, frontRimY, rearRimY);
     const outerHalf = section.width * 0.5;
     const footHalf = outerHalf + 0.028;
     const innerHalf = Math.max(0.018, outerHalf - wallThickness);
     const floorHalf = Math.max(0.012, innerHalf - wallThickness * 0.15);
+    const frontThicknessStartZ = 0.73;
+    const frontThicknessRatio = Math.max(0, Math.min(1, (section.z - frontThicknessStartZ) / (0.845 - frontThicknessStartZ)));
+    const innerZ = section.z - wallThickness * 1.15 * frontThicknessRatio;
     return {
       outerBottomLeft: { x: -footHalf, y: baseY, z: section.z },
       outerBottomRight: { x: footHalf, y: baseY, z: section.z },
       outerRimLeft: { x: -outerHalf, y: rimY, z: section.z },
       outerRimRight: { x: outerHalf, y: rimY, z: section.z },
-      innerRimLeft: { x: -innerHalf, y: rimY - 0.018, z: section.z },
-      innerRimRight: { x: innerHalf, y: rimY - 0.018, z: section.z },
-      floorLeft: { x: -floorHalf, y: floorY, z: section.z },
-      floorRight: { x: floorHalf, y: floorY, z: section.z }
+      innerRimLeft: { x: -innerHalf, y: rimY - 0.018, z: innerZ },
+      innerRimRight: { x: innerHalf, y: rimY - 0.018, z: innerZ },
+      floorLeft: { x: -floorHalf, y: floorY, z: innerZ },
+      floorRight: { x: floorHalf, y: floorY, z: innerZ }
     };
   });
 
@@ -353,6 +356,7 @@ function createRoundedSailMesh(name, scene) {
 
   addSailEndCap(positions, indices, sectionPoints[0], { x: 0, y: 0, z: -1 });
   addSailEndCap(positions, indices, sectionPoints[sectionPoints.length - 1], { x: 0, y: 0, z: 1 });
+  addSailFrontEndThickness(positions, indices, sectionPoints);
   addSailFrontCoaming(positions, indices, sectionPoints);
   return createVertexMesh(name, scene, positions, indices);
 }
@@ -477,18 +481,56 @@ function addSailEndCap(positions, indices, section, direction) {
   addQuadFacing(positions, indices, section.outerBottomLeft, section.floorLeft, section.floorRight, section.outerBottomRight, { x: 0, y: -1, z: 0 });
 }
 
+function addSailFrontEndThickness(positions, indices, sectionPoints) {
+  const front = sectionPoints[sectionPoints.length - 1];
+  const back = sectionPoints[sectionPoints.length - 7] ?? sectionPoints[sectionPoints.length - 2];
+  const frontInnerHalf = Math.max(Math.abs(front.innerRimLeft.x), 0.052);
+  const frontOuterHalf = Math.max(Math.abs(front.outerRimLeft.x), frontInnerHalf + 0.055);
+  const backInnerHalf = Math.max(Math.abs(back.innerRimLeft.x), frontInnerHalf + 0.03);
+  const backOuterHalf = Math.max(Math.abs(back.outerRimLeft.x), backInnerHalf + 0.055);
+  const wallDepth = 0.09;
+  const innerZ = front.z - wallDepth;
+  const rimY = front.innerRimLeft.y + 0.002;
+  const floorY = front.floorLeft.y + 0.006;
+  const baseY = front.outerBottomLeft.y + 0.018;
+
+  const frontInnerLeft = { x: -frontInnerHalf, y: floorY, z: innerZ };
+  const frontInnerRight = { x: frontInnerHalf, y: floorY, z: innerZ };
+  const backInnerLeft = { x: -backInnerHalf, y: floorY, z: back.z };
+  const backInnerRight = { x: backInnerHalf, y: floorY, z: back.z };
+  const frontRimLeft = { x: -frontOuterHalf, y: rimY, z: front.z };
+  const frontRimRight = { x: frontOuterHalf, y: rimY, z: front.z };
+  const frontInnerRimLeft = { x: -frontInnerHalf, y: rimY, z: innerZ };
+  const frontInnerRimRight = { x: frontInnerHalf, y: rimY, z: innerZ };
+  const backRimLeft = { x: -backOuterHalf, y: rimY, z: back.z };
+  const backRimRight = { x: backOuterHalf, y: rimY, z: back.z };
+  const frontBaseLeft = { x: -frontOuterHalf, y: baseY, z: front.z };
+  const frontBaseRight = { x: frontOuterHalf, y: baseY, z: front.z };
+  const backBaseLeft = { x: -backOuterHalf, y: baseY, z: back.z };
+  const backBaseRight = { x: backOuterHalf, y: baseY, z: back.z };
+
+  addQuadFacing(positions, indices, frontInnerLeft, backInnerLeft, backRimLeft, frontInnerRimLeft, { x: -0.45, y: 0.1, z: -0.6 });
+  addQuadFacing(positions, indices, frontInnerRight, frontInnerRimRight, backRimRight, backInnerRight, { x: 0.45, y: 0.1, z: -0.6 });
+  addQuadFacing(positions, indices, frontRimLeft, frontInnerRimLeft, frontInnerRimRight, frontRimRight, { x: 0, y: 1, z: 0 });
+  addQuadFacing(positions, indices, frontInnerRimLeft, backRimLeft, backRimRight, frontInnerRimRight, { x: 0, y: 1, z: 0 });
+  addQuadFacing(positions, indices, frontBaseLeft, frontRimLeft, backRimLeft, backBaseLeft, { x: -0.45, y: 0, z: -0.6 });
+  addQuadFacing(positions, indices, frontBaseRight, backBaseRight, backRimRight, frontRimRight, { x: 0.45, y: 0, z: -0.6 });
+  addQuadFacing(positions, indices, frontBaseLeft, frontBaseRight, frontRimRight, frontRimLeft, { x: 0, y: 0, z: 1 });
+}
+
 function addSailFrontCoaming(positions, indices, sectionPoints) {
   const front = sectionPoints[sectionPoints.length - 1];
-  const previous = sectionPoints[sectionPoints.length - 7] ?? sectionPoints[sectionPoints.length - 2];
-  const bottomY = front.floorLeft.y + 0.02;
-  const topY = front.innerRimLeft.y - 0.012;
+  const previous = sectionPoints[sectionPoints.length - 8] ?? sectionPoints[sectionPoints.length - 2];
+  const bottomY = front.floorLeft.y + 0.012;
+  const topY = front.innerRimLeft.y - 0.006;
   const backZ = previous.z;
   const frontZ = front.z;
-  const halfWidth = Math.max(Math.abs(previous.innerRimLeft.x), Math.abs(front.innerRimLeft.x), 0.092);
-  const leftBack = { x: -halfWidth, y: bottomY, z: backZ };
-  const rightBack = { x: halfWidth, y: bottomY, z: backZ };
-  const leftFront = { x: -halfWidth * 0.62, y: bottomY, z: frontZ };
-  const rightFront = { x: halfWidth * 0.62, y: bottomY, z: frontZ };
+  const frontHalf = Math.max(Math.abs(front.outerRimLeft.x), Math.abs(front.innerRimLeft.x) + 0.055);
+  const backHalf = Math.max(Math.abs(previous.innerRimLeft.x) + 0.022, frontHalf + 0.026);
+  const leftBack = { x: -backHalf, y: bottomY, z: backZ };
+  const rightBack = { x: backHalf, y: bottomY, z: backZ };
+  const leftFront = { x: -frontHalf, y: bottomY, z: frontZ };
+  const rightFront = { x: frontHalf, y: bottomY, z: frontZ };
   const leftBackTop = { ...leftBack, y: topY };
   const rightBackTop = { ...rightBack, y: topY };
   const leftFrontTop = { ...leftFront, y: topY };
