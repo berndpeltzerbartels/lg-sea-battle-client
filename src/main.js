@@ -1689,8 +1689,8 @@ function getBridgeWindowCameraLocalPosition() {
 
 function getSubmarineBridgeCameraLocalPosition() {
   return {
-    position: new Vector3(0, 1.64, 0.31),
-    target: new Vector3(0, 1.48, 82)
+    position: new Vector3(0, 1.58, 0.02),
+    target: new Vector3(0, 1.44, 82)
   };
 }
 
