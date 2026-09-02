@@ -1680,7 +1680,7 @@ function setBattleStation(station) {
 }
 
 function updateSteeringModifierHint() {
-  document.body.dataset.steeringModifier = (flakViewActive || cannonViewActive || isPlayerSubmarineObservationPeriscopeActive()) ? "shift" : "none";
+  document.body.dataset.steeringModifier = (flakViewActive || cannonViewActive) ? "shift" : "none";
 }
 
 function updateTorpedoViewState() {
@@ -3473,7 +3473,7 @@ function pressDirectionalInput(direction, options = {}) {
   const shiftKey = Boolean(options.shiftKey);
 
   if (direction === "up") {
-    if (isPlayerSubmarineObservationPeriscopeActive() && !shiftKey) {
+    if (isPlayerSubmarineObservationPeriscopeActive() && shiftKey) {
       heldObservationPeriscopePitchDirection = 1;
       return;
     }
@@ -3511,7 +3511,7 @@ function pressDirectionalInput(direction, options = {}) {
   }
 
   if (direction === "down") {
-    if (isPlayerSubmarineObservationPeriscopeActive() && !shiftKey) {
+    if (isPlayerSubmarineObservationPeriscopeActive() && shiftKey) {
       heldObservationPeriscopePitchDirection = -1;
       return;
     }
@@ -3549,7 +3549,7 @@ function pressDirectionalInput(direction, options = {}) {
   }
 
   if (direction === "left") {
-    if (isPlayerSubmarineObservationPeriscopeActive() && !shiftKey) {
+    if (isPlayerSubmarineObservationPeriscopeActive() && shiftKey) {
       heldObservationPeriscopeYawDirection = -1;
       return;
     }
@@ -3578,7 +3578,7 @@ function pressDirectionalInput(direction, options = {}) {
   }
 
   if (direction === "right") {
-    if (isPlayerSubmarineObservationPeriscopeActive() && !shiftKey) {
+    if (isPlayerSubmarineObservationPeriscopeActive() && shiftKey) {
       heldObservationPeriscopeYawDirection = 1;
       return;
     }
