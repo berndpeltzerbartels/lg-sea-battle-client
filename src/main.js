@@ -674,6 +674,11 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     return;
   }
+  if (playerActive && isSubmarineTorpedoScopeZoomKey(event) && !event.repeat) {
+    cycleTorpedoScopeZoomLevel();
+    event.preventDefault();
+    return;
+  }
   if (playerActive && isSubmarineDiveKey(event) && !event.repeat) {
     toggleSubmarineDepthState(submarineDepthStates.submerged);
     event.preventDefault();
@@ -1592,6 +1597,10 @@ function isSubmarinePeriscopeKey(event) {
 
 function isObservationPeriscopeAlignKey(event) {
   return isPlayerSubmarineObservationPeriscopeActive() && (event.code === "KeyH" || event.key === "h" || event.key === "H");
+}
+
+function isSubmarineTorpedoScopeZoomKey(event) {
+  return submarineMode && torpedoScopeActive && (event.code === "KeyZ" || event.key === "z" || event.key === "Z");
 }
 
 function isCannonSightToggleKey(event) {
@@ -2677,6 +2686,12 @@ function currentCannonSightLevel() {
 
 function currentSubmarineTorpedoScopeZoomLevel() {
   return submarineTorpedoScopeZoomLevels[torpedoScopeZoomLevelIndex] ?? submarineTorpedoScopeZoomLevels[0];
+}
+
+function cycleTorpedoScopeZoomLevel() {
+  torpedoScopeZoomLevelIndex = (torpedoScopeZoomLevelIndex + 1) % submarineTorpedoScopeZoomLevels.length;
+  document.body.dataset.torpedoScopeZoom = currentSubmarineTorpedoScopeZoomLevel().label;
+  updateTorpedoScopeZoomDisplay();
 }
 
 function updateCannonSightFromWheel(event) {

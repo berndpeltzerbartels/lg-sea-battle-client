@@ -1256,12 +1256,28 @@ body[data-torpedo-view="active"] .torpedo-scope {
 }
 
 .torpedo-scope-zoom small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   grid-column: 1 / -1;
   color: rgb(247 251 255 / 66%);
   font-size: 9px;
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
+}
+
+.torpedo-scope-zoom kbd {
+  display: inline-grid;
+  min-width: 18px;
+  height: 14px;
+  place-items: center;
+  padding: 0 3px;
+  border: 1px solid rgb(155 229 223 / 46%);
+  border-radius: 4px;
+  background: rgb(155 229 223 / 12%);
+  color: rgb(247 251 255 / 84%);
+  font: inherit;
 }
 
 .torpedo-scope-line,
@@ -1587,7 +1603,7 @@ body[data-observation-periscope="active"] .observation-periscope {
 
 body[data-observation-periscope="active"] {
   --periscope-side-panel-width: 132px;
-  --periscope-rudder-panel-width: 188px;
+  --periscope-rudder-panel-width: 244px;
   --periscope-circle-size: min(72vw, 760px);
 }
 
@@ -1686,7 +1702,7 @@ body[data-player-vehicle="submarine"][data-torpedo-view="active"] .torpedo-scope
   display: grid;
 }
 
-body[data-player-vehicle="submarine"][data-torpedo-view="active"] .torpedo-scope-line-center {
+body[data-player-vehicle="submarine"][data-torpedo-view="active"] .torpedo-scope-range-mid {
   display: none;
 }
 
@@ -1709,7 +1725,7 @@ body[data-player-vehicle="submarine"][data-torpedo-view="active"] .torpedo-scope
 
 body[data-player-vehicle="submarine"][data-torpedo-view="active"] {
   --periscope-side-panel-width: 132px;
-  --periscope-rudder-panel-width: 188px;
+  --periscope-rudder-panel-width: 244px;
 }
 
 body[data-player-vehicle="submarine"][data-torpedo-view="active"] .ship-controls-panel {
@@ -3150,9 +3166,7 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
 }
 
 body[data-observation-periscope="active"] .telegraph-key-hints .shift-hint,
-body[data-observation-periscope="active"] .rudder-key-hints .shift-hint,
 body[data-observation-periscope="active"][data-steering-modifier="shift"] .telegraph-key-hints .shift-hint,
-body[data-observation-periscope="active"][data-steering-modifier="shift"] .rudder-key-hints .shift-hint,
 body[data-player-vehicle="submarine"][data-torpedo-view="active"] .telegraph-key-hints .shift-hint,
 body[data-player-vehicle="submarine"][data-torpedo-view="active"] .rudder-key-hints .shift-hint,
 body[data-player-vehicle="submarine"][data-torpedo-view="active"][data-steering-modifier="shift"] .telegraph-key-hints .shift-hint,

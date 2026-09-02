@@ -158,9 +158,12 @@ test("submarine periscope depth keeps the observation view above water", async (
   const targetPeriscope = await diveSnapshot(page);
   expect(targetPeriscope.cameraY).toBeGreaterThan(samples[targetDepthIndex].cameraY);
   expect(targetPeriscope.cameraY).toBeLessThan(0.5);
-  await expect(page.locator(".torpedo-scope-line-center")).toBeHidden();
-  await page.mouse.wheel(0, -140);
+  await expect(page.locator(".torpedo-scope-line-center")).toBeVisible();
+  await expect(page.locator(".torpedo-scope-range-mid")).toBeHidden();
+  await page.keyboard.press("Z");
   await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoScopeZoom)).toBe("II");
+  await page.mouse.wheel(0, -140);
+  await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoScopeZoom)).toBe("III");
   const zoomedTargetPeriscope = await diveSnapshot(page);
   expect(zoomedTargetPeriscope.torpedoScopeFov).toBeLessThan(targetPeriscope.torpedoScopeFov);
 });
