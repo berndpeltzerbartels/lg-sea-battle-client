@@ -1479,7 +1479,7 @@ function isBridgeViewKey(event) {
 }
 
 function isTorpedoScopeToggleKey(event) {
-  return !scoutPlaneMode && !submarineMode && (event.code === "KeyT" || event.key === "t" || event.key === "T");
+  return !scoutPlaneMode && (event.code === "KeyT" || event.key === "t" || event.key === "T");
 }
 
 function isAlignWeaponsKey(event) {
@@ -1519,7 +1519,10 @@ function toggleCannonView() {
 }
 
 function setBattleStation(station) {
-  if (submarineMode && (station === "cannon" || station === "torpedo")) {
+  if (submarineMode && station === "cannon") {
+    station = "bridge";
+  }
+  if (submarineMode && station === "torpedo" && !canUseSubmarineTorpedoScope()) {
     station = "bridge";
   }
   if (submarineMode && playerSubmarineDepthState !== submarineDepthStates.surface && station === "flak") {
@@ -1557,16 +1560,29 @@ function updateSteeringModifierHint() {
 }
 
 function updateTorpedoViewState() {
-  if (torpedoScopeActive && (scoutPlaneMode || submarineMode || flakViewActive || cannonViewActive || bombBayViewActive || playerDamageState !== "active")) {
+  if (torpedoScopeActive && !canUseTorpedoScope()) {
     setTorpedoScope(false);
   }
-  const active = torpedoScopeActive && !scoutPlaneMode && !submarineMode && !flakViewActive && !cannonViewActive && !bombBayViewActive && playerDamageState === "active";
+  const active = torpedoScopeActive && canUseTorpedoScope();
   document.body.dataset.torpedoView = active ? "active" : "hidden";
 }
 
 function setTorpedoScope(active) {
-  torpedoScopeActive = Boolean(active) && !scoutPlaneMode && !submarineMode && !flakViewActive && !cannonViewActive && !bombBayViewActive && playerDamageState === "active";
+  torpedoScopeActive = Boolean(active) && canUseTorpedoScope();
   document.body.dataset.torpedoView = torpedoScopeActive ? "active" : "hidden";
+}
+
+function canUseTorpedoScope() {
+  return !scoutPlaneMode
+    && !flakViewActive
+    && !cannonViewActive
+    && !bombBayViewActive
+    && playerDamageState === "active"
+    && (!submarineMode || canUseSubmarineTorpedoScope());
+}
+
+function canUseSubmarineTorpedoScope() {
+  return !submarineMode || playerSubmarineDepthState !== submarineDepthStates.submerged;
 }
 
 function toggleBombBayView() {
@@ -2155,8 +2171,8 @@ function configureVehicleHud() {
     cannonViewButton.setAttribute("aria-hidden", "true");
   }
   if (torpedoAidButton) {
-    torpedoAidButton.disabled = true;
-    torpedoAidButton.setAttribute("aria-hidden", "true");
+    torpedoAidButton.disabled = false;
+    torpedoAidButton.removeAttribute("aria-hidden");
   }
 }
 
@@ -2435,6 +2451,11 @@ function updateBattleStationButtons() {
   flakViewButton?.classList.toggle("is-active", flakViewActive);
   cannonViewButton?.classList.toggle("is-active", cannonViewActive);
   torpedoAidButton?.classList.toggle("is-active", torpedoScopeActive);
+  if (submarineMode && torpedoAidButton) {
+    const torpedoDisabled = !canUseSubmarineTorpedoScope();
+    torpedoAidButton.disabled = torpedoDisabled;
+    torpedoAidButton.classList.toggle("is-disabled", torpedoDisabled);
+  }
   updateCannonSightDisplay();
 }
 
@@ -3365,6 +3386,8 @@ function setPlayerSubmarineDepthState(depthState) {
   updateOwnSubmarineDepthVisibility();
   if (playerSubmarineDepthState !== submarineDepthStates.surface) {
     setBattleStation("bridge");
+  } else {
+    updateBattleStationButtons();
   }
   if (playerDamageState === "active") {
     nextPlayerStateSendTime = 0;
@@ -4558,6 +4581,11 @@ async function sendPlayerState() {
 }
 
 function requestPlayerWeaponFire() {
+  if (submarineMode && !torpedoScopeActive) {
+    document.body.dataset.fireTorpedoSync = "blocked";
+    document.body.dataset.fireTorpedoSyncError = "submarine-torpedo-scope-required";
+    return;
+  }
   return requestPlayerTorpedoFire();
 }
 

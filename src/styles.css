@@ -956,6 +956,12 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
   color: #fff7ef;
 }
 
+.battle-station:disabled,
+.battle-station.is-disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
 .battle-station.is-active kbd {
   border-color: rgb(255 107 74 / 48%);
   background: rgb(255 107 74 / 18%);
@@ -1055,7 +1061,9 @@ body[data-player-vehicle="submarine"] .battle-station-hull {
 
 body[data-player-vehicle="submarine"] .battle-station-panel {
   top: auto;
-  bottom: calc(var(--instrument-panel-padding) + 84px + var(--instrument-panel-gap));
+  bottom: calc(var(--instrument-panel-padding) + 112px + var(--instrument-panel-gap));
+  height: 72px;
+  padding: 6px 8px;
 }
 
 body[data-player-vehicle="submarine"] .battle-station-bow,
@@ -1064,8 +1072,7 @@ body[data-player-vehicle="submarine"] .battle-station-funnel,
 body[data-player-vehicle="submarine"] .battle-station-tubes,
 body[data-player-vehicle="submarine"] .battle-station-cannon-mark,
 body[data-player-vehicle="submarine"] .battle-station-stern-mark,
-body[data-player-vehicle="submarine"] .battle-station-cannon,
-body[data-player-vehicle="submarine"] .battle-station-torpedo-precision {
+body[data-player-vehicle="submarine"] .battle-station-cannon {
   display: none;
 }
 
@@ -1098,7 +1105,7 @@ body[data-player-vehicle="submarine"] .battle-station-flak-mark {
 
 body[data-player-vehicle="submarine"] .battle-station-bridge {
   left: 51%;
-  top: 47px;
+  top: 42px;
   min-width: 62px;
 }
 
@@ -1110,6 +1117,12 @@ body[data-player-vehicle="submarine"] .battle-station-flak {
   left: 28%;
   top: 7px;
   min-width: 54px;
+}
+
+body[data-player-vehicle="submarine"] .battle-station-torpedo-precision {
+  right: 6%;
+  top: 7px;
+  min-width: 68px;
 }
 
 body[data-player-vehicle="submarine"] .align-weapons-group {
@@ -2386,9 +2399,7 @@ body[data-player-vehicle="submarine"] .depth-gauge strong {
 
 .submarine-depth-actions {
   display: none;
-  flex-wrap: wrap;
-  justify-content: start;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
   gap: 5px;
   font: 800 7px/1 Inter, Arial, sans-serif;
   letter-spacing: 0;
@@ -2419,12 +2430,7 @@ body[data-player-vehicle="submarine"] .depth-gauge strong {
 }
 
 body[data-player-vehicle="submarine"] .submarine-depth-actions {
-  display: flex;
-}
-
-.submarine-depth-actions button:first-child {
-  flex-basis: 100%;
-  width: fit-content;
+  display: grid;
 }
 
 .depth-gauge {

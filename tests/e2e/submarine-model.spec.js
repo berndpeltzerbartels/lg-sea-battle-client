@@ -19,7 +19,7 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
   await expect(page.locator("#bridgeViewButton")).toBeVisible();
   await expect(page.locator("#flakViewButton")).toBeVisible();
   await expect(page.locator("#cannonViewButton")).toBeHidden();
-  await expect(page.locator("#torpedoAidButton")).toBeHidden();
+  await expect(page.locator("#torpedoAidButton")).toBeVisible();
   await expect(page.locator(".align-weapons-group")).toBeHidden();
   await expect(page.locator(".submarine-depth-actions")).toContainText("Auftauchen");
   await expect(page.locator(".submarine-depth-actions")).toContainText("Tauchen");
@@ -29,8 +29,14 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
   await page.keyboard.press("P");
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("periscope");
   await expect(page.locator("#depthValue")).toHaveText("Sehrohr");
+  await expect(page.locator("#torpedoAidButton")).toBeEnabled();
   await page.keyboard.press("P");
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("surface");
+
+  await page.keyboard.press("T");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("active");
+  await page.locator("#bridgeViewButton").click();
+  await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("hidden");
 
   await page.keyboard.press("F");
   await expect.poll(() => page.evaluate(() => document.body.dataset.flakView)).toBe("active");
@@ -38,8 +44,12 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("submerged");
   await expect.poll(() => page.evaluate(() => document.body.dataset.flakView)).toBe("bridge");
   await expect(page.locator("#depthValue")).toHaveText("Getaucht");
+  await expect(page.locator("#torpedoAidButton")).toBeDisabled();
+  await page.keyboard.press("T");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("hidden");
   await page.keyboard.press("B");
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("surface");
+  await expect(page.locator("#torpedoAidButton")).toBeEnabled();
   await page.keyboard.press("D");
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("submerged");
   await page.keyboard.press("D");
