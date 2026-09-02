@@ -160,7 +160,9 @@ const submarineDepthOffsets = {
   submerged: -2.95
 };
 const submarineObservationPeriscopeSwitchOffset = 0.92;
-const submarineObservationPeriscopeEyeY = 1.92;
+const submarineObservationPeriscopeEyeY = 1.97;
+const submarineTargetPeriscopeEyeY = 2.0;
+const submarineTargetPeriscopeEyeZ = 0.18;
 const submarineObservationPeriscopePitchBase = -0.015;
 const submarineObservationPeriscopePitchMin = -0.11;
 const submarineObservationPeriscopePitchMax = 0.08;
@@ -1796,6 +1798,18 @@ function getPlayerCameraSetup(forward) {
       position,
       target
     };
+  }
+
+  if (!scoutPlaneMode && submarineMode && torpedoScopeActive) {
+    const position = transformLocalShipPointWithoutTilt(
+      new Vector3(0, submarineTargetPeriscopeEyeY + playerSubmarinePeriscopeLift, submarineTargetPeriscopeEyeZ),
+      submarineVisualScale
+    );
+    const target = transformLocalShipPointWithoutTilt(
+      new Vector3(0, submarineTargetPeriscopeEyeY + playerSubmarinePeriscopeLift, 88),
+      submarineVisualScale
+    );
+    return { position, target };
   }
 
   if (!scoutPlaneMode && submarineMode && isPlayerSubmarineObservationPeriscopeActive()) {
@@ -8506,6 +8520,19 @@ function stationSnapshot() {
 }
 
 function getSubmarineDiveSequenceCameraSetupForTest() {
+  if (submarineMode && torpedoScopeActive) {
+    const position = transformLocalShipPointWithoutTilt(
+      new Vector3(0, submarineTargetPeriscopeEyeY + playerSubmarinePeriscopeLift, submarineTargetPeriscopeEyeZ),
+      submarineVisualScale
+    );
+    return {
+      position,
+      target: transformLocalShipPointWithoutTilt(
+        new Vector3(0, submarineTargetPeriscopeEyeY + playerSubmarinePeriscopeLift, 88),
+        submarineVisualScale
+      )
+    };
+  }
   if (submarineMode && isPlayerSubmarineObservationPeriscopeActive()) {
     const position = transformLocalShipPointWithoutTilt(new Vector3(0, submarineObservationPeriscopeEyeY + playerSubmarinePeriscopeLift, 0.02), submarineVisualScale);
     const viewYaw = heading + observationPeriscopeYaw;

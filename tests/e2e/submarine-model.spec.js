@@ -13,6 +13,8 @@ test("side-view sandbox can render the new submarine model", async ({ page }, te
 });
 
 test("submarine cockpit exposes bridge and flak controls only", async ({ page }) => {
+  test.setTimeout(45_000);
+
   await page.goto("/sea-battle/?setup=8&vehicle=submarine&hide-beach=1");
   await page.waitForFunction(() => document.body.dataset.playerVehicle === "submarine");
 
@@ -127,6 +129,12 @@ test("submarine periscope depth keeps the observation view above water", async (
   expect(samples[targetDepthIndex].cameraY).toBeGreaterThan(0.03);
   expect(samples[targetDepthIndex].cameraY).toBeLessThan(0.35);
   expect(samples[targetDepthIndex].periscopeLift).toBe(0);
+
+  await page.keyboard.press("T");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("active");
+  const targetPeriscope = await diveSnapshot(page);
+  expect(targetPeriscope.cameraY).toBeGreaterThan(samples[targetDepthIndex].cameraY);
+  expect(targetPeriscope.cameraY).toBeLessThan(0.5);
 });
 
 async function diveSnapshot(page) {

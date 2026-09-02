@@ -1443,7 +1443,7 @@ body[data-observation-periscope="active"] .observation-periscope {
 body[data-observation-periscope="active"] {
   --periscope-side-panel-width: 132px;
   --periscope-rudder-panel-width: 188px;
-  --periscope-circle-size: min(68vw, 700px, calc(100vw - var(--view-left) - var(--periscope-side-panel-width) - var(--periscope-rudder-panel-width) - 122px));
+  --periscope-circle-size: min(72vw, 760px);
 }
 
 body[data-observation-periscope="active"] .observation-periscope-glass {
@@ -1452,26 +1452,26 @@ body[data-observation-periscope="active"] .observation-periscope-glass {
 
 body[data-observation-periscope="active"] .ship-controls-panel {
   left: var(--view-left);
-  top: 50%;
-  bottom: auto;
+  top: 0;
+  bottom: 0;
   z-index: 5;
   display: block;
   width: calc(100vw - var(--view-left));
-  height: 0;
+  height: 100vh;
   overflow: visible;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
-  transform: translateY(-50%);
+  transform: none;
   pointer-events: none;
 }
 
 body[data-observation-periscope="active"] .telegraph,
 body[data-observation-periscope="active"] .rudder {
   position: absolute;
-  top: -44px;
+  bottom: 18px;
   height: 88px;
   box-sizing: border-box;
   padding: 8px 10px;
@@ -1484,13 +1484,13 @@ body[data-observation-periscope="active"] .rudder {
 }
 
 body[data-observation-periscope="active"] .telegraph {
-  left: max(14px, calc(50% - var(--periscope-circle-size) / 2 - var(--periscope-side-panel-width) - 18px));
+  left: 18px;
   width: var(--periscope-side-panel-width);
   border-right: 1px solid rgb(255 255 255 / 32%);
 }
 
 body[data-observation-periscope="active"] .rudder {
-  right: max(14px, calc(50% - var(--periscope-circle-size) / 2 - var(--periscope-rudder-panel-width) - 18px));
+  right: 18px;
   width: var(--periscope-rudder-panel-width);
 }
 
