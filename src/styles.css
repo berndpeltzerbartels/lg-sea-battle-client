@@ -1194,7 +1194,7 @@ body[data-torpedo-view="active"] .torpedo-scope {
   inset: 0;
   z-index: 0;
   background:
-    radial-gradient(circle at calc(var(--view-left) + (100vw - var(--view-left)) / 2) 47%, transparent 0 24%, rgb(1 8 10 / 10%) 38%, rgb(1 8 10 / 72%) 75%, rgb(0 0 0 / 92%) 100%);
+    radial-gradient(circle at calc(var(--view-left) + (100vw - var(--view-left)) / 2) 47%, transparent 0 24%, rgb(1 8 10 / 88%) 24.4%, rgb(0 0 0 / 98%) 100%);
 }
 
 .torpedo-scope-glass {
@@ -1414,7 +1414,7 @@ body[data-observation-periscope="active"] .observation-periscope {
   inset: 0;
   z-index: 0;
   background:
-    radial-gradient(circle at calc(var(--view-left) + (100vw - var(--view-left)) / 2) 50%, transparent 0 24%, rgb(1 8 10 / 18%) 36%, rgb(1 8 10 / 80%) 73%, rgb(0 0 0 / 94%) 100%);
+    radial-gradient(circle at calc(var(--view-left) + (100vw - var(--view-left)) / 2) 50%, transparent 0 31%, rgb(1 8 10 / 92%) 31.4%, rgb(0 0 0 / 98%) 100%);
 }
 
 .observation-periscope-glass {
@@ -1422,7 +1422,7 @@ body[data-observation-periscope="active"] .observation-periscope {
   left: calc(var(--view-left) + (100vw - var(--view-left)) / 2);
   top: 50%;
   z-index: 1;
-  width: min(62vw, 640px);
+  width: min(72vw, 760px);
   aspect-ratio: 1;
   transform: translate(-50%, -50%);
   border: 2px solid rgb(6 16 19 / 84%);

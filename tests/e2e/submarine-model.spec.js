@@ -25,18 +25,26 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
   await expect(page.locator(".submarine-depth-actions")).toContainText("Tauchen");
   await expect(page.locator(".submarine-depth-actions")).toContainText("Sehrohrtiefe");
   await expect(page.locator("#submarineSurfaceButton")).toContainText("B");
+  await expect(page.locator("#torpedoAidButton")).toBeDisabled();
+  await page.keyboard.press("T");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("hidden");
 
   await page.keyboard.press("P");
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("periscope");
   await expect(page.locator("#depthValue")).toHaveText("Sehrohr");
   await expect(page.locator("#torpedoAidButton")).toBeEnabled();
-  await page.keyboard.press("P");
-  await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("surface");
-
+  await expect(page.locator("#torpedoAidButton")).toContainText("Torpedo");
   await page.keyboard.press("T");
   await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("active");
-  await page.locator("#bridgeViewButton").click();
+  await page.keyboard.press("T");
   await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("hidden");
+  await page.keyboard.press("T");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("active");
+  await page.keyboard.press("P");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("hidden");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("periscope");
+  await page.keyboard.press("P");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("surface");
 
   await page.keyboard.press("F");
   await expect.poll(() => page.evaluate(() => document.body.dataset.flakView)).toBe("active");
@@ -49,7 +57,7 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
   await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("hidden");
   await page.keyboard.press("B");
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("surface");
-  await expect(page.locator("#torpedoAidButton")).toBeEnabled();
+  await expect(page.locator("#torpedoAidButton")).toBeDisabled();
   await page.keyboard.press("D");
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("submerged");
   await page.keyboard.press("D");
@@ -67,6 +75,14 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
   await page.waitForTimeout(12000);
   const speed = Number(await page.locator("#telegraphSpeedValue").textContent());
   expect(speed).toBeLessThanOrEqual(11.1);
+
+  await page.keyboard.press("P");
+  for (let i = 0; i < 8; i += 1) {
+    await page.keyboard.press("ArrowUp");
+  }
+  await page.waitForTimeout(12000);
+  const periscopeSpeed = Number(await page.locator("#telegraphSpeedValue").textContent());
+  expect(periscopeSpeed).toBeLessThanOrEqual(9.1);
 });
 
 test("submarine periscope depth keeps the observation view above water", async ({ page }) => {

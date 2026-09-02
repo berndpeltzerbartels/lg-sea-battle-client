@@ -161,6 +161,11 @@ const submarineDepthOffsets = {
 };
 const submarineObservationPeriscopeSwitchOffset = 0.92;
 const submarineObservationPeriscopeEyeY = 1.92;
+const submarineObservationPeriscopePitchBase = -0.015;
+const submarineObservationPeriscopePitchMin = -0.11;
+const submarineObservationPeriscopePitchMax = 0.08;
+const submarineObservationPeriscopeYawSpeed = 0.62;
+const submarineObservationPeriscopePitchSpeed = 0.18;
 const submarineDepthTransitionSpeed = 0.28;
 const submarinePeriscopeLiftSpeed = 0.55;
 const submarineBobbingRatios = {
@@ -617,6 +622,11 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (playerActive && isTorpedoScopeToggleKey(event) && !event.repeat) {
+    if (submarineMode && torpedoScopeActive) {
+      setBattleStation("bridge");
+      event.preventDefault();
+      return;
+    }
     setBattleStation("torpedo");
     event.preventDefault();
     return;
@@ -637,6 +647,11 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (playerActive && isSubmarinePeriscopeKey(event) && !event.repeat) {
+    if (submarineMode && playerSubmarineDepthState === submarineDepthStates.periscope && torpedoScopeActive) {
+      setBattleStation("bridge");
+      event.preventDefault();
+      return;
+    }
     toggleSubmarineDepthState(submarineDepthStates.periscope);
     event.preventDefault();
     return;
@@ -691,6 +706,8 @@ window.addEventListener("keyup", (event) => {
     heldEngineDirection = 0;
     heldEngineStopGuardDirection = 0;
     heldRudderDirection = 0;
+    heldObservationPeriscopeYawDirection = 0;
+    heldObservationPeriscopePitchDirection = 0;
   }
   for (const direction of ["up", "down", "left", "right"]) {
     if (!isInputKey(event, direction)) continue;
@@ -921,6 +938,7 @@ const engineOrders = engineOrderLabels.map((order, index) => ({
 }));
 const maxTorpedoBoatForwardSpeed = Math.max(...engineOrders.map((order) => order.speed).filter((orderSpeed) => orderSpeed > 0));
 const maxSubmarineForwardSpeed = 11;
+const maxSubmarinePeriscopeForwardSpeed = 9;
 
 // Keep propulsion as discrete ship orders, not held-key throttle.
 // Later multiplayer can send this order index plus heading/speed instead of raw input.
@@ -943,6 +961,10 @@ let cannonViewActive = false;
 let torpedoScopeActive = false;
 let bombBayViewActive = false;
 let bombBayImpactFocus = null;
+let observationPeriscopeYaw = 0;
+let observationPeriscopePitch = 0;
+let heldObservationPeriscopeYawDirection = 0;
+let heldObservationPeriscopePitchDirection = 0;
 const singleRadarMode = true;
 const RADAR_MODE_OVERRIDE_MS = 10000;
 let radarMode = "radar";
@@ -1174,6 +1196,20 @@ scene.onBeforeRenderObservable.add(() => {
       cannonMaxPitch
     );
   }
+  if (playerActive && isPlayerSubmarineObservationPeriscopeActive()) {
+    if (heldObservationPeriscopeYawDirection !== 0) {
+      observationPeriscopeYaw = normalizeAngle(
+        observationPeriscopeYaw + heldObservationPeriscopeYawDirection * submarineObservationPeriscopeYawSpeed * dt
+      );
+    }
+    if (heldObservationPeriscopePitchDirection !== 0) {
+      observationPeriscopePitch = clamp(
+        observationPeriscopePitch + heldObservationPeriscopePitchDirection * submarineObservationPeriscopePitchSpeed * dt,
+        submarineObservationPeriscopePitchMin,
+        submarineObservationPeriscopePitchMax
+      );
+    }
+  }
   if (playerActive && flakViewActive && heldFlakFire) {
     firePlayerFlak();
   }
@@ -1201,7 +1237,7 @@ scene.onBeforeRenderObservable.add(() => {
     const diveRatio = scoutPlaneMode ? clamp(-heldElevatorDirection, 0, 1) : 0;
     const maxForwardSpeed = scoutPlaneMode
       ? scoutPlaneMaxSpeed + (scoutPlaneMaxDiveSpeed - scoutPlaneMaxSpeed) * diveRatio
-      : (submarineMode ? maxSubmarineForwardSpeed : maxTorpedoBoatForwardSpeed);
+      : getPlayerMaxForwardSpeed();
     const engineTargetSpeed = engineOrders[engineOrder].speed;
     const targetSpeed = scoutPlaneMode
       ? scoutPlaneTargetSpeed + (scoutPlaneMaxDiveSpeed - scoutPlaneTargetSpeed) * diveRatio
@@ -1395,6 +1431,7 @@ scene.onBeforeRenderObservable.add(() => {
     camera.rotation.x = -Math.abs(camera.rotation.x);
   }
   updateObservationPeriscopeViewState();
+  updateSteeringModifierHint();
   updateOwnSubmarineDepthVisibility();
   boat.flakDeckView?.setEnabled(flakViewActive);
   boat.flakViewHiddenMeshes?.forEach((mesh) => mesh.setEnabled(!flakViewActive));
@@ -1565,6 +1602,8 @@ function setBattleStation(station) {
   heldElevatorDirection = 0;
   heldCannonDirection = 0;
   heldCannonPitchDirection = 0;
+  heldObservationPeriscopeYawDirection = 0;
+  heldObservationPeriscopePitchDirection = 0;
   heldCannonStartTime = time;
   heldCannonPitchStartTime = time;
   rightMouseRudderActive = false;
@@ -1576,7 +1615,7 @@ function setBattleStation(station) {
 }
 
 function updateSteeringModifierHint() {
-  document.body.dataset.steeringModifier = (flakViewActive || cannonViewActive) ? "shift" : "none";
+  document.body.dataset.steeringModifier = (flakViewActive || cannonViewActive || isPlayerSubmarineObservationPeriscopeActive()) ? "shift" : "none";
 }
 
 function updateTorpedoViewState() {
@@ -1602,7 +1641,14 @@ function canUseTorpedoScope() {
 }
 
 function canUseSubmarineTorpedoScope() {
-  return !submarineMode || playerSubmarineDepthState !== submarineDepthStates.submerged;
+  return !submarineMode || playerSubmarineDepthState === submarineDepthStates.periscope;
+}
+
+function getPlayerMaxForwardSpeed() {
+  if (!submarineMode) return maxTorpedoBoatForwardSpeed;
+  return playerSubmarineDepthState === submarineDepthStates.periscope
+    ? maxSubmarinePeriscopeForwardSpeed
+    : maxSubmarineForwardSpeed;
 }
 
 function toggleBombBayView() {
@@ -1754,7 +1800,13 @@ function getPlayerCameraSetup(forward) {
 
   if (!scoutPlaneMode && submarineMode && isPlayerSubmarineObservationPeriscopeActive()) {
     const position = transformLocalShipPointWithoutTilt(new Vector3(0, submarineObservationPeriscopeEyeY + playerSubmarinePeriscopeLift, 0.02), submarineVisualScale);
-    const target = transformLocalShipPointWithoutTilt(new Vector3(0, 1.86 + playerSubmarinePeriscopeLift, 88), submarineVisualScale);
+    const viewYaw = heading + observationPeriscopeYaw;
+    const viewPitch = submarineObservationPeriscopePitchBase + observationPeriscopePitch;
+    const target = position.add(new Vector3(
+      Math.sin(viewYaw) * Math.cos(viewPitch),
+      Math.sin(viewPitch),
+      Math.cos(viewYaw) * Math.cos(viewPitch)
+    ).scale(88 * submarineVisualScale));
     return { position, target };
   }
 
@@ -2222,6 +2274,11 @@ function configureVehicleHud() {
   if (torpedoAidButton) {
     torpedoAidButton.disabled = false;
     torpedoAidButton.removeAttribute("aria-hidden");
+    torpedoAidButton.setAttribute("aria-label", "Torpedo wählen");
+    const label = torpedoAidButton.querySelector("span");
+    if (label) {
+      label.textContent = "Torpedo";
+    }
   }
 }
 
@@ -3264,6 +3321,10 @@ function pressDirectionalInput(direction, options = {}) {
   const shiftKey = Boolean(options.shiftKey);
 
   if (direction === "up") {
+    if (isPlayerSubmarineObservationPeriscopeActive() && !shiftKey) {
+      heldObservationPeriscopePitchDirection = 1;
+      return;
+    }
     if (cannonViewActive && !shiftKey) {
       if (!repeat || heldCannonPitchDirection !== 1) {
         heldCannonPitchStartTime = time;
@@ -3298,6 +3359,10 @@ function pressDirectionalInput(direction, options = {}) {
   }
 
   if (direction === "down") {
+    if (isPlayerSubmarineObservationPeriscopeActive() && !shiftKey) {
+      heldObservationPeriscopePitchDirection = -1;
+      return;
+    }
     if (cannonViewActive && !shiftKey) {
       if (!repeat || heldCannonPitchDirection !== -1) {
         heldCannonPitchStartTime = time;
@@ -3332,6 +3397,10 @@ function pressDirectionalInput(direction, options = {}) {
   }
 
   if (direction === "left") {
+    if (isPlayerSubmarineObservationPeriscopeActive() && !shiftKey) {
+      heldObservationPeriscopeYawDirection = -1;
+      return;
+    }
     if (cannonViewActive && !shiftKey) {
       if (!repeat || heldCannonDirection !== -1) {
         heldCannonStartTime = time;
@@ -3357,6 +3426,10 @@ function pressDirectionalInput(direction, options = {}) {
   }
 
   if (direction === "right") {
+    if (isPlayerSubmarineObservationPeriscopeActive() && !shiftKey) {
+      heldObservationPeriscopeYawDirection = 1;
+      return;
+    }
     if (cannonViewActive && !shiftKey) {
       if (!repeat || heldCannonDirection !== 1) {
         heldCannonStartTime = time;
@@ -3384,20 +3457,24 @@ function pressDirectionalInput(direction, options = {}) {
 function releaseDirectionalInput(direction) {
   if (direction === "up") {
     if (heldEngineDirection > 0) heldEngineDirection = 0;
+    if (heldObservationPeriscopePitchDirection > 0) heldObservationPeriscopePitchDirection = 0;
     if (heldFlakPitchDirection > 0) heldFlakPitchDirection = 0;
     if (heldCannonPitchDirection > 0) heldCannonPitchDirection = 0;
     if (heldElevatorDirection < 0) heldElevatorDirection = 0;
   } else if (direction === "down") {
     if (heldEngineDirection < 0) heldEngineDirection = 0;
+    if (heldObservationPeriscopePitchDirection < 0) heldObservationPeriscopePitchDirection = 0;
     if (heldFlakPitchDirection < 0) heldFlakPitchDirection = 0;
     if (heldCannonPitchDirection < 0) heldCannonPitchDirection = 0;
     if (heldElevatorDirection > 0) heldElevatorDirection = 0;
   } else if (direction === "left") {
     if (heldRudderDirection < 0) heldRudderDirection = 0;
+    if (heldObservationPeriscopeYawDirection < 0) heldObservationPeriscopeYawDirection = 0;
     if (heldFlakDirection < 0) heldFlakDirection = 0;
     if (heldCannonDirection < 0) heldCannonDirection = 0;
   } else if (direction === "right") {
     if (heldRudderDirection > 0) heldRudderDirection = 0;
+    if (heldObservationPeriscopeYawDirection > 0) heldObservationPeriscopeYawDirection = 0;
     if (heldFlakDirection > 0) heldFlakDirection = 0;
     if (heldCannonDirection > 0) heldCannonDirection = 0;
   }
@@ -3433,7 +3510,7 @@ function setPlayerSubmarineDepthState(depthState) {
   document.body.dataset.playerDepthState = playerSubmarineDepthState;
   updateSubmarineDepthUi();
   updateOwnSubmarineDepthVisibility();
-  if (playerSubmarineDepthState !== submarineDepthStates.surface) {
+  if (playerSubmarineDepthState !== submarineDepthStates.surface || torpedoScopeActive) {
     setBattleStation("bridge");
   } else {
     updateBattleStationButtons();
@@ -8430,9 +8507,16 @@ function stationSnapshot() {
 
 function getSubmarineDiveSequenceCameraSetupForTest() {
   if (submarineMode && isPlayerSubmarineObservationPeriscopeActive()) {
+    const position = transformLocalShipPointWithoutTilt(new Vector3(0, submarineObservationPeriscopeEyeY + playerSubmarinePeriscopeLift, 0.02), submarineVisualScale);
+    const viewYaw = heading + observationPeriscopeYaw;
+    const viewPitch = submarineObservationPeriscopePitchBase + observationPeriscopePitch;
     return {
-      position: transformLocalShipPointWithoutTilt(new Vector3(0, submarineObservationPeriscopeEyeY + playerSubmarinePeriscopeLift, 0.02), submarineVisualScale),
-      target: transformLocalShipPointWithoutTilt(new Vector3(0, 1.86 + playerSubmarinePeriscopeLift, 88), submarineVisualScale)
+      position,
+      target: position.add(new Vector3(
+        Math.sin(viewYaw) * Math.cos(viewPitch),
+        Math.sin(viewPitch),
+        Math.cos(viewYaw) * Math.cos(viewPitch)
+      ).scale(88 * submarineVisualScale))
     };
   }
   if (submarineMode) {
