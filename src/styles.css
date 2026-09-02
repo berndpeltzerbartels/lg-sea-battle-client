@@ -1512,6 +1512,7 @@ body[data-underwater-view="true"] .torpedo-scope-glass {
 body[data-underwater-view="true"] .observation-periscope-vignette,
 body[data-underwater-view="true"] .torpedo-scope-vignette {
   background:
+    linear-gradient(to top, rgb(0 4 7 / 52%) 0%, rgb(0 15 22 / 28%) 34%, transparent 68%),
     radial-gradient(circle at calc(var(--view-left) + (100vw - var(--view-left)) / 2) 50%, rgb(0 45 62 / 14%) 0 31%, rgb(0 5 9 / 94%) 31.4%, rgb(0 0 0 / 99%) 100%);
 }
 

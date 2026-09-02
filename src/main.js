@@ -1374,6 +1374,7 @@ scene.onBeforeRenderObservable.add(() => {
     : (flakViewActive && !scoutPlaneMode
       ? 0.16
       : (cannonViewActive && !scoutPlaneMode ? 0.12 : bridgeViewStabilization)));
+  const submarineHiddenByDepth = submarineMode && playerSubmarineDepthState === submarineDepthStates.submerged;
   const bob = (Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035) * shipStabilization;
   if (playerActive) {
     if (submarineMode) {
@@ -1392,8 +1393,11 @@ scene.onBeforeRenderObservable.add(() => {
       scoutPlaneMode ? -turnVelocity * 2.8 : (-turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018) * shipStabilization * submarineRollFactor
     );
     if (!scoutPlaneMode) {
-      const wakeSpeed = submarineMode && playerSubmarineDepthState === submarineDepthStates.submerged ? 0 : speed;
-      updateEnemyBowWake(boat.bowWake, wakeSpeed, time, dt, boat.root.position, heading);
+      if (submarineHiddenByDepth) {
+        hideEnemyWake(boat.bowWake);
+      } else {
+        updateEnemyBowWake(boat.bowWake, speed, time, dt, boat.root.position, heading);
+      }
     }
     if (scoutPlaneMode) {
       updateScoutPlaneVisual(boat, speed, time);
@@ -1476,11 +1480,11 @@ scene.onBeforeRenderObservable.add(() => {
   }
   updateObservationPeriscopeViewState();
   updateSteeringModifierHint();
-  updateOwnSubmarineDepthVisibility();
   boat.flakDeckView?.setEnabled(flakViewActive);
   boat.flakViewHiddenMeshes?.forEach((mesh) => mesh.setEnabled(!flakViewActive));
   boat.cannonViewHiddenMeshes?.forEach((mesh) => mesh.setEnabled(!cannonViewActive));
   boat.bridgeViewHiddenMeshes?.forEach((mesh) => mesh.setEnabled(!bridgeInteriorViewActive));
+  updateOwnSubmarineDepthVisibility();
   hideOwnSubmarineBelowSurface();
   updateTorpedoViewState();
   document.body.dataset.camera = `${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)}`;
@@ -3702,6 +3706,7 @@ function updatePlayerSubmarineDiveMotion(dt) {
 
 function isPlayerSubmarineObservationPeriscopeActive() {
   if (!submarineMode || torpedoScopeActive || flakViewActive || cannonViewActive) return false;
+  if (playerSubmarineDepthState === submarineDepthStates.submerged) return true;
   if (playerSubmarineDepthState !== submarineDepthStates.periscope) return false;
   return Math.abs(playerSubmarineDepthOffset) >= submarineObservationPeriscopeSwitchOffset;
 }
@@ -5972,8 +5977,8 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
 
   if (radarRange <= 0) {
     if (statusElement) statusElement.textContent = "Radar aus";
-    drawRadarContactMarker(ctx, centerX, centerY, "light", true, null, heading, "", playerVehicleType, contactMarkerScale);
-    drawRadarOwnHeadingMarker(ctx, centerX, centerY);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.96)";
+    ctx.fillRect(0, 0, width, height);
     ctx.restore();
     return;
   }
@@ -7409,10 +7414,11 @@ function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
     motion.heading,
     roll
   );
-  const wakeSpeed = motion.vehicleType === "submarine" && motion.depthState === submarineDepthStates.submerged
-    ? 0
-    : motion.speed;
-  updateEnemyBowWake(motion.bowWake, wakeSpeed, time, dt, motion.root.position, motion.heading);
+  if (motion.vehicleType === "submarine" && motion.depthState === submarineDepthStates.submerged) {
+    hideEnemyWake(motion.bowWake);
+  } else {
+    updateEnemyBowWake(motion.bowWake, motion.speed, time, dt, motion.root.position, motion.heading);
+  }
 
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
   document.body.dataset.enemyEngineOrder = engineOrders[motion.engineOrder].label;
@@ -7459,10 +7465,11 @@ function updateServerEnemyMotion(motion, dt, time) {
       motion.heading,
       roll
     );
-    const wakeSpeed = motion.vehicleType === "submarine" && motion.depthState === submarineDepthStates.submerged
-      ? 0
-      : Math.max(0, motion.speed, motion.serverSpeed ?? 0);
-    updateEnemyBowWake(motion.bowWake, wakeSpeed, time, dt, motion.root.position, motion.heading);
+    if (motion.vehicleType === "submarine" && motion.depthState === submarineDepthStates.submerged) {
+      hideEnemyWake(motion.bowWake);
+    } else {
+      updateEnemyBowWake(motion.bowWake, Math.max(0, motion.speed, motion.serverSpeed ?? 0), time, dt, motion.root.position, motion.heading);
+    }
   }
 
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
@@ -12714,6 +12721,12 @@ function createMaterials(scene) {
   terrain.diffuseColor = new Color3(0.22, 0.34, 0.3);
   terrain.specularColor = new Color3(0.03, 0.04, 0.04);
 
+  const underwaterLand = new StandardMaterial("underwater_land_material", scene);
+  underwaterLand.diffuseColor = new Color3(0.035, 0.075, 0.08);
+  underwaterLand.emissiveColor = new Color3(0.006, 0.02, 0.024);
+  underwaterLand.specularColor = new Color3(0.01, 0.015, 0.015);
+  underwaterLand.backFaceCulling = false;
+
   const shallow = new StandardMaterial("shallow_water_material", scene);
   shallow.diffuseColor = new Color3(0.18, 0.36, 0.4);
   shallow.emissiveColor = new Color3(0.025, 0.075, 0.08);
@@ -12888,6 +12901,7 @@ function createMaterials(scene) {
     sand,
     grass,
     terrain,
+    underwaterLand,
     shallow,
     rock,
     hull,
@@ -15149,6 +15163,8 @@ function createCoastline(land, position, scene, materials, parent) {
   const heightScale = land.heightScale ?? 1;
   const peakBoost = land.peakBoost ?? 0;
 
+  createLandUnderwaterPlug(land, position, rx, rz, scene, materials, parent);
+
   if (!hideBeachDebug) {
     const beach = createCoastlineBeachMesh(`${name}_beach`, land, rx, rz, scene);
     beach.parent = parent;
@@ -15321,6 +15337,8 @@ function createIsland(land, position, scene, materials, parent) {
   islandRoot.position = position;
   islandRoot.parent = parent;
 
+  createLandUnderwaterPlug(land, Vector3.Zero(), rx, rz, scene, materials, islandRoot);
+
   if (!steepRock) {
     createSmallIslandSurface(land, rx, rz, heightScale, scene, materials, islandRoot);
     return islandRoot;
@@ -15354,6 +15372,46 @@ function createIsland(land, position, scene, materials, parent) {
   }
 
   return islandRoot;
+}
+
+function createLandUnderwaterPlug(land, position, rx, rz, scene, materials, parent) {
+  const depth = land.kind === "coastline" ? 58 : 34;
+  const boundary = getZoneBoundaryDistance(land, "navigation");
+  const samples = land.kind === "coastline" ? 112 : 64;
+  const mesh = new Mesh(`${land.name}_underwater_plug`, scene);
+  const positions = [];
+  const indices = [];
+  const normals = [];
+
+  for (let i = 0; i < samples; i += 1) {
+    const angle = (i / samples) * Math.PI * 2;
+    const radiusFactor = land.kind === "coastline" ? getCoastRadiusFactor(angle, land) : 1;
+    const x = Math.cos(angle) * rx * boundary * radiusFactor;
+    const z = Math.sin(angle) * rz * boundary * radiusFactor;
+    positions.push(x, 0.02, z, x, -depth, z);
+  }
+
+  for (let i = 0; i < samples; i += 1) {
+    const next = (i + 1) % samples;
+    const topA = i * 2;
+    const bottomA = topA + 1;
+    const topB = next * 2;
+    const bottomB = topB + 1;
+    indices.push(topA, bottomA, topB);
+    indices.push(topB, bottomA, bottomB);
+  }
+
+  VertexData.ComputeNormals(positions, indices, normals);
+  const vertexData = new VertexData();
+  vertexData.positions = positions;
+  vertexData.indices = indices;
+  vertexData.normals = normals;
+  vertexData.applyToMesh(mesh);
+  mesh.parent = parent;
+  mesh.position = position;
+  mesh.material = materials.underwaterLand;
+  mesh.receiveShadows = true;
+  return mesh;
 }
 
 function createSmallIslandSurface(land, rx, rz, heightScale, scene, materials, parent) {

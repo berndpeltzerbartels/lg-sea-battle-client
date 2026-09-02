@@ -177,6 +177,7 @@ test("submarine periscope depth keeps the observation view above water", async (
 
   await page.evaluate(() => window.seaBattleScenarioTest.setSubmarineDepthState("submerged"));
   const submergedRadar = await diveSnapshot(page);
+  expect(submergedRadar.observationPeriscope).toBe("active");
   expect(submergedRadar.radarDepthMode).toBe("off");
   expect(submergedRadar.radarRange).toBe(0);
   await page.evaluate(() => window.seaBattleScenarioTest.setSubmarineDepthState("periscope"));
