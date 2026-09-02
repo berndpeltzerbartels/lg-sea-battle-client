@@ -150,10 +150,12 @@ const submarineDepthLabels = {
 };
 const submarineDepthOffsets = {
   surface: 0,
-  periscope: -1.28,
-  submerged: -2.2
+  periscope: -2.2,
+  submerged: -2.95
 };
-const submarinePeriscopeSurfaceClearance = 0.12;
+const submarineObservationPeriscopeSwitchOffset = 0.92;
+const submarinePeriscopeSurfaceClearance = 0.045;
+const submarineObservationPeriscopeEyeY = 1.92;
 const submarineDepthTransitionSpeed = 0.38;
 const submarinePeriscopeLiftSpeed = 1.1;
 const submarineBobbingRatios = {
@@ -1743,7 +1745,7 @@ function getPlayerCameraSetup(forward) {
   }
 
   if (!scoutPlaneMode && submarineMode && isPlayerSubmarineObservationPeriscopeActive()) {
-    const position = transformLocalShipPointWithoutTilt(new Vector3(0, 1.92 + playerSubmarinePeriscopeLift, 0.02), submarineVisualScale);
+    const position = transformLocalShipPointWithoutTilt(new Vector3(0, submarineObservationPeriscopeEyeY + playerSubmarinePeriscopeLift, 0.02), submarineVisualScale);
     const target = transformLocalShipPointWithoutTilt(new Vector3(0, 1.86 + playerSubmarinePeriscopeLift, 88), submarineVisualScale);
     return { position, target };
   }
@@ -3439,8 +3441,8 @@ function updatePlayerSubmarineDiveMotion(dt) {
 
 function isPlayerSubmarineObservationPeriscopeActive() {
   if (!submarineMode || torpedoScopeActive || flakViewActive || cannonViewActive) return false;
-  if (playerSubmarineDepthState === submarineDepthStates.surface) return false;
-  return Math.abs(playerSubmarineDepthOffset) >= Math.abs(submarineDepthOffsets.periscope) * 0.72;
+  if (playerSubmarineDepthState !== submarineDepthStates.periscope) return false;
+  return Math.abs(playerSubmarineDepthOffset) >= submarineObservationPeriscopeSwitchOffset;
 }
 
 function updateObservationPeriscopeViewState() {
@@ -3449,11 +3451,16 @@ function updateObservationPeriscopeViewState() {
 }
 
 function getSubmarinePeriscopeLiftTarget(depthState, depthOffset) {
-  if (depthState === submarineDepthStates.surface) return 0;
+  if (depthState !== submarineDepthStates.periscope) return 0;
   const targetOffset = submarineDepthOffsets[depthState] ?? 0;
   const reachedTargetDepth = Math.abs(depthOffset - targetOffset) < 0.035;
-  if (depthState === submarineDepthStates.submerged && !reachedTargetDepth) return 0;
-  return Math.max(0, -depthOffset + submarinePeriscopeSurfaceClearance / submarineVisualScale);
+  if (!reachedTargetDepth) return 0;
+  const eyeLiftToSurface = (
+    (submarinePeriscopeSurfaceClearance - submarineWaterlineY) / submarineVisualScale
+    - depthOffset
+    - submarineObservationPeriscopeEyeY
+  );
+  return Math.max(0, eyeLiftToSurface);
 }
 
 function updateSubmarinePeriscopeExtension(submarine, periscopeLift) {
@@ -8396,7 +8403,7 @@ function stationSnapshot() {
 function getSubmarineDiveSequenceCameraSetupForTest() {
   if (submarineMode && isPlayerSubmarineObservationPeriscopeActive()) {
     return {
-      position: transformLocalShipPointWithoutTilt(new Vector3(0, 1.92 + playerSubmarinePeriscopeLift, 0.02), submarineVisualScale),
+      position: transformLocalShipPointWithoutTilt(new Vector3(0, submarineObservationPeriscopeEyeY + playerSubmarinePeriscopeLift, 0.02), submarineVisualScale),
       target: transformLocalShipPointWithoutTilt(new Vector3(0, 1.86 + playerSubmarinePeriscopeLift, 88), submarineVisualScale)
     };
   }

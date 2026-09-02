@@ -54,6 +54,7 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("submerged");
   await page.keyboard.press("D");
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("surface");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.observationPeriscope)).toBe("hidden");
 
   await page.keyboard.press("F");
   await expect.poll(() => page.evaluate(() => document.body.dataset.flakView)).toBe("active");
@@ -79,7 +80,7 @@ test("submarine dive sequence switches to observation periscope and crosses wate
   expect(initial.observationPeriscope).toBe("hidden");
   expect(initial.cameraY).toBeGreaterThan(0);
 
-  await page.keyboard.press("D");
+  await page.keyboard.press("P");
   const startedAt = Date.now();
   const samples = [];
   for (let i = 0; i < 42; i += 1) {
