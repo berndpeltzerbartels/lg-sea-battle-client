@@ -156,11 +156,10 @@ const submarineDepthLabels = {
 };
 const submarineDepthOffsets = {
   surface: 0,
-  periscope: -2.2,
+  periscope: -1.6,
   submerged: -2.95
 };
 const submarineObservationPeriscopeSwitchOffset = 0.92;
-const submarinePeriscopeSurfaceClearance = 0.085;
 const submarineObservationPeriscopeEyeY = 1.92;
 const submarineDepthTransitionSpeed = 0.28;
 const submarinePeriscopeLiftSpeed = 0.55;
@@ -3489,16 +3488,7 @@ function updateObservationPeriscopeViewState() {
 }
 
 function getSubmarinePeriscopeLiftTarget(depthState, depthOffset) {
-  if (depthState !== submarineDepthStates.periscope) return 0;
-  const targetOffset = submarineDepthOffsets[depthState] ?? 0;
-  const reachedTargetDepth = Math.abs(depthOffset - targetOffset) < 0.035;
-  if (!reachedTargetDepth) return 0;
-  const eyeLiftToSurface = (
-    (submarinePeriscopeSurfaceClearance - submarineWaterlineY) / submarineVisualScale
-    - depthOffset
-    - submarineObservationPeriscopeEyeY
-  );
-  return Math.max(0, eyeLiftToSurface);
+  return 0;
 }
 
 function updateSubmarinePeriscopeExtension(submarine, periscopeLift) {
