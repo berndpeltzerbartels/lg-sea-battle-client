@@ -7256,17 +7256,9 @@ function updateRemoteSubmarineDiveMotion(motion, dt) {
   updateRemoteVehicleObserverVisibility(motion);
 }
 
-function shouldShowRemoteSubmarineModel(motion) {
-  if (motion.vehicleType !== "submarine") return true;
-  if (motion.depthState === submarineDepthStates.surface) return true;
-  if (motion.depthState === submarineDepthStates.periscope) return scoutPlaneMode;
-  return false;
-}
-
 function updateRemoteVehicleObserverVisibility(motion) {
   if (motion.vehicleType !== "submarine") return;
-  const showModel = shouldShowRemoteSubmarineModel(motion);
-  motion.boat?.periscopeHiddenMeshes?.forEach((mesh) => mesh.setEnabled(showModel));
+  motion.boat?.periscopeHiddenMeshes?.forEach((mesh) => mesh.setEnabled(true));
 }
 
 function getRemoteMotionWaterlineY(motion) {
