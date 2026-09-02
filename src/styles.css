@@ -546,6 +546,13 @@ body[data-torpedo-view="active"] .compass {
   z-index: 4;
 }
 
+body[data-observation-periscope="active"] .nav-instrument,
+body[data-observation-periscope="active"] .speed,
+body[data-observation-periscope="active"] .compass,
+body[data-observation-periscope="active"] .battle-station-panel {
+  z-index: 4;
+}
+
 .nav-instrument-radar canvas {
   width: 100%;
   margin: 0 auto;
@@ -1431,6 +1438,89 @@ body[data-observation-periscope="active"] .observation-periscope {
     inset 0 0 0 1px rgb(210 247 242 / 13%),
     inset 0 0 52px rgb(3 17 22 / 26%),
     0 0 0 999px rgb(0 0 0 / 20%);
+}
+
+body[data-observation-periscope="active"] {
+  --periscope-side-panel-width: 132px;
+  --periscope-rudder-panel-width: 188px;
+  --periscope-circle-size: min(68vw, 700px, calc(100vw - var(--view-left) - var(--periscope-side-panel-width) - var(--periscope-rudder-panel-width) - 122px));
+}
+
+body[data-observation-periscope="active"] .observation-periscope-glass {
+  width: max(420px, var(--periscope-circle-size));
+}
+
+body[data-observation-periscope="active"] .ship-controls-panel {
+  left: var(--view-left);
+  top: 50%;
+  bottom: auto;
+  z-index: 5;
+  display: block;
+  width: calc(100vw - var(--view-left));
+  height: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+body[data-observation-periscope="active"] .telegraph,
+body[data-observation-periscope="active"] .rudder {
+  position: absolute;
+  top: -44px;
+  height: 88px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid rgb(255 255 255 / 32%);
+  border-radius: 8px;
+  background: rgb(5 27 40 / 96%);
+  box-shadow: 0 12px 32px rgb(1 15 24 / 18%);
+  backdrop-filter: blur(7px);
+  pointer-events: auto;
+}
+
+body[data-observation-periscope="active"] .telegraph {
+  left: max(14px, calc(50% - var(--periscope-circle-size) / 2 - var(--periscope-side-panel-width) - 18px));
+  width: var(--periscope-side-panel-width);
+  border-right: 1px solid rgb(255 255 255 / 32%);
+}
+
+body[data-observation-periscope="active"] .rudder {
+  right: max(14px, calc(50% - var(--periscope-circle-size) / 2 - var(--periscope-rudder-panel-width) - 18px));
+  width: var(--periscope-rudder-panel-width);
+}
+
+body[data-observation-periscope="active"] .telegraph-readout-row {
+  grid-template-columns: minmax(0, 1fr);
+  margin-bottom: 0;
+}
+
+body[data-observation-periscope="active"] .telegraph-speed-readout {
+  gap: 4px;
+}
+
+body[data-observation-periscope="active"] .telegraph-speed-line {
+  grid-template-columns: 18px 38px 16px 18px;
+  gap: 4px;
+}
+
+body[data-observation-periscope="active"] .telegraph-speed-readout #telegraphSpeedValue {
+  width: 38px;
+  min-width: 38px;
+  font-size: 16px;
+}
+
+body[data-observation-periscope="active"] .telegraph-scale {
+  display: none;
+}
+
+body[data-observation-periscope="active"] .telegraph-title,
+body[data-observation-periscope="active"] .rudder-title {
+  margin-bottom: 4px;
 }
 
 .observation-periscope-line,
@@ -2791,6 +2881,13 @@ body[data-player-vehicle="submarine"] .submarine-depth-actions {
 body[data-steering-modifier="shift"] .telegraph-key-hints .shift-hint,
 body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
   display: inline-grid !important;
+}
+
+body[data-observation-periscope="active"] .telegraph-key-hints .shift-hint,
+body[data-observation-periscope="active"] .rudder-key-hints .shift-hint,
+body[data-observation-periscope="active"][data-steering-modifier="shift"] .telegraph-key-hints .shift-hint,
+body[data-observation-periscope="active"][data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
+  display: none !important;
 }
 
 .telegraph-scale {
