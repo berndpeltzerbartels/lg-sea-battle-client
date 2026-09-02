@@ -166,7 +166,7 @@ const submarineDepthTransitionSpeed = 0.28;
 const submarinePeriscopeLiftSpeed = 0.55;
 const submarineBobbingRatios = {
   surface: 1,
-  periscope: 0.14,
+  periscope: 0,
   submerged: 0
 };
 const teamDefinitions = [
@@ -1305,9 +1305,10 @@ scene.onBeforeRenderObservable.add(() => {
     boat.root.position.y = scoutPlaneMode
       ? scoutPlaneAltitude
       : (submarineMode ? getPlayerSubmarineWaterlineY() : torpedoBoatWaterlineY) + bob * getPlayerSubmarineBobbingRatio();
+    const submarineUnderwaterMotionFactor = submarineMode && playerSubmarineDepthState !== submarineDepthStates.surface ? 0 : 1;
     const torpedoBoatTrimPitch = scoutPlaneMode ? 0 : getTorpedoBoatTrimPitch(speed);
-    const submarineMotionFactor = submarineMode ? 0.08 : 1;
-    const submarineRollFactor = submarineMode ? 0.04 : 1;
+    const submarineMotionFactor = submarineMode ? 0.08 * submarineUnderwaterMotionFactor : 1;
+    const submarineRollFactor = submarineMode ? 0.04 * submarineUnderwaterMotionFactor : 1;
     boat.root.rotationQuaternion = Quaternion.FromEulerAngles(
       scoutPlaneMode ? scoutPlanePitch : (torpedoBoatTrimPitch + Math.sin(time * 2.6) * 0.025 * shipStabilization) * submarineMotionFactor,
       heading,
