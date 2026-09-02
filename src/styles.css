@@ -1053,6 +1053,11 @@ body[data-player-vehicle="submarine"] .battle-station-hull {
   clip-path: polygon(0 50%, 8% 28%, 34% 22%, 67% 22%, 92% 30%, 100% 50%, 92% 70%, 67% 78%, 34% 78%, 8% 72%);
 }
 
+body[data-player-vehicle="submarine"] .battle-station-panel {
+  top: auto;
+  bottom: calc(var(--instrument-panel-padding) + 84px + var(--instrument-panel-gap));
+}
+
 body[data-player-vehicle="submarine"] .battle-station-bow,
 body[data-player-vehicle="submarine"] .battle-station-cabin,
 body[data-player-vehicle="submarine"] .battle-station-funnel,
@@ -1097,10 +1102,18 @@ body[data-player-vehicle="submarine"] .battle-station-bridge {
   min-width: 62px;
 }
 
+body[data-player-vehicle="submarine"] .battle-station-bridge kbd {
+  display: none;
+}
+
 body[data-player-vehicle="submarine"] .battle-station-flak {
   left: 28%;
   top: 7px;
   min-width: 54px;
+}
+
+body[data-player-vehicle="submarine"] .align-weapons-group {
+  display: none;
 }
 
 .align-weapons-group {
@@ -2355,9 +2368,9 @@ body[data-player-vehicle="scout-plane"] .altimeter {
 
 body[data-player-vehicle="submarine"] .speed {
   display: grid;
-  left: calc(var(--instrument-panel-padding) + var(--instrument-panel-width) - var(--instrument-panel-padding) * 2 + var(--instrument-panel-gap));
-  top: calc(var(--instrument-panel-padding) + var(--map-panel-height) + var(--instrument-panel-gap) * 2 + var(--radar-size) + var(--radar-panel-extra-height));
-  bottom: auto;
+  left: var(--instrument-panel-padding);
+  top: auto;
+  bottom: var(--instrument-panel-padding);
   width: calc(var(--instrument-panel-width) - var(--instrument-panel-padding) * 2);
   min-width: 0;
   box-sizing: border-box;
@@ -2407,6 +2420,11 @@ body[data-player-vehicle="submarine"] .depth-gauge strong {
 
 body[data-player-vehicle="submarine"] .submarine-depth-actions {
   display: flex;
+}
+
+.submarine-depth-actions button:first-child {
+  flex-basis: 100%;
+  width: fit-content;
 }
 
 .depth-gauge {

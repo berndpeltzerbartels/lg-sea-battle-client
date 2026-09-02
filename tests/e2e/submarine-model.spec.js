@@ -20,10 +20,11 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
   await expect(page.locator("#flakViewButton")).toBeVisible();
   await expect(page.locator("#cannonViewButton")).toBeHidden();
   await expect(page.locator("#torpedoAidButton")).toBeHidden();
-  await expect(page.locator("#alignWeaponsLabel")).toHaveText("Flak ausrichten:");
+  await expect(page.locator(".align-weapons-group")).toBeHidden();
   await expect(page.locator(".submarine-depth-actions")).toContainText("Auftauchen");
   await expect(page.locator(".submarine-depth-actions")).toContainText("Tauchen");
   await expect(page.locator(".submarine-depth-actions")).toContainText("Sehrohrtiefe");
+  await expect(page.locator("#submarineSurfaceButton")).toContainText("B");
 
   await page.keyboard.press("P");
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("periscope");
@@ -37,7 +38,7 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("submerged");
   await expect.poll(() => page.evaluate(() => document.body.dataset.flakView)).toBe("bridge");
   await expect(page.locator("#depthValue")).toHaveText("Getaucht");
-  await page.locator("#submarineSurfaceButton").click();
+  await page.keyboard.press("B");
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("surface");
   await page.keyboard.press("D");
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("submerged");
@@ -46,7 +47,7 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
 
   await page.keyboard.press("F");
   await expect.poll(() => page.evaluate(() => document.body.dataset.flakView)).toBe("active");
-  await page.keyboard.press("B");
+  await page.locator("#bridgeViewButton").click();
   await expect.poll(() => page.evaluate(() => document.body.dataset.flakView)).toBe("bridge");
 
   for (let i = 0; i < 8; i += 1) {

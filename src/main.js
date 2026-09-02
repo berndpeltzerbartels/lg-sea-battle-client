@@ -592,6 +592,11 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     return;
   }
+  if (playerActive && isSubmarineSurfaceKey(event) && !event.repeat) {
+    setPlayerSubmarineDepthState(submarineDepthStates.surface);
+    event.preventDefault();
+    return;
+  }
   if (playerActive && isBridgeViewKey(event) && !event.repeat) {
     setBattleStation("bridge");
     event.preventDefault();
@@ -1470,7 +1475,7 @@ function isCannonViewToggleKey(event) {
 }
 
 function isBridgeViewKey(event) {
-  return !scoutPlaneMode && (event.code === "KeyB" || event.key === "b" || event.key === "B");
+  return !scoutPlaneMode && !submarineMode && (event.code === "KeyB" || event.key === "b" || event.key === "B");
 }
 
 function isTorpedoScopeToggleKey(event) {
@@ -1491,6 +1496,10 @@ function isRadarModeToggleKey(event) {
 
 function isSubmarineDiveKey(event) {
   return submarineMode && (event.code === "KeyD" || event.key === "d" || event.key === "D");
+}
+
+function isSubmarineSurfaceKey(event) {
+  return submarineMode && (event.code === "KeyB" || event.key === "b" || event.key === "B");
 }
 
 function isSubmarinePeriscopeKey(event) {
