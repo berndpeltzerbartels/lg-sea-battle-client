@@ -106,6 +106,8 @@ test("submarine periscope depth keeps the observation view above water", async (
   const initial = await diveSnapshot(page);
   expect(initial.observationPeriscope).toBe("hidden");
   expect(initial.cameraY).toBeGreaterThan(0);
+  expect(initial.radarDepthMode).toBe("normal");
+  expect(initial.radarRange).toBeGreaterThan(0);
 
   await page.evaluate(() => window.seaBattleScenarioTest.setPlayerNavigationState({ engineOrder: 6, speed: 0 }));
   const halfAheadAtSurface = await diveSnapshot(page);
@@ -144,6 +146,9 @@ test("submarine periscope depth keeps the observation view above water", async (
   expect(samples[targetDepthIndex].cameraY).toBeGreaterThan(0.03);
   expect(samples[targetDepthIndex].cameraY).toBeLessThan(0.55);
   expect(samples[targetDepthIndex].periscopeLift).toBe(0);
+  expect(samples[targetDepthIndex].radarDepthMode).toBe("periscope");
+  expect(samples[targetDepthIndex].radarRange).toBeGreaterThan(0);
+  expect(samples[targetDepthIndex].radarRange).toBeLessThan(initial.radarRange);
 
   await page.keyboard.down("ArrowRight");
   await page.waitForTimeout(1200);
@@ -169,6 +174,12 @@ test("submarine periscope depth keeps the observation view above water", async (
   await page.evaluate(() => window.seaBattleScenarioTest.setPlayerNavigationState({ engineOrder: 0, speed: 0 }));
   const fullAsternAtPeriscope = await diveSnapshot(page);
   expect(Math.abs(fullAsternAtPeriscope.engineTargetSpeed)).toBeLessThan(Math.abs(fullAsternAtSurface.engineTargetSpeed));
+
+  await page.evaluate(() => window.seaBattleScenarioTest.setSubmarineDepthState("submerged"));
+  const submergedRadar = await diveSnapshot(page);
+  expect(submergedRadar.radarDepthMode).toBe("off");
+  expect(submergedRadar.radarRange).toBe(0);
+  await page.evaluate(() => window.seaBattleScenarioTest.setSubmarineDepthState("periscope"));
 
   await page.keyboard.press("T");
   await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("active");

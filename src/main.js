@@ -72,8 +72,8 @@ const surfaceClearColor = new Color4(0.38, 0.5, 0.6, 1);
 const surfaceFogColor = new Color3(0.35, 0.46, 0.54);
 const surfaceFogDensity = 0.00135;
 const underwaterClearColor = new Color4(0.03, 0.16, 0.22, 1);
-const underwaterFogColor = new Color3(0.015, 0.11, 0.16);
-const underwaterFogDensity = 0.018;
+const underwaterFogColor = new Color3(0.025, 0.14, 0.19);
+const underwaterFogDensity = 0.0065;
 scene.clearColor = surfaceClearColor.clone();
 scene.fogMode = Scene.FOGMODE_EXP2;
 scene.fogColor = surfaceFogColor.clone();
@@ -1095,6 +1095,7 @@ const radarRangeFactors = {
   near: combatRadarRangeFactor,
   far: scoutPlaneRadarRangeFactor
 };
+const submarinePeriscopeRadarRangeFactor = 0.36;
 if (!singleRadarMode) {
   setupRadarRangeControl(radarRangeButton);
   setupTargetRadarControl(targetRadarButton);
@@ -1391,7 +1392,7 @@ scene.onBeforeRenderObservable.add(() => {
       scoutPlaneMode ? -turnVelocity * 2.8 : (-turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018) * shipStabilization * submarineRollFactor
     );
     if (!scoutPlaneMode) {
-      const wakeSpeed = submarineMode && getPlayerSubmarineDepthRatio() > 0.35 ? 0 : speed;
+      const wakeSpeed = submarineMode && playerSubmarineDepthState === submarineDepthStates.submerged ? 0 : speed;
       updateEnemyBowWake(boat.bowWake, wakeSpeed, time, dt, boat.root.position, heading);
     }
     if (scoutPlaneMode) {
@@ -1961,6 +1962,7 @@ function transformLocalShipPointWithoutTilt(localPoint, visualScale = 1) {
 function updateCameraWaterAtmosphere() {
   if (sideViewSandboxMode || scoutPlaneMode) {
     document.body.dataset.underwaterView = "false";
+    document.body.style.setProperty("--underwater-view-ratio", "0");
     return;
   }
   const ratio = clamp((0.08 - camera.position.y) / 1.1, 0, 1);
@@ -1968,6 +1970,7 @@ function updateCameraWaterAtmosphere() {
   scene.fogColor = lerpColor3(surfaceFogColor, underwaterFogColor, ratio);
   scene.fogDensity = mix(surfaceFogDensity, underwaterFogDensity, ratio);
   document.body.dataset.underwaterView = String(ratio > 0.05);
+  document.body.style.setProperty("--underwater-view-ratio", ratio.toFixed(3));
 }
 
 function lerpColor3(start, end, ratio) {
@@ -2308,10 +2311,20 @@ function updateRadarModeButtons() {
 }
 
 function getSelectedRadarRange() {
+  if (submarineMode && playerSubmarineDepthState === submarineDepthStates.submerged) {
+    document.body.dataset.radarDepthMode = "off";
+    return 0;
+  }
   if (singleRadarMode) {
     const combatRadarRange = clientRadarRange * combatRadarRangeFactor;
+    if (submarineMode && playerSubmarineDepthState === submarineDepthStates.periscope) {
+      document.body.dataset.radarDepthMode = "periscope";
+      return combatRadarRange * submarinePeriscopeRadarRangeFactor;
+    }
+    document.body.dataset.radarDepthMode = "normal";
     return scoutPlaneMode && bombBayViewActive ? combatRadarRange * 0.5 : combatRadarRange;
   }
+  document.body.dataset.radarDepthMode = "normal";
   return getRadarRangeForMode("radar");
 }
 
@@ -5492,6 +5505,7 @@ function updateOrCreateRemoteShip(ship) {
   if (existing) {
     if (existing.vehicleType === getShipVehicleType(ship)) {
       applyServerShipSnapshot(existing, ship);
+      updateRemoteVehicleObserverVisibility(existing);
       return existing;
     }
     disposeRemoteMotion(existing);
@@ -5510,6 +5524,7 @@ function updateOrCreateRemoteShip(ship) {
   };
   const motion = createEnemyMotion(boatModel, headingValue, ship.engineOrder ?? 2, enemyMotions.length, ship);
   applyRemoteWeaponAim(motion, ship);
+  updateRemoteVehicleObserverVisibility(motion);
   enemyMotions.push(motion);
   return motion;
 }
@@ -5601,6 +5616,7 @@ function applyServerShipSnapshot(motion, ship) {
     controlledBy: ship.controlledBy,
     vehicleType: motion.vehicleType
   };
+  updateRemoteVehicleObserverVisibility(motion);
 }
 
 function applyRemoteWeaponAim(motion, ship) {
@@ -5944,7 +5960,6 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   const radius = Math.max(1, Math.min(width, height) * 0.46);
   const radarRange = range;
   const targetMode = options.targetMode === true;
-  const scale = radius / radarRange;
   const contactMarkerScale = getRadarContactMarkerScale(radius);
 
   ctx.clearRect(0, 0, width, height);
@@ -5955,6 +5970,15 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   ctx.fillStyle = "rgba(2, 22, 28, 0.86)";
   ctx.fillRect(0, 0, width, height);
 
+  if (radarRange <= 0) {
+    if (statusElement) statusElement.textContent = "Radar aus";
+    drawRadarContactMarker(ctx, centerX, centerY, "light", true, null, heading, "", playerVehicleType, contactMarkerScale);
+    drawRadarOwnHeadingMarker(ctx, centerX, centerY);
+    ctx.restore();
+    return;
+  }
+
+  const scale = radius / radarRange;
   drawRadarRangeRings(ctx, centerX, centerY, radius);
   drawRadarLandUnion(ctx, landZones, playerPosition, centerX, centerY, scale, heading, width, height);
 
@@ -6011,7 +6035,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
     if (statusElement) statusElement.textContent = `Clear ${formatWorldDistance(radarRange)}`;
   }
 
-  drawRadarContactMarker(ctx, centerX, centerY, "light", true, null, heading, "", "torpedo-boat", contactMarkerScale);
+  drawRadarContactMarker(ctx, centerX, centerY, "light", true, null, heading, "", playerVehicleType, contactMarkerScale);
   drawRadarOwnHeadingMarker(ctx, centerX, centerY);
   ctx.restore();
 
@@ -7211,6 +7235,20 @@ function updateRemoteSubmarineDiveMotion(motion, dt) {
   const targetLift = getSubmarinePeriscopeLiftTarget(motion.depthState, motion.depthOffset ?? 0);
   motion.periscopeLift = moveValueToward(motion.periscopeLift ?? 0, targetLift, submarinePeriscopeLiftSpeed * dt);
   updateSubmarinePeriscopeExtension(motion.boat, motion.periscopeLift);
+  updateRemoteVehicleObserverVisibility(motion);
+}
+
+function shouldShowRemoteSubmarineModel(motion) {
+  if (motion.vehicleType !== "submarine") return true;
+  if (motion.depthState === submarineDepthStates.surface) return true;
+  if (motion.depthState === submarineDepthStates.periscope) return scoutPlaneMode;
+  return false;
+}
+
+function updateRemoteVehicleObserverVisibility(motion) {
+  if (motion.vehicleType !== "submarine") return;
+  const showModel = shouldShowRemoteSubmarineModel(motion);
+  motion.boat?.periscopeHiddenMeshes?.forEach((mesh) => mesh.setEnabled(showModel));
 }
 
 function getRemoteMotionWaterlineY(motion) {
@@ -7371,7 +7409,7 @@ function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
     motion.heading,
     roll
   );
-  const wakeSpeed = motion.vehicleType === "submarine" && Math.abs(motion.depthOffset ?? 0) > Math.abs(submarineDepthOffsets.periscope) * 0.35
+  const wakeSpeed = motion.vehicleType === "submarine" && motion.depthState === submarineDepthStates.submerged
     ? 0
     : motion.speed;
   updateEnemyBowWake(motion.bowWake, wakeSpeed, time, dt, motion.root.position, motion.heading);
@@ -7421,7 +7459,7 @@ function updateServerEnemyMotion(motion, dt, time) {
       motion.heading,
       roll
     );
-    const wakeSpeed = motion.vehicleType === "submarine" && Math.abs(motion.depthOffset ?? 0) > Math.abs(submarineDepthOffsets.periscope) * 0.35
+    const wakeSpeed = motion.vehicleType === "submarine" && motion.depthState === submarineDepthStates.submerged
       ? 0
       : Math.max(0, motion.speed, motion.serverSpeed ?? 0);
     updateEnemyBowWake(motion.bowWake, wakeSpeed, time, dt, motion.root.position, motion.heading);
@@ -8197,6 +8235,10 @@ function installScenarioTestHooks() {
         speed: Number(speed.toFixed(3)),
         engineOrder,
         engineTargetSpeed: Number(getPlayerEngineTargetSpeed().toFixed(3)),
+        radarRange: Number(getSelectedRadarRange().toFixed(3)),
+        radarDepthMode: document.body.dataset.radarDepthMode ?? "normal",
+        underwaterView: document.body.dataset.underwaterView ?? "false",
+        fogDensity: Number(scene.fogDensity.toFixed(5)),
         torpedoScopeZoom: document.body.dataset.torpedoScopeZoom ?? "I",
         torpedoScopeFov: Number(getTorpedoScopeFov().toFixed(3)),
         cameraY: Number(cameraSetup.position.y.toFixed(3)),
