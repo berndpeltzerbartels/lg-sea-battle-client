@@ -175,6 +175,8 @@ const submarineObservationPeriscopePitchSpeed = 0.18;
 const submarineObservationPeriscopeAlignSpeed = 0.34;
 const submarineDepthTransitionSpeed = 0.28;
 const submarinePeriscopeLiftSpeed = 0.55;
+const submarineWakeFadeStartDepth = 0.42;
+const submarineWakeFadeEndDepth = 0.95;
 const submarineBobbingRatios = {
   surface: 1,
   periscope: 0,
@@ -1374,7 +1376,7 @@ scene.onBeforeRenderObservable.add(() => {
     : (flakViewActive && !scoutPlaneMode
       ? 0.16
       : (cannonViewActive && !scoutPlaneMode ? 0.12 : bridgeViewStabilization)));
-  const submarineHiddenByDepth = submarineMode && playerSubmarineDepthState === submarineDepthStates.submerged;
+  const submarineWakeExposure = submarineMode ? getSubmarineWakeExposureRatio(playerSubmarineDepthOffset) : 1;
   const bob = (Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035) * shipStabilization;
   if (playerActive) {
     if (submarineMode) {
@@ -1393,10 +1395,10 @@ scene.onBeforeRenderObservable.add(() => {
       scoutPlaneMode ? -turnVelocity * 2.8 : (-turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018) * shipStabilization * submarineRollFactor
     );
     if (!scoutPlaneMode) {
-      if (submarineHiddenByDepth) {
+      if (submarineWakeExposure <= 0.01) {
         hideEnemyWake(boat.bowWake);
       } else {
-        updateEnemyBowWake(boat.bowWake, speed, time, dt, boat.root.position, heading);
+        updateEnemyBowWake(boat.bowWake, speed * submarineWakeExposure, time, dt, boat.root.position, heading);
       }
     }
     if (scoutPlaneMode) {
@@ -3689,6 +3691,11 @@ function getPlayerSubmarineDepthRatio() {
     return clamp(Math.abs(playerSubmarineDepthOffset) / Math.abs(submarineDepthOffsets.periscope), 0, 1);
   }
   return clamp(Math.abs(playerSubmarineDepthOffset / targetOffset), 0, 1);
+}
+
+function getSubmarineWakeExposureRatio(depthOffset) {
+  const depth = Math.abs(depthOffset ?? 0);
+  return 1 - smoothstep(submarineWakeFadeStartDepth, submarineWakeFadeEndDepth, depth);
 }
 
 function updatePlayerSubmarineDiveMotion(dt) {
@@ -7414,10 +7421,13 @@ function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
     motion.heading,
     roll
   );
-  if (motion.vehicleType === "submarine" && motion.depthState === submarineDepthStates.submerged) {
+  const submarineWakeExposure = motion.vehicleType === "submarine"
+    ? getSubmarineWakeExposureRatio(motion.depthOffset ?? 0)
+    : 1;
+  if (submarineWakeExposure <= 0.01) {
     hideEnemyWake(motion.bowWake);
   } else {
-    updateEnemyBowWake(motion.bowWake, motion.speed, time, dt, motion.root.position, motion.heading);
+    updateEnemyBowWake(motion.bowWake, motion.speed * submarineWakeExposure, time, dt, motion.root.position, motion.heading);
   }
 
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
@@ -7465,10 +7475,13 @@ function updateServerEnemyMotion(motion, dt, time) {
       motion.heading,
       roll
     );
-    if (motion.vehicleType === "submarine" && motion.depthState === submarineDepthStates.submerged) {
+    const submarineWakeExposure = motion.vehicleType === "submarine"
+      ? getSubmarineWakeExposureRatio(motion.depthOffset ?? 0)
+      : 1;
+    if (submarineWakeExposure <= 0.01) {
       hideEnemyWake(motion.bowWake);
     } else {
-      updateEnemyBowWake(motion.bowWake, Math.max(0, motion.speed, motion.serverSpeed ?? 0), time, dt, motion.root.position, motion.heading);
+      updateEnemyBowWake(motion.bowWake, Math.max(0, motion.speed, motion.serverSpeed ?? 0) * submarineWakeExposure, time, dt, motion.root.position, motion.heading);
     }
   }
 
@@ -8248,6 +8261,9 @@ function installScenarioTestHooks() {
         fogDensity: Number(scene.fogDensity.toFixed(5)),
         torpedoScopeZoom: document.body.dataset.torpedoScopeZoom ?? "I",
         torpedoScopeFov: Number(getTorpedoScopeFov().toFixed(3)),
+        bowWakeVisible: boat.bowWake?.root?.isEnabled?.() === true,
+        bowWakeStrength: Number((boat.bowWake?.strength ?? 0).toFixed(3)),
+        submarineWakeExposure: Number(getSubmarineWakeExposureRatio(playerSubmarineDepthOffset).toFixed(3)),
         cameraY: Number(cameraSetup.position.y.toFixed(3)),
         boatY: Number(boat.root.position.y.toFixed(3)),
         waterlineY: 0
@@ -15391,6 +15407,9 @@ function createLandUnderwaterPlug(land, position, rx, rz, scene, materials, pare
     positions.push(x, 0.02, z, x, -depth, z);
   }
 
+  const bottomCenter = positions.length / 3;
+  positions.push(0, -depth, 0);
+
   for (let i = 0; i < samples; i += 1) {
     const next = (i + 1) % samples;
     const topA = i * 2;
@@ -15399,6 +15418,7 @@ function createLandUnderwaterPlug(land, position, rx, rz, scene, materials, pare
     const bottomB = topB + 1;
     indices.push(topA, bottomA, topB);
     indices.push(topB, bottomA, bottomB);
+    indices.push(bottomA, bottomCenter, bottomB);
   }
 
   VertexData.ComputeNormals(positions, indices, normals);

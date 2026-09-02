@@ -108,6 +108,7 @@ test("submarine periscope depth keeps the observation view above water", async (
   expect(initial.cameraY).toBeGreaterThan(0);
   expect(initial.radarDepthMode).toBe("normal");
   expect(initial.radarRange).toBeGreaterThan(0);
+  expect(initial.submarineWakeExposure).toBe(1);
 
   await page.evaluate(() => window.seaBattleScenarioTest.setPlayerNavigationState({ engineOrder: 6, speed: 0 }));
   const halfAheadAtSurface = await diveSnapshot(page);
@@ -149,6 +150,8 @@ test("submarine periscope depth keeps the observation view above water", async (
   expect(samples[targetDepthIndex].radarDepthMode).toBe("periscope");
   expect(samples[targetDepthIndex].radarRange).toBeGreaterThan(0);
   expect(samples[targetDepthIndex].radarRange).toBeLessThan(initial.radarRange);
+  expect(samples[targetDepthIndex].submarineWakeExposure).toBe(0);
+  expect(samples[targetDepthIndex].bowWakeVisible).toBe(false);
 
   await page.keyboard.down("ArrowRight");
   await page.waitForTimeout(1200);
