@@ -3608,6 +3608,13 @@ function toggleSubmarineDepthState(depthState) {
 function setPlayerSubmarineDepthState(depthState) {
   if (!submarineMode) return;
   playerSubmarineDepthState = sanitizeSubmarineDepthState(depthState);
+  if (playerSubmarineDepthState === submarineDepthStates.periscope) {
+    observationPeriscopeYaw = 0;
+    observationPeriscopePitch = 0;
+    observationPeriscopeAligning = false;
+    heldObservationPeriscopeYawDirection = 0;
+    heldObservationPeriscopePitchDirection = 0;
+  }
   document.body.dataset.playerDepthState = playerSubmarineDepthState;
   updateSubmarineDepthUi();
   updateOwnSubmarineDepthVisibility();

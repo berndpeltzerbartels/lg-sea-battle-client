@@ -143,6 +143,11 @@ test("submarine periscope depth keeps the observation view above water", async (
   const alignedPeriscope = await diveSnapshot(page);
   expect(Math.abs(alignedPeriscope.observationYawDeg)).toBeLessThan(Math.abs(turnedPeriscope.observationYawDeg));
 
+  await page.evaluate(() => window.seaBattleScenarioTest.setSubmarineDepthState("surface"));
+  await page.evaluate(() => window.seaBattleScenarioTest.setSubmarineDepthState("periscope"));
+  const resetPeriscope = await diveSnapshot(page);
+  expect(resetPeriscope.observationYawDeg).toBe(0);
+
   await page.evaluate(() => window.seaBattleScenarioTest.setPlayerNavigationState({ engineOrder: 6, speed: 0 }));
   const halfAheadAtPeriscope = await diveSnapshot(page);
   expect(halfAheadAtPeriscope.engineTargetSpeed).toBeLessThan(10.4);
