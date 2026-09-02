@@ -155,6 +155,7 @@ const submarineDepthOffsets = {
 };
 const submarinePeriscopeSurfaceClearance = 0.12;
 const submarineDepthTransitionSpeed = 0.62;
+const submarinePeriscopeLiftSpeed = 1.1;
 const submarineBobbingRatios = {
   surface: 1,
   periscope: 0.14,
@@ -402,6 +403,7 @@ const submarineMode = selectedVehicleType === "submarine";
 const playerVehicleType = scoutPlaneMode ? "scout-plane" : (submarineMode ? "submarine" : "torpedo-boat");
 let playerSubmarineDepthState = submarineDepthStates.surface;
 let playerSubmarineDepthOffset = 0;
+let playerSubmarinePeriscopeLift = 0;
 if (scoutPlaneMode) {
   scene.fogDensity = 0.0008;
 }
@@ -426,6 +428,7 @@ document.body.dataset.playerId = playerId;
 document.body.dataset.playerInitials = playerInitials;
 document.body.dataset.playerVehicle = playerVehicleType;
 document.body.dataset.playerDepthState = playerSubmarineDepthState;
+document.body.dataset.observationPeriscope = "hidden";
 document.body.dataset.flakView = "bridge";
 document.body.dataset.cannonView = "bridge";
 document.body.dataset.cannonSight = "I";
@@ -1381,6 +1384,7 @@ scene.onBeforeRenderObservable.add(() => {
   if (!sideViewSandboxMode && !scoutPlaneMode && !flakViewActive && !cannonViewActive) {
     camera.rotation.x = -Math.abs(camera.rotation.x);
   }
+  updateObservationPeriscopeViewState();
   updateOwnSubmarineDepthVisibility();
   boat.flakDeckView?.setEnabled(flakViewActive);
   boat.flakViewHiddenMeshes?.forEach((mesh) => mesh.setEnabled(!flakViewActive));
@@ -1739,8 +1743,8 @@ function getPlayerCameraSetup(forward) {
   }
 
   if (!scoutPlaneMode && submarineMode && isPlayerSubmarineObservationPeriscopeActive()) {
-    const position = transformLocalShipPointWithoutTilt(new Vector3(0, 1.92, 0.02), submarineVisualScale);
-    const target = transformLocalShipPointWithoutTilt(new Vector3(0, 1.86, 88), submarineVisualScale);
+    const position = transformLocalShipPointWithoutTilt(new Vector3(0, 1.92 + playerSubmarinePeriscopeLift, 0.02), submarineVisualScale);
+    const target = transformLocalShipPointWithoutTilt(new Vector3(0, 1.86 + playerSubmarinePeriscopeLift, 88), submarineVisualScale);
     return { position, target };
   }
 
@@ -3428,7 +3432,9 @@ function updatePlayerSubmarineDiveMotion(dt) {
   } else {
     playerSubmarineDepthOffset += Math.sign(targetOffset - playerSubmarineDepthOffset) * step;
   }
-  updateSubmarinePeriscopeExtension(boat, playerSubmarineDepthOffset);
+  const targetLift = getSubmarinePeriscopeLiftTarget(playerSubmarineDepthState, playerSubmarineDepthOffset);
+  playerSubmarinePeriscopeLift = moveValueToward(playerSubmarinePeriscopeLift, targetLift, submarinePeriscopeLiftSpeed * dt);
+  updateSubmarinePeriscopeExtension(boat, playerSubmarinePeriscopeLift);
 }
 
 function isPlayerSubmarineObservationPeriscopeActive() {
@@ -3437,10 +3443,23 @@ function isPlayerSubmarineObservationPeriscopeActive() {
   return Math.abs(playerSubmarineDepthOffset) >= Math.abs(submarineDepthOffsets.periscope) * 0.72;
 }
 
-function updateSubmarinePeriscopeExtension(submarine, depthOffset) {
+function updateObservationPeriscopeViewState() {
+  const active = isPlayerSubmarineObservationPeriscopeActive();
+  document.body.dataset.observationPeriscope = active ? "active" : "hidden";
+}
+
+function getSubmarinePeriscopeLiftTarget(depthState, depthOffset) {
+  if (depthState === submarineDepthStates.surface) return 0;
+  const targetOffset = submarineDepthOffsets[depthState] ?? 0;
+  const reachedTargetDepth = Math.abs(depthOffset - targetOffset) < 0.035;
+  if (depthState === submarineDepthStates.submerged && !reachedTargetDepth) return 0;
+  return Math.max(0, -depthOffset + submarinePeriscopeSurfaceClearance / submarineVisualScale);
+}
+
+function updateSubmarinePeriscopeExtension(submarine, periscopeLift) {
   submarine?.periscopeMasts?.forEach((mast) => {
     if (!mast?.mesh) return;
-    const extension = Math.max(0, -depthOffset * submarineVisualScale + submarinePeriscopeSurfaceClearance);
+    const extension = Math.max(0, periscopeLift);
     const baseY = mast.baseY ?? mast.mesh.metadata?.baseY ?? 0;
     const height = mast.height ?? mast.mesh.metadata?.height ?? 1;
     mast.mesh.scaling.y = 1 + extension / Math.max(0.001, height);
@@ -5302,7 +5321,7 @@ function applyServerShipSnapshot(motion, ship) {
   motion.speed = !wakeTestOverrideActive && Number.isFinite(ship.speed) ? motion.speed + (ship.speed - motion.speed) * 0.18 : motion.speed;
   motion.engineOrder = !wakeTestOverrideActive && Number.isInteger(ship.engineOrder) ? ship.engineOrder : motion.engineOrder;
   motion.rudder = Number.isFinite(ship.rudderDegrees) ? clamp(ship.rudderDegrees / maxRudderDegrees, -1, 1) : motion.rudder;
-  updateSubmarinePeriscopeExtension(motion.boat, motion.depthOffset ?? 0);
+  updateSubmarinePeriscopeExtension(motion.boat, motion.periscopeLift ?? 0);
   if (wasInactive && correctionDistance > 55) {
     motion.root.position.x = motion.serverPosition.x;
     motion.root.position.y = motion.serverPosition.y;
@@ -6923,7 +6942,9 @@ function updateRemoteSubmarineDiveMotion(motion, dt) {
   } else {
     motion.depthOffset = (motion.depthOffset ?? 0) + Math.sign(targetOffset - (motion.depthOffset ?? 0)) * step;
   }
-  updateSubmarinePeriscopeExtension(motion.boat, motion.depthOffset);
+  const targetLift = getSubmarinePeriscopeLiftTarget(motion.depthState, motion.depthOffset ?? 0);
+  motion.periscopeLift = moveValueToward(motion.periscopeLift ?? 0, targetLift, submarinePeriscopeLiftSpeed * dt);
+  updateSubmarinePeriscopeExtension(motion.boat, motion.periscopeLift);
 }
 
 function getRemoteMotionWaterlineY(motion) {
@@ -6963,6 +6984,10 @@ function createEnemyMotion(vehicle, heading, engineOrder, index = 0, serverShip 
     cannonPitch: Number.isFinite(serverShip?.cannonPitch) ? serverShip.cannonPitch : 0,
     depthState: getShipDepthState(serverShip),
     depthOffset: submarineDepthOffsets[getShipDepthState(serverShip)] ?? 0,
+    periscopeLift: getSubmarinePeriscopeLiftTarget(
+      getShipDepthState(serverShip),
+      submarineDepthOffsets[getShipDepthState(serverShip)] ?? 0
+    ),
     heading,
     speed: serverShip?.speed ?? 0,
     isServerControlled: Boolean(serverShip),

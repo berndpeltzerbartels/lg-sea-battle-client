@@ -1397,6 +1397,120 @@ body[data-cannon-reloading="true"] .cannon-scope-glass::after {
   display: block;
 }
 
+.observation-periscope {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: none;
+  pointer-events: none;
+}
+
+body[data-observation-periscope="active"] .observation-periscope {
+  display: block;
+}
+
+.observation-periscope-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(circle at calc(var(--view-left) + (100vw - var(--view-left)) / 2) 50%, transparent 0 24%, rgb(1 8 10 / 18%) 36%, rgb(1 8 10 / 80%) 73%, rgb(0 0 0 / 94%) 100%);
+}
+
+.observation-periscope-glass {
+  position: absolute;
+  left: calc(var(--view-left) + (100vw - var(--view-left)) / 2);
+  top: 50%;
+  z-index: 1;
+  width: min(62vw, 640px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 2px solid rgb(6 16 19 / 84%);
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 0 1px rgb(210 247 242 / 13%),
+    inset 0 0 52px rgb(3 17 22 / 26%),
+    0 0 0 999px rgb(0 0 0 / 20%);
+}
+
+.observation-periscope-line,
+.observation-periscope-ring,
+.observation-periscope-range {
+  position: absolute;
+  z-index: 2;
+  display: block;
+  background: rgb(1 7 8 / 72%);
+}
+
+.observation-periscope-horizon {
+  left: 16%;
+  right: 16%;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+  background:
+    linear-gradient(
+      90deg,
+      rgb(1 7 8 / 70%) 0 39%,
+      transparent 39% 61%,
+      rgb(1 7 8 / 70%) 61% 100%
+    );
+}
+
+.observation-periscope-vertical {
+  left: 50%;
+  top: 18%;
+  bottom: 18%;
+  width: 2px;
+  transform: translateX(-50%);
+  background:
+    linear-gradient(
+      180deg,
+      rgb(1 7 8 / 70%) 0 42%,
+      transparent 42% 58%,
+      rgb(1 7 8 / 70%) 58% 100%
+    );
+}
+
+.observation-periscope-ring {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgb(1 7 8 / 42%);
+  border-radius: 50%;
+  background: transparent;
+}
+
+.observation-periscope-ring-inner {
+  width: 28%;
+  height: 28%;
+}
+
+.observation-periscope-ring-outer {
+  width: 54%;
+  height: 54%;
+}
+
+.observation-periscope-range {
+  left: 50%;
+  width: 38px;
+  height: 2px;
+  transform: translateX(-50%);
+}
+
+.observation-periscope-range-near {
+  top: 42%;
+}
+
+.observation-periscope-range-mid {
+  top: 58%;
+  width: 54px;
+}
+
+.observation-periscope-range-far {
+  top: 66%;
+}
+
 .cannon-scope-line,
 .cannon-scope-ring,
 .cannon-scope-range {
