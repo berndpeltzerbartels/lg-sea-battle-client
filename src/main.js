@@ -74,6 +74,7 @@ const surfaceFogDensity = 0.00135;
 const underwaterClearColor = new Color4(0.03, 0.16, 0.22, 1);
 const underwaterFogColor = new Color3(0.025, 0.14, 0.19);
 const underwaterFogDensity = 0.0065;
+const underwaterLandTopY = -0.1;
 const underwaterSeaFloorY = -16;
 scene.clearColor = surfaceClearColor.clone();
 scene.fogMode = Scene.FOGMODE_EXP2;
@@ -7735,6 +7736,7 @@ function getSnapshotRadarContacts() {
     if (!ship || ship.state !== "active") continue;
     if (ship.id === playerServerShipId || ship.id === pendingPlayerServerShip?.id) continue;
     if (!Number.isFinite(ship.x) || !Number.isFinite(ship.z)) continue;
+    if (!isShipRadarVisibleToPlayer(ship)) continue;
     contacts.push({
       id: `radar-${ship.id}`,
       shipId: ship.id,
@@ -7752,6 +7754,16 @@ function getSnapshotRadarContacts() {
   document.body.dataset.radarStateSync = "client-snapshot";
   document.body.dataset.radarContacts = String(contacts.length);
   return contacts;
+}
+
+function isShipRadarVisibleToPlayer(ship) {
+  if (submarineMode && playerSubmarineDepthState === submarineDepthStates.submerged) return false;
+  const contactVehicleType = getShipVehicleType(ship);
+  if (contactVehicleType !== "submarine") return true;
+  const contactDepthState = getShipDepthState(ship);
+  if (contactDepthState === submarineDepthStates.submerged) return false;
+  if (contactDepthState === submarineDepthStates.periscope) return scoutPlaneMode;
+  return true;
 }
 
 function beginPlayerSinking(hitPosition, now, damageMessage = null) {
@@ -15415,7 +15427,7 @@ function createLandUnderwaterPlug(land, position, rx, rz, scene, materials, pare
     const radiusFactor = land.kind === "coastline" ? getCoastRadiusFactor(angle, land) : 1;
     const x = Math.cos(angle) * rx * boundary * radiusFactor;
     const z = Math.sin(angle) * rz * boundary * radiusFactor;
-    positions.push(x, 0.02, z, x, floorY, z);
+    positions.push(x, underwaterLandTopY, z, x, floorY, z);
   }
 
   const bottomCenter = positions.length / 3;
