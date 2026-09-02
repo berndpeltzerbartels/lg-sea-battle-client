@@ -21,6 +21,7 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
   await expect(page.locator("#cannonViewButton")).toBeHidden();
   await expect(page.locator("#torpedoAidButton")).toBeHidden();
   await expect(page.locator("#alignWeaponsLabel")).toHaveText("Flak ausrichten:");
+  await expect(page.locator(".submarine-depth-actions")).toContainText("Auftauchen");
   await expect(page.locator(".submarine-depth-actions")).toContainText("Tauchen");
   await expect(page.locator(".submarine-depth-actions")).toContainText("Sehrohrtiefe");
 
@@ -36,6 +37,10 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("submerged");
   await expect.poll(() => page.evaluate(() => document.body.dataset.flakView)).toBe("bridge");
   await expect(page.locator("#depthValue")).toHaveText("Getaucht");
+  await page.locator("#submarineSurfaceButton").click();
+  await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("surface");
+  await page.keyboard.press("D");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("submerged");
   await page.keyboard.press("D");
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("surface");
 

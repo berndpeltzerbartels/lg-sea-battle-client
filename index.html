@@ -365,14 +365,6 @@
           <span>Flak</span>
           <kbd>F</kbd>
         </button>
-        <div class="submarine-station-note submarine-station-dive" aria-hidden="true">
-          <span>Tauchen</span>
-          <kbd>D</kbd>
-        </div>
-        <div class="submarine-station-note submarine-station-periscope" aria-hidden="true">
-          <span>Sehrohrtiefe</span>
-          <kbd>P</kbd>
-        </div>
         <div class="align-weapons-group" aria-label="Geschütze ausrichten">
           <span id="alignWeaponsLabel">Geschütze ausrichten:</span>
           <button id="alignWeaponsButton" class="align-weapons-button align-weapons-flat" type="button">Flach <kbd>A</kbd></button>
@@ -450,8 +442,9 @@
           </div>
           <strong id="depthValue">Deep</strong>
           <div class="submarine-depth-actions" aria-hidden="true">
-            <button id="submarineDiveButton" type="button" data-depth-state="submerged">Tauchen <kbd>D</kbd></button>
+            <button id="submarineSurfaceButton" type="button" data-depth-state="surface">Auftauchen</button>
             <button id="submarinePeriscopeButton" type="button" data-depth-state="periscope">Sehrohrtiefe <kbd>P</kbd></button>
+            <button id="submarineDiveButton" type="button" data-depth-state="submerged">Tauchen <kbd>D</kbd></button>
           </div>
         </div>
       </div>

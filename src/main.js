@@ -79,6 +79,7 @@ const altimeterHundredsHand = document.getElementById("altimeterHundredsHand");
 const altimeterThousandsHand = document.getElementById("altimeterThousandsHand");
 const depthValue = document.getElementById("depthValue");
 const depthGauge = document.querySelector(".depth-gauge");
+const submarineSurfaceButton = document.getElementById("submarineSurfaceButton");
 const submarineDiveButton = document.getElementById("submarineDiveButton");
 const submarinePeriscopeButton = document.getElementById("submarinePeriscopeButton");
 const engineValue = document.getElementById("engineValue");
@@ -1035,6 +1036,7 @@ setupCannonViewControl(cannonViewButton);
 setupAlignWeaponsControl(alignWeaponsButton);
 setupAlignWeaponsControl(alignAirDefenseButton, "air-defense");
 setupTorpedoAidControl(torpedoAidButton);
+setupSubmarineDepthControl(submarineSurfaceButton);
 setupSubmarineDepthControl(submarineDiveButton);
 setupSubmarineDepthControl(submarinePeriscopeButton);
 setupSideViewCameraTuner();
@@ -2180,7 +2182,12 @@ function setupTorpedoAidControl(button) {
 function setupSubmarineDepthControl(button) {
   if (!button) return;
   button.addEventListener("click", (event) => {
-    toggleSubmarineDepthState(button.dataset.depthState);
+    const depthState = sanitizeSubmarineDepthState(button.dataset.depthState);
+    if (depthState === submarineDepthStates.surface) {
+      setPlayerSubmarineDepthState(submarineDepthStates.surface);
+    } else {
+      toggleSubmarineDepthState(depthState);
+    }
     button.blur();
     event.stopPropagation();
   });
@@ -3378,6 +3385,7 @@ function getDepthGaugeRatio(waterSafety) {
 
 function updateSubmarineDepthUi() {
   if (!submarineMode) return;
+  submarineSurfaceButton?.classList.toggle("is-active", playerSubmarineDepthState === submarineDepthStates.surface);
   submarineDiveButton?.classList.toggle("is-active", playerSubmarineDepthState === submarineDepthStates.submerged);
   submarinePeriscopeButton?.classList.toggle("is-active", playerSubmarineDepthState === submarineDepthStates.periscope);
 }

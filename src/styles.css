@@ -1000,20 +1000,6 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
   min-width: 92px;
 }
 
-.submarine-station-note {
-  position: absolute;
-  z-index: 1;
-  display: none;
-  align-items: center;
-  gap: 4px;
-  color: rgb(247 251 255 / 58%);
-  font: 800 7px/1 Inter, Arial, sans-serif;
-  letter-spacing: 0;
-  text-transform: uppercase;
-  pointer-events: none;
-}
-
-.submarine-station-note kbd,
 .submarine-depth-actions kbd {
   display: inline-grid;
   min-width: 12px;
@@ -1115,10 +1101,6 @@ body[data-player-vehicle="submarine"] .battle-station-flak {
   left: 28%;
   top: 7px;
   min-width: 54px;
-}
-
-body[data-player-vehicle="submarine"] .submarine-station-note {
-  display: inline-flex;
 }
 
 .align-weapons-group {
@@ -2204,6 +2186,7 @@ body.big-map .map-meta span {
   background: rgb(5 27 40 / 82%);
   box-shadow: 0 12px 38px rgb(1 15 24 / 22%);
   backdrop-filter: blur(7px);
+  pointer-events: auto;
 }
 
 body:not([data-player-vehicle="scout-plane"]) .speed {
@@ -2372,7 +2355,12 @@ body[data-player-vehicle="scout-plane"] .altimeter {
 
 body[data-player-vehicle="submarine"] .speed {
   display: grid;
-  min-width: 142px;
+  left: calc(var(--instrument-panel-padding) + var(--instrument-panel-width) - var(--instrument-panel-padding) * 2 + var(--instrument-panel-gap));
+  top: calc(var(--instrument-panel-padding) + var(--map-panel-height) + var(--instrument-panel-gap) * 2 + var(--radar-size) + var(--radar-panel-extra-height));
+  bottom: auto;
+  width: calc(var(--instrument-panel-width) - var(--instrument-panel-padding) * 2);
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 body[data-player-vehicle="submarine"] .depth-gauge {
@@ -2385,9 +2373,10 @@ body[data-player-vehicle="submarine"] .depth-gauge strong {
 
 .submarine-depth-actions {
   display: none;
-  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  justify-content: start;
+  align-items: center;
   gap: 5px;
-  margin-top: 4px;
   font: 800 7px/1 Inter, Arial, sans-serif;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -2396,7 +2385,7 @@ body[data-player-vehicle="submarine"] .depth-gauge strong {
 .submarine-depth-actions button {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 4px;
   min-height: 20px;
   padding: 0 6px;
@@ -2417,19 +2406,20 @@ body[data-player-vehicle="submarine"] .depth-gauge strong {
 }
 
 body[data-player-vehicle="submarine"] .submarine-depth-actions {
-  display: grid;
+  display: flex;
 }
 
 .depth-gauge {
   display: none;
-  grid-template-columns: 16px 1fr;
+  grid-template-columns: 16px 58px 1fr;
   align-items: center;
   gap: 8px;
-  margin-top: 9px;
+  margin-top: 0;
 }
 
 .depth-gauge strong {
   margin-top: 0;
+  text-align: left;
 }
 
 .depth-gauge-track {
