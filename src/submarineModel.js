@@ -71,7 +71,8 @@ export function createSubmarineModel(scene, materials, {
     meshes.push(sailInterior);
   }
 
-  meshes.push(...createDeckDetails(scene, root, submarineMaterials, name));
+  const deckDetails = createDeckDetails(scene, root, submarineMaterials, name);
+  meshes.push(...deckDetails.meshes);
   meshes.push(...createSternGear(scene, root, submarineMaterials, name));
   meshes.push(...createBowPlanes(scene, root, submarineMaterials, name));
 
@@ -83,6 +84,7 @@ export function createSubmarineModel(scene, materials, {
       deckY: sailPositionY + rearSailRimY * sailScale + 0.012,
       scale: 0.54
     },
+    periscopeMasts: deckDetails.masts,
     periscopeHiddenMeshes: meshes
   };
 }
@@ -272,6 +274,7 @@ function createDeckCasingMesh(name, scene) {
 
 function createDeckDetails(scene, root, materials, name) {
   const details = [];
+  const masts = [];
   const mastBaseY = sailPositionY + sailFloorY * sailScale - 0.012;
   [0.02, 0.2].forEach((z, index) => {
     const height = (index === 0 ? 0.986 : 0.816) * sailScale;
@@ -280,9 +283,11 @@ function createDeckDetails(scene, root, materials, name) {
     mast.position.y = mastBaseY + height * 0.5;
     mast.position.z = sailPositionZ + (z - sailPositionZ) * sailScale;
     mast.material = materials.darkDetail;
+    mast.metadata = { baseY: mastBaseY, height };
     details.push(mast);
+    masts.push({ mesh: mast, baseY: mastBaseY, height });
   });
-  return details;
+  return { meshes: details, masts };
 }
 
 function createRoundedSailMesh(name, scene) {

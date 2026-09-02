@@ -153,6 +153,8 @@ const submarineDepthOffsets = {
   periscope: -1.28,
   submerged: -2.2
 };
+const submarinePeriscopeSurfaceClearance = 0.12;
+const submarineDepthTransitionSpeed = 0.62;
 const submarineBobbingRatios = {
   surface: 1,
   periscope: 0.14,
@@ -399,6 +401,7 @@ const scoutPlaneMode = gameState.sessionId === scoutPlaneSetupId || selectedVehi
 const submarineMode = selectedVehicleType === "submarine";
 const playerVehicleType = scoutPlaneMode ? "scout-plane" : (submarineMode ? "submarine" : "torpedo-boat");
 let playerSubmarineDepthState = submarineDepthStates.surface;
+let playerSubmarineDepthOffset = 0;
 if (scoutPlaneMode) {
   scene.fogDensity = 0.0008;
 }
@@ -1284,6 +1287,9 @@ scene.onBeforeRenderObservable.add(() => {
       : (cannonViewActive && !scoutPlaneMode ? 0.12 : bridgeViewStabilization)));
   const bob = (Math.sin(time * 2.1) * 0.08 + Math.sin(time * 3.8 + 1.6) * 0.035) * shipStabilization;
   if (playerActive) {
+    if (submarineMode) {
+      updatePlayerSubmarineDiveMotion(dt);
+    }
     boat.root.position.y = scoutPlaneMode
       ? scoutPlaneAltitude
       : (submarineMode ? getPlayerSubmarineWaterlineY() : torpedoBoatWaterlineY) + bob * getPlayerSubmarineBobbingRatio();
@@ -1296,7 +1302,7 @@ scene.onBeforeRenderObservable.add(() => {
       scoutPlaneMode ? -turnVelocity * 2.8 : (-turnVelocity * 0.5 + Math.sin(time * 1.9) * 0.018) * shipStabilization * submarineRollFactor
     );
     if (!scoutPlaneMode) {
-      const wakeSpeed = submarineMode && playerSubmarineDepthState !== submarineDepthStates.surface ? 0 : speed;
+      const wakeSpeed = submarineMode && getPlayerSubmarineDepthRatio() > 0.35 ? 0 : speed;
       updateEnemyBowWake(boat.bowWake, wakeSpeed, time, dt, boat.root.position, heading);
     }
     if (scoutPlaneMode) {
@@ -1732,7 +1738,7 @@ function getPlayerCameraSetup(forward) {
     };
   }
 
-  if (!scoutPlaneMode && submarineMode && playerSubmarineDepthState === submarineDepthStates.periscope) {
+  if (!scoutPlaneMode && submarineMode && isPlayerSubmarineObservationPeriscopeActive()) {
     const position = transformLocalShipPointWithoutTilt(new Vector3(0, 1.92, 0.02), submarineVisualScale);
     const target = transformLocalShipPointWithoutTilt(new Vector3(0, 1.86, 88), submarineVisualScale);
     return { position, target };
@@ -3395,11 +3401,51 @@ function setPlayerSubmarineDepthState(depthState) {
 }
 
 function getPlayerSubmarineWaterlineY() {
-  return submarineWaterlineY + (submarineDepthOffsets[playerSubmarineDepthState] ?? 0) * submarineVisualScale;
+  return submarineWaterlineY + playerSubmarineDepthOffset * submarineVisualScale;
 }
 
 function getPlayerSubmarineBobbingRatio() {
-  return submarineBobbingRatios[playerSubmarineDepthState] ?? 1;
+  return mix(
+    submarineBobbingRatios.surface,
+    submarineBobbingRatios[playerSubmarineDepthState] ?? 1,
+    getPlayerSubmarineDepthRatio()
+  );
+}
+
+function getPlayerSubmarineDepthRatio() {
+  const targetOffset = submarineDepthOffsets[playerSubmarineDepthState] ?? 0;
+  if (targetOffset === 0) {
+    return clamp(Math.abs(playerSubmarineDepthOffset) / Math.abs(submarineDepthOffsets.periscope), 0, 1);
+  }
+  return clamp(Math.abs(playerSubmarineDepthOffset / targetOffset), 0, 1);
+}
+
+function updatePlayerSubmarineDiveMotion(dt) {
+  const targetOffset = submarineDepthOffsets[playerSubmarineDepthState] ?? 0;
+  const step = submarineDepthTransitionSpeed * dt;
+  if (Math.abs(playerSubmarineDepthOffset - targetOffset) <= step) {
+    playerSubmarineDepthOffset = targetOffset;
+  } else {
+    playerSubmarineDepthOffset += Math.sign(targetOffset - playerSubmarineDepthOffset) * step;
+  }
+  updateSubmarinePeriscopeExtension(boat, playerSubmarineDepthOffset);
+}
+
+function isPlayerSubmarineObservationPeriscopeActive() {
+  if (!submarineMode || torpedoScopeActive || flakViewActive || cannonViewActive) return false;
+  if (playerSubmarineDepthState === submarineDepthStates.surface) return false;
+  return Math.abs(playerSubmarineDepthOffset) >= Math.abs(submarineDepthOffsets.periscope) * 0.72;
+}
+
+function updateSubmarinePeriscopeExtension(submarine, depthOffset) {
+  submarine?.periscopeMasts?.forEach((mast) => {
+    if (!mast?.mesh) return;
+    const extension = Math.max(0, -depthOffset * submarineVisualScale + submarinePeriscopeSurfaceClearance);
+    const baseY = mast.baseY ?? mast.mesh.metadata?.baseY ?? 0;
+    const height = mast.height ?? mast.mesh.metadata?.height ?? 1;
+    mast.mesh.scaling.y = 1 + extension / Math.max(0.001, height);
+    mast.mesh.position.y = baseY + (height + extension) * 0.5;
+  });
 }
 
 function getPlayerSubmarineDepthLabel() {
@@ -3408,9 +3454,10 @@ function getPlayerSubmarineDepthLabel() {
 
 function getDepthGaugeRatio(waterSafety) {
   if (submarineMode) {
-    if (playerSubmarineDepthState === submarineDepthStates.submerged) return "0.08";
-    if (playerSubmarineDepthState === submarineDepthStates.periscope) return "0.45";
-    return "0.9";
+    const surface = submarineDepthOffsets.surface;
+    const submerged = submarineDepthOffsets.submerged;
+    const ratio = 1 - clamp((playerSubmarineDepthOffset - submerged) / (surface - submerged), 0, 1);
+    return String(clamp(0.9 - ratio * 0.82, 0.08, 0.9));
   }
   return waterSafety?.isBlocked ? "1" : "0";
 }
@@ -3424,14 +3471,15 @@ function updateSubmarineDepthUi() {
 
 function updateOwnSubmarineDepthVisibility() {
   if (!submarineMode) return;
-  const showSurfaceModel = playerSubmarineDepthState === submarineDepthStates.surface;
+  const showSurfaceModel = sideViewSandboxMode || (!torpedoScopeActive && !isPlayerSubmarineObservationPeriscopeActive());
   boat.periscopeHiddenMeshes?.forEach((mesh) => mesh.setEnabled(showSurfaceModel));
   boat.flakViewHiddenMeshes?.forEach((mesh) => mesh.setEnabled(showSurfaceModel && !flakViewActive));
   boat.flakDeckView?.setEnabled(showSurfaceModel && flakViewActive);
 }
 
 function hideOwnSubmarineBelowSurface() {
-  if (!submarineMode || playerSubmarineDepthState === submarineDepthStates.surface) return;
+  if (!submarineMode || sideViewSandboxMode || playerSubmarineDepthState === submarineDepthStates.surface) return;
+  if (!torpedoScopeActive && !isPlayerSubmarineObservationPeriscopeActive()) return;
   boat.periscopeHiddenMeshes?.forEach((mesh) => mesh.setEnabled(false));
   boat.flakViewHiddenMeshes?.forEach((mesh) => mesh.setEnabled(false));
   boat.flakDeckView?.setEnabled(false);
@@ -4610,7 +4658,8 @@ async function requestPlayerTorpedoFire() {
     y: scoutPlaneMode ? scoutPlaneAltitude : boat.root.position.y,
     verticalSpeed: scoutPlaneMode ? scoutPlaneVerticalSpeed : 0,
     tubeSide: requestedTubeSide,
-    clientTime: performance.now() / 1000
+    clientTime: performance.now() / 1000,
+    depthState: submarineMode ? playerSubmarineDepthState : null
   };
   sendClientGameEvent("torpedo-fire-request", {
     request: summarizeFireRequest(fireRequest),
@@ -5238,6 +5287,7 @@ function applyServerShipSnapshot(motion, ship) {
   motion.teamId = ship.teamId;
   motion.controlledBy = ship.controlledBy;
   motion.vehicleType = getShipVehicleType(ship);
+  motion.depthState = getShipDepthState(ship);
   motion.serverState = ship.state;
   motion.serverPosition.x = Number.isFinite(ship.x) ? ship.x : motion.serverPosition.x;
   motion.serverPosition.y = remoteVehicleY(ship);
@@ -5252,6 +5302,7 @@ function applyServerShipSnapshot(motion, ship) {
   motion.speed = !wakeTestOverrideActive && Number.isFinite(ship.speed) ? motion.speed + (ship.speed - motion.speed) * 0.18 : motion.speed;
   motion.engineOrder = !wakeTestOverrideActive && Number.isInteger(ship.engineOrder) ? ship.engineOrder : motion.engineOrder;
   motion.rudder = Number.isFinite(ship.rudderDegrees) ? clamp(ship.rudderDegrees / maxRudderDegrees, -1, 1) : motion.rudder;
+  updateSubmarinePeriscopeExtension(motion.boat, motion.depthOffset ?? 0);
   if (wasInactive && correctionDistance > 55) {
     motion.root.position.x = motion.serverPosition.x;
     motion.root.position.y = motion.serverPosition.y;
@@ -6851,9 +6902,45 @@ function isScoutPlaneMotion(motion) {
 
 function remoteVehicleY(ship) {
   const vehicleType = getShipVehicleType(ship);
-  if (vehicleType === "submarine") return submarineWaterlineY;
+  if (vehicleType === "submarine") {
+    return submarineWaterlineY + (submarineDepthOffsets[getShipDepthState(ship)] ?? 0) * submarineVisualScale;
+  }
   if (vehicleType !== "scout-plane") return torpedoBoatWaterlineY;
   return Number.isFinite(ship?.y) ? ship.y : scoutPlaneCruiseAltitude;
+}
+
+function getShipDepthState(ship) {
+  if (getShipVehicleType(ship) !== "submarine") return submarineDepthStates.surface;
+  return sanitizeSubmarineDepthState(ship?.depthState);
+}
+
+function updateRemoteSubmarineDiveMotion(motion, dt) {
+  if (motion.vehicleType !== "submarine") return;
+  const targetOffset = submarineDepthOffsets[motion.depthState] ?? 0;
+  const step = submarineDepthTransitionSpeed * dt;
+  if (Math.abs((motion.depthOffset ?? 0) - targetOffset) <= step) {
+    motion.depthOffset = targetOffset;
+  } else {
+    motion.depthOffset = (motion.depthOffset ?? 0) + Math.sign(targetOffset - (motion.depthOffset ?? 0)) * step;
+  }
+  updateSubmarinePeriscopeExtension(motion.boat, motion.depthOffset);
+}
+
+function getRemoteMotionWaterlineY(motion) {
+  if (motion.vehicleType === "submarine") {
+    return submarineWaterlineY + (motion.depthOffset ?? 0) * submarineVisualScale;
+  }
+  return torpedoBoatWaterlineY;
+}
+
+function getRemoteSubmarineBobbingRatio(motion) {
+  if (motion.vehicleType !== "submarine") return 1;
+  const targetRatio = submarineBobbingRatios[motion.depthState] ?? 1;
+  const targetOffset = submarineDepthOffsets[motion.depthState] ?? 0;
+  const ratio = targetOffset === 0
+    ? clamp(Math.abs(motion.depthOffset ?? 0) / Math.abs(submarineDepthOffsets.periscope), 0, 1)
+    : clamp(Math.abs((motion.depthOffset ?? 0) / targetOffset), 0, 1);
+  return mix(submarineBobbingRatios.surface, targetRatio, ratio);
 }
 
 function createEnemyMotion(vehicle, heading, engineOrder, index = 0, serverShip = null) {
@@ -6874,6 +6961,8 @@ function createEnemyMotion(vehicle, heading, engineOrder, index = 0, serverShip 
     flakPitch: Number.isFinite(serverShip?.flakPitch) ? serverShip.flakPitch : 0,
     cannonYaw: Number.isFinite(serverShip?.cannonYaw) ? serverShip.cannonYaw : 0,
     cannonPitch: Number.isFinite(serverShip?.cannonPitch) ? serverShip.cannonPitch : 0,
+    depthState: getShipDepthState(serverShip),
+    depthOffset: submarineDepthOffsets[getShipDepthState(serverShip)] ?? 0,
     heading,
     speed: serverShip?.speed ?? 0,
     isServerControlled: Boolean(serverShip),
@@ -6978,8 +7067,11 @@ function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
 
   const forward = new Vector3(Math.sin(motion.heading), 0, Math.cos(motion.heading));
   motion.root.position.addInPlace(forward.scale(motion.speed * dt));
-  const waterlineY = motion.vehicleType === "submarine" ? submarineWaterlineY : torpedoBoatWaterlineY;
-  const bobAmplitude = motion.vehicleType === "submarine" ? enemyTorpedoBoatBobAmplitude * 0.45 : enemyTorpedoBoatBobAmplitude;
+  updateRemoteSubmarineDiveMotion(motion, dt);
+  const waterlineY = getRemoteMotionWaterlineY(motion);
+  const bobAmplitude = motion.vehicleType === "submarine"
+    ? enemyTorpedoBoatBobAmplitude * getRemoteSubmarineBobbingRatio(motion) * 0.45
+    : enemyTorpedoBoatBobAmplitude;
   motion.root.position.y = waterlineY + Math.sin(time * 1.6 + 1.9) * bobAmplitude;
   const trimPitch = getTorpedoBoatTrimPitch(motion.speed);
   const roll = -motion.turnVelocity * 0.42 + motion.rollImpulse + Math.sin(time * 1.4) * 0.01;
@@ -6988,7 +7080,10 @@ function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
     motion.heading,
     roll
   );
-  updateEnemyBowWake(motion.bowWake, motion.speed, time, dt, motion.root.position, motion.heading);
+  const wakeSpeed = motion.vehicleType === "submarine" && Math.abs(motion.depthOffset ?? 0) > Math.abs(submarineDepthOffsets.periscope) * 0.35
+    ? 0
+    : motion.speed;
+  updateEnemyBowWake(motion.bowWake, wakeSpeed, time, dt, motion.root.position, motion.heading);
 
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
   document.body.dataset.enemyEngineOrder = engineOrders[motion.engineOrder].label;
@@ -7022,8 +7117,11 @@ function updateServerEnemyMotion(motion, dt, time) {
     );
     updateScoutPlaneVisual(motion, Math.max(6, Math.abs(motion.speed)), time);
   } else {
-    const waterlineY = motion.vehicleType === "submarine" ? submarineWaterlineY : torpedoBoatWaterlineY;
-    const bobAmplitude = motion.vehicleType === "submarine" ? enemyTorpedoBoatBobAmplitude * 0.45 : enemyTorpedoBoatBobAmplitude;
+    updateRemoteSubmarineDiveMotion(motion, dt);
+    const waterlineY = getRemoteMotionWaterlineY(motion);
+    const bobAmplitude = motion.vehicleType === "submarine"
+      ? enemyTorpedoBoatBobAmplitude * getRemoteSubmarineBobbingRatio(motion) * 0.45
+      : enemyTorpedoBoatBobAmplitude;
     motion.root.position.y = waterlineY + Math.sin(time * 1.6 + 1.9) * bobAmplitude;
     const trimPitch = getTorpedoBoatTrimPitch(motion.speed);
     const roll = Math.sin(time * 1.4) * 0.01;
@@ -7032,7 +7130,9 @@ function updateServerEnemyMotion(motion, dt, time) {
       motion.heading,
       roll
     );
-    const wakeSpeed = Math.max(0, motion.speed, motion.serverSpeed ?? 0);
+    const wakeSpeed = motion.vehicleType === "submarine" && Math.abs(motion.depthOffset ?? 0) > Math.abs(submarineDepthOffsets.periscope) * 0.35
+      ? 0
+      : Math.max(0, motion.speed, motion.serverSpeed ?? 0);
     updateEnemyBowWake(motion.bowWake, wakeSpeed, time, dt, motion.root.position, motion.heading);
   }
 
@@ -15111,6 +15211,10 @@ function getNameSeed(name) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function mix(start, end, ratio) {
+  return start + (end - start) * ratio;
 }
 
 function smoothstep(edge0, edge1, value) {
