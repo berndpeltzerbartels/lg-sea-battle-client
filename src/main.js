@@ -74,6 +74,7 @@ const surfaceFogDensity = 0.00135;
 const underwaterClearColor = new Color4(0.03, 0.16, 0.22, 1);
 const underwaterFogColor = new Color3(0.025, 0.14, 0.19);
 const underwaterFogDensity = 0.0065;
+const underwaterSeaFloorY = -16;
 scene.clearColor = surfaceClearColor.clone();
 scene.fogMode = Scene.FOGMODE_EXP2;
 scene.fogColor = surfaceFogColor.clone();
@@ -533,6 +534,10 @@ if (materials.water.diffuseTexture) {
   materials.water.diffuseTexture.vScale = 34 * oceanTextureScale;
 }
 ocean.parent = world;
+const seaFloor = MeshBuilder.CreateGround("underwater_sea_floor", { width: oceanVisualSize, height: oceanVisualSize, subdivisions: 24 }, scene);
+seaFloor.position.y = underwaterSeaFloorY;
+seaFloor.material = materials.underwaterFloor;
+seaFloor.parent = world;
 const foam = createFoamPatches(scene, materials, world);
 const volcanoPlumes = [];
 const navigationLights = [];
@@ -12743,6 +12748,11 @@ function createMaterials(scene) {
   underwaterLand.specularColor = new Color3(0.01, 0.015, 0.015);
   underwaterLand.backFaceCulling = false;
 
+  const underwaterFloor = new StandardMaterial("underwater_floor_material", scene);
+  underwaterFloor.diffuseColor = new Color3(0.018, 0.055, 0.058);
+  underwaterFloor.emissiveColor = new Color3(0.006, 0.022, 0.024);
+  underwaterFloor.specularColor = Color3.Black();
+
   const shallow = new StandardMaterial("shallow_water_material", scene);
   shallow.diffuseColor = new Color3(0.18, 0.36, 0.4);
   shallow.emissiveColor = new Color3(0.025, 0.075, 0.08);
@@ -12918,6 +12928,7 @@ function createMaterials(scene) {
     grass,
     terrain,
     underwaterLand,
+    underwaterFloor,
     shallow,
     rock,
     hull,
@@ -15391,7 +15402,7 @@ function createIsland(land, position, scene, materials, parent) {
 }
 
 function createLandUnderwaterPlug(land, position, rx, rz, scene, materials, parent) {
-  const depth = land.kind === "coastline" ? 58 : 34;
+  const floorY = underwaterSeaFloorY + 0.04;
   const boundary = getZoneBoundaryDistance(land, "navigation");
   const samples = land.kind === "coastline" ? 112 : 64;
   const mesh = new Mesh(`${land.name}_underwater_plug`, scene);
@@ -15404,11 +15415,11 @@ function createLandUnderwaterPlug(land, position, rx, rz, scene, materials, pare
     const radiusFactor = land.kind === "coastline" ? getCoastRadiusFactor(angle, land) : 1;
     const x = Math.cos(angle) * rx * boundary * radiusFactor;
     const z = Math.sin(angle) * rz * boundary * radiusFactor;
-    positions.push(x, 0.02, z, x, -depth, z);
+    positions.push(x, 0.02, z, x, floorY, z);
   }
 
   const bottomCenter = positions.length / 3;
-  positions.push(0, -depth, 0);
+  positions.push(0, floorY, 0);
 
   for (let i = 0; i < samples; i += 1) {
     const next = (i + 1) % samples;
