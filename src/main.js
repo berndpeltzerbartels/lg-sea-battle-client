@@ -68,10 +68,16 @@ const enemyBowWakeSurfaceY = -torpedoBoatModelWaterlineY + 0.018;
 const enemyBowWakeFullSpeed = 17.5;
 const torpedoBoatModelSinkDepth = 2.35;
 const gameConfig = await loadGameConfig();
-scene.clearColor = new Color4(0.38, 0.5, 0.6, 1);
+const surfaceClearColor = new Color4(0.38, 0.5, 0.6, 1);
+const surfaceFogColor = new Color3(0.35, 0.46, 0.54);
+const surfaceFogDensity = 0.00135;
+const underwaterClearColor = new Color4(0.03, 0.16, 0.22, 1);
+const underwaterFogColor = new Color3(0.015, 0.11, 0.16);
+const underwaterFogDensity = 0.018;
+scene.clearColor = surfaceClearColor.clone();
 scene.fogMode = Scene.FOGMODE_EXP2;
-scene.fogColor = new Color3(0.35, 0.46, 0.54);
-scene.fogDensity = 0.00135;
+scene.fogColor = surfaceFogColor.clone();
+scene.fogDensity = surfaceFogDensity;
 
 const speedValue = document.getElementById("speedValue");
 const altitudeValue = document.getElementById("altitudeValue");
@@ -154,10 +160,10 @@ const submarineDepthOffsets = {
   submerged: -2.95
 };
 const submarineObservationPeriscopeSwitchOffset = 0.92;
-const submarinePeriscopeSurfaceClearance = 0.045;
+const submarinePeriscopeSurfaceClearance = 0.085;
 const submarineObservationPeriscopeEyeY = 1.92;
-const submarineDepthTransitionSpeed = 0.38;
-const submarinePeriscopeLiftSpeed = 1.1;
+const submarineDepthTransitionSpeed = 0.28;
+const submarinePeriscopeLiftSpeed = 0.55;
 const submarineBobbingRatios = {
   surface: 1,
   periscope: 0.14,
@@ -501,6 +507,7 @@ const oceanBaseSize = 2300;
 const oceanVisualSize = worldLimit * 2;
 const ocean = MeshBuilder.CreateGround("ocean", { width: oceanVisualSize, height: oceanVisualSize, subdivisions: 160 }, scene);
 ocean.material = materials.water;
+ocean.material.backFaceCulling = false;
 if (materials.water.diffuseTexture) {
   const oceanTextureScale = oceanVisualSize / oceanBaseSize;
   materials.water.diffuseTexture.uScale = 34 * oceanTextureScale;
@@ -1383,6 +1390,7 @@ scene.onBeforeRenderObservable.add(() => {
   cameraTarget.copyFrom(desiredTarget);
   camera.position.copyFrom(cameraPosition);
   camera.setTarget(desiredTarget);
+  updateCameraWaterAtmosphere();
   if (!sideViewSandboxMode && !scoutPlaneMode && !flakViewActive && !cannonViewActive) {
     camera.rotation.x = -Math.abs(camera.rotation.x);
   }
@@ -1818,6 +1826,35 @@ function transformLocalShipPointWithoutTilt(localPoint, visualScale = 1) {
     .add(right.scale(localPoint.x * visualScale))
     .add(new Vector3(0, localPoint.y * visualScale, 0))
     .add(forward.scale(localPoint.z * visualScale));
+}
+
+function updateCameraWaterAtmosphere() {
+  if (sideViewSandboxMode || scoutPlaneMode) {
+    document.body.dataset.underwaterView = "false";
+    return;
+  }
+  const ratio = clamp((0.08 - camera.position.y) / 1.1, 0, 1);
+  scene.clearColor = lerpColor4(surfaceClearColor, underwaterClearColor, ratio);
+  scene.fogColor = lerpColor3(surfaceFogColor, underwaterFogColor, ratio);
+  scene.fogDensity = mix(surfaceFogDensity, underwaterFogDensity, ratio);
+  document.body.dataset.underwaterView = String(ratio > 0.05);
+}
+
+function lerpColor3(start, end, ratio) {
+  return new Color3(
+    mix(start.r, end.r, ratio),
+    mix(start.g, end.g, ratio),
+    mix(start.b, end.b, ratio)
+  );
+}
+
+function lerpColor4(start, end, ratio) {
+  return new Color4(
+    mix(start.r, end.r, ratio),
+    mix(start.g, end.g, ratio),
+    mix(start.b, end.b, ratio),
+    mix(start.a, end.a, ratio)
+  );
 }
 
 function worldToLocalShipPointWithoutTilt(worldPoint) {

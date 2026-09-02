@@ -83,7 +83,7 @@ test("submarine dive sequence switches to observation periscope and crosses wate
   await page.keyboard.press("P");
   const startedAt = Date.now();
   const samples = [];
-  for (let i = 0; i < 42; i += 1) {
+  for (let i = 0; i < 72; i += 1) {
     await page.waitForTimeout(250);
     samples.push({
       elapsed: Date.now() - startedAt,
@@ -93,7 +93,7 @@ test("submarine dive sequence switches to observation periscope and crosses wate
 
   const firstPeriscopeIndex = samples.findIndex((sample) => sample.observationPeriscope === "active");
   expect(firstPeriscopeIndex).toBeGreaterThanOrEqual(0);
-  expect(samples[firstPeriscopeIndex].elapsed).toBeGreaterThan(1500);
+  expect(samples[firstPeriscopeIndex].elapsed).toBeGreaterThan(2500);
   expect(samples[firstPeriscopeIndex].torpedoView).toBe("hidden");
   expect(samples[firstPeriscopeIndex].cameraY).toBeGreaterThan(0);
 
@@ -118,6 +118,7 @@ test("submarine dive sequence switches to observation periscope and crosses wate
     && sample.cameraY > 0.03
   ));
   expect(resurfacedPeriscopeIndex).toBeGreaterThan(targetDepthIndex);
+  expect(samples[resurfacedPeriscopeIndex].cameraY).toBeLessThan(0.2);
 });
 
 async function diveSnapshot(page) {
