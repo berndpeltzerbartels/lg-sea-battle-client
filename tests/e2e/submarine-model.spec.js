@@ -88,6 +88,8 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
 });
 
 test("submarine periscope depth keeps the observation view above water", async ({ page }) => {
+  test.setTimeout(40_000);
+
   await page.goto("/sea-battle/?setup=8&vehicle=submarine&hide-beach=1&scenarioTest=1");
   await page.waitForFunction(() => (
     document.body.dataset.playerVehicle === "submarine"
@@ -129,6 +131,17 @@ test("submarine periscope depth keeps the observation view above water", async (
   expect(samples[targetDepthIndex].cameraY).toBeGreaterThan(0.03);
   expect(samples[targetDepthIndex].cameraY).toBeLessThan(0.35);
   expect(samples[targetDepthIndex].periscopeLift).toBe(0);
+
+  await page.keyboard.down("ArrowRight");
+  await page.waitForTimeout(1200);
+  await page.keyboard.up("ArrowRight");
+  const turnedPeriscope = await diveSnapshot(page);
+  expect(Math.abs(turnedPeriscope.observationYawDeg)).toBeGreaterThan(20);
+
+  await page.keyboard.press("H");
+  await page.waitForTimeout(1400);
+  const alignedPeriscope = await diveSnapshot(page);
+  expect(Math.abs(alignedPeriscope.observationYawDeg)).toBeLessThan(Math.abs(turnedPeriscope.observationYawDeg));
 
   await page.keyboard.press("T");
   await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("active");

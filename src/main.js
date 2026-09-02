@@ -88,6 +88,9 @@ const depthGauge = document.querySelector(".depth-gauge");
 const submarineSurfaceButton = document.getElementById("submarineSurfaceButton");
 const submarineDiveButton = document.getElementById("submarineDiveButton");
 const submarinePeriscopeButton = document.getElementById("submarinePeriscopeButton");
+const observationPeriscopeHeadingNeedle = document.getElementById("observationPeriscopeHeadingNeedle");
+const observationPeriscopeHeadingValue = document.getElementById("observationPeriscopeHeadingValue");
+const observationPeriscopeAlignButton = document.getElementById("observationPeriscopeAlignButton");
 const engineValue = document.getElementById("engineValue");
 const telegraphSpeedValue = document.getElementById("telegraphSpeedValue");
 const telegraphOrderValue = document.getElementById("telegraphOrderValue");
@@ -168,6 +171,7 @@ const submarineObservationPeriscopePitchMin = -0.11;
 const submarineObservationPeriscopePitchMax = 0.08;
 const submarineObservationPeriscopeYawSpeed = 0.62;
 const submarineObservationPeriscopePitchSpeed = 0.18;
+const submarineObservationPeriscopeAlignSpeed = 0.34;
 const submarineDepthTransitionSpeed = 0.28;
 const submarinePeriscopeLiftSpeed = 0.55;
 const submarineBobbingRatios = {
@@ -658,6 +662,11 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     return;
   }
+  if (playerActive && isObservationPeriscopeAlignKey(event) && !event.repeat) {
+    startObservationPeriscopeAlignment();
+    event.preventDefault();
+    return;
+  }
   if (playerActive && isSubmarineDiveKey(event) && !event.repeat) {
     toggleSubmarineDepthState(submarineDepthStates.submerged);
     event.preventDefault();
@@ -965,6 +974,7 @@ let bombBayViewActive = false;
 let bombBayImpactFocus = null;
 let observationPeriscopeYaw = 0;
 let observationPeriscopePitch = 0;
+let observationPeriscopeAligning = false;
 let heldObservationPeriscopeYawDirection = 0;
 let heldObservationPeriscopePitchDirection = 0;
 const singleRadarMode = true;
@@ -1082,6 +1092,7 @@ setupTorpedoAidControl(torpedoAidButton);
 setupSubmarineDepthControl(submarineSurfaceButton);
 setupSubmarineDepthControl(submarineDiveButton);
 setupSubmarineDepthControl(submarinePeriscopeButton);
+setupObservationPeriscopeAlignControl(observationPeriscopeAlignButton);
 setupSideViewCameraTuner();
 let serverShipsById = indexShipsById(gameState.ships);
 let serverClockOffset = Number.isFinite(gameState.t) ? -gameState.t : null;
@@ -1200,9 +1211,16 @@ scene.onBeforeRenderObservable.add(() => {
   }
   if (playerActive && isPlayerSubmarineObservationPeriscopeActive()) {
     if (heldObservationPeriscopeYawDirection !== 0) {
+      observationPeriscopeAligning = false;
       observationPeriscopeYaw = normalizeAngle(
         observationPeriscopeYaw + heldObservationPeriscopeYawDirection * submarineObservationPeriscopeYawSpeed * dt
       );
+    } else if (observationPeriscopeAligning) {
+      observationPeriscopeYaw = moveAngleToward(observationPeriscopeYaw, 0, submarineObservationPeriscopeAlignSpeed * dt);
+      if (Math.abs(shortestAngleDelta(observationPeriscopeYaw, 0)) < 0.001) {
+        observationPeriscopeYaw = 0;
+        observationPeriscopeAligning = false;
+      }
     }
     if (heldObservationPeriscopePitchDirection !== 0) {
       observationPeriscopePitch = clamp(
@@ -1565,6 +1583,10 @@ function isSubmarinePeriscopeKey(event) {
   return submarineMode && (event.code === "KeyP" || event.key === "p" || event.key === "P");
 }
 
+function isObservationPeriscopeAlignKey(event) {
+  return isPlayerSubmarineObservationPeriscopeActive() && (event.code === "KeyH" || event.key === "h" || event.key === "H");
+}
+
 function isCannonSightToggleKey(event) {
   return cannonViewActive && !scoutPlaneMode && (event.code === "KeyZ" || event.key === "z" || event.key === "Z");
 }
@@ -1606,6 +1628,7 @@ function setBattleStation(station) {
   heldCannonPitchDirection = 0;
   heldObservationPeriscopeYawDirection = 0;
   heldObservationPeriscopePitchDirection = 0;
+  observationPeriscopeAligning = false;
   heldCannonStartTime = time;
   heldCannonPitchStartTime = time;
   rightMouseRudderActive = false;
@@ -2333,6 +2356,15 @@ function setupSubmarineDepthControl(button) {
     } else {
       toggleSubmarineDepthState(depthState);
     }
+    button.blur();
+    event.stopPropagation();
+  });
+}
+
+function setupObservationPeriscopeAlignControl(button) {
+  if (!button) return;
+  button.addEventListener("click", (event) => {
+    startObservationPeriscopeAlignment();
     button.blur();
     event.stopPropagation();
   });
@@ -3576,6 +3608,26 @@ function isPlayerSubmarineObservationPeriscopeActive() {
 function updateObservationPeriscopeViewState() {
   const active = isPlayerSubmarineObservationPeriscopeActive();
   document.body.dataset.observationPeriscope = active ? "active" : "hidden";
+  if (!active) {
+    observationPeriscopeAligning = false;
+  }
+  updateObservationPeriscopeHeadingDisplay(active);
+}
+
+function startObservationPeriscopeAlignment() {
+  if (!isPlayerSubmarineObservationPeriscopeActive()) return;
+  observationPeriscopeAligning = true;
+}
+
+function updateObservationPeriscopeHeadingDisplay(active = isPlayerSubmarineObservationPeriscopeActive()) {
+  const yawDegrees = Math.round(normalizeAngle(observationPeriscopeYaw) * 180 / Math.PI);
+  if (observationPeriscopeHeadingValue) {
+    observationPeriscopeHeadingValue.textContent = `${yawDegrees}°`;
+  }
+  if (observationPeriscopeHeadingNeedle) {
+    observationPeriscopeHeadingNeedle.style.transform = `translate(-50%, -100%) rotate(${observationPeriscopeYaw}rad)`;
+  }
+  observationPeriscopeAlignButton?.classList.toggle("is-active", active && observationPeriscopeAligning);
 }
 
 function getSubmarinePeriscopeLiftTarget(depthState, depthOffset) {
@@ -8052,6 +8104,8 @@ function installScenarioTestHooks() {
         periscopeLift: Number(playerSubmarinePeriscopeLift.toFixed(3)),
         observationPeriscope: document.body.dataset.observationPeriscope ?? "hidden",
         torpedoView: document.body.dataset.torpedoView ?? "hidden",
+        observationYawDeg: Number((normalizeAngle(observationPeriscopeYaw) * 180 / Math.PI).toFixed(1)),
+        observationAligning: observationPeriscopeAligning,
         cameraY: Number(cameraSetup.position.y.toFixed(3)),
         boatY: Number(boat.root.position.y.toFixed(3)),
         waterlineY: 0
