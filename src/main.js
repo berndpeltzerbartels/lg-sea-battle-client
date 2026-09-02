@@ -119,6 +119,7 @@ const alignWeaponsButton = document.getElementById("alignWeaponsButton");
 const alignAirDefenseButton = document.getElementById("alignAirDefenseButton");
 const alignWeaponsLabel = document.getElementById("alignWeaponsLabel");
 const torpedoAidButton = document.getElementById("torpedoAidButton");
+const torpedoScopeZoomValue = document.getElementById("torpedoScopeZoomValue");
 const flakHitAlert = document.getElementById("flakHitAlert");
 const rudderIndicator = document.getElementById("rudderIndicator");
 const rudderValue = document.getElementById("rudderValue");
@@ -351,6 +352,11 @@ const cannonSightLevels = [
   { label: "III", fov: 0.18, startSpeedFactor: 0.52, rampFactor: 1.28 },
   { label: "IV", fov: 0.105, startSpeedFactor: 0.36, rampFactor: 1.45 }
 ];
+const submarineTorpedoScopeZoomLevels = [
+  { label: "I", fov: 0.42 },
+  { label: "II", fov: 0.31 },
+  { label: "III", fov: 0.23 }
+];
 const cannonFireCooldownSeconds = 1.0;
 const cannonProjectileSpeed = 1455 * torpedoBoatVisualScale;
 const cannonProjectileGravity = 9.8;
@@ -450,6 +456,7 @@ document.body.dataset.observationPeriscope = "hidden";
 document.body.dataset.flakView = "bridge";
 document.body.dataset.cannonView = "bridge";
 document.body.dataset.cannonSight = "I";
+document.body.dataset.torpedoScopeZoom = "I";
 document.body.dataset.bombBayView = "off";
 document.body.dataset.playerShipId = playerServerShipId ?? "pending";
 document.body.dataset.serverOwnShips = String(playerShips.length);
@@ -826,6 +833,11 @@ window.addEventListener("auxclick", (event) => {
 window.addEventListener("wheel", (event) => {
   if (isStartupErrorVisible()) return;
   if (playerDamageState !== "active") return;
+  if (submarineMode && torpedoScopeActive) {
+    updateTorpedoScopeZoomFromWheel(event);
+    event.preventDefault();
+    return;
+  }
   if (updateDebugOrbitCameraZoom(event)) {
     event.preventDefault();
     return;
@@ -839,7 +851,6 @@ window.addEventListener("wheel", (event) => {
     event.preventDefault();
     return;
   }
-
   mouseWheelEngineAccumulator -= event.deltaY;
   while (mouseWheelEngineAccumulator <= -mouseWheelEngineStep) {
     changeEngineOrder(1);
@@ -947,7 +958,6 @@ const engineOrders = engineOrderLabels.map((order, index) => ({
   ...order,
   speed: Number.isFinite(Number(engineSpeeds[index])) ? Number(engineSpeeds[index]) : defaultEngineSpeeds[index]
 }));
-const maxTorpedoBoatForwardSpeed = Math.max(...engineOrders.map((order) => order.speed).filter((orderSpeed) => orderSpeed > 0));
 const maxSubmarineForwardSpeed = 11;
 const maxSubmarinePeriscopeForwardSpeed = 9;
 
@@ -977,6 +987,7 @@ let observationPeriscopePitch = 0;
 let observationPeriscopeAligning = false;
 let heldObservationPeriscopeYawDirection = 0;
 let heldObservationPeriscopePitchDirection = 0;
+let torpedoScopeZoomLevelIndex = 0;
 const singleRadarMode = true;
 const RADAR_MODE_OVERRIDE_MS = 10000;
 let radarMode = "radar";
@@ -1255,15 +1266,9 @@ scene.onBeforeRenderObservable.add(() => {
       engineOrder = 7;
     }
     const diveRatio = scoutPlaneMode ? clamp(-heldElevatorDirection, 0, 1) : 0;
-    const maxForwardSpeed = scoutPlaneMode
-      ? scoutPlaneMaxSpeed + (scoutPlaneMaxDiveSpeed - scoutPlaneMaxSpeed) * diveRatio
-      : getPlayerMaxForwardSpeed();
-    const engineTargetSpeed = engineOrders[engineOrder].speed;
     const targetSpeed = scoutPlaneMode
       ? scoutPlaneTargetSpeed + (scoutPlaneMaxDiveSpeed - scoutPlaneTargetSpeed) * diveRatio
-      : engineTargetSpeed > 0
-      ? Math.min(engineTargetSpeed, maxForwardSpeed)
-      : engineTargetSpeed;
+      : getPlayerEngineTargetSpeed();
     const response = scoutPlaneMode ? 1.1 : (Math.abs(targetSpeed) > Math.abs(speed) ? 0.45 : 0.42);
     speed += (targetSpeed - speed) * Math.min(1, dt * response);
 
@@ -1439,9 +1444,11 @@ scene.onBeforeRenderObservable.add(() => {
     && !bombBayViewActive;
 
   camera.minZ = (cannonViewActive || flakViewActive || torpedoScopeActive) ? 0.03 : (bombBayViewActive ? 0.2 : (scoutPlaneMode ? 1.5 : 0.2));
-  camera.fov = sideViewSandboxMode
+  camera.fov = torpedoScopeActive
+    ? getTorpedoScopeFov()
+    : (sideViewSandboxMode
     ? debugOrbitFov
-    : (cannonViewActive ? getCannonFov() : (flakViewActive ? 0.64 : (torpedoScopeActive ? 0.42 : (bombBayViewActive ? getBombBayFov() : (scoutPlaneMode ? 1.02 : (bridgeInteriorViewActive ? bridgeViewWidth : 0.78))))));
+    : (cannonViewActive ? getCannonFov() : (flakViewActive ? 0.64 : (bombBayViewActive ? getBombBayFov() : (scoutPlaneMode ? 1.02 : (bridgeInteriorViewActive ? bridgeViewWidth : 0.78))))));
   cameraPosition.copyFrom(desiredCameraPosition.add(shakeOffset));
   cameraTarget.copyFrom(desiredTarget);
   camera.position.copyFrom(cameraPosition);
@@ -1654,6 +1661,7 @@ function updateTorpedoViewState() {
 function setTorpedoScope(active) {
   torpedoScopeActive = Boolean(active) && canUseTorpedoScope();
   document.body.dataset.torpedoView = torpedoScopeActive ? "active" : "hidden";
+  updateTorpedoScopeZoomDisplay();
 }
 
 function canUseTorpedoScope() {
@@ -1669,11 +1677,24 @@ function canUseSubmarineTorpedoScope() {
   return !submarineMode || playerSubmarineDepthState === submarineDepthStates.periscope;
 }
 
-function getPlayerMaxForwardSpeed() {
-  if (!submarineMode) return maxTorpedoBoatForwardSpeed;
-  return playerSubmarineDepthState === submarineDepthStates.periscope
-    ? maxSubmarinePeriscopeForwardSpeed
-    : maxSubmarineForwardSpeed;
+function getPlayerSubmarineSpeedFactor() {
+  if (!submarineMode) return 1;
+  const periscopeRatio = clamp(
+    Math.abs(playerSubmarineDepthOffset) / Math.abs(submarineDepthOffsets.periscope),
+    0,
+    1
+  );
+  return mix(1, maxSubmarinePeriscopeForwardSpeed / maxSubmarineForwardSpeed, periscopeRatio);
+}
+
+function getPlayerEngineTargetSpeed() {
+  const engineTargetSpeed = engineOrders[engineOrder].speed;
+  if (!submarineMode) return engineTargetSpeed;
+  const speedFactor = getPlayerSubmarineSpeedFactor();
+  if (engineTargetSpeed > 0) {
+    return Math.min(engineTargetSpeed, maxSubmarineForwardSpeed) * speedFactor;
+  }
+  return engineTargetSpeed * speedFactor;
 }
 
 function toggleBombBayView() {
@@ -2645,8 +2666,17 @@ function getCannonFov() {
   return currentCannonSightLevel().fov;
 }
 
+function getTorpedoScopeFov() {
+  if (!submarineMode) return 0.42;
+  return currentSubmarineTorpedoScopeZoomLevel().fov;
+}
+
 function currentCannonSightLevel() {
   return cannonSightLevels[cannonSightLevelIndex] ?? cannonSightLevels[0];
+}
+
+function currentSubmarineTorpedoScopeZoomLevel() {
+  return submarineTorpedoScopeZoomLevels[torpedoScopeZoomLevelIndex] ?? submarineTorpedoScopeZoomLevels[0];
 }
 
 function updateCannonSightFromWheel(event) {
@@ -2658,6 +2688,31 @@ function updateCannonSightFromWheel(event) {
   while (mouseWheelCannonSightAccumulator >= mouseWheelEngineStep) {
     changeCannonSightLevel(-1);
     mouseWheelCannonSightAccumulator -= mouseWheelEngineStep;
+  }
+}
+
+function changeTorpedoScopeZoomLevel(direction) {
+  const nextIndex = clamp(torpedoScopeZoomLevelIndex + direction, 0, submarineTorpedoScopeZoomLevels.length - 1);
+  torpedoScopeZoomLevelIndex = nextIndex;
+  document.body.dataset.torpedoScopeZoom = currentSubmarineTorpedoScopeZoomLevel().label;
+  updateTorpedoScopeZoomDisplay();
+}
+
+function updateTorpedoScopeZoomFromWheel(event) {
+  mouseWheelCannonSightAccumulator += event.deltaY;
+  while (mouseWheelCannonSightAccumulator <= -mouseWheelEngineStep) {
+    changeTorpedoScopeZoomLevel(1);
+    mouseWheelCannonSightAccumulator += mouseWheelEngineStep;
+  }
+  while (mouseWheelCannonSightAccumulator >= mouseWheelEngineStep) {
+    changeTorpedoScopeZoomLevel(-1);
+    mouseWheelCannonSightAccumulator -= mouseWheelEngineStep;
+  }
+}
+
+function updateTorpedoScopeZoomDisplay() {
+  if (torpedoScopeZoomValue) {
+    torpedoScopeZoomValue.textContent = currentSubmarineTorpedoScopeZoomLevel().label;
   }
 }
 
@@ -8106,6 +8161,11 @@ function installScenarioTestHooks() {
         torpedoView: document.body.dataset.torpedoView ?? "hidden",
         observationYawDeg: Number((normalizeAngle(observationPeriscopeYaw) * 180 / Math.PI).toFixed(1)),
         observationAligning: observationPeriscopeAligning,
+        speed: Number(speed.toFixed(3)),
+        engineOrder,
+        engineTargetSpeed: Number(getPlayerEngineTargetSpeed().toFixed(3)),
+        torpedoScopeZoom: document.body.dataset.torpedoScopeZoom ?? "I",
+        torpedoScopeFov: Number(getTorpedoScopeFov().toFixed(3)),
         cameraY: Number(cameraSetup.position.y.toFixed(3)),
         boatY: Number(boat.root.position.y.toFixed(3)),
         waterlineY: 0

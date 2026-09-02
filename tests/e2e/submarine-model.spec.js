@@ -143,11 +143,21 @@ test("submarine periscope depth keeps the observation view above water", async (
   const alignedPeriscope = await diveSnapshot(page);
   expect(Math.abs(alignedPeriscope.observationYawDeg)).toBeLessThan(Math.abs(turnedPeriscope.observationYawDeg));
 
+  await page.evaluate(() => window.seaBattleScenarioTest.setPlayerNavigationState({ engineOrder: 6, speed: 0 }));
+  const halfAheadAtPeriscope = await diveSnapshot(page);
+  expect(halfAheadAtPeriscope.engineTargetSpeed).toBeLessThan(10.4);
+  expect(halfAheadAtPeriscope.engineTargetSpeed).toBeGreaterThan(8.4);
+
   await page.keyboard.press("T");
   await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("active");
   const targetPeriscope = await diveSnapshot(page);
   expect(targetPeriscope.cameraY).toBeGreaterThan(samples[targetDepthIndex].cameraY);
   expect(targetPeriscope.cameraY).toBeLessThan(0.5);
+  await expect(page.locator(".torpedo-scope-line-center")).toBeHidden();
+  await page.mouse.wheel(0, -140);
+  await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoScopeZoom)).toBe("II");
+  const zoomedTargetPeriscope = await diveSnapshot(page);
+  expect(zoomedTargetPeriscope.torpedoScopeFov).toBeLessThan(targetPeriscope.torpedoScopeFov);
 });
 
 async function diveSnapshot(page) {

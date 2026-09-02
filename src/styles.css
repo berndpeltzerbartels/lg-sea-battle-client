@@ -1220,6 +1220,50 @@ body[data-torpedo-view="active"] .torpedo-scope {
     0 0 20px rgb(247 251 255 / 10%);
 }
 
+.torpedo-scope-zoom {
+  position: absolute;
+  left: calc(var(--view-left) + 20px);
+  top: 18px;
+  z-index: 5;
+  display: none;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 128px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid rgb(255 255 255 / 32%);
+  border-radius: 8px;
+  background: rgb(5 27 40 / 96%);
+  box-shadow: 0 12px 32px rgb(1 15 24 / 18%);
+  color: rgb(247 251 255 / 90%);
+  backdrop-filter: blur(7px);
+}
+
+.torpedo-scope-zoom span {
+  color: #9be5df;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.torpedo-scope-zoom strong {
+  justify-self: end;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.torpedo-scope-zoom small {
+  grid-column: 1 / -1;
+  color: rgb(247 251 255 / 66%);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 .torpedo-scope-line,
 .torpedo-scope-range,
 .torpedo-scope-scale {
@@ -1636,6 +1680,14 @@ body[data-player-vehicle="submarine"][data-torpedo-view="active"] .torpedo-scope
 body[data-player-vehicle="submarine"][data-torpedo-view="active"] .torpedo-scope-glass {
   top: 50%;
   width: min(72vw, 760px);
+}
+
+body[data-player-vehicle="submarine"][data-torpedo-view="active"] .torpedo-scope-zoom {
+  display: grid;
+}
+
+body[data-player-vehicle="submarine"][data-torpedo-view="active"] .torpedo-scope-line-center {
+  display: none;
 }
 
 body[data-player-vehicle="submarine"][data-torpedo-view="active"] .torpedo-scope-line-left,
