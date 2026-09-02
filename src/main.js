@@ -632,6 +632,11 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     return;
   }
+  if (playerActive && submarineMode && isSubmarineSurfaceKey(event) && !event.repeat && (flakViewActive || torpedoScopeActive)) {
+    setBattleStation("bridge");
+    event.preventDefault();
+    return;
+  }
   if (playerActive && isSubmarineSurfaceKey(event) && !event.repeat) {
     setPlayerSubmarineDepthState(submarineDepthStates.surface);
     event.preventDefault();
@@ -1588,7 +1593,8 @@ function isCannonViewToggleKey(event) {
 }
 
 function isBridgeViewKey(event) {
-  return !scoutPlaneMode && !submarineMode && (event.code === "KeyB" || event.key === "b" || event.key === "B");
+  return !scoutPlaneMode && (!submarineMode || flakViewActive || torpedoScopeActive)
+    && (event.code === "KeyB" || event.key === "b" || event.key === "B");
 }
 
 function isTorpedoScopeToggleKey(event) {
