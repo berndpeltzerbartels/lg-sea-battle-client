@@ -1061,7 +1061,7 @@ body[data-player-vehicle="submarine"] .battle-station-hull {
 
 body[data-player-vehicle="submarine"] .battle-station-panel {
   top: auto;
-  bottom: calc(var(--instrument-panel-padding) + 112px + var(--instrument-panel-gap));
+  bottom: calc(var(--instrument-panel-padding) + 84px + var(--instrument-panel-gap));
   height: 72px;
   padding: 6px 8px;
 }
@@ -2399,7 +2399,7 @@ body[data-player-vehicle="submarine"] .depth-gauge strong {
 
 .submarine-depth-actions {
   display: none;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 5px;
   font: 800 7px/1 Inter, Arial, sans-serif;
   letter-spacing: 0;
@@ -2421,6 +2421,10 @@ body[data-player-vehicle="submarine"] .depth-gauge strong {
   letter-spacing: 0;
   text-transform: uppercase;
   cursor: pointer;
+}
+
+.submarine-depth-actions button:first-child {
+  grid-column: 1 / -1;
 }
 
 .submarine-depth-actions button.is-active {
