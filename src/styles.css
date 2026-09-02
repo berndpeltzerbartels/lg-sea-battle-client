@@ -1602,7 +1602,7 @@ body[data-observation-periscope="active"] .observation-periscope {
 }
 
 body[data-observation-periscope="active"] {
-  --periscope-side-panel-width: 132px;
+  --periscope-side-panel-width: 168px;
   --periscope-rudder-panel-width: 244px;
   --periscope-circle-size: min(72vw, 760px);
 }
@@ -1669,7 +1669,7 @@ body[data-observation-periscope="active"] .telegraph-speed-readout {
 }
 
 body[data-observation-periscope="active"] .telegraph-speed-line {
-  grid-template-columns: 18px 38px 16px 18px;
+  grid-template-columns: 42px 38px 16px 42px;
   gap: 4px;
 }
 
@@ -3165,13 +3165,16 @@ body[data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
   display: inline-grid !important;
 }
 
-body[data-observation-periscope="active"] .telegraph-key-hints .shift-hint,
-body[data-observation-periscope="active"][data-steering-modifier="shift"] .telegraph-key-hints .shift-hint,
 body[data-player-vehicle="submarine"][data-torpedo-view="active"] .telegraph-key-hints .shift-hint,
 body[data-player-vehicle="submarine"][data-torpedo-view="active"] .rudder-key-hints .shift-hint,
 body[data-player-vehicle="submarine"][data-torpedo-view="active"][data-steering-modifier="shift"] .telegraph-key-hints .shift-hint,
 body[data-player-vehicle="submarine"][data-torpedo-view="active"][data-steering-modifier="shift"] .rudder-key-hints .shift-hint {
   display: none !important;
+}
+
+body[data-observation-periscope="active"] .telegraph-key-hints .shift-hint,
+body[data-observation-periscope="active"] .rudder-key-hints .shift-hint {
+  display: inline-grid !important;
 }
 
 .telegraph-scale {

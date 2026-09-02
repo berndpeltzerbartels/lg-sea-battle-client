@@ -1133,13 +1133,24 @@ const torpedoLaunchDefaults = {
   waterEntryZ: 2.62,
   runStartZ: 2.88
 };
+const submarineTorpedoLaunchDefaults = {
+  tubeX: 0.24,
+  startZ: 4.1,
+  startY: -0.18,
+  waterEntryZ: 5.05,
+  runStartZ: 5.45
+};
 
-function shipTorpedoTubeLaunchPoints(origin, heading, tubeSide) {
+function torpedoTubeLaunchTuning(vehicleType = "torpedo-boat") {
+  return vehicleType === "submarine" ? submarineTorpedoLaunchDefaults : torpedoLaunchDefaults;
+}
+
+function shipTorpedoTubeLaunchPoints(origin, heading, tubeSide, vehicleType = "torpedo-boat") {
   const launchHeading = Number.isFinite(heading) ? heading : 0;
   const forward = getForwardVector(launchHeading);
   const right = getRightVector(launchHeading);
   const side = tubeSide === -1 ? -1 : 1;
-  const tuning = torpedoLaunchDefaults;
+  const tuning = torpedoTubeLaunchTuning(vehicleType);
   const tubeX = side * tuning.tubeX * torpedoBoatVisualScale;
   const tubeStartZ = tuning.startZ * torpedoBoatVisualScale;
   const waterEntryZ = tuning.waterEntryZ * torpedoBoatVisualScale;
@@ -8532,6 +8543,19 @@ function installScenarioTestHooks() {
           startZ: Number(visual.launchStart.z.toFixed(3))
         }));
     },
+    playerTorpedoLaunchPreview(vehicleType = playerVehicleType) {
+      const left = shipTorpedoTubeLaunchPoints(boat.root.position, heading, -1, vehicleType);
+      const right = shipTorpedoTubeLaunchPoints(boat.root.position, heading, 1, vehicleType);
+      return [left, right].map((launch) => ({
+        vehicleType,
+        sideOffset: Number(launch.sideOffset.toFixed(3)),
+        startY: Number(launch.start.y.toFixed(3)),
+        startZ: Number(worldToLocalShipPointWithoutTilt(launch.start).z.toFixed(3)),
+        waterStartY: Number(launch.waterStart.y.toFixed(3)),
+        waterStartZ: Number(worldToLocalShipPointWithoutTilt(launch.waterStart).z.toFixed(3)),
+        runStartZ: Number(worldToLocalShipPointWithoutTilt(launch.runStart).z.toFixed(3))
+      }));
+    },
     vehicleVisual(vehicleId) {
       if (vehicleId === playerServerShipId || vehicleId === pendingPlayerServerShip?.id) {
         return {
@@ -10648,7 +10672,7 @@ function firePlayerTorpedo(system, shipRoot, heading, turnVelocity, shipSpeed, n
   // Firing while turning is the normal attack maneuver. Aim very slightly into the current turn
   // so the shot feels tied to the tube direction, without making torpedoes steer after launch.
   const launchHeading = heading + clamp(turnVelocity, -0.42, 0.42) * 0.2;
-  const launch = shipTorpedoTubeLaunchPoints(shipRoot.position, launchHeading, tubeSide);
+  const launch = shipTorpedoTubeLaunchPoints(shipRoot.position, launchHeading, tubeSide, playerVehicleType);
 
   const root = new TransformNode(`torpedo_${system.nextId}`, system.scene);
   root.parent = system.root;
@@ -10692,7 +10716,7 @@ function firePlayerTorpedo(system, shipRoot, heading, turnVelocity, shipSpeed, n
     speed: shipTorpedoBaseSpeed + Math.max(0, shipSpeed) * shipTorpedoSpeedGain,
     owner: "player",
     // Keep launch nearly immediate so turning fire does not drag behind the player's aim.
-    launchDuration: 0.2,
+    launchDuration: submarineMode ? 0.36 : 0.2,
     maxRange: 620,
     hit: false
   };
@@ -10708,30 +10732,16 @@ function fireEnemyTorpedo(system, motion, targetPosition, now) {
 
   const aimJitter = (pseudoRandom(system.nextId + motion.numericIndex * 17, 97) - 0.5) * enemyTorpedoAimJitterRadians;
   const launchHeading = motion.heading + aimJitter;
-  const forward = getForwardVector(launchHeading);
-  const right = getRightVector(launchHeading);
   const tubeSide = motion.nextTube === 0 ? -1 : 1;
   motion.nextTube = 1 - motion.nextTube;
   motion.nextFireTime = now + 34 + motion.numericIndex * 4.5;
   system.nextEnemyFireTime = now + 18;
-
-  const launchStart = motion.root.position
-    .add(right.scale(tubeSide * 0.44 * torpedoBoatVisualScale))
-    .add(forward.scale(3.65 * torpedoBoatVisualScale))
-    .add(new Vector3(0, 0.76 * torpedoBoatVisualScale, 0));
-  const launchEnd = motion.root.position
-    .add(right.scale(tubeSide * 0.44 * torpedoBoatVisualScale))
-    .add(forward.scale(4.35 * torpedoBoatVisualScale))
-    .add(new Vector3(0, 0.04, 0));
-  const runStart = motion.root.position
-    .add(right.scale(tubeSide * 0.44 * torpedoBoatVisualScale))
-    .add(forward.scale(4.65 * torpedoBoatVisualScale))
-    .add(new Vector3(0, 0.05, 0));
+  const launch = shipTorpedoTubeLaunchPoints(motion.root.position, launchHeading, tubeSide, motion.vehicleType);
 
   const root = new TransformNode(`enemy_torpedo_${system.nextId}`, system.scene);
   root.parent = system.root;
   root.scaling.setAll(torpedoVisualScale);
-  root.position.copyFrom(launchStart);
+  root.position.copyFrom(launch.start);
   root.rotationQuaternion = Quaternion.FromEulerAngles(0, launchHeading, 0);
 
   const body = MeshBuilder.CreateCylinder(`${root.name}_body`, {
@@ -10761,19 +10771,19 @@ function fireEnemyTorpedo(system, motion, targetPosition, now) {
     body,
     wake,
     heading: launchHeading,
-    forward,
-    launchStart,
-    launchEnd,
-    runStart,
+    forward: launch.forward,
+    launchStart: launch.start,
+    launchEnd: launch.launchEnd,
+    runStart: launch.runStart,
     age: 0,
     runDistance: 0,
     speed: (21 * torpedoSpeedScale + Math.max(0, motion.speed) * 0.25 * torpedoSpeedScale) * torpedoSpeedAdjustment,
     owner: "enemy",
-    launchDuration: 0.24,
+    launchDuration: motion.vehicleType === "submarine" ? 0.4 : 0.24,
     maxRange: 520,
     hit: false
   });
-  createLaunchPuff(system, launchStart.add(forward.scale(0.2)), launchHeading, tubeSide);
+  createLaunchPuff(system, launch.puffPosition, launchHeading, tubeSide);
   system.nextId += 1;
   return true;
 }
@@ -11011,7 +11021,8 @@ function getServerTorpedoLaunch(system, snapshot, snapshotServerTime = null) {
   if (isOwnTorpedo && isFreshShipLaunch && boat?.root?.position && distance2D(boat.root.position, serverPosition) < 35) {
     const launchHeading = Number.isFinite(heading) ? heading : 0;
     const right = getRightVector(launchHeading);
-    const tuning = torpedoLaunchDefaults;
+    const ownVehicleType = submarineMode ? "submarine" : playerVehicleType;
+    const tuning = torpedoTubeLaunchTuning(ownVehicleType);
     const serverOffset = serverPosition.subtract(boat.root.position);
     const sideOffset = serverOffset.x * right.x + serverOffset.z * right.z;
     const snapshotTubeSide = snapshot.tubeSide === -1 || snapshot.tubeSide === 1 ? snapshot.tubeSide : null;
@@ -11026,7 +11037,7 @@ function getServerTorpedoLaunch(system, snapshot, snapshotServerTime = null) {
       system.pendingOwnTubeSide = null;
     }
     system.nextTube = tubeSide < 0 ? 1 : 0;
-    const launch = shipTorpedoTubeLaunchPoints(boat.root.position, launchHeading, tubeSide);
+    const launch = shipTorpedoTubeLaunchPoints(boat.root.position, launchHeading, tubeSide, ownVehicleType);
 
     document.body.dataset.ownServerTorpedoLaunch = "local";
     return {
@@ -11042,7 +11053,7 @@ function getServerTorpedoLaunch(system, snapshot, snapshotServerTime = null) {
       blendUntil: time + 0.35,
       blendDuration: 0.35,
       showMuzzleEffect: true,
-      sourceVehicleType: null,
+      sourceVehicleType: ownVehicleType,
       sourceSpeed: Math.max(0, Number.isFinite(shooterShip?.speed) ? shooterShip.speed : speed)
     };
   }
@@ -11056,7 +11067,8 @@ function getServerTorpedoLaunch(system, snapshot, snapshotServerTime = null) {
       ?? (shooterShip ? new Vector3(shooterShip.x, remoteVehicleY(shooterShip), shooterShip.z) : null);
     if (shooterPosition) {
       const tubeSide = snapshot.tubeSide === -1 || snapshot.tubeSide === 1 ? snapshot.tubeSide : 1;
-      const launch = shipTorpedoTubeLaunchPoints(shooterPosition, heading, tubeSide);
+      const shooterVehicleType = shooterMotion?.vehicleType ?? getShipVehicleType(shooterShip);
+      const launch = shipTorpedoTubeLaunchPoints(shooterPosition, heading, tubeSide, shooterVehicleType);
       document.body.dataset.serverTorpedoLaunch = "remote-tube";
       return {
         mode: "server-position",
@@ -11067,7 +11079,7 @@ function getServerTorpedoLaunch(system, snapshot, snapshotServerTime = null) {
         tubeSide,
         blendUntil: 0,
         showMuzzleEffect: true,
-        sourceVehicleType: null,
+        sourceVehicleType: shooterVehicleType,
         sourceSpeed: Math.max(0, Number.isFinite(shooterShip?.speed) ? shooterShip.speed : shooterMotion?.speed ?? 0)
       };
     }

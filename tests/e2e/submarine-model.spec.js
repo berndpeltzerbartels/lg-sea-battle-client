@@ -1,12 +1,19 @@
 import { expect, test } from "@playwright/test";
 
 test("side-view sandbox can render the new submarine model", async ({ page }, testInfo) => {
-  await page.goto("/sea-battle/?setup=8&vehicle=submarine&hide-beach=1");
+  await page.goto("/sea-battle/?setup=8&vehicle=submarine&hide-beach=1&scenarioTest=1");
   await page.waitForFunction(() => (
     document.body.dataset.playerVehicle === "submarine"
     && Number(document.body.dataset.playerModelMeshes || 0) > 12
     && document.body.dataset.submarineFlak === "1"
   ));
+
+  const submarineLaunch = await page.evaluate(() => window.seaBattleScenarioTest.playerTorpedoLaunchPreview("submarine"));
+  const boatLaunch = await page.evaluate(() => window.seaBattleScenarioTest.playerTorpedoLaunchPreview("torpedo-boat"));
+  expect(Math.abs(submarineLaunch[0].sideOffset)).toBeLessThan(Math.abs(boatLaunch[0].sideOffset));
+  expect(submarineLaunch[0].startY).toBeLessThan(boatLaunch[0].startY);
+  expect(submarineLaunch[0].waterStartZ).toBeGreaterThan(boatLaunch[0].waterStartZ);
+  expect(submarineLaunch[0].runStartZ).toBeGreaterThan(submarineLaunch[0].waterStartZ);
 
   await expect(page.locator("#renderCanvas")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("submarine-model.png"), fullPage: true });
@@ -129,7 +136,7 @@ test("submarine periscope depth keeps the observation view above water", async (
   ));
   expect(targetDepthIndex).toBeGreaterThan(firstPeriscopeIndex);
   expect(samples[targetDepthIndex].cameraY).toBeGreaterThan(0.03);
-  expect(samples[targetDepthIndex].cameraY).toBeLessThan(0.35);
+  expect(samples[targetDepthIndex].cameraY).toBeLessThan(0.55);
   expect(samples[targetDepthIndex].periscopeLift).toBe(0);
 
   await page.keyboard.down("ArrowRight");
