@@ -4945,7 +4945,12 @@ async function sendPlayerState() {
 }
 
 function requestPlayerWeaponFire() {
-  if (submarineMode && !torpedoScopeActive) {
+  if (submarineMode && playerSubmarineDepthState === submarineDepthStates.submerged) {
+    document.body.dataset.fireTorpedoSync = "blocked";
+    document.body.dataset.fireTorpedoSyncError = "submarine-submerged";
+    return;
+  }
+  if (submarineMode && playerSubmarineDepthState === submarineDepthStates.periscope && !torpedoScopeActive) {
     document.body.dataset.fireTorpedoSync = "blocked";
     document.body.dataset.fireTorpedoSyncError = "submarine-torpedo-scope-required";
     return;
