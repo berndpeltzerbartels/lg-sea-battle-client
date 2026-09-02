@@ -67,3 +67,58 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
   const speed = Number(await page.locator("#telegraphSpeedValue").textContent());
   expect(speed).toBeLessThanOrEqual(11.1);
 });
+
+test("submarine dive sequence switches to observation periscope and crosses waterline twice", async ({ page }) => {
+  await page.goto("/sea-battle/?setup=8&vehicle=submarine&hide-beach=1&scenarioTest=1");
+  await page.waitForFunction(() => (
+    document.body.dataset.playerVehicle === "submarine"
+    && document.body.dataset.scenarioTest === "ready"
+  ));
+
+  const initial = await diveSnapshot(page);
+  expect(initial.observationPeriscope).toBe("hidden");
+  expect(initial.cameraY).toBeGreaterThan(0);
+
+  await page.keyboard.press("D");
+  const startedAt = Date.now();
+  const samples = [];
+  for (let i = 0; i < 42; i += 1) {
+    await page.waitForTimeout(250);
+    samples.push({
+      elapsed: Date.now() - startedAt,
+      ...(await diveSnapshot(page))
+    });
+  }
+
+  const firstPeriscopeIndex = samples.findIndex((sample) => sample.observationPeriscope === "active");
+  expect(firstPeriscopeIndex).toBeGreaterThanOrEqual(0);
+  expect(samples[firstPeriscopeIndex].elapsed).toBeGreaterThan(1500);
+  expect(samples[firstPeriscopeIndex].torpedoView).toBe("hidden");
+  expect(samples[firstPeriscopeIndex].cameraY).toBeGreaterThan(0);
+
+  const firstUnderwaterIndex = samples.findIndex((sample, index) => (
+    index > firstPeriscopeIndex
+    && sample.observationPeriscope === "active"
+    && sample.cameraY < -0.03
+  ));
+  expect(firstUnderwaterIndex).toBeGreaterThan(firstPeriscopeIndex);
+
+  const targetDepthIndex = samples.findIndex((sample, index) => (
+    index > firstUnderwaterIndex
+    && Math.abs(sample.depthOffset - sample.targetDepthOffset) < 0.05
+  ));
+  expect(targetDepthIndex).toBeGreaterThan(firstUnderwaterIndex);
+  expect(samples[targetDepthIndex].cameraY).toBeLessThan(0);
+
+  const resurfacedPeriscopeIndex = samples.findIndex((sample, index) => (
+    index > targetDepthIndex
+    && sample.observationPeriscope === "active"
+    && sample.periscopeLift > 0.2
+    && sample.cameraY > 0.03
+  ));
+  expect(resurfacedPeriscopeIndex).toBeGreaterThan(targetDepthIndex);
+});
+
+async function diveSnapshot(page) {
+  return page.evaluate(() => window.seaBattleScenarioTest.submarineDiveSequenceSnapshot());
+}

@@ -154,7 +154,7 @@ const submarineDepthOffsets = {
   submerged: -2.2
 };
 const submarinePeriscopeSurfaceClearance = 0.12;
-const submarineDepthTransitionSpeed = 0.62;
+const submarineDepthTransitionSpeed = 0.38;
 const submarinePeriscopeLiftSpeed = 1.1;
 const submarineBobbingRatios = {
   surface: 1,
@@ -7917,6 +7917,20 @@ function installScenarioTestHooks() {
       setPlayerSubmarineDepthState(depthState);
       return stationSnapshot();
     },
+    submarineDiveSequenceSnapshot() {
+      const cameraSetup = getSubmarineDiveSequenceCameraSetupForTest();
+      return {
+        depthState: playerSubmarineDepthState,
+        depthOffset: Number(playerSubmarineDepthOffset.toFixed(3)),
+        targetDepthOffset: Number((submarineDepthOffsets[playerSubmarineDepthState] ?? 0).toFixed(3)),
+        periscopeLift: Number(playerSubmarinePeriscopeLift.toFixed(3)),
+        observationPeriscope: document.body.dataset.observationPeriscope ?? "hidden",
+        torpedoView: document.body.dataset.torpedoView ?? "hidden",
+        cameraY: Number(cameraSetup.position.y.toFixed(3)),
+        boatY: Number(boat.root.position.y.toFixed(3)),
+        waterlineY: 0
+      };
+    },
     async setPlayerNavigationState(state) {
       if (Number.isFinite(Number(state?.x))) {
         boat.root.position.x = Number(state.x);
@@ -8377,6 +8391,23 @@ function stationSnapshot() {
     torpedo: torpedoScopeActive,
     depthState: playerSubmarineDepthState
   };
+}
+
+function getSubmarineDiveSequenceCameraSetupForTest() {
+  if (submarineMode && isPlayerSubmarineObservationPeriscopeActive()) {
+    return {
+      position: transformLocalShipPointWithoutTilt(new Vector3(0, 1.92 + playerSubmarinePeriscopeLift, 0.02), submarineVisualScale),
+      target: transformLocalShipPointWithoutTilt(new Vector3(0, 1.86 + playerSubmarinePeriscopeLift, 88), submarineVisualScale)
+    };
+  }
+  if (submarineMode) {
+    const bridgeWindow = getSubmarineBridgeCameraLocalPosition();
+    return {
+      position: transformLocalShipPointWithoutTilt(bridgeWindow.position, submarineVisualScale),
+      target: transformLocalShipPointWithoutTilt(bridgeWindow.target, submarineVisualScale)
+    };
+  }
+  return getPlayerCameraSetup(getForwardVector(heading));
 }
 
 function weaponViewAlignmentSnapshot(weapon) {
