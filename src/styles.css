@@ -3810,17 +3810,17 @@ body[data-flak-view="active"] .align-weapons-button kbd {
 }
 
 body[data-flak-view="active"] .ship-controls-panel {
-  grid-template-columns: 220px minmax(0, 1fr);
-  width: min(620px, calc(100vw - var(--view-left) - 44px));
+  grid-template-columns: 192px minmax(0, 1fr);
+  width: min(530px, calc(100vw - var(--view-left) - 44px));
 }
 
 body[data-flak-view="active"] .telegraph-speed-line {
-  grid-template-columns: 62px 40px 16px 62px;
+  grid-template-columns: 52px 36px 16px 52px;
 }
 
 body[data-flak-view="active"] .telegraph-speed-line .telegraph-key-hints {
-  width: 62px;
-  min-width: 62px;
+  width: 52px;
+  min-width: 52px;
 }
 
 body[data-cannon-view="active"] .cannon-elevation {
