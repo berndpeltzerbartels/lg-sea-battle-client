@@ -5115,7 +5115,9 @@ async function sendPlayerState() {
         playerId,
         teamId: playerTeamId,
         x: boat.root.position.x,
-        y: scoutPlaneMode ? boat.root.position.y : 0,
+        y: scoutPlaneMode
+          ? boat.root.position.y
+          : (submarineMode ? getPlayerSubmarineWaterlineY() : 0),
         z: boat.root.position.z,
         heading,
         speed,
@@ -5187,7 +5189,9 @@ async function requestPlayerTorpedoFire() {
     turnVelocity,
     engineOrder,
     rudderDegrees: Math.round(rudderDegrees),
-    y: scoutPlaneMode ? scoutPlaneAltitude : boat.root.position.y,
+    y: scoutPlaneMode
+      ? scoutPlaneAltitude
+      : (submarineMode ? getPlayerSubmarineWaterlineY() : boat.root.position.y),
     verticalSpeed: scoutPlaneMode ? scoutPlaneVerticalSpeed : 0,
     tubeSide: requestedTubeSide,
     clientTime: performance.now() / 1000,
@@ -5822,6 +5826,9 @@ function applyServerShipSnapshot(motion, ship) {
   motion.controlledBy = ship.controlledBy;
   motion.vehicleType = getShipVehicleType(ship);
   motion.depthState = getShipDepthState(ship);
+  motion.depthOffset = motion.vehicleType === "submarine"
+    ? getRemoteSubmarineDepthOffset(ship)
+    : (motion.depthOffset ?? 0);
   motion.serverState = ship.state;
   motion.serverPosition.x = Number.isFinite(ship.x) ? ship.x : motion.serverPosition.x;
   motion.serverPosition.y = remoteVehicleY(ship);
@@ -7454,10 +7461,18 @@ function isScoutPlaneMotion(motion) {
 function remoteVehicleY(ship) {
   const vehicleType = getShipVehicleType(ship);
   if (vehicleType === "submarine") {
-    return submarineWaterlineY + (submarineDepthOffsets[getShipDepthState(ship)] ?? 0) * submarineVisualScale;
+    return submarineWaterlineY + getRemoteSubmarineDepthOffset(ship) * submarineVisualScale;
   }
   if (vehicleType !== "scout-plane") return torpedoBoatWaterlineY;
   return Number.isFinite(ship?.y) ? ship.y : scoutPlaneCruiseAltitude;
+}
+
+function getRemoteSubmarineDepthOffset(ship) {
+  if (getShipVehicleType(ship) !== "submarine") return 0;
+  if (Number.isFinite(ship?.y)) {
+    return (ship.y - submarineWaterlineY) / submarineVisualScale;
+  }
+  return submarineDepthOffsets[getShipDepthState(ship)] ?? 0;
 }
 
 function getShipDepthState(ship) {
@@ -7521,7 +7536,7 @@ function createEnemyMotion(vehicle, heading, engineOrder, index = 0, serverShip 
     cannonYaw: Number.isFinite(serverShip?.cannonYaw) ? serverShip.cannonYaw : 0,
     cannonPitch: Number.isFinite(serverShip?.cannonPitch) ? serverShip.cannonPitch : 0,
     depthState: getShipDepthState(serverShip),
-    depthOffset: submarineDepthOffsets[getShipDepthState(serverShip)] ?? 0,
+    depthOffset: getRemoteSubmarineDepthOffset(serverShip),
     periscopeLift: getSubmarinePeriscopeLiftTarget(
       getShipDepthState(serverShip),
       submarineDepthOffsets[getShipDepthState(serverShip)] ?? 0
