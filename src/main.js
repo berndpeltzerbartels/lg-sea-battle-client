@@ -4352,7 +4352,7 @@ function showClientLogin(prefill = {}) {
       <label>Name<input name="nickname" autocomplete="off" minlength="2" maxlength="40" required></label>
       <label>Kennung<input name="alias" autocomplete="off" autocapitalize="characters" maxlength="5" pattern="[A-Za-z0-9]{1,5}" required></label>
       <label>Flotte<select name="team" required><option value="light">Light</option><option value="dark">Dark</option></select></label>
-      <label>Fahrzeug<select name="vehicleType" required><option value="torpedo-boat">Torpedoboot</option><option value="submarine">U-Boot</option><option value="scout-plane">Flugzeug</option></select></label>
+      <label>Fahrzeug<select name="vehicleType" required><option value="torpedo-boat">Torpedoboot</option><option value="submarine">U-Boot</option></select></label>
       <button type="submit">Einsteigen</button>
       <small data-login-error></small>
     </form>
