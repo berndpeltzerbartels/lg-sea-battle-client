@@ -7438,6 +7438,17 @@ function createRemoteVehicleModel(scene, materials, name, ship) {
       widthScale: 0.72,
       vehicleType: "submarine"
     });
+    if (!submarine.sternFlak && submarine.flakMount) {
+      const teamMaterials = getShipTeamMaterials(materials, ship.teamId);
+      submarine.sternFlak = createSternFlak(scene, materials, submarine.root, name, teamMaterials, submarine.flakMount.z, false, {
+        deckY: submarine.flakMount.deckY,
+        scale: submarine.flakMount.scale,
+        platformDiameterScale: 0.34,
+        platformHeightScale: 1,
+        pedestalDiameterScale: 0.5,
+        pedestalHeightScale: 0.24
+      });
+    }
     return submarine;
   }
   return createEnemyTorpedoBoat(
@@ -8942,6 +8953,112 @@ function installScenarioTestHooks() {
         damageAnchor: serializeShipDamageAnchor(motion.cannonHitAnchor ?? motion.criticalHitAnchor)
       };
     },
+    createRemoteSubmarineForTest(state = {}) {
+      const id = String(state.id ?? "test-U1");
+      const ship = {
+        id,
+        teamId: state.teamId ?? "dark",
+        controlledBy: state.controlledBy ?? "remote-test",
+        vehicleType: "submarine",
+        state: "active",
+        x: Number.isFinite(Number(state.x)) ? Number(state.x) : boat.root.position.x + 18,
+        y: Number.isFinite(Number(state.y)) ? Number(state.y) : submarineWaterlineY,
+        z: Number.isFinite(Number(state.z)) ? Number(state.z) : boat.root.position.z + 34,
+        heading: Number.isFinite(Number(state.heading)) ? Number(state.heading) : Math.PI,
+        speed: Number.isFinite(Number(state.speed)) ? Number(state.speed) : 0,
+        engineOrder: Number.isInteger(state.engineOrder) ? state.engineOrder : 2,
+        rudderDegrees: Number.isFinite(Number(state.rudderDegrees)) ? Number(state.rudderDegrees) : 0,
+        depthState: sanitizeSubmarineDepthState(state.depthState),
+        flakYaw: Number.isFinite(Number(state.flakYaw)) ? Number(state.flakYaw) : submarineFlakRestYaw,
+        flakPitch: Number.isFinite(Number(state.flakPitch)) ? Number(state.flakPitch) : submarineFlakRestPitch
+      };
+      const existing = enemyMotions.find((candidate) => candidate.id === id);
+      if (existing) {
+        applyServerShipSnapshot(existing, ship);
+        return window.seaBattleScenarioTest.remoteSubmarineFlakVisual(id);
+      }
+      const model = createRemoteVehicleModel(scene, materials, `test_server_ship_${id}`, ship);
+      model.root.position = new Vector3(ship.x, remoteVehicleY(ship), ship.z);
+      model.root.rotationQuaternion = Quaternion.FromEulerAngles(0, ship.heading, 0);
+      model.root.metadata = {
+        serverShipId: ship.id,
+        teamId: ship.teamId,
+        controlledBy: ship.controlledBy,
+        vehicleType: ship.vehicleType
+      };
+      const motion = createEnemyMotion(model, ship.heading, ship.engineOrder, enemyMotions.length, ship);
+      applyRemoteWeaponAim(motion, ship);
+      enemyMotions.push(motion);
+      return window.seaBattleScenarioTest.remoteSubmarineFlakVisual(id);
+    },
+    setRemoteSubmarineDepthForTest(vehicleId, depthState) {
+      const motion = enemyMotions.find((candidate) => candidate.id === vehicleId);
+      if (!motion) {
+        throw new Error(`Enemy motion not found: ${vehicleId}`);
+      }
+      motion.vehicleType = "submarine";
+      motion.depthState = sanitizeSubmarineDepthState(depthState);
+      motion.depthOffset = submarineDepthOffsets[motion.depthState] ?? 0;
+      motion.serverPosition.y = remoteVehicleY({
+        vehicleType: "submarine",
+        y: submarineWaterlineY + motion.depthOffset * submarineVisualScale,
+        depthState: motion.depthState
+      });
+      updateRemoteSubmarineDiveMotion(motion, 1);
+      return window.seaBattleScenarioTest.remoteSubmarineFlakVisual(vehicleId);
+    },
+    remoteSubmarineFlakVisual(vehicleId) {
+      const motion = enemyMotions.find((candidate) => candidate.id === vehicleId);
+      const sternFlak = motion?.boat?.sternFlak;
+      if (!motion || !sternFlak) return null;
+      const meshes = motion.root.getChildMeshes(false)
+        .filter((mesh) => mesh.name.includes("_flak_"));
+      const enabledMeshes = meshes.filter((mesh) => isNodeEffectivelyEnabled(mesh));
+      sternFlak.muzzle?.computeWorldMatrix(true);
+      return {
+        id: motion.id,
+        depthState: motion.depthState,
+        depthOffset: Number((motion.depthOffset ?? 0).toFixed(3)),
+        hasFlak: true,
+        meshCount: meshes.length,
+        enabledMeshCount: enabledMeshes.length,
+        mountY: Number((sternFlak.mount?.position.y ?? 0).toFixed(3)),
+        platformY: Number((sternFlak.platform?.position.y ?? 0).toFixed(3)),
+        pitchDeg: Number((-(sternFlak.elevationRoot?.rotation.x ?? 0) * 180 / Math.PI).toFixed(1)),
+        yawDeg: Number((normalizeAngle(sternFlak.mount?.rotation.y ?? 0) * 180 / Math.PI).toFixed(1)),
+        muzzle: sternFlak.muzzle
+          ? vectorSnapshot(sternFlak.muzzle.getAbsolutePosition())
+          : null
+      };
+    },
+    syncRemoteFlakShotForTest(vehicleId) {
+      const motion = enemyMotions.find((candidate) => candidate.id === vehicleId);
+      if (!motion) {
+        throw new Error(`Enemy motion not found: ${vehicleId}`);
+      }
+      const shot = getRemoteFlakShot(motion);
+      const direction = shot?.direction ?? getForwardVector(motion.heading);
+      const position = shot?.position ?? motion.root.position.add(direction.scale(0.2));
+      const velocity = direction.scale(flakProjectileSpeed);
+      const before = flakSystem.flashes.length;
+      syncServerFlakProjectiles([{
+        id: `flak-test-${Math.round(time * 1000)}`,
+        shipId: vehicleId,
+        x: position.x,
+        y: position.y,
+        z: position.z,
+        vx: velocity.x,
+        vy: velocity.y,
+        vz: velocity.z,
+        firedAt: time
+      }], time);
+      return {
+        flashesBefore: before,
+        flashesAfter: flakSystem.flashes.length,
+        muzzle: shot?.muzzle ? vectorSnapshot(shot.muzzle) : null,
+        projectileCount: flakSystem.serverVisuals.size
+      };
+    },
     bombVisuals() {
       return Array.from(bombSystem.serverVisuals.values())
         .map((visual) => {
@@ -9524,6 +9641,17 @@ function isNodeDescendantOf(node, ancestor) {
     if (current === ancestor) return true;
   }
   return false;
+}
+
+function isNodeEffectivelyEnabled(node) {
+  const visited = new Set();
+  for (let current = node; current; current = current.parent) {
+    if (visited.has(current)) return false;
+    visited.add(current);
+    if (typeof current.isEnabled === "function" && !current.isEnabled()) return false;
+    if (current.isVisible === false) return false;
+  }
+  return true;
 }
 
 function shotTubeIntersectsMesh(origin, direction, length, mesh, radius = 0) {
