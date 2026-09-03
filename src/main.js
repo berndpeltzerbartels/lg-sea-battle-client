@@ -336,6 +336,10 @@ const flakBarrelCenterZ = 0.22;
 const flakSightYOffsetFactor = 0.14;
 const flakEyeZFactor = 0.02;
 const flakSightTargetZ = 72;
+const submarineFlakRestYaw = Math.PI;
+const submarineFlakRestPitch = Math.PI * 35 / 180;
+const submarineFlakStowedPitch = Math.PI / 2;
+const submarineFlakStowDrop = 0.62;
 const playerSternFlakScale = 0.54;
 const playerFlakSightYOffset = flakSightYOffsetFactor * playerSternFlakScale;
 const playerFlakEyeZ = flakEyeZFactor * playerSternFlakScale;
@@ -601,6 +605,9 @@ if (submarineMode && !boat.sternFlak && boat.flakMount) {
   });
   boat.flakViewHiddenMeshes = boat.sternFlak.viewHiddenMeshes ?? [];
   document.body.dataset.submarineFlak = "1";
+  flakYaw = submarineFlakRestYaw;
+  flakPitch = submarineFlakRestPitch;
+  updatePlayerFlakMount();
 }
 if (!scoutPlaneMode && !boat.bowWake) {
   boat.bowWake = createEnemyBowWake(scene, materials, boat.root, `${boat.root.name}_player`, {
@@ -1802,6 +1809,8 @@ function updatePlayerFlakMount() {
   if (boat.sternFlak.elevationRoot) {
     boat.sternFlak.elevationRoot.rotation.x = -flakPitch;
   }
+  boat.sternFlak.currentPitch = flakPitch;
+  updateSubmarineFlakStowVisual(boat.sternFlak, submarineMode ? playerSubmarineDepthOffset : 0, submarineMode && !flakViewActive);
   document.body.dataset.flakYaw = String(Math.round(normalizeAngle(flakYaw) * 180 / Math.PI));
   document.body.dataset.flakPitch = String(Math.round(flakPitch * 180 / Math.PI));
 }
@@ -3821,6 +3830,10 @@ function stepPlayerSubmarineDepthState(direction) {
 function setPlayerSubmarineDepthState(depthState) {
   if (!submarineMode) return;
   playerSubmarineDepthState = sanitizeSubmarineDepthState(depthState);
+  if (playerSubmarineDepthState === submarineDepthStates.surface) {
+    flakYaw = submarineFlakRestYaw;
+    flakPitch = submarineFlakRestPitch;
+  }
   if (playerSubmarineDepthState === submarineDepthStates.periscope) {
     observationPeriscopeYaw = 0;
     observationPeriscopePitch = 0;
@@ -3889,6 +3902,7 @@ function updatePlayerSubmarineDiveMotion(dt) {
   const targetLift = getSubmarinePeriscopeLiftTarget(playerSubmarineDepthState, playerSubmarineDepthOffset);
   playerSubmarinePeriscopeLift = moveValueToward(playerSubmarinePeriscopeLift, targetLift, submarinePeriscopeLiftSpeed * dt);
   updateSubmarinePeriscopeExtension(boat, playerSubmarinePeriscopeLift);
+  updateSubmarineFlakStowVisual(boat.sternFlak, playerSubmarineDepthOffset, !flakViewActive);
 }
 
 function isPlayerSubmarineObservationPeriscopeActive() {
@@ -3969,6 +3983,31 @@ function updateSubmarinePeriscopeExtension(submarine, periscopeLift) {
     mast.mesh.scaling.y = 1 + extension / Math.max(0.001, height);
     mast.mesh.position.y = baseY + (height + extension) * 0.5;
   });
+}
+
+function updateSubmarineFlakStowVisual(sternFlak, depthOffset = 0, allowStow = true) {
+  if (!sternFlak?.mount) return;
+  const ratio = allowStow
+    ? smoothstep(0.08, Math.abs(submarineDepthOffsets.periscope) * 0.86, Math.abs(depthOffset ?? 0))
+    : 0;
+  const yDrop = submarineFlakStowDrop * ratio;
+  const currentVisualPitch = sternFlak.elevationRoot ? -sternFlak.elevationRoot.rotation.x : submarineFlakRestPitch;
+  const startPitch = Number.isFinite(sternFlak.currentPitch) ? sternFlak.currentPitch : currentVisualPitch;
+  const pitch = mix(startPitch, submarineFlakStowedPitch, ratio);
+
+  sternFlak.mount.rotation.y = blendAngle(sternFlak.mount.rotation.y, submarineFlakRestYaw, ratio);
+  if (sternFlak.elevationRoot) {
+    sternFlak.elevationRoot.rotation.x = -pitch;
+  }
+  if (sternFlak.mountBaseY != null) {
+    sternFlak.mount.position.y = sternFlak.mountBaseY - yDrop;
+  }
+  if (sternFlak.platform?.position && sternFlak.platformBaseY != null) {
+    sternFlak.platform.position.y = sternFlak.platformBaseY - yDrop;
+  }
+  if (sternFlak.pedestal?.position && sternFlak.pedestalBaseY != null) {
+    sternFlak.pedestal.position.y = sternFlak.pedestalBaseY - yDrop;
+  }
 }
 
 function getPlayerSubmarineDepthLabel() {
@@ -5872,7 +5911,9 @@ function applyRemoteWeaponAim(motion, ship) {
   }
   if (motion.boat?.sternFlak?.elevationRoot) {
     motion.boat.sternFlak.elevationRoot.rotation.x = -motion.flakPitch;
+    motion.boat.sternFlak.currentPitch = motion.flakPitch;
   }
+  updateSubmarineFlakStowVisual(motion.boat?.sternFlak, motion.depthOffset ?? 0, motion.vehicleType === "submarine");
   if (motion.boat?.bowCannon?.mount) {
     motion.boat.bowCannon.mount.rotation.y = motion.cannonYaw;
   }
@@ -7492,6 +7533,7 @@ function updateRemoteSubmarineDiveMotion(motion, dt) {
   const targetLift = getSubmarinePeriscopeLiftTarget(motion.depthState, motion.depthOffset ?? 0);
   motion.periscopeLift = moveValueToward(motion.periscopeLift ?? 0, targetLift, submarinePeriscopeLiftSpeed * dt);
   updateSubmarinePeriscopeExtension(motion.boat, motion.periscopeLift);
+  updateSubmarineFlakStowVisual(motion.boat?.sternFlak, motion.depthOffset ?? 0, true);
   updateRemoteVehicleObserverVisibility(motion);
 }
 
@@ -14482,9 +14524,15 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   sightBracket.material = metalMaterial;
 
   return {
+    platform,
+    pedestal,
     mount,
     elevationRoot,
     muzzle,
+    platformBaseY: platform.position.y,
+    pedestalBaseY: pedestal.position.y,
+    mountBaseY: mount.position.y,
+    currentPitch: 0,
     viewHiddenMeshes: []
   };
 }
