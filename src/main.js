@@ -605,9 +605,6 @@ if (submarineMode && !boat.sternFlak && boat.flakMount) {
   });
   boat.flakViewHiddenMeshes = boat.sternFlak.viewHiddenMeshes ?? [];
   document.body.dataset.submarineFlak = "1";
-  flakYaw = submarineFlakRestYaw;
-  flakPitch = submarineFlakRestPitch;
-  updatePlayerFlakMount();
 }
 if (!scoutPlaneMode && !boat.bowWake) {
   boat.bowWake = createEnemyBowWake(scene, materials, boat.root, `${boat.root.name}_player`, {
@@ -1042,8 +1039,8 @@ const RADAR_MODE_OVERRIDE_MS = 10000;
 let radarMode = "radar";
 let radarModeOverride = null;
 let radarModeOverrideUntil = 0;
-let flakYaw = Math.PI;
-let flakPitch = 0;
+let flakYaw = submarineMode ? submarineFlakRestYaw : Math.PI;
+let flakPitch = submarineMode ? submarineFlakRestPitch : 0;
 let cannonYaw = 0;
 let cannonPitch = 0.04;
 let cannonSightLevelIndex = 0;
