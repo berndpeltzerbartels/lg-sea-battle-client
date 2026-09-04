@@ -1617,7 +1617,7 @@ body[data-observation-periscope="active"] .observation-periscope {
   inset: 0;
   z-index: 0;
   background:
-    radial-gradient(circle at calc(var(--view-left) + (100vw - var(--view-left)) / 2) 50%, transparent 0 31%, rgb(1 8 10 / 92%) 31.4%, rgb(0 0 0 / 98%) 100%);
+    radial-gradient(circle at calc(var(--view-left) + (100vw - var(--view-left)) / 2) 50%, transparent 0 calc(var(--periscope-circle-size) / 2), rgb(0 0 0 / 98%) calc(var(--periscope-circle-size) / 2 + 3px), rgb(0 0 0 / 99%) 100%);
 }
 
 .observation-periscope-glass {
@@ -1643,14 +1643,14 @@ body[data-underwater-view="true"] .torpedo-scope-glass {
   box-shadow:
     inset 0 0 0 1px rgb(178 236 242 / 15%),
     inset 0 0 48px rgb(1 18 27 / 32%),
-    0 0 0 999px rgb(0 0 0 / 30%);
+    0 0 18px rgb(1 18 27 / 22%);
 }
 
 body[data-underwater-view="true"] .observation-periscope-vignette,
 body[data-underwater-view="true"] .torpedo-scope-vignette {
   background:
-    linear-gradient(to top, rgb(0 4 7 / 52%) 0%, rgb(0 15 22 / 28%) 34%, transparent 68%),
-    radial-gradient(circle at calc(var(--view-left) + (100vw - var(--view-left)) / 2) 50%, rgb(0 45 62 / 14%) 0 31%, rgb(0 5 9 / 94%) 31.4%, rgb(0 0 0 / 99%) 100%);
+    linear-gradient(to top, rgb(0 4 7 / 28%) 0%, rgb(0 15 22 / 14%) 34%, transparent 68%),
+    radial-gradient(circle at calc(var(--view-left) + (100vw - var(--view-left)) / 2) 50%, transparent 0 calc(var(--periscope-circle-size) / 2), rgb(0 3 6 / 94%) calc(var(--periscope-circle-size) / 2 + 3px), rgb(0 0 0 / 99%) 100%);
 }
 
 .observation-periscope-heading {
@@ -1997,11 +1997,15 @@ body[data-underwater-view="true"] .torpedo-scope-vignette {
 body[data-observation-periscope="active"] {
   --periscope-side-panel-width: 168px;
   --periscope-rudder-panel-width: 244px;
-  --periscope-circle-size: min(72vw, 760px);
+  --periscope-circle-size: min(calc(100vw - var(--view-left) - 36px), calc(100vh - 36px), 1120px);
 }
 
 body[data-observation-periscope="active"] .observation-periscope-glass {
   width: max(420px, var(--periscope-circle-size));
+  box-shadow:
+    inset 0 0 0 1px rgb(210 247 242 / 13%),
+    inset 0 0 52px rgb(3 17 22 / 22%),
+    0 0 18px rgb(3 17 22 / 18%);
 }
 
 body[data-observation-periscope="active"] .ship-controls-panel {
@@ -2101,12 +2105,23 @@ body[data-observation-periscope="active"] .rudder-title {
 
 body[data-player-vehicle="submarine"][data-torpedo-view="active"] .torpedo-scope-vignette {
   background:
-    radial-gradient(circle at calc(var(--view-left) + (100vw - var(--view-left)) / 2) 50%, transparent 0 31%, rgb(1 8 10 / 92%) 31.4%, rgb(0 0 0 / 98%) 100%);
+    radial-gradient(circle at calc(var(--view-left) + (100vw - var(--view-left)) / 2) 50%, transparent 0 calc(var(--periscope-circle-size) / 2), rgb(0 0 0 / 98%) calc(var(--periscope-circle-size) / 2 + 3px), rgb(0 0 0 / 99%) 100%);
 }
 
 body[data-player-vehicle="submarine"][data-torpedo-view="active"] .torpedo-scope-glass {
   top: 50%;
-  width: min(72vw, 760px);
+  width: min(calc(100vw - var(--view-left) - 36px), calc(100vh - 36px), 1120px);
+  box-shadow:
+    inset 0 0 0 1px rgb(210 247 242 / 13%),
+    inset 0 0 52px rgb(3 17 22 / 22%),
+    0 0 18px rgb(3 17 22 / 18%);
+}
+
+body[data-underwater-view="true"][data-observation-periscope="active"] .observation-periscope-vignette,
+body[data-underwater-view="true"][data-player-vehicle="submarine"][data-torpedo-view="active"] .torpedo-scope-vignette {
+  background:
+    linear-gradient(to top, rgb(0 4 7 / 28%) 0%, rgb(0 15 22 / 14%) 34%, transparent 68%),
+    radial-gradient(circle at calc(var(--view-left) + (100vw - var(--view-left)) / 2) 50%, transparent 0 calc(var(--periscope-circle-size) / 2), rgb(0 3 6 / 94%) calc(var(--periscope-circle-size) / 2 + 3px), rgb(0 0 0 / 99%) 100%);
 }
 
 body[data-player-vehicle="submarine"][data-torpedo-view="active"] .torpedo-scope-range-mid {
@@ -2155,6 +2170,7 @@ body[data-player-vehicle="submarine"][data-player-depth-state="submerged"][data-
 body[data-player-vehicle="submarine"][data-torpedo-view="active"] {
   --periscope-side-panel-width: 132px;
   --periscope-rudder-panel-width: 244px;
+  --periscope-circle-size: min(calc(100vw - var(--view-left) - 36px), calc(100vh - 36px), 1120px);
 }
 
 body[data-player-vehicle="submarine"][data-torpedo-view="active"] .ship-controls-panel {
