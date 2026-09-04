@@ -195,6 +195,13 @@ test("submarine periscope depth keeps the observation view above water", async (
     index > 0
     && Math.abs(sample.depthOffset - sample.targetDepthOffset) < 0.05
   ));
+  const bridgeDiveIndex = samples.findIndex((sample) => (
+    Math.abs(sample.depthOffset) > 0.12
+    && Math.abs(sample.depthOffset) < 0.75
+  ));
+  expect(bridgeDiveIndex).toBeGreaterThanOrEqual(0);
+  expect(samples[bridgeDiveIndex].torpedoView).toBe("hidden");
+  expect(samples[bridgeDiveIndex].observationPeriscope).toBe("hidden");
   expect(targetDepthIndex).toBeGreaterThan(0);
   expect(samples[targetDepthIndex].torpedoView).toBe("active");
   expect(samples[targetDepthIndex].submarinePeriscopeMode).toBe("drive");
