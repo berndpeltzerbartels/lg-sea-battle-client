@@ -282,7 +282,7 @@ function createDeckDetails(scene, root, materials, name) {
     mast.parent = root;
     mast.position.y = mastBaseY + height * 0.5;
     mast.position.z = sailPositionZ + (z - sailPositionZ) * sailScale;
-    mast.material = materials.darkDetail;
+    mast.material = materials.tower;
     mast.metadata = { baseY: mastBaseY, height };
     details.push(mast);
     masts.push({ mesh: mast, baseY: mastBaseY, height });
