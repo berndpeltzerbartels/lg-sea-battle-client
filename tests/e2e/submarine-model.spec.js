@@ -40,16 +40,26 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
   await page.keyboard.press("Shift+ArrowDown");
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("periscope");
   await expect(page.locator("#depthValue")).toHaveText("Sehrohr");
+  await expect(page.locator(".submarine-periscope-mode-panel").first()).toContainText("1");
+  await expect(page.locator(".submarine-periscope-mode-panel").first()).toContainText("Fahrt");
+  await expect(page.locator(".submarine-periscope-mode-panel").first()).toContainText("2");
+  await expect(page.locator(".submarine-periscope-mode-panel").first()).toContainText("Zielen");
+  await expect(page.locator(".submarine-periscope-mode-panel").first()).toContainText("3");
+  await expect(page.locator(".submarine-periscope-mode-panel").first()).toContainText("360° Periskop");
   await expect(page.locator("#torpedoAidButton")).toBeEnabled();
   await expect(page.locator("#torpedoAidButton")).toContainText("Torpedo");
-  await page.keyboard.press("T");
   await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("active");
-  await page.keyboard.press("T");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.submarinePeriscopeMode)).toBe("drive");
+  await expect(page.locator(".torpedo-scope-rudder-scale")).toContainText("Ruder");
+  await expect(page.locator(".torpedo-scope-rudder-scale")).toContainText("S 35");
+  await expect(page.locator(".torpedo-scope-rudder-scale")).toContainText("P 35");
+  await page.keyboard.press("3");
   await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("hidden");
-  await page.keyboard.press("T");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.observationPeriscope)).toBe("active");
+  await page.keyboard.press("1");
   await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("active");
   await page.keyboard.press("B");
-  await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("hidden");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("active");
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("periscope");
   await page.keyboard.press("Shift+ArrowUp");
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("surface");
@@ -61,10 +71,9 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
   await expect.poll(() => page.evaluate(() => document.body.dataset.flakView)).toBe("bridge");
   await expect(page.locator("#depthValue")).toHaveText("Sehrohr");
   await expect(page.locator("#torpedoAidButton")).toBeEnabled();
-  await page.keyboard.press("T");
   await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("active");
-  await page.keyboard.press("T");
-  await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("hidden");
+  await page.keyboard.press("3");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.observationPeriscope)).toBe("active");
   await page.keyboard.press("Shift+ArrowUp");
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("surface");
   await expect(page.locator("#torpedoAidButton")).toBeDisabled();
@@ -116,8 +125,21 @@ test("remote submarine keeps its real flak visible and stows it while diving", a
   expect(surfaced?.hasFlak).toBe(true);
   expect(surfaced.meshCount).toBeGreaterThan(4);
   expect(surfaced.enabledMeshCount).toBe(surfaced.meshCount);
-  expect(surfaced.pitchDeg).toBeGreaterThan(30);
-  expect(surfaced.pitchDeg).toBeLessThan(40);
+  expect(surfaced.pitchDeg).toBeGreaterThan(10);
+  expect(surfaced.pitchDeg).toBeLessThan(20);
+  const periscopeMaterials = await page.evaluate(() => window.seaBattleScenarioTest.submarinePeriscopeMaterialsForTest());
+  expect(periscopeMaterials).toHaveLength(2);
+  expect(periscopeMaterials.every((entry) => entry.material.includes("_tower_material"))).toBe(true);
+
+  const ownPeriscopeShotLine = await page.evaluate(() => (
+    window.seaBattleScenarioTest.flakShotLineAtLocalTarget({ x: 0, y: 1.58, z: 0.02 })
+  ));
+  expect(ownPeriscopeShotLine.blocked).toBe(true);
+  expect(ownPeriscopeShotLine.blocker).toContain("_periscope_");
+  const ownSailShotLine = await page.evaluate(() => (
+    window.seaBattleScenarioTest.flakShotLineAtLocalTarget({ x: 0, y: 0.95, z: 0.02 })
+  ));
+  expect(ownSailShotLine.blocked).toBe(true);
 
   const fire = await page.evaluate(() => window.seaBattleScenarioTest.syncRemoteFlakShotForTest("test-U1"));
   expect(fire.projectileCount).toBeGreaterThan(0);
@@ -137,7 +159,7 @@ test("remote submarine keeps its real flak visible and stows it while diving", a
 });
 
 test("submarine periscope depth keeps the observation view above water", async ({ page }) => {
-  test.setTimeout(40_000);
+  test.setTimeout(70_000);
 
   await page.goto("/sea-battle/?setup=8&vehicle=submarine&hide-beach=1&scenarioTest=1");
   await page.waitForFunction(() => (
@@ -169,23 +191,13 @@ test("submarine periscope depth keeps the observation view above water", async (
     });
   }
 
-  const firstPeriscopeIndex = samples.findIndex((sample) => sample.observationPeriscope === "active");
-  expect(firstPeriscopeIndex).toBeGreaterThanOrEqual(0);
-  expect(samples[firstPeriscopeIndex].elapsed).toBeGreaterThan(2500);
-  expect(samples[firstPeriscopeIndex].torpedoView).toBe("hidden");
-  expect(samples[firstPeriscopeIndex].cameraY).toBeGreaterThan(0);
-
-  const underwaterPeriscopeSample = samples.find((sample) => (
-    sample.observationPeriscope === "active"
-    && sample.cameraY < -0.03
-  ));
-  expect(underwaterPeriscopeSample).toBeUndefined();
-
   const targetDepthIndex = samples.findIndex((sample, index) => (
-    index > firstPeriscopeIndex
+    index > 0
     && Math.abs(sample.depthOffset - sample.targetDepthOffset) < 0.05
   ));
-  expect(targetDepthIndex).toBeGreaterThan(firstPeriscopeIndex);
+  expect(targetDepthIndex).toBeGreaterThan(0);
+  expect(samples[targetDepthIndex].torpedoView).toBe("active");
+  expect(samples[targetDepthIndex].submarinePeriscopeMode).toBe("drive");
   expect(samples[targetDepthIndex].cameraY).toBeGreaterThan(0.03);
   expect(samples[targetDepthIndex].cameraY).toBeLessThan(0.55);
   expect(samples[targetDepthIndex].periscopeLift).toBe(0);
@@ -195,17 +207,24 @@ test("submarine periscope depth keeps the observation view above water", async (
   expect(samples[targetDepthIndex].submarineWakeExposure).toBe(0);
   expect(samples[targetDepthIndex].bowWakeVisible).toBe(false);
 
-  await page.keyboard.press("M");
+  await page.keyboard.press("3");
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.observationPeriscope)).toBe("active");
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.radarTargetLineMode)).toBe("periscope");
+  await expect(page.locator(".observation-periscope-bearing-scale .observation-periscope-scale-title")).toContainText("Zielen");
   await page.keyboard.down("ArrowRight");
   await page.waitForTimeout(1200);
   await page.keyboard.up("ArrowRight");
   const turnedPeriscope = await diveSnapshot(page);
   expect(Math.abs(turnedPeriscope.observationYawDeg)).toBeGreaterThan(10);
 
-  await page.keyboard.press("H");
-  await page.waitForTimeout(1400);
+  await page.evaluate(() => window.seaBattleScenarioTest.setPlayerNavigationState({ engineOrder: 2, speed: 0, heading: 0 }));
+  await page.keyboard.press("2");
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.submarinePeriscopeMode)).toBe("aiming");
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.submarinePeriscopeMode), { timeout: 14_000 }).toBe("drive");
   const alignedPeriscope = await diveSnapshot(page);
-  expect(Math.abs(alignedPeriscope.observationYawDeg)).toBeLessThan(Math.abs(turnedPeriscope.observationYawDeg));
+  expect(alignedPeriscope.submarinePeriscopeMode).toBe("drive");
+  expect(alignedPeriscope.torpedoView).toBe("active");
+  expect(alignedPeriscope.engineOrder).toBe(2);
 
   await page.evaluate(() => window.seaBattleScenarioTest.setSubmarineDepthState("surface"));
   await page.evaluate(() => window.seaBattleScenarioTest.setSubmarineDepthState("periscope"));
@@ -224,17 +243,34 @@ test("submarine periscope depth keeps the observation view above water", async (
   await page.evaluate(() => window.seaBattleScenarioTest.setSubmarineDepthState("submerged"));
   await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.radarDepthMode), { timeout: 12_000 }).toBe("submerged");
   const submergedRadar = await diveSnapshot(page);
-  expect(submergedRadar.observationPeriscope).toBe("active");
+  expect(submergedRadar.observationPeriscope).toBe("hidden");
+  expect(submergedRadar.torpedoView).toBe("active");
+  expect(submergedRadar.submarinePeriscopeMode).toBe("drive");
+  expect(submergedRadar.radarTargetLineMode).toBe("torpedo");
   expect(submergedRadar.radarRange).toBeGreaterThan(0);
   expect(submergedRadar.radarRange).toBeLessThan(samples[targetDepthIndex].radarRange);
-  await page.evaluate(() => window.seaBattleScenarioTest.setSubmarineDepthState("periscope"));
-  await expect.poll(() => diveSnapshot(page).then((snapshot) => Math.abs(snapshot.depthOffset - snapshot.targetDepthOffset)), { timeout: 12_000 }).toBeLessThan(0.05);
+  await expect(page.locator(".torpedo-scope-line-center")).toBeHidden();
+  await expect(page.locator(".torpedo-scope-line-left")).toBeHidden();
+  await expect(page.locator(".torpedo-scope-target-bearing-marker")).toBeHidden();
 
-  await page.keyboard.press("T");
+  const respawnedFromSubmerged = await page.evaluate(() => window.seaBattleScenarioTest.respawnPlayerForTest("submerged"));
+  expect(respawnedFromSubmerged.depthState).toBe("surface");
+  expect(respawnedFromSubmerged.depthOffset).toBe(0);
+  expect(respawnedFromSubmerged.torpedoView).toBe("hidden");
+  expect(respawnedFromSubmerged.observationPeriscope).toBe("hidden");
+  expect(respawnedFromSubmerged.cameraY).toBeGreaterThan(0);
+
+  await page.evaluate(() => window.seaBattleScenarioTest.setSubmarineDepthState("submerged"));
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.radarDepthMode), { timeout: 12_000 }).toBe("submerged");
+  await page.keyboard.press("2");
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.depthState)).toBe("periscope");
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => Math.abs(snapshot.depthOffset - snapshot.targetDepthOffset)), { timeout: 12_000 }).toBeLessThan(0.05);
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.submarinePeriscopeMode), { timeout: 14_000 }).toBe("drive");
+
   await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("active");
   const targetPeriscope = await diveSnapshot(page);
-  expect(targetPeriscope.cameraY).toBeGreaterThan(samples[targetDepthIndex].cameraY);
-  expect(targetPeriscope.cameraY).toBeLessThan(0.5);
+  expect(targetPeriscope.cameraY).toBeGreaterThan(0.03);
+  expect(targetPeriscope.cameraY).toBeLessThan(0.55);
   await expect(page.locator(".torpedo-scope-line-center")).toBeVisible();
   await expect(page.locator(".torpedo-scope-range-mid")).toBeHidden();
   await page.keyboard.press("Z");

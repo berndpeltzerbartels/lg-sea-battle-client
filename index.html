@@ -386,24 +386,33 @@
       <div class="observation-periscope" aria-hidden="true">
         <div class="observation-periscope-vignette"></div>
         <div class="observation-periscope-heading" aria-hidden="true">
-          <span class="observation-periscope-mode-toggle" aria-hidden="true">
-            <button id="observationPeriscopeSteeringButton" type="button"><kbd>M</kbd> Ruder</button>
-            <button id="observationPeriscopeControlButton" type="button"><kbd>M</kbd> Sehrohr</button>
-          </span>
-          <button id="observationPeriscopeAlignButton" type="button"><kbd>H</kbd> Ausrichten</button>
           <span class="observation-periscope-depth-hint"><kbd>Shift</kbd><kbd>↑</kbd><kbd>↓</kbd> Tiefe</span>
         </div>
         <div class="observation-periscope-glass">
+          <span class="submarine-periscope-mode-panel" aria-hidden="true">
+            <button type="button" data-submarine-periscope-mode="drive"><kbd>1</kbd> Fahrt</button>
+            <button type="button" data-submarine-periscope-mode="aiming"><kbd>2</kbd> Zielen</button>
+            <button type="button" data-submarine-periscope-mode="observation"><kbd>3</kbd> 360° Periskop</button>
+          </span>
           <span class="observation-periscope-reference-line"></span>
           <i id="observationPeriscopeHeadingNeedle" class="observation-periscope-course-needle"></i>
           <span class="observation-periscope-scale observation-periscope-bearing-scale">
-            <span class="observation-periscope-scale-title">Peilung <strong id="observationPeriscopeBearingValue">000°</strong></span>
+            <span class="observation-periscope-scale-title">Zielen <strong id="observationPeriscopeBearingValue">000°</strong></span>
             <span class="observation-periscope-scale-label" style="--scale-label-top: 0%">N 000</span>
             <span class="observation-periscope-scale-label" style="--scale-label-top: 25%">090</span>
             <span class="observation-periscope-scale-label" style="--scale-label-top: 50%">180</span>
             <span class="observation-periscope-scale-label" style="--scale-label-top: 75%">270</span>
             <span class="observation-periscope-scale-label" style="--scale-label-top: 100%">N 360</span>
             <span id="observationPeriscopeHeadingMarker" class="observation-periscope-scale-marker"></span>
+          </span>
+          <span class="observation-periscope-edge-scale observation-periscope-yaw-scale">
+            <span class="observation-periscope-edge-title">Periskop</span>
+            <span class="observation-periscope-edge-label" style="--scale-label-left: 0%">180</span>
+            <span class="observation-periscope-edge-label" style="--scale-label-left: 25%">90</span>
+            <span class="observation-periscope-edge-label" style="--scale-label-left: 50%">0</span>
+            <span class="observation-periscope-edge-label" style="--scale-label-left: 75%">90</span>
+            <span class="observation-periscope-edge-label" style="--scale-label-left: 100%">180</span>
+            <span id="observationPeriscopeYawMarker" class="observation-periscope-edge-marker"></span>
           </span>
           <span class="observation-periscope-scale observation-periscope-zoom-scale">
             <span class="observation-periscope-scale-title">Zoom <kbd>Z</kbd></span>
@@ -416,35 +425,43 @@
       </div>
       <div class="torpedo-scope" aria-hidden="true">
         <div class="torpedo-scope-vignette"></div>
-        <div class="torpedo-scope-zoom" aria-hidden="true">
-          <span>Zoom</span>
-          <strong id="torpedoScopeZoomValue">I</strong>
-          <small><kbd>Z</kbd> Wheel</small>
-        </div>
         <div class="torpedo-scope-glass">
+          <span class="submarine-periscope-mode-panel" aria-hidden="true">
+            <button type="button" data-submarine-periscope-mode="drive"><kbd>1</kbd> Fahrt</button>
+            <button type="button" data-submarine-periscope-mode="aiming"><kbd>2</kbd> Zielen</button>
+            <button type="button" data-submarine-periscope-mode="observation"><kbd>3</kbd> 360° Periskop</button>
+          </span>
           <span class="torpedo-scope-line torpedo-scope-line-left"></span>
           <span class="torpedo-scope-line torpedo-scope-line-right"></span>
           <span class="torpedo-scope-line torpedo-scope-line-center"></span>
           <span class="torpedo-scope-range torpedo-scope-range-near"></span>
           <span class="torpedo-scope-range torpedo-scope-range-mid"></span>
           <span class="torpedo-scope-range torpedo-scope-range-far"></span>
-          <span class="torpedo-scope-scale torpedo-scope-time-scale">
-            <span class="torpedo-scope-scale-title">Sek.</span>
-            <span class="torpedo-scope-scale-label torpedo-scope-scale-label-top">30</span>
-            <span class="torpedo-scope-scale-label torpedo-scope-scale-label-midtop">20</span>
-            <span class="torpedo-scope-scale-label torpedo-scope-scale-label-near">10</span>
-            <span class="torpedo-scope-scale-label torpedo-scope-scale-label-midbottom">5</span>
-            <span class="torpedo-scope-scale-label torpedo-scope-scale-label-bottom">0</span>
-            <span id="torpedoScopeTimeMarker" class="torpedo-scope-scale-marker" aria-hidden="true"></span>
+          <span class="torpedo-scope-scale torpedo-scope-rudder-scale">
+            <span class="torpedo-scope-scale-title">Ruder</span>
+            <span class="torpedo-scope-scale-label" style="--scale-label-left: 0%">P 35</span>
+            <span class="torpedo-scope-scale-label" style="--scale-label-left: 25%">P 18</span>
+            <span class="torpedo-scope-scale-label" style="--scale-label-left: 50%">0</span>
+            <span class="torpedo-scope-scale-label" style="--scale-label-left: 75%">S 18</span>
+            <span class="torpedo-scope-scale-label" style="--scale-label-left: 100%">S 35</span>
+            <span id="torpedoScopeRudderMarker" class="torpedo-scope-scale-marker" aria-hidden="true"></span>
           </span>
           <span class="torpedo-scope-scale torpedo-scope-bearing-scale">
-            <span class="torpedo-scope-scale-title">Peilung <strong id="torpedoScopeBearingValue">000°</strong></span>
+            <span class="torpedo-scope-scale-title torpedo-scope-bearing-title">Zielen <strong id="torpedoScopeBearingValue">000°</strong>/<strong id="torpedoScopeTargetBearingValue">000°</strong></span>
             <span class="torpedo-scope-scale-label" style="--scale-label-top: 0%">N 000</span>
             <span class="torpedo-scope-scale-label" style="--scale-label-top: 25%">090</span>
             <span class="torpedo-scope-scale-label" style="--scale-label-top: 50%">180</span>
             <span class="torpedo-scope-scale-label" style="--scale-label-top: 75%">270</span>
             <span class="torpedo-scope-scale-label" style="--scale-label-top: 100%">N 360</span>
             <span id="torpedoScopeBearingMarker" class="torpedo-scope-scale-marker" aria-hidden="true"></span>
+            <span id="torpedoScopeTargetBearingMarker" class="torpedo-scope-scale-marker torpedo-scope-target-bearing-marker" aria-hidden="true"></span>
+          </span>
+          <span class="torpedo-scope-scale torpedo-scope-zoom-scale">
+            <span class="torpedo-scope-scale-title">Zoom <strong id="torpedoScopeZoomValue">I</strong> <kbd>Z</kbd></span>
+            <span class="torpedo-scope-scale-label" style="--scale-label-top: 0%">III</span>
+            <span class="torpedo-scope-scale-label" style="--scale-label-top: 50%">II</span>
+            <span class="torpedo-scope-scale-label" style="--scale-label-top: 100%">I</span>
+            <span id="torpedoScopeZoomMarker" class="torpedo-scope-scale-marker" aria-hidden="true"></span>
           </span>
         </div>
       </div>
