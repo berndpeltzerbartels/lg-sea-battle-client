@@ -375,12 +375,16 @@ const cannonSightLevels = [
 const submarineTorpedoScopeZoomLevels = [
   { label: "I", fov: 0.42 },
   { label: "II", fov: 0.28 },
-  { label: "III", fov: 0.18 }
+  { label: "III", fov: 0.18 },
+  { label: "IV", fov: 0.12 },
+  { label: "V", fov: 0.08 }
 ];
 const submarineObservationPeriscopeZoomLevels = [
   { label: "I", fov: 0.64 },
   { label: "II", fov: 0.44 },
-  { label: "III", fov: 0.3 }
+  { label: "III", fov: 0.3 },
+  { label: "IV", fov: 0.2 },
+  { label: "V", fov: 0.13 }
 ];
 const cannonFireCooldownSeconds = 1.0;
 const cannonProjectileSpeed = 1455 * torpedoBoatVisualScale;
@@ -1036,6 +1040,8 @@ let heldObservationPeriscopeYawStartTime = 0;
 let heldObservationPeriscopePitchDirection = 0;
 let torpedoScopeZoomLevelIndex = 0;
 let observationPeriscopeZoomLevelIndex = 0;
+let torpedoScopeZoomCycleDirection = 1;
+let observationPeriscopeZoomCycleDirection = 1;
 let submarinePeriscopeMode = submarinePeriscopeModes.drive;
 let submarineBearingAlignTarget = heading;
 let submarineBearingAlignReturnToStop = false;
@@ -2926,14 +2932,47 @@ function currentSubmarineObservationPeriscopeZoomLevel() {
 }
 
 function cycleTorpedoScopeZoomLevel() {
-  torpedoScopeZoomLevelIndex = (torpedoScopeZoomLevelIndex + 1) % submarineTorpedoScopeZoomLevels.length;
+  torpedoScopeZoomLevelIndex = nextPingPongZoomIndex(
+    torpedoScopeZoomLevelIndex,
+    submarineTorpedoScopeZoomLevels.length,
+    "torpedo"
+  );
   document.body.dataset.torpedoScopeZoom = currentSubmarineTorpedoScopeZoomLevel().label;
   updateTorpedoScopeZoomDisplay();
 }
 
 function cycleObservationPeriscopeZoomLevel() {
-  observationPeriscopeZoomLevelIndex = (observationPeriscopeZoomLevelIndex + 1) % submarineObservationPeriscopeZoomLevels.length;
+  observationPeriscopeZoomLevelIndex = nextPingPongZoomIndex(
+    observationPeriscopeZoomLevelIndex,
+    submarineObservationPeriscopeZoomLevels.length,
+    "observation"
+  );
   updateObservationPeriscopeZoomDisplay();
+}
+
+function nextPingPongZoomIndex(index, levelCount, scope) {
+  if (levelCount <= 1) return 0;
+  let direction = scope === "torpedo"
+    ? torpedoScopeZoomCycleDirection
+    : observationPeriscopeZoomCycleDirection;
+  const nextIndex = index + direction;
+  if (nextIndex >= levelCount) {
+    direction = -1;
+  } else if (nextIndex < 0) {
+    direction = 1;
+  }
+  const boundedIndex = clamp(index + direction, 0, levelCount - 1);
+  if (boundedIndex === levelCount - 1) {
+    direction = -1;
+  } else if (boundedIndex === 0) {
+    direction = 1;
+  }
+  if (scope === "torpedo") {
+    torpedoScopeZoomCycleDirection = direction;
+  } else {
+    observationPeriscopeZoomCycleDirection = direction;
+  }
+  return boundedIndex;
 }
 
 function updateCannonSightFromWheel(event) {
@@ -2951,6 +2990,7 @@ function updateCannonSightFromWheel(event) {
 function changeTorpedoScopeZoomLevel(direction) {
   const nextIndex = clamp(torpedoScopeZoomLevelIndex + direction, 0, submarineTorpedoScopeZoomLevels.length - 1);
   torpedoScopeZoomLevelIndex = nextIndex;
+  torpedoScopeZoomCycleDirection = direction >= 0 ? 1 : -1;
   document.body.dataset.torpedoScopeZoom = currentSubmarineTorpedoScopeZoomLevel().label;
   updateTorpedoScopeZoomDisplay();
 }
@@ -2970,6 +3010,7 @@ function updateTorpedoScopeZoomFromWheel(event) {
 function changeObservationPeriscopeZoomLevel(direction) {
   const nextIndex = clamp(observationPeriscopeZoomLevelIndex + direction, 0, submarineObservationPeriscopeZoomLevels.length - 1);
   observationPeriscopeZoomLevelIndex = nextIndex;
+  observationPeriscopeZoomCycleDirection = direction >= 0 ? 1 : -1;
   updateObservationPeriscopeZoomDisplay();
 }
 
