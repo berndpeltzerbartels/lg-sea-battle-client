@@ -479,6 +479,7 @@ document.body.dataset.playerId = playerId;
 document.body.dataset.playerInitials = playerInitials;
 document.body.dataset.playerVehicle = playerVehicleType;
 document.body.dataset.playerDepthState = playerSubmarineDepthState;
+document.body.dataset.periscopeInk = "dark";
 document.body.dataset.observationPeriscope = "hidden";
 document.body.dataset.observationPeriscopeZoom = "I";
 document.body.dataset.submarinePeriscopeMode = "drive";
@@ -4022,6 +4023,7 @@ function setPlayerSubmarineDepthState(depthState) {
     heldObservationPeriscopePitchDirection = 0;
   }
   document.body.dataset.playerDepthState = playerSubmarineDepthState;
+  updatePlayerPeriscopeInkMode();
   updateSubmarineDepthUi();
   updateOwnSubmarineDepthVisibility();
   if (playerSubmarineDepthState === submarineDepthStates.surface) {
@@ -4086,6 +4088,16 @@ function getPlayerEffectiveSubmarineDepthState() {
   return submarineDepthStates.surface;
 }
 
+function getPlayerPeriscopeInkMode() {
+  if (!submarineMode) return "dark";
+  const periscopeDepth = Math.abs(submarineDepthOffsets.periscope);
+  return Math.abs(playerSubmarineDepthOffset) > periscopeDepth + 0.06 ? "light" : "dark";
+}
+
+function updatePlayerPeriscopeInkMode() {
+  document.body.dataset.periscopeInk = getPlayerPeriscopeInkMode();
+}
+
 function getSubmarineWakeExposureRatio(depthOffset) {
   const depth = Math.abs(depthOffset ?? 0);
   return 1 - smoothstep(submarineWakeFadeStartDepth, submarineWakeFadeEndDepth, depth);
@@ -4101,6 +4113,7 @@ function updatePlayerSubmarineDiveMotion(dt) {
   }
   const targetLift = getSubmarinePeriscopeLiftTarget(playerSubmarineDepthState, playerSubmarineDepthOffset);
   playerSubmarinePeriscopeLift = moveValueToward(playerSubmarinePeriscopeLift, targetLift, submarinePeriscopeLiftSpeed * dt);
+  updatePlayerPeriscopeInkMode();
   updateSubmarinePeriscopeExtension(boat, playerSubmarinePeriscopeLift);
   updateSubmarineFlakStowVisual(boat.sternFlak, playerSubmarineDepthOffset, !flakViewActive);
   if (submarineBridgeDiveHoldActive
@@ -8962,6 +8975,7 @@ function installScenarioTestHooks() {
         observationPeriscope: document.body.dataset.observationPeriscope ?? "hidden",
         torpedoView: document.body.dataset.torpedoView ?? "hidden",
         submarinePeriscopeMode: document.body.dataset.submarinePeriscopeMode ?? "drive",
+        periscopeInk: document.body.dataset.periscopeInk ?? "dark",
         observationYawDeg: Number((normalizeAngle(observationPeriscopeYaw) * 180 / Math.PI).toFixed(1)),
         speed: Number(speed.toFixed(3)),
         engineOrder,

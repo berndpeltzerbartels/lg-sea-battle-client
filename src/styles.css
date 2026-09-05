@@ -1191,6 +1191,12 @@ body[data-player-vehicle="submarine"] .align-weapons-group {
 }
 
 .torpedo-scope {
+  --periscope-ink: rgb(1 7 8 / 72%);
+  --periscope-ink-strong: rgb(1 7 8 / 82%);
+  --periscope-ink-bold: rgb(1 7 8 / 88%);
+  --periscope-ink-scale: rgb(1 7 8 / 70%);
+  --periscope-ink-soft: rgb(1 7 8 / 52%);
+  --periscope-key-fill: rgb(255 255 255 / 18%);
   position: absolute;
   inset: 0;
   z-index: 2;
@@ -1291,7 +1297,7 @@ body[data-torpedo-view="active"] .torpedo-scope {
 .torpedo-scope-scale {
   position: absolute;
   display: block;
-  background: rgb(1 7 8 / 74%);
+  background: var(--periscope-ink);
   box-shadow: 0 0 8px rgb(155 229 223 / 7%);
 }
 
@@ -1319,11 +1325,11 @@ body[data-torpedo-view="active"] .torpedo-scope {
   transform: translateX(-50%);
   background: linear-gradient(
     180deg,
-    rgb(1 7 8 / 78%) 0 2%,
+    var(--periscope-ink-strong) 0 2%,
     transparent 2% 28.6%,
-    rgb(1 7 8 / 78%) 28.6% 41.6%,
+    var(--periscope-ink-strong) 28.6% 41.6%,
     transparent 41.6% 58.4%,
-    rgb(1 7 8 / 78%) 58.4% 71.4%,
+    var(--periscope-ink-strong) 58.4% 71.4%,
     transparent 71.4% 100%
   );
 }
@@ -1354,7 +1360,7 @@ body[data-torpedo-view="active"] .torpedo-scope {
   height: 44%;
   background: repeating-linear-gradient(
     180deg,
-    rgb(1 7 8 / 70%) 0 2px,
+    var(--periscope-ink-scale) 0 2px,
     transparent 2px 8px
   );
 }
@@ -1365,7 +1371,7 @@ body[data-torpedo-view="active"] .torpedo-scope {
   position: absolute;
   width: 10px;
   height: 2px;
-  background: rgb(1 7 8 / 70%);
+  background: var(--periscope-ink-scale);
 }
 
 .torpedo-scope-scale::before {
@@ -1379,7 +1385,7 @@ body[data-torpedo-view="active"] .torpedo-scope {
 .torpedo-scope-scale-title,
 .torpedo-scope-scale-label {
   position: absolute;
-  color: rgb(1 7 8 / 72%);
+  color: var(--periscope-ink);
   font: 800 11px/1 Inter, Arial, sans-serif;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -1393,7 +1399,7 @@ body[data-torpedo-view="active"] .torpedo-scope {
 
 .torpedo-scope-scale-title strong {
   margin-left: 5px;
-  color: rgb(1 7 8 / 82%);
+  color: var(--periscope-ink-strong);
   font: inherit;
 }
 
@@ -1404,10 +1410,10 @@ body[data-torpedo-view="active"] .torpedo-scope {
   place-items: center;
   margin-left: 5px;
   padding: 0 3px;
-  border: 1px solid rgb(1 7 8 / 52%);
+  border: 1px solid var(--periscope-ink-soft);
   border-radius: 4px;
-  background: rgb(255 255 255 / 18%);
-  color: rgb(1 7 8 / 82%);
+  background: var(--periscope-key-fill);
+  color: var(--periscope-ink-strong);
   font: inherit;
 }
 
@@ -1417,7 +1423,7 @@ body[data-torpedo-view="active"] .torpedo-scope {
   bottom: 19%;
   width: 34%;
   height: 30px;
-  background: linear-gradient(90deg, rgb(1 7 8 / 0%) 0, rgb(1 7 8 / 72%) 7%, rgb(1 7 8 / 72%) 93%, rgb(1 7 8 / 0%) 100%) 50% 62% / 100% 2px no-repeat;
+  background: linear-gradient(90deg, transparent 0, var(--periscope-ink) 7%, var(--periscope-ink) 93%, transparent 100%) 50% 62% / 100% 2px no-repeat;
   box-shadow: none;
 }
 
@@ -1503,7 +1509,7 @@ body[data-torpedo-view="active"] .torpedo-scope {
   top: 11px;
   width: 1px;
   height: 12px;
-  background: rgb(1 7 8 / 70%);
+  background: var(--periscope-ink-scale);
   transform: translateX(-50%);
 }
 
@@ -1513,7 +1519,7 @@ body[data-torpedo-view="active"] .torpedo-scope {
   width: 14px;
   height: 3px;
   border-radius: 999px;
-  background: rgb(1 7 8 / 82%);
+  background: var(--periscope-ink-strong);
   box-shadow: 0 0 5px rgb(1 7 8 / 20%);
   transform: translateY(-50%);
 }
@@ -1537,7 +1543,7 @@ body[data-torpedo-view="active"] .torpedo-scope {
   width: min(7.5vw, 57px);
   height: 2px;
   border-radius: 0;
-  background: rgb(1 7 8 / 78%);
+  background: var(--periscope-ink-strong);
   opacity: 0.78;
 }
 
@@ -1593,9 +1599,9 @@ body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-sc
   height: 68%;
   background: linear-gradient(
     180deg,
-    rgb(1 7 8 / 78%) 0 42%,
+    var(--periscope-ink-strong) 0 42%,
     transparent 42% 58%,
-    rgb(1 7 8 / 78%) 58% 100%
+    var(--periscope-ink-strong) 58% 100%
   );
 }
 
@@ -1719,6 +1725,12 @@ body[data-cannon-reloading="true"] .cannon-scope-glass::after {
 }
 
 .observation-periscope {
+  --periscope-ink: rgb(1 7 8 / 72%);
+  --periscope-ink-strong: rgb(1 7 8 / 82%);
+  --periscope-ink-bold: rgb(1 7 8 / 88%);
+  --periscope-ink-scale: rgb(1 7 8 / 70%);
+  --periscope-ink-soft: rgb(1 7 8 / 52%);
+  --periscope-key-fill: rgb(255 255 255 / 18%);
   position: absolute;
   inset: 0;
   z-index: 2;
@@ -1823,10 +1835,10 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
   min-width: 0;
   height: 20px;
   padding: 0 7px;
-  border: 1px solid rgb(1 7 8 / 44%);
+  border: 1px solid var(--periscope-ink-soft);
   border-radius: 5px;
   background: rgb(255 255 255 / 8%);
-  color: rgb(1 7 8 / 78%);
+  color: var(--periscope-ink-strong);
   font: 900 9px/1 Inter, Arial, sans-serif;
   text-transform: uppercase;
   white-space: nowrap;
@@ -1834,9 +1846,9 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
 
 .submarine-periscope-mode-panel button.is-active,
 .submarine-periscope-mode-panel button.is-aligning {
-  border-color: rgb(1 7 8 / 72%);
+  border-color: var(--periscope-ink);
   background: rgb(255 255 255 / 24%);
-  color: rgb(1 7 8 / 92%);
+  color: var(--periscope-ink-bold);
   box-shadow: 0 0 8px rgb(1 7 8 / 12%);
 }
 
@@ -1873,7 +1885,7 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
   z-index: 3;
   width: 1px;
   height: 38px;
-  background: rgb(1 7 8 / 70%);
+  background: var(--periscope-ink-scale);
   transform: translateX(-50%);
 }
 
@@ -1894,7 +1906,7 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
   width: 2px;
   height: 26px;
   border-radius: 999px;
-  background: rgb(1 7 8 / 86%);
+  background: var(--periscope-ink-bold);
   box-shadow: 0 0 6px rgb(1 7 8 / 18%);
   transform: translateX(-50%);
 }
@@ -1905,7 +1917,7 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
   left: 50%;
   top: 3.2%;
   border-right: 4px solid transparent;
-  border-bottom: 7px solid rgb(1 7 8 / 86%);
+  border-bottom: 7px solid var(--periscope-ink-bold);
   border-left: 4px solid transparent;
   transform: translateX(-50%);
 }
@@ -1918,7 +1930,7 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
   height: 44%;
   background: repeating-linear-gradient(
     180deg,
-    rgb(1 7 8 / 70%) 0 2px,
+    var(--periscope-ink-scale) 0 2px,
     transparent 2px 8px
   );
 }
@@ -1929,7 +1941,7 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
   position: absolute;
   width: 10px;
   height: 2px;
-  background: rgb(1 7 8 / 70%);
+  background: var(--periscope-ink-scale);
 }
 
 .observation-periscope-scale::before {
@@ -1961,7 +1973,7 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
 .observation-periscope-scale-title,
 .observation-periscope-scale-label {
   position: absolute;
-  color: rgb(1 7 8 / 72%);
+  color: var(--periscope-ink);
   font: 800 11px/1 Inter, Arial, sans-serif;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -1975,7 +1987,7 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
 
 .observation-periscope-scale-title strong {
   margin-left: 5px;
-  color: rgb(1 7 8 / 82%);
+  color: var(--periscope-ink-strong);
   font: inherit;
 }
 
@@ -1986,10 +1998,10 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
   place-items: center;
   margin-left: 5px;
   padding: 0 3px;
-  border: 1px solid rgb(1 7 8 / 52%);
+  border: 1px solid var(--periscope-ink-soft);
   border-radius: 4px;
-  background: rgb(255 255 255 / 18%);
-  color: rgb(1 7 8 / 82%);
+  background: var(--periscope-key-fill);
+  color: var(--periscope-ink-strong);
   font: inherit;
 }
 
@@ -2023,7 +2035,7 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
   width: 14px;
   height: 3px;
   border-radius: 999px;
-  background: rgb(1 7 8 / 82%);
+  background: var(--periscope-ink-strong);
   box-shadow: 0 0 5px rgb(1 7 8 / 20%);
   transform: translateY(-50%);
 }
@@ -2044,7 +2056,7 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
   height: 30px;
   border: 0;
   border-radius: 0;
-  background: linear-gradient(90deg, rgb(1 7 8 / 0%) 0, rgb(1 7 8 / 72%) 7%, rgb(1 7 8 / 72%) 93%, rgb(1 7 8 / 0%) 100%) 50% 62% / 100% 2px no-repeat;
+  background: linear-gradient(90deg, transparent 0, var(--periscope-ink) 7%, var(--periscope-ink) 93%, transparent 100%) 50% 62% / 100% 2px no-repeat;
   box-shadow: none;
   opacity: 1;
 }
@@ -2064,7 +2076,7 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
   top: 10px;
   bottom: 0;
   width: 2px;
-  background: rgb(1 7 8 / 74%);
+  background: var(--periscope-ink);
   transform: translateX(-50%);
 }
 
@@ -2072,7 +2084,7 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
   position: absolute;
   left: 0;
   top: -9px;
-  color: rgb(1 7 8 / 76%);
+  color: var(--periscope-ink-strong);
   font: 900 10px/1 Inter, Arial, sans-serif;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -2082,7 +2094,7 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
   position: absolute;
   left: var(--scale-label-left);
   top: 5px;
-  color: rgb(1 7 8 / 68%);
+  color: var(--periscope-ink);
   font: 900 9px/1 Inter, Arial, sans-serif;
   letter-spacing: 0;
   transform: translateX(-50%);
@@ -2096,7 +2108,7 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
   top: 11px;
   width: 1px;
   height: 12px;
-  background: rgb(1 7 8 / 70%);
+  background: var(--periscope-ink-scale);
   transform: translateX(-50%);
 }
 
@@ -2107,7 +2119,7 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
   bottom: -1px;
   width: 2px;
   border-radius: 999px;
-  background: rgb(1 7 8 / 88%);
+  background: var(--periscope-ink-bold);
   box-shadow: 0 0 5px rgb(1 7 8 / 22%);
   transform: translateX(-50%);
 }
@@ -2268,9 +2280,9 @@ body[data-player-vehicle="submarine"][data-torpedo-view="active"] .torpedo-scope
   background: linear-gradient(
     180deg,
     transparent 0 28.6%,
-    rgb(1 7 8 / 78%) 28.6% 41.6%,
+    var(--periscope-ink-strong) 28.6% 41.6%,
     transparent 41.6% 58.4%,
-    rgb(1 7 8 / 78%) 58.4% 71.4%,
+    var(--periscope-ink-strong) 58.4% 71.4%,
     transparent 71.4% 100%
   );
 }
@@ -2285,89 +2297,14 @@ body[data-player-vehicle="submarine"][data-player-depth-state="submerged"][data-
   display: none;
 }
 
-body[data-underwater-view="true"] .observation-periscope-scale,
-body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-bearing-scale,
-body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-zoom-scale,
-body[data-player-depth-state="submerged"] .observation-periscope-scale,
-body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-bearing-scale,
-body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-zoom-scale {
-  background: repeating-linear-gradient(
-    180deg,
-    rgb(247 251 255 / 72%) 0 2px,
-    transparent 2px 8px
-  );
-}
-
-body[data-underwater-view="true"] .observation-periscope-scale-title,
-body[data-underwater-view="true"] .observation-periscope-scale-label,
-body[data-underwater-view="true"] .observation-periscope-edge-title,
-body[data-underwater-view="true"] .observation-periscope-edge-label,
-body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-scale-title,
-body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-scale-label,
-body[data-player-depth-state="submerged"] .observation-periscope-scale-title,
-body[data-player-depth-state="submerged"] .observation-periscope-scale-label,
-body[data-player-depth-state="submerged"] .observation-periscope-edge-title,
-body[data-player-depth-state="submerged"] .observation-periscope-edge-label,
-body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-scale-title,
-body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-scale-label {
-  color: rgb(247 251 255 / 92%);
-}
-
-body[data-underwater-view="true"] .observation-periscope-scale-title strong,
-body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-scale-title strong,
-body[data-player-depth-state="submerged"] .observation-periscope-scale-title strong,
-body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-scale-title strong {
-  color: #ffffff;
-}
-
-body[data-underwater-view="true"] .observation-periscope-scale-title kbd,
-body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-scale-title kbd,
-body[data-player-depth-state="submerged"] .observation-periscope-scale-title kbd,
-body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-scale-title kbd {
-  border-color: rgb(247 251 255 / 62%);
-  background: rgb(247 251 255 / 18%);
-  color: #ffffff;
-}
-
-body[data-underwater-view="true"] .observation-periscope-bearing-scale::before,
-body[data-underwater-view="true"] .observation-periscope-bearing-scale::after,
-body[data-underwater-view="true"] .observation-periscope-zoom-scale::before,
-body[data-underwater-view="true"] .observation-periscope-zoom-scale::after,
-body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-scale::before,
-body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-scale::after,
-body[data-player-depth-state="submerged"] .observation-periscope-bearing-scale::before,
-body[data-player-depth-state="submerged"] .observation-periscope-bearing-scale::after,
-body[data-player-depth-state="submerged"] .observation-periscope-zoom-scale::before,
-body[data-player-depth-state="submerged"] .observation-periscope-zoom-scale::after,
-body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-scale::before,
-body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-scale::after {
-  background: rgb(247 251 255 / 72%);
-}
-
-body[data-underwater-view="true"] .observation-periscope-edge-scale,
-body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-rudder-scale,
-body[data-player-depth-state="submerged"] .observation-periscope-edge-scale,
-body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-rudder-scale {
-  background: linear-gradient(90deg, rgb(247 251 255 / 0%) 0, rgb(247 251 255 / 72%) 7%, rgb(247 251 255 / 72%) 93%, rgb(247 251 255 / 0%) 100%) 50% 62% / 100% 2px no-repeat;
-}
-
-body[data-underwater-view="true"] .observation-periscope-edge-label::after,
-body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-rudder-scale .torpedo-scope-scale-label::after,
-body[data-player-depth-state="submerged"] .observation-periscope-edge-label::after,
-body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-rudder-scale .torpedo-scope-scale-label::after {
-  background: rgb(247 251 255 / 68%);
-}
-
-body[data-underwater-view="true"] .observation-periscope-scale-marker,
-body[data-underwater-view="true"] .observation-periscope-edge-marker,
-body[data-underwater-view="true"] .observation-periscope-direction-arrow,
-body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-scale-marker,
-body[data-player-depth-state="submerged"] .observation-periscope-scale-marker,
-body[data-player-depth-state="submerged"] .observation-periscope-edge-marker,
-body[data-player-depth-state="submerged"] .observation-periscope-direction-arrow,
-body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-scale-marker {
-  background: rgb(247 251 255 / 86%);
-  box-shadow: 0 0 7px rgb(178 236 242 / 30%);
+body[data-periscope-ink="light"] .torpedo-scope,
+body[data-periscope-ink="light"] .observation-periscope {
+  --periscope-ink: rgb(247 251 255 / 72%);
+  --periscope-ink-strong: rgb(247 251 255 / 82%);
+  --periscope-ink-bold: rgb(247 251 255 / 90%);
+  --periscope-ink-scale: rgb(247 251 255 / 70%);
+  --periscope-ink-soft: rgb(247 251 255 / 52%);
+  --periscope-key-fill: rgb(247 251 255 / 12%);
 }
 
 body[data-player-vehicle="submarine"][data-torpedo-view="active"] {
@@ -2459,7 +2396,7 @@ body[data-player-vehicle="submarine"][data-torpedo-view="active"] .rudder-title 
   position: absolute;
   z-index: 2;
   display: block;
-  background: rgb(1 7 8 / 72%);
+  background: var(--periscope-ink);
 }
 
 .observation-periscope-horizon {
@@ -2471,9 +2408,9 @@ body[data-player-vehicle="submarine"][data-torpedo-view="active"] .rudder-title 
   background:
     linear-gradient(
       90deg,
-      rgb(1 7 8 / 70%) 0 39%,
+      var(--periscope-ink-scale) 0 39%,
       transparent 39% 61%,
-      rgb(1 7 8 / 70%) 61% 100%
+      var(--periscope-ink-scale) 61% 100%
     );
 }
 
@@ -2486,9 +2423,9 @@ body[data-player-vehicle="submarine"][data-torpedo-view="active"] .rudder-title 
   background:
     linear-gradient(
       180deg,
-      rgb(1 7 8 / 70%) 0 42%,
+      var(--periscope-ink-scale) 0 42%,
       transparent 42% 58%,
-      rgb(1 7 8 / 70%) 58% 100%
+      var(--periscope-ink-scale) 58% 100%
     );
 }
 
@@ -2496,7 +2433,7 @@ body[data-player-vehicle="submarine"][data-torpedo-view="active"] .rudder-title 
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  border: 1px solid rgb(1 7 8 / 42%);
+  border: 1px solid var(--periscope-ink-soft);
   border-radius: 50%;
   background: transparent;
 }

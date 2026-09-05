@@ -273,6 +273,7 @@ test("submarine periscope depth keeps the observation view above water", async (
   expect(initial.radarDepthMode).toBe("normal");
   expect(initial.radarRange).toBeGreaterThan(0);
   expect(initial.submarineWakeExposure).toBe(1);
+  expect(initial.periscopeInk).toBe("dark");
 
   await page.evaluate(() => window.seaBattleScenarioTest.setPlayerNavigationState({ engineOrder: 6, speed: 0 }));
   const halfAheadAtSurface = await diveSnapshot(page);
@@ -313,6 +314,7 @@ test("submarine periscope depth keeps the observation view above water", async (
   expect(samples[targetDepthIndex].radarRange).toBeLessThan(initial.radarRange);
   expect(samples[targetDepthIndex].submarineWakeExposure).toBe(0);
   expect(samples[targetDepthIndex].bowWakeVisible).toBe(false);
+  expect(samples[targetDepthIndex].periscopeInk).toBe("dark");
 
   await page.keyboard.press("3");
   await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.observationPeriscope)).toBe("active");
@@ -356,13 +358,10 @@ test("submarine periscope depth keeps the observation view above water", async (
   expect(submergedRadar.radarTargetLineMode).toBe("torpedo");
   expect(submergedRadar.radarRange).toBeGreaterThan(0);
   expect(submergedRadar.radarRange).toBeLessThan(samples[targetDepthIndex].radarRange);
+  expect(submergedRadar.periscopeInk).toBe("light");
   await expect(page.locator(".torpedo-scope-line-center")).toBeHidden();
   await expect(page.locator(".torpedo-scope-line-left")).toBeHidden();
   await expect(page.locator(".torpedo-scope-target-bearing-marker")).toBeHidden();
-  const underwaterLabelColor = await page.locator(".torpedo-scope-zoom-scale .torpedo-scope-scale-title").evaluate((element) => (
-    getComputedStyle(element).color
-  ));
-  expect(underwaterLabelColor).toContain("247, 251, 255");
 
   const respawnedFromSubmerged = await page.evaluate(() => window.seaBattleScenarioTest.respawnPlayerForTest("submerged"));
   expect(respawnedFromSubmerged.depthState).toBe("surface");
@@ -382,6 +381,7 @@ test("submarine periscope depth keeps the observation view above water", async (
   const targetPeriscope = await diveSnapshot(page);
   expect(targetPeriscope.cameraY).toBeGreaterThan(0.03);
   expect(targetPeriscope.cameraY).toBeLessThan(0.55);
+  expect(targetPeriscope.periscopeInk).toBe("dark");
   await expect(page.locator(".torpedo-scope-line-center")).toBeVisible();
   await expect(page.locator(".torpedo-scope-range-mid")).toBeHidden();
   await page.keyboard.press("Z");
