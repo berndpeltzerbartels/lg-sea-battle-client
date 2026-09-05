@@ -906,8 +906,11 @@ window.addEventListener("pageshow", focusGameCanvas);
 window.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
     focusGameCanvas();
+  } else {
+    sendFinalPlayerState();
   }
 });
+window.addEventListener("pagehide", sendFinalPlayerState);
 
 function prepareGameFocus(renderCanvas) {
   if (!renderCanvas) return;
@@ -1136,6 +1139,8 @@ let playerServerHeadingCorrection = 0;
 let playerServerTurnRateCorrection = 0;
 let nextPlayerStateSendTime = 0;
 let playerStateRequestInFlight = false;
+let playerStateRequestStartedAt = 0;
+const playerStateRequestTimeoutSeconds = 2.5;
 let remoteCorrectionSamples = 0;
 let remoteCorrectionTotal = 0;
 let remoteCorrectionMax = 0;
@@ -4478,6 +4483,54 @@ function getPlayerStateEndpoint() {
   return gameEndpoint("/game/player-state");
 }
 
+function createPlayerStatePayload(debugTeleport = false) {
+  return {
+    playerId,
+    teamId: playerTeamId,
+    x: boat.root.position.x,
+    y: scoutPlaneMode
+      ? boat.root.position.y
+      : (submarineMode ? getPlayerSubmarineWaterlineY() : 0),
+    z: boat.root.position.z,
+    heading,
+    speed,
+    verticalSpeed: scoutPlaneMode ? scoutPlaneVerticalSpeed : 0,
+    turnVelocity,
+    engineOrder,
+    rudderDegrees: Math.round(rudderDegrees),
+    flakYaw,
+    flakPitch,
+    cannonYaw,
+    cannonPitch,
+    clientTime: performance.now() / 1000,
+    debugTeleport,
+    vehicleType: playerVehicleType,
+    depthState: submarineMode ? getPlayerEffectiveSubmarineDepthState() : null
+  };
+}
+
+function sendFinalPlayerState() {
+  if (sideViewSandboxMode || playerDamageState !== "active" || !playerId || !playerTeamId) return;
+  const payload = JSON.stringify(createPlayerStatePayload(debugTeleportPending));
+  const endpoint = getPlayerStateEndpoint();
+  if (navigator.sendBeacon) {
+    const sent = navigator.sendBeacon(endpoint, new Blob([payload], { type: "application/json" }));
+    if (sent) {
+      document.body.dataset.playerStateSync = "final-beacon";
+      return;
+    }
+  }
+  fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: payload,
+    keepalive: true
+  }).catch((error) => {
+    document.body.dataset.playerStateSync = "final-error";
+    document.body.dataset.playerStateSyncError = error.message;
+  });
+}
+
 function getFireTorpedoEndpoint() {
   return gameEndpoint("/game/fire-torpedo");
 }
@@ -5303,6 +5356,10 @@ function getOtherServerShips(ships, ownShipId) {
 
 function syncMultiplayerState(now) {
   if (sideViewSandboxMode) return;
+  if (playerStateRequestInFlight && now - playerStateRequestStartedAt > playerStateRequestTimeoutSeconds) {
+    playerStateRequestInFlight = false;
+    document.body.dataset.playerStateSync = "timeout";
+  }
   if (now >= nextPlayerStateSendTime && !playerStateRequestInFlight && playerDamageState === "active") {
     nextPlayerStateSendTime = now + 0.25;
     sendPlayerState();
@@ -5311,35 +5368,17 @@ function syncMultiplayerState(now) {
 
 async function sendPlayerState() {
   playerStateRequestInFlight = true;
+  playerStateRequestStartedAt = time;
   const requestStartedAt = beginHttpRequest();
   const debugTeleport = debugTeleportPending;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), playerStateRequestTimeoutSeconds * 1000);
   try {
     const response = await fetch(getPlayerStateEndpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        playerId,
-        teamId: playerTeamId,
-        x: boat.root.position.x,
-        y: scoutPlaneMode
-          ? boat.root.position.y
-          : (submarineMode ? getPlayerSubmarineWaterlineY() : 0),
-        z: boat.root.position.z,
-        heading,
-        speed,
-        verticalSpeed: scoutPlaneMode ? scoutPlaneVerticalSpeed : 0,
-        turnVelocity,
-        engineOrder,
-        rudderDegrees: Math.round(rudderDegrees),
-        flakYaw,
-        flakPitch,
-        cannonYaw,
-        cannonPitch,
-        clientTime: performance.now() / 1000,
-        debugTeleport,
-        vehicleType: playerVehicleType,
-        depthState: submarineMode ? getPlayerEffectiveSubmarineDepthState() : null
-      })
+      body: JSON.stringify(createPlayerStatePayload(debugTeleport)),
+      signal: controller.signal
     });
     if (!response.ok) {
       if (response.status === 403) {
@@ -5357,8 +5396,10 @@ async function sendPlayerState() {
     document.body.dataset.playerStateSync = "error";
     document.body.dataset.playerStateSyncError = error.message;
   } finally {
+    clearTimeout(timeoutId);
     finishHttpRequest("playerState", requestStartedAt);
     playerStateRequestInFlight = false;
+    playerStateRequestStartedAt = 0;
   }
 }
 
