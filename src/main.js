@@ -611,6 +611,12 @@ if (!scoutPlaneMode && !boat.bowWake) {
     vehicleType: playerVehicleType
   });
 }
+if (submarineMode && !boat.periscopeWake) {
+  boat.periscopeWake = createSubmarinePeriscopeWake(scene, materials, boat.root, `${boat.root.name}_player`, {
+    waterlineY: submarineWaterlineY,
+    periscopeZ: 0.11
+  });
+}
 if (sideViewSandboxMode && submarineMode) {
   createSubmarineCameraDebugMarker(scene, boat);
   window.__seaBattleSideView = { scene, boat };
@@ -1004,6 +1010,8 @@ const submarineBearingAlignMinRudder = 8;
 const submarineBearingAlignStopSpeed = 0.28;
 const submarineEngineStopIndex = engineOrders.findIndex((order) => order.speed === 0);
 const submarineEngineAheadOneThirdIndex = engineOrders.findIndex((order) => order.shortLabel === "1/3");
+const submarinePeriscopeWakeQuietSpeed = engineOrders[submarineEngineAheadOneThirdIndex]?.speed ?? 2.93;
+const submarinePeriscopeWakeFullSpeed = maxSubmarinePeriscopeForwardSpeed;
 
 // Keep propulsion as discrete ship orders, not held-key throttle.
 // Later multiplayer can send this order index plus heading/speed instead of raw input.
@@ -1446,14 +1454,19 @@ scene.onBeforeRenderObservable.add(() => {
       } else {
         updateEnemyBowWake(boat.bowWake, speed * submarineWakeExposure, time, dt, boat.root.position, heading);
       }
+      updateSubmarinePeriscopeWake(boat.periscopeWake, playerSubmarineDepthState, speed, time, dt, boat.root.position, heading);
     }
     if (scoutPlaneMode) {
       updateScoutPlaneVisual(boat, speed, time);
     }
   } else if (playerDamageState === "sinking") {
+    hideEnemyWake(boat.periscopeWake);
     updatePlayerSinking(boat, time);
   } else if (playerDamageState === "air-hit") {
+    hideEnemyWake(boat.periscopeWake);
     updateScoutPlaneFlakHitSequence(boat, time, dt);
+  } else {
+    hideEnemyWake(boat.periscopeWake);
   }
   boat.root.setEnabled(!torpedoScopeActive);
   ocean.position.x = boat.root.position.x;
@@ -4722,7 +4735,7 @@ function setupResetGameControl(button) {
 function openHostSpecialMenu() {
   const debugLabel = debugMapEnabled ? "Debug-Karte aus" : "Debug-Karte an";
   const markerLabel = debugMarkerMapEnabled ? "Marker-Karte aus" : "Marker-Karte an";
-  const choice = window.prompt(`Spezialmenue: 1 = ${debugLabel}, 2 = Spiel neu starten, 3 = ${markerLabel}, 8 = Seitenansicht Sandbox, 9 = Zwei Schiffe`, "1");
+  const choice = window.prompt(`Spezialmenue: 1 = ${debugLabel}, 2 = Spiel neu starten, 3 = ${markerLabel}, 8 = Seitenansicht Sandbox, 9 = Zwei Schiffe, 10 = Zwei Schiffe + Flugzeuge`, "1");
   if (choice === null) return;
   const normalized = choice.trim().toLowerCase();
   if (normalized === "1" || normalized === "debug" || normalized === "karte") {
@@ -4743,6 +4756,10 @@ function openHostSpecialMenu() {
   }
   if (normalized === "9" || normalized === "two-ship-duel" || normalized === "duel" || normalized === "zwei-schiffe") {
     requestHostGameReset("two-ship-duel");
+    return;
+  }
+  if (normalized === "10" || normalized === "two-ship-duel-air" || normalized === "duel-air" || normalized === "zwei-schiffe-flugzeuge") {
+    requestHostGameReset("two-ship-duel-air");
   }
 }
 
@@ -4838,7 +4855,7 @@ async function requestHostGameReset(forcedSetupId = null) {
 
 function promptGameSetupId() {
   const defaultChoice = "1";
-  const choice = window.prompt("World: 1 = Dense land, 2 = Islands, 3 = Escort debug, 4 = Landmark tour, 5 = Dense land crowded, 6 = Dense land crowded reverse, 7 = Scout plane, 8 = Seitenansicht Sandbox, 9 = Zwei Schiffe", defaultChoice);
+  const choice = window.prompt("World: 1 = Dense land, 2 = Islands, 3 = Escort debug, 4 = Landmark tour, 5 = Dense land crowded, 6 = Dense land crowded reverse, 7 = Scout plane, 8 = Seitenansicht Sandbox, 9 = Zwei Schiffe, 10 = Zwei Schiffe + Flugzeuge", defaultChoice);
   if (choice === null) return null;
   const normalized = choice.trim().toLowerCase();
   if (normalized === "2" || normalized === "islands" || normalized === "island") return "islands";
@@ -4849,6 +4866,7 @@ function promptGameSetupId() {
   if (normalized === "7" || normalized === "scout-plane" || normalized === "plane" || normalized === "flugzeug" || normalized === "aufklaerer") return scoutPlaneSetupId;
   if (normalized === "8" || normalized === "side-view-sandbox" || normalized === "sandbox" || normalized === "seitenansicht") return "side-view-sandbox";
   if (normalized === "9" || normalized === "two-ship-duel" || normalized === "duel" || normalized === "zwei-schiffe") return "two-ship-duel";
+  if (normalized === "10" || normalized === "two-ship-duel-air" || normalized === "duel-air" || normalized === "zwei-schiffe-flugzeuge") return "two-ship-duel-air";
   return "dense-land";
 }
 
@@ -5958,8 +5976,11 @@ function updateOrCreateRemoteShip(ship) {
 function disposeRemoteMotion(motion) {
   motion.timers?.forEach((timer) => window.clearTimeout(timer));
   hideEnemyWake(motion.bowWake);
+  hideEnemyWake(motion.periscopeWake);
   motion.bowWake?.root?.getChildMeshes?.().forEach((mesh) => mesh.dispose());
   motion.bowWake?.root?.dispose?.();
+  motion.periscopeWake?.root?.getChildMeshes?.().forEach((mesh) => mesh.dispose());
+  motion.periscopeWake?.root?.dispose?.();
   motion.root?.getChildMeshes?.().forEach((mesh) => mesh.dispose());
   motion.root?.dispose?.();
 }
@@ -7630,6 +7651,10 @@ function createRemoteVehicleModel(scene, materials, name, ship) {
       widthScale: 0.72,
       vehicleType: "submarine"
     });
+    submarine.periscopeWake = createSubmarinePeriscopeWake(scene, materials, submarine.root, name, {
+      waterlineY: submarineWaterlineY,
+      periscopeZ: 0.11
+    });
     if (!submarine.sternFlak && submarine.flakMount) {
       const teamMaterials = getShipTeamMaterials(materials, ship.teamId);
       submarine.sternFlak = createSternFlak(scene, materials, submarine.root, name, teamMaterials, submarine.flakMount.z, false, {
@@ -7770,6 +7795,7 @@ function createEnemyMotion(vehicle, heading, engineOrder, index = 0, serverShip 
     serverState: serverShip?.state ?? "active",
     root,
     bowWake: vehicle.bowWake,
+    periscopeWake: vehicle.periscopeWake,
     propellerRoot: vehicle.propellerRoot,
     propellerRoots: vehicle.propellerRoots,
     shadow: vehicle.shadow,
@@ -7843,6 +7869,7 @@ function applyEnemyMotionEvent(motion, event) {
 function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
   if (motion.state === "sunk") {
     hideEnemyWake(motion.bowWake);
+    hideEnemyWake(motion.periscopeWake);
     return;
   }
 
@@ -7908,6 +7935,7 @@ function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
   } else {
     updateEnemyBowWake(motion.bowWake, motion.speed * submarineWakeExposure, time, dt, motion.root.position, motion.heading);
   }
+  updateSubmarinePeriscopeWake(motion.periscopeWake, motion.depthState, motion.speed, time, dt, motion.root.position, motion.heading);
 
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
   document.body.dataset.enemyEngineOrder = engineOrders[motion.engineOrder].label;
@@ -7962,6 +7990,18 @@ function updateServerEnemyMotion(motion, dt, time) {
     } else {
       updateEnemyBowWake(motion.bowWake, Math.max(0, motion.speed, motion.serverSpeed ?? 0) * submarineWakeExposure, time, dt, motion.root.position, motion.heading);
     }
+    const periscopeWakeSpeed = Math.abs(motion.serverSpeed ?? 0) > Math.abs(motion.speed)
+      ? motion.serverSpeed
+      : motion.speed;
+    updateSubmarinePeriscopeWake(
+      motion.periscopeWake,
+      motion.depthState,
+      periscopeWakeSpeed,
+      time,
+      dt,
+      motion.root.position,
+      motion.heading
+    );
   }
 
   document.body.dataset.enemy = `${motion.root.position.x.toFixed(1)},${motion.root.position.z.toFixed(1)}`;
@@ -8552,6 +8592,64 @@ function updateEnemyBowWake(wake, speed, time, dt = 1 / 60, sourcePosition = nul
   });
 }
 
+function updateSubmarinePeriscopeWake(wake, depthState, speed, time, dt = 1 / 60, sourcePosition = null, sourceHeading = 0) {
+  if (!wake) return;
+
+  const periscopeSpeed = Math.abs(Number.isFinite(speed) ? speed : 0);
+  if (depthState !== submarineDepthStates.periscope || periscopeSpeed <= submarinePeriscopeWakeQuietSpeed) {
+    hideEnemyWake(wake);
+    return;
+  }
+  const speedRatio = smoothstep(submarinePeriscopeWakeQuietSpeed, submarinePeriscopeWakeFullSpeed, periscopeSpeed);
+  const targetStrength = clamp(0.12 + speedRatio * 0.88, 0, 1);
+  const response = targetStrength > wake.strength ? 5.4 : 1.15;
+  wake.strength += (targetStrength - wake.strength) * Math.min(1, dt * response);
+  const wakeIntensity = wake.strength;
+  const wakeDirection = speed >= 0 ? "forward" : "reverse";
+
+  wake.root.setEnabled(wakeIntensity > 0.018);
+  if (sourcePosition) {
+    wake.root.position.x = sourcePosition.x;
+    wake.root.position.y = wake.waterlineY;
+    wake.root.position.z = sourcePosition.z;
+  }
+  wake.root.rotationQuaternion = Quaternion.FromEulerAngles(0, sourceHeading, 0);
+
+  wake.segments.forEach((segment, index) => {
+    const row = segment.metadata?.row ?? 1;
+    const activeDirection = segment.metadata?.direction === wakeDirection;
+    const visibility = wakeRowVisibility(wakeIntensity, row);
+    const pulse = 0.82 + Math.sin(time * 3.1 + index * 0.74) * 0.09;
+    segment.setEnabled(activeDirection && visibility > 0.015);
+    segment.visibility = activeDirection ? visibility : 0;
+    segment.scaling.x = 0.32 + wakeIntensity * 1.45 + row * 0.035;
+    segment.scaling.z = (0.24 + wakeIntensity * 0.72 + row * 0.028) * pulse;
+    segment.position.x = segment.metadata.baseX + Math.sin(time * 5.2 + index * 1.31) * 0.018 * wakeIntensity;
+    segment.position.z = segment.metadata.baseZ + segment.metadata.zSign * wakeIntensity * row * 0.035;
+    segment.position.y = (wake.surfaceY ?? enemyBowWakeSurfaceY)
+      + wakeIntensity * 0.018
+      + Math.sin(time * 2.6 + index) * 0.0035;
+    segment.rotation.y = segment.metadata.baseRotationY + Math.sin(time * 4.4 + index) * 0.045 * wakeIntensity;
+  });
+
+  wake.churn.forEach((patch, index) => {
+    const row = patch.metadata?.row ?? 1;
+    const activeDirection = patch.metadata?.direction === wakeDirection;
+    const visibility = wakeRowVisibility(wakeIntensity, row);
+    const pulse = 0.76 + Math.sin(time * 4.3 + index * 1.6) * 0.11;
+    patch.setEnabled(activeDirection && visibility > 0.015);
+    patch.visibility = activeDirection ? visibility : 0;
+    patch.scaling.x = (0.42 + wakeIntensity * 1.35) * pulse;
+    patch.scaling.z = 0.42 + wakeIntensity * 0.92 + row * 0.035;
+    patch.position.x = patch.metadata.baseX + Math.sin(time * 5.8 + index * 1.2) * 0.021 * wakeIntensity;
+    patch.position.z = patch.metadata.baseZ + patch.metadata.zSign * wakeIntensity * row * 0.028;
+    patch.position.y = (wake.surfaceY ?? enemyBowWakeSurfaceY)
+      + wakeIntensity * 0.02
+      + Math.sin(time * 3.2 + index) * 0.004;
+    patch.rotation.y = patch.metadata.baseRotationY + Math.sin(time * 4.9 + index) * 0.12 * wakeIntensity;
+  });
+}
+
 function resetWakeAtPosition(wake, sourcePosition, sourceHeading = 0) {
   if (!wake) return;
   wake.strength = 0;
@@ -8789,6 +8887,8 @@ function installScenarioTestHooks() {
         observationPeriscopeFov: Number(getObservationPeriscopeFov().toFixed(3)),
         bowWakeVisible: boat.bowWake?.root?.isEnabled?.() === true,
         bowWakeStrength: Number((boat.bowWake?.strength ?? 0).toFixed(3)),
+        periscopeWakeVisible: boat.periscopeWake?.root?.isEnabled?.() === true,
+        periscopeWakeStrength: Number((boat.periscopeWake?.strength ?? 0).toFixed(3)),
         submarineWakeExposure: Number(getSubmarineWakeExposureRatio(playerSubmarineDepthOffset).toFixed(3)),
         cameraY: Number(cameraSetup.position.y.toFixed(3)),
         boatY: Number(boat.root.position.y.toFixed(3)),
@@ -9059,6 +9159,9 @@ function installScenarioTestHooks() {
     enemyWakeSnapshot(shipId) {
       return enemyWakeSnapshot(shipId);
     },
+    enemyPeriscopeWakeSnapshot(shipId) {
+      return enemyPeriscopeWakeSnapshot(shipId);
+    },
     async fireFlakAt(target) {
       setBattleStation("flak");
       const aim = aimPlayerFlakAtWorldPoint(target);
@@ -9185,6 +9288,7 @@ function installScenarioTestHooks() {
     },
     createRemoteSubmarineForTest(state = {}) {
       const id = String(state.id ?? "test-U1");
+      const depthState = sanitizeSubmarineDepthState(state.depthState);
       const ship = {
         id,
         teamId: state.teamId ?? "dark",
@@ -9192,13 +9296,15 @@ function installScenarioTestHooks() {
         vehicleType: "submarine",
         state: "active",
         x: Number.isFinite(Number(state.x)) ? Number(state.x) : boat.root.position.x + 18,
-        y: Number.isFinite(Number(state.y)) ? Number(state.y) : submarineWaterlineY,
+        y: Number.isFinite(Number(state.y))
+          ? Number(state.y)
+          : submarineWaterlineY + (submarineDepthOffsets[depthState] ?? 0) * submarineVisualScale,
         z: Number.isFinite(Number(state.z)) ? Number(state.z) : boat.root.position.z + 34,
         heading: Number.isFinite(Number(state.heading)) ? Number(state.heading) : Math.PI,
         speed: Number.isFinite(Number(state.speed)) ? Number(state.speed) : 0,
         engineOrder: Number.isInteger(state.engineOrder) ? state.engineOrder : 2,
         rudderDegrees: Number.isFinite(Number(state.rudderDegrees)) ? Number(state.rudderDegrees) : 0,
-        depthState: sanitizeSubmarineDepthState(state.depthState),
+        depthState,
         flakYaw: Number.isFinite(Number(state.flakYaw)) ? Number(state.flakYaw) : submarineFlakRestYaw,
         flakPitch: Number.isFinite(Number(state.flakPitch)) ? Number(state.flakPitch) : submarineFlakRestPitch
       };
@@ -9368,6 +9474,43 @@ function enemyWakeSnapshot(shipId) {
     bowVisibility: averageWakeVisibility(segments.filter((segment) => segment.kind === "bow")),
     sternEdgeVisibility: averageWakeVisibility(segments.filter((segment) => segment.kind === "sternEdge")),
     sternChurnVisibility: averageWakeVisibility(churn.filter((patch) => patch.kind === "sternChurn"))
+  };
+}
+
+function enemyPeriscopeWakeSnapshot(shipId) {
+  const motion = enemyMotions.find((candidate) => candidate.id === shipId);
+  if (!motion?.periscopeWake) return null;
+  const wake = motion.periscopeWake;
+  const segments = wake.segments.map((segment) => ({
+    kind: segment.metadata?.kind ?? "periscopeTrail",
+    direction: segment.metadata?.direction ?? "forward",
+    row: segment.metadata?.row ?? 1,
+    enabled: segment.isEnabled(),
+    visibility: Number((segment.visibility ?? 1).toFixed(3)),
+    scaleX: Number(segment.scaling.x.toFixed(3)),
+    scaleZ: Number(segment.scaling.z.toFixed(3))
+  }));
+  const churn = wake.churn.map((patch) => ({
+    kind: patch.metadata?.kind ?? "periscopeChurn",
+    direction: patch.metadata?.direction ?? "forward",
+    row: patch.metadata?.row ?? 1,
+    enabled: patch.isEnabled(),
+    visibility: Number((patch.visibility ?? 1).toFixed(3)),
+    scaleX: Number(patch.scaling.x.toFixed(3)),
+    scaleZ: Number(patch.scaling.z.toFixed(3))
+  }));
+  return {
+    shipId,
+    depthState: motion.depthState,
+    speed: Number(motion.speed.toFixed(3)),
+    serverSpeed: Number((motion.serverSpeed ?? 0).toFixed(3)),
+    wakeEnabled: wake.root.isEnabled(),
+    strength: Number(wake.strength.toFixed(3)),
+    trailVisibility: averageWakeVisibility(segments),
+    churnVisibility: averageWakeVisibility(churn),
+    forwardParts: segments.concat(churn).filter((part) => part.kind?.includes("periscope") && part.direction === "forward" && part.enabled).length,
+    reverseParts: segments.concat(churn).filter((part) => part.kind?.includes("periscope") && part.direction === "reverse" && part.enabled).length,
+    enabledParts: segments.concat(churn).filter((part) => part.enabled).length
   };
 }
 
@@ -15032,6 +15175,72 @@ function createEnemyBowWake(scene, materials, parent, name, options = {}) {
 
   root.setEnabled(false);
   return { root, segments, churn, strength: 0, waterlineY, surfaceY, vehicleType };
+}
+
+function createSubmarinePeriscopeWake(scene, materials, parent, name, options = {}) {
+  const root = new TransformNode(`${name}_periscope_wake`, scene);
+  root.parent = parent.parent ?? null;
+  root.scaling.copyFrom(parent.scaling);
+  const waterlineY = Number.isFinite(options.waterlineY) ? options.waterlineY : submarineWaterlineY;
+  const surfaceY = -waterlineY / Math.max(0.001, root.scaling.y) + 0.026;
+  const periscopeZ = Number.isFinite(options.periscopeZ) ? options.periscopeZ : 0.11;
+  const segments = [];
+  const churn = [];
+
+  const createDirectionalWake = (direction, zSign) => {
+    for (let side = -1; side <= 1; side += 2) {
+      for (let row = 0; row < 8; row += 1) {
+        const startX = side * (0.014 + row * 0.008);
+        const startZ = periscopeZ + zSign * (0.018 + row * 0.02);
+        const endX = side * (0.055 + row * 0.045);
+        const endZ = periscopeZ + zSign * (0.24 + row * 0.19);
+        const segment = createWakeRibbon(`${name}_periscope_${direction}_wake_${side}_${row}`, scene, materials.foam, root, startX, startZ, endX, endZ, surfaceY);
+        segment.metadata = {
+          kind: "periscopeTrail",
+          direction,
+          zSign,
+          row: row + 1,
+          side,
+          baseX: segment.position.x,
+          baseZ: segment.position.z,
+          baseRotationY: segment.rotation.y
+        };
+        segments.push(segment);
+      }
+    }
+
+    for (let row = 0; row < 9; row += 1) {
+      const patch = createJaggedSurfacePatch(
+        `${name}_periscope_${direction}_churn_${row}`,
+        scene,
+        0.055 + (row % 3) * 0.018,
+        0.11 + row * 0.018,
+        stableHashString(`${name}:${direction}:${row}`)
+      );
+      patch.parent = root;
+      patch.material = materials.foam;
+      patch.position.x = (row - 4) * 0.014;
+      patch.position.y = surfaceY;
+      patch.position.z = periscopeZ + zSign * (0.07 + row * 0.095);
+      patch.rotation.y = zSign < 0 ? (-0.1 + row * 0.03) : (Math.PI + 0.1 - row * 0.03);
+      patch.metadata = {
+        kind: "periscopeChurn",
+        direction,
+        zSign,
+        row: row + 1,
+        baseX: patch.position.x,
+        baseZ: patch.position.z,
+        baseRotationY: patch.rotation.y
+      };
+      churn.push(patch);
+    }
+  };
+
+  createDirectionalWake("forward", -1);
+  createDirectionalWake("reverse", 1);
+
+  root.setEnabled(false);
+  return { root, segments, churn, strength: 0, waterlineY, surfaceY, periscopeZ, vehicleType: "submarine-periscope" };
 }
 
 function createWakeRibbon(name, scene, material, parent, startX, startZ, endX, endZ, surfaceY = enemyBowWakeSurfaceY) {
