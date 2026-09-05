@@ -321,6 +321,24 @@ test("submarine periscope depth keeps the observation view above water", async (
   expect(samples[targetDepthIndex].bowWakeVisible).toBe(false);
   expect(samples[targetDepthIndex].periscopeInk).toBe("dark");
 
+  await page.keyboard.press("Shift+ArrowUp");
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.depthState)).toBe("surface");
+  const surfacingStart = await diveSnapshot(page);
+  expect(Math.abs(surfacingStart.depthOffset)).toBeGreaterThan(0.92);
+  expect(surfacingStart.torpedoView).toBe("active");
+  expect(surfacingStart.observationPeriscope).toBe("hidden");
+  expect(surfacingStart.cameraY).toBeLessThan(0.75);
+
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => Math.abs(snapshot.depthOffset)), { timeout: 12_000 }).toBeLessThan(0.92);
+  const surfacingBridgeSwitch = await diveSnapshot(page);
+  expect(surfacingBridgeSwitch.torpedoView).toBe("hidden");
+  expect(surfacingBridgeSwitch.observationPeriscope).toBe("hidden");
+  expect(surfacingBridgeSwitch.cameraY).toBeGreaterThan(0);
+
+  await page.keyboard.press("Shift+ArrowDown");
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.depthState)).toBe("periscope");
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => Math.abs(snapshot.depthOffset - snapshot.targetDepthOffset)), { timeout: 12_000 }).toBeLessThan(0.05);
+
   await page.keyboard.press("3");
   await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.observationPeriscope)).toBe("active");
   await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.radarTargetLineMode)).toBe("periscope");
@@ -364,9 +382,13 @@ test("submarine periscope depth keeps the observation view above water", async (
   expect(submergedRadar.radarRange).toBeGreaterThan(0);
   expect(submergedRadar.radarRange).toBeLessThan(samples[targetDepthIndex].radarRange);
   expect(submergedRadar.periscopeInk).toBe("light");
+  expect(submergedRadar.submarineTorpedoFireAllowed).toBe(false);
   await expect(page.locator(".torpedo-scope-line-center")).toBeHidden();
   await expect(page.locator(".torpedo-scope-line-left")).toBeHidden();
   await expect(page.locator(".torpedo-scope-target-bearing-marker")).toBeHidden();
+  await page.keyboard.press("Space");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.fireTorpedoSync)).toBe("blocked");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.fireTorpedoSyncError)).toBe("submarine-submerged");
 
   const respawnedFromSubmerged = await page.evaluate(() => window.seaBattleScenarioTest.respawnPlayerForTest("submerged"));
   expect(respawnedFromSubmerged.depthState).toBe("surface");
@@ -379,11 +401,20 @@ test("submarine periscope depth keeps the observation view above water", async (
   await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.radarDepthMode), { timeout: 12_000 }).toBe("submerged");
   await page.keyboard.press("2");
   await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.depthState)).toBe("periscope");
+  const ascendingBelowPeriscope = await diveSnapshot(page);
+  expect(ascendingBelowPeriscope.submarineTorpedoFireAllowed).toBe(false);
+  await page.evaluate(() => {
+    document.body.dataset.fireTorpedoSync = "";
+    document.body.dataset.fireTorpedoSyncError = "";
+  });
+  await page.keyboard.press("Space");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.fireTorpedoSync)).toBe("blocked");
   await expect.poll(() => diveSnapshot(page).then((snapshot) => Math.abs(snapshot.depthOffset - snapshot.targetDepthOffset)), { timeout: 12_000 }).toBeLessThan(0.05);
   await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.submarinePeriscopeMode), { timeout: 14_000 }).toBe("drive");
 
   await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("active");
   const targetPeriscope = await diveSnapshot(page);
+  expect(targetPeriscope.submarineTorpedoFireAllowed).toBe(true);
   expect(targetPeriscope.cameraY).toBeGreaterThan(0.03);
   expect(targetPeriscope.cameraY).toBeLessThan(0.55);
   expect(targetPeriscope.periscopeInk).toBe("dark");

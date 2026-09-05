@@ -1054,6 +1054,7 @@ let torpedoBoatScopeZoomLevelIndex = 0;
 let torpedoBoatScopeZoomCycleDirection = 1;
 let submarinePeriscopeMode = submarinePeriscopeModes.drive;
 let submarineBridgeDiveHoldActive = false;
+let submarineBridgeAscentHoldActive = false;
 let submarineBearingAlignTarget = heading;
 let submarineBearingAlignReturnToStop = false;
 let submarineBearingAlignPendingAscent = false;
@@ -1910,12 +1911,18 @@ function canUseTorpedoScope() {
 
 function canShowSubmarineTorpedoScope() {
   return !submarineMode
+    || submarineBridgeAscentHoldActive
     || playerSubmarineDepthState === submarineDepthStates.periscope
     || playerSubmarineDepthState === submarineDepthStates.submerged;
 }
 
 function canUseSubmarineTorpedoScope() {
   return !submarineMode || playerSubmarineDepthState === submarineDepthStates.periscope;
+}
+
+function canFireSubmarineTorpedoAtCurrentDepth() {
+  return !submarineMode
+    || Math.abs(playerSubmarineDepthOffset) <= Math.abs(submarineDepthOffsets.periscope) + 0.06;
 }
 
 function getPlayerSubmarineSpeedFactor() {
@@ -4012,6 +4019,9 @@ function setPlayerSubmarineDepthState(depthState) {
   if (previousDepthState === submarineDepthStates.surface && playerSubmarineDepthState !== submarineDepthStates.surface) {
     submarineBridgeDiveHoldActive = true;
   }
+  submarineBridgeAscentHoldActive = previousDepthState !== submarineDepthStates.surface
+    && playerSubmarineDepthState === submarineDepthStates.surface
+    && Math.abs(playerSubmarineDepthOffset) > submarineObservationPeriscopeSwitchOffset;
   if (playerSubmarineDepthState === submarineDepthStates.surface) {
     submarineBridgeDiveHoldActive = false;
     flakYaw = submarineFlakRestYaw;
@@ -4031,7 +4041,11 @@ function setPlayerSubmarineDepthState(depthState) {
     submarinePeriscopeMode = submarinePeriscopeModes.drive;
     submarineBearingAlignReturnToStop = false;
     submarineBearingAlignPendingAscent = false;
-    setBattleStation("bridge");
+    if (submarineBridgeAscentHoldActive) {
+      setSubmarinePeriscopeMode(submarinePeriscopeModes.drive);
+    } else {
+      setBattleStation("bridge");
+    }
   } else if (playerSubmarineDepthState === submarineDepthStates.periscope) {
     setBattleStation("bridge");
     if (submarineBridgeDiveHoldActive) {
@@ -4122,6 +4136,12 @@ function updatePlayerSubmarineDiveMotion(dt) {
     && Math.abs(playerSubmarineDepthOffset) >= submarineObservationPeriscopeSwitchOffset) {
     submarineBridgeDiveHoldActive = false;
     setSubmarinePeriscopeMode(submarinePeriscopeModes.drive);
+  }
+  if (submarineBridgeAscentHoldActive
+    && playerSubmarineDepthState === submarineDepthStates.surface
+    && Math.abs(playerSubmarineDepthOffset) <= submarineObservationPeriscopeSwitchOffset) {
+    submarineBridgeAscentHoldActive = false;
+    setBattleStation("bridge");
   }
 }
 
@@ -5467,7 +5487,7 @@ async function sendPlayerState() {
 }
 
 function requestPlayerWeaponFire() {
-  if (submarineMode && playerSubmarineDepthState === submarineDepthStates.submerged) {
+  if (submarineMode && !canFireSubmarineTorpedoAtCurrentDepth()) {
     document.body.dataset.fireTorpedoSync = "blocked";
     document.body.dataset.fireTorpedoSyncError = "submarine-submerged";
     return;
@@ -8990,6 +9010,7 @@ function installScenarioTestHooks() {
         observationPeriscopeZoom: document.body.dataset.observationPeriscopeZoom ?? "I",
         torpedoScopeFov: Number(getTorpedoScopeFov().toFixed(3)),
         observationPeriscopeFov: Number(getObservationPeriscopeFov().toFixed(3)),
+        submarineTorpedoFireAllowed: canFireSubmarineTorpedoAtCurrentDepth(),
         bowWakeVisible: boat.bowWake?.root?.isEnabled?.() === true,
         bowWakeStrength: Number((boat.bowWake?.strength ?? 0).toFixed(3)),
         periscopeWakeVisible: boat.periscopeWake?.root?.isEnabled?.() === true,
