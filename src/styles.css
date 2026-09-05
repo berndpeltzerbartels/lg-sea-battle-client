@@ -2285,6 +2285,91 @@ body[data-player-vehicle="submarine"][data-player-depth-state="submerged"][data-
   display: none;
 }
 
+body[data-underwater-view="true"] .observation-periscope-scale,
+body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-bearing-scale,
+body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-zoom-scale,
+body[data-player-depth-state="submerged"] .observation-periscope-scale,
+body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-bearing-scale,
+body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-zoom-scale {
+  background: repeating-linear-gradient(
+    180deg,
+    rgb(247 251 255 / 72%) 0 2px,
+    transparent 2px 8px
+  );
+}
+
+body[data-underwater-view="true"] .observation-periscope-scale-title,
+body[data-underwater-view="true"] .observation-periscope-scale-label,
+body[data-underwater-view="true"] .observation-periscope-edge-title,
+body[data-underwater-view="true"] .observation-periscope-edge-label,
+body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-scale-title,
+body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-scale-label,
+body[data-player-depth-state="submerged"] .observation-periscope-scale-title,
+body[data-player-depth-state="submerged"] .observation-periscope-scale-label,
+body[data-player-depth-state="submerged"] .observation-periscope-edge-title,
+body[data-player-depth-state="submerged"] .observation-periscope-edge-label,
+body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-scale-title,
+body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-scale-label {
+  color: rgb(247 251 255 / 92%);
+}
+
+body[data-underwater-view="true"] .observation-periscope-scale-title strong,
+body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-scale-title strong,
+body[data-player-depth-state="submerged"] .observation-periscope-scale-title strong,
+body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-scale-title strong {
+  color: #ffffff;
+}
+
+body[data-underwater-view="true"] .observation-periscope-scale-title kbd,
+body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-scale-title kbd,
+body[data-player-depth-state="submerged"] .observation-periscope-scale-title kbd,
+body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-scale-title kbd {
+  border-color: rgb(247 251 255 / 62%);
+  background: rgb(247 251 255 / 18%);
+  color: #ffffff;
+}
+
+body[data-underwater-view="true"] .observation-periscope-bearing-scale::before,
+body[data-underwater-view="true"] .observation-periscope-bearing-scale::after,
+body[data-underwater-view="true"] .observation-periscope-zoom-scale::before,
+body[data-underwater-view="true"] .observation-periscope-zoom-scale::after,
+body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-scale::before,
+body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-scale::after,
+body[data-player-depth-state="submerged"] .observation-periscope-bearing-scale::before,
+body[data-player-depth-state="submerged"] .observation-periscope-bearing-scale::after,
+body[data-player-depth-state="submerged"] .observation-periscope-zoom-scale::before,
+body[data-player-depth-state="submerged"] .observation-periscope-zoom-scale::after,
+body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-scale::before,
+body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-scale::after {
+  background: rgb(247 251 255 / 72%);
+}
+
+body[data-underwater-view="true"] .observation-periscope-edge-scale,
+body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-rudder-scale,
+body[data-player-depth-state="submerged"] .observation-periscope-edge-scale,
+body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-rudder-scale {
+  background: linear-gradient(90deg, rgb(247 251 255 / 0%) 0, rgb(247 251 255 / 72%) 7%, rgb(247 251 255 / 72%) 93%, rgb(247 251 255 / 0%) 100%) 50% 62% / 100% 2px no-repeat;
+}
+
+body[data-underwater-view="true"] .observation-periscope-edge-label::after,
+body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-rudder-scale .torpedo-scope-scale-label::after,
+body[data-player-depth-state="submerged"] .observation-periscope-edge-label::after,
+body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-rudder-scale .torpedo-scope-scale-label::after {
+  background: rgb(247 251 255 / 68%);
+}
+
+body[data-underwater-view="true"] .observation-periscope-scale-marker,
+body[data-underwater-view="true"] .observation-periscope-edge-marker,
+body[data-underwater-view="true"] .observation-periscope-direction-arrow,
+body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-scale-marker,
+body[data-player-depth-state="submerged"] .observation-periscope-scale-marker,
+body[data-player-depth-state="submerged"] .observation-periscope-edge-marker,
+body[data-player-depth-state="submerged"] .observation-periscope-direction-arrow,
+body[data-player-depth-state="submerged"][data-player-vehicle="submarine"] .torpedo-scope-scale-marker {
+  background: rgb(247 251 255 / 86%);
+  box-shadow: 0 0 7px rgb(178 236 242 / 30%);
+}
+
 body[data-player-vehicle="submarine"][data-torpedo-view="active"] {
   --periscope-side-panel-width: 132px;
   --periscope-rudder-panel-width: 244px;

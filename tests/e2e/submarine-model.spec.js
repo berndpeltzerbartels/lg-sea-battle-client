@@ -359,6 +359,10 @@ test("submarine periscope depth keeps the observation view above water", async (
   await expect(page.locator(".torpedo-scope-line-center")).toBeHidden();
   await expect(page.locator(".torpedo-scope-line-left")).toBeHidden();
   await expect(page.locator(".torpedo-scope-target-bearing-marker")).toBeHidden();
+  const underwaterLabelColor = await page.locator(".torpedo-scope-zoom-scale .torpedo-scope-scale-title").evaluate((element) => (
+    getComputedStyle(element).color
+  ));
+  expect(underwaterLabelColor).toContain("247, 251, 255");
 
   const respawnedFromSubmerged = await page.evaluate(() => window.seaBattleScenarioTest.respawnPlayerForTest("submerged"));
   expect(respawnedFromSubmerged.depthState).toBe("surface");

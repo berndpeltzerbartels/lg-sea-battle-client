@@ -6595,7 +6595,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   drawRadarOwnHeadingMarker(ctx, centerX, centerY, monochromeMode);
   ctx.restore();
 
-  ctx.strokeStyle = monochromeMode ? "rgba(214, 248, 255, 0.46)" : "rgba(155, 229, 223, 0.62)";
+  ctx.strokeStyle = monochromeMode ? "rgba(247, 251, 255, 0.68)" : "rgba(155, 229, 223, 0.62)";
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
@@ -7204,7 +7204,7 @@ function drawRadarCompassRing(ctx, centerX, centerY, radius, radarHeading, monoc
   ctx.font = "800 10px Inter, Arial, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = monochromeMode ? "rgba(214, 248, 255, 0.72)" : "rgba(216, 236, 242, 0.82)";
+  ctx.fillStyle = monochromeMode ? "rgba(247, 251, 255, 0.94)" : "rgba(216, 236, 242, 0.82)";
   ctx.strokeStyle = monochromeMode ? "rgba(0, 5, 10, 0.92)" : "rgba(2, 16, 21, 0.74)";
   ctx.lineWidth = 3;
 
