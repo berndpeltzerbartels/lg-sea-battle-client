@@ -351,10 +351,13 @@ test("submarine periscope depth keeps the observation view above water", async (
   await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.depthState)).toBe("periscope");
   await expect.poll(() => diveSnapshot(page).then((snapshot) => Math.abs(snapshot.depthOffset - snapshot.targetDepthOffset)), { timeout: 12_000 }).toBeLessThan(0.05);
 
+  await page.evaluate(() => window.seaBattleScenarioTest.setPlayerNavigationState({ rudderDegrees: 24 }));
   await page.keyboard.press("3");
   await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.observationPeriscope)).toBe("active");
   await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.radarTargetLineMode)).toBe("periscope");
   await expect(page.locator(".observation-periscope-bearing-scale .observation-periscope-scale-title")).toContainText("Zielen");
+  const observationStart = await diveSnapshot(page);
+  expect(observationStart.rudderDegrees).toBe(0);
   await page.keyboard.down("ArrowRight");
   await page.waitForTimeout(1200);
   await page.keyboard.up("ArrowRight");

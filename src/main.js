@@ -180,12 +180,12 @@ const submarineTargetPeriscopeEyeZ = 0.18;
 const submarineObservationPeriscopePitchBase = -0.015;
 const submarineObservationPeriscopePitchMin = -0.11;
 const submarineObservationPeriscopePitchMax = 0.08;
-const submarineObservationPeriscopeYawFineSpeed = 0.03;
-const submarineObservationPeriscopeYawMediumSpeed = 0.10;
-const submarineObservationPeriscopeYawFastSpeed = 0.18;
-const submarineObservationPeriscopeYawVeryFastSpeed = 0.27;
-const submarineObservationPeriscopeYawMaxSpeed = 0.34;
-const submarineObservationPeriscopeYawExtremeSpeed = 0.40;
+const submarineObservationPeriscopeYawFineSpeed = 0.04;
+const submarineObservationPeriscopeYawMediumSpeed = 0.14;
+const submarineObservationPeriscopeYawFastSpeed = 0.24;
+const submarineObservationPeriscopeYawVeryFastSpeed = 0.36;
+const submarineObservationPeriscopeYawMaxSpeed = 0.46;
+const submarineObservationPeriscopeYawExtremeSpeed = 0.54;
 const submarineObservationPeriscopePitchSpeed = 0.18;
 const submarineDepthTransitionSpeed = 0.28;
 const submarinePeriscopeLiftSpeed = 0.55;
@@ -1794,6 +1794,9 @@ function setSubmarinePeriscopeMode(mode) {
   if (nextMode === submarinePeriscopeModes.observation) {
     submarineBearingAlignReturnToStop = false;
     submarineBearingAlignPendingAscent = false;
+    rudderDegrees = 0;
+    heldRudderDirection = 0;
+    nextPlayerStateSendTime = 0;
     submarinePeriscopeMode = nextMode;
     setTorpedoScope(false);
   } else if (nextMode === submarinePeriscopeModes.aiming) {
@@ -9015,6 +9018,7 @@ function installScenarioTestHooks() {
         torpedoScopeFov: Number(getTorpedoScopeFov().toFixed(3)),
         observationPeriscopeFov: Number(getObservationPeriscopeFov().toFixed(3)),
         submarineTorpedoFireAllowed: canFireSubmarineTorpedoAtCurrentDepth(),
+        rudderDegrees: Number(rudderDegrees.toFixed(1)),
         bowWakeVisible: boat.bowWake?.root?.isEnabled?.() === true,
         bowWakeStrength: Number((boat.bowWake?.strength ?? 0).toFixed(3)),
         periscopeWakeVisible: boat.periscopeWake?.root?.isEnabled?.() === true,
