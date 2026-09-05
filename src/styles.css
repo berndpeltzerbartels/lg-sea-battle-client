@@ -8,6 +8,7 @@ body {
   --instrument-panel-gap: 14px;
   --instrument-panel-inner-width: calc(var(--instrument-panel-width) - var(--instrument-panel-padding) * 2);
   --control-panel-width: min(430px, calc(100vw - var(--view-left) - 44px));
+  --flak-control-panel-width: min(530px, calc(100vw - var(--view-left) - 44px));
   --control-panel-height: 86px;
   --battle-station-height: 112px;
   --radar-size: calc(var(--instrument-panel-inner-width) - 20px);
@@ -1474,6 +1475,10 @@ body[data-torpedo-view="active"] .torpedo-scope {
   gap: 4px;
 }
 
+.torpedo-scope-bearing-label-boat {
+  display: none;
+}
+
 .torpedo-scope-scale-label[style] {
   top: var(--scale-label-top);
   transform: translateY(-50%);
@@ -1539,6 +1544,119 @@ body[data-torpedo-view="active"] .torpedo-scope {
 .torpedo-scope-zoom-scale .torpedo-scope-scale-marker {
   right: -6px;
   display: block;
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope {
+  z-index: 3;
+  --torpedo-boat-scope-size: min(calc(100vw - var(--view-left) - 52px), calc(100vh - 44px), 980px);
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-vignette {
+  background:
+    radial-gradient(circle at calc(var(--view-left) + (100vw - var(--view-left)) / 2) 50%, transparent 0 calc(var(--torpedo-boat-scope-size) / 2), rgb(1 8 10 / 58%) calc(var(--torpedo-boat-scope-size) / 2 + 3px), rgb(0 0 0 / 82%) 100%);
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-glass {
+  left: calc(var(--view-left) + (100vw - var(--view-left)) / 2);
+  top: 50%;
+  width: var(--torpedo-boat-scope-size);
+  height: var(--torpedo-boat-scope-size);
+  aspect-ratio: auto;
+  border: 2px solid rgb(8 15 18 / 70%);
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 0 1px rgb(247 251 255 / 10%),
+    inset 0 0 44px rgb(247 251 255 / 7%),
+    0 0 18px rgb(247 251 255 / 8%);
+  overflow: visible;
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .submarine-periscope-mode-panel {
+  display: none;
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-line-left,
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-line-right {
+  width: 14%;
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-line-left {
+  left: 29%;
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-line-right {
+  right: 29%;
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-line-center {
+  top: 16%;
+  height: 68%;
+  background: linear-gradient(
+    180deg,
+    rgb(1 7 8 / 78%) 0 42%,
+    transparent 42% 58%,
+    rgb(1 7 8 / 78%) 58% 100%
+  );
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-range-near {
+  top: 42%;
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-range-mid {
+  display: none;
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-range-far {
+  top: 58%;
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-bearing-scale {
+  display: none;
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-zoom-scale {
+  left: 18%;
+  right: auto;
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-zoom-scale::before,
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-zoom-scale::after {
+  left: -8px;
+  right: auto;
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-zoom-scale .torpedo-scope-scale-title,
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-zoom-scale .torpedo-scope-scale-label {
+  left: 10px;
+  right: auto;
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-zoom-scale .torpedo-scope-scale-marker {
+  left: -6px;
+  right: auto;
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-rudder-scale {
+  left: 33%;
+  bottom: 11%;
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-bearing-label-submarine,
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-target-bearing-readout,
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-target-bearing-marker {
+  display: none;
+}
+
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-bearing-label-boat {
+  display: inline;
+}
+
+body[data-observation-periscope="active"] .player-list,
+body[data-observation-periscope="active"] .kill-feed,
+body[data-player-vehicle="submarine"][data-torpedo-view="active"] .player-list,
+body[data-player-vehicle="submarine"][data-torpedo-view="active"] .kill-feed {
+  z-index: 8;
 }
 
 .cannon-scope {
@@ -1638,7 +1756,7 @@ body[data-observation-periscope="active"] .observation-periscope {
 }
 
 body[data-underwater-view="true"] .observation-periscope-glass,
-body[data-underwater-view="true"] .torpedo-scope-glass {
+body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-glass {
   background: rgb(0 54 72 / 18%);
   box-shadow:
     inset 0 0 0 1px rgb(178 236 242 / 15%),
@@ -1647,7 +1765,7 @@ body[data-underwater-view="true"] .torpedo-scope-glass {
 }
 
 body[data-underwater-view="true"] .observation-periscope-vignette,
-body[data-underwater-view="true"] .torpedo-scope-vignette {
+body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scope-vignette {
   background:
     linear-gradient(to top, rgb(0 4 7 / 28%) 0%, rgb(0 15 22 / 14%) 34%, transparent 68%),
     radial-gradient(circle at calc(var(--view-left) + (100vw - var(--view-left)) / 2) 50%, transparent 0 calc(var(--periscope-circle-size) / 2), rgb(0 3 6 / 94%) calc(var(--periscope-circle-size) / 2 + 3px), rgb(0 0 0 / 99%) 100%);
@@ -3939,7 +4057,7 @@ body[data-flak-view="active"] .align-weapons-button kbd {
 
 body[data-flak-view="active"] .ship-controls-panel {
   grid-template-columns: 192px minmax(0, 1fr);
-  width: min(530px, calc(100vw - var(--view-left) - 44px));
+  width: var(--flak-control-panel-width);
 }
 
 body[data-flak-view="active"] .telegraph-speed-line {
@@ -4099,6 +4217,10 @@ body[data-cannon-view="active"] .cannon-sight-readout {
 body[data-flak-view="active"] .weapon-aim-hints,
 body[data-cannon-view="active"] .weapon-aim-hints {
   display: block;
+}
+
+body[data-flak-view="active"] .weapon-aim-hints {
+  left: calc(var(--view-left) + (100vw - var(--view-left)) / 2 - var(--flak-control-panel-width) / 2 - 68px);
 }
 
 body[data-cannon-view="active"] .weapon-aim-hints {

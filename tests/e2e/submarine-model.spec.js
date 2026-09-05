@@ -50,6 +50,7 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
   await expect(page.locator("#torpedoAidButton")).toContainText("Torpedo");
   await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("active");
   await expect.poll(() => page.evaluate(() => document.body.dataset.submarinePeriscopeMode)).toBe("drive");
+  await expect(page.locator(".torpedo-scope")).toBeVisible();
   await expect(page.locator(".torpedo-scope-rudder-scale")).toContainText("Ruder");
   await expect(page.locator(".torpedo-scope-rudder-scale")).toContainText("S 35");
   await expect(page.locator(".torpedo-scope-rudder-scale")).toContainText("P 35");
@@ -106,6 +107,42 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
   await page.waitForTimeout(12000);
   const periscopeSpeed = Number(await page.locator("#telegraphSpeedValue").textContent());
   expect(periscopeSpeed).toBeLessThanOrEqual(9.1);
+});
+
+test("torpedo boat torpedo view keeps its own precision sight", async ({ page }) => {
+  await page.goto("/sea-battle/?setup=8&vehicle=torpedo-boat&hide-beach=1");
+  await page.waitForFunction(() => document.body.dataset.playerVehicle === "torpedo-boat");
+
+  await page.keyboard.press("T");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("active");
+  await expect(page.locator(".torpedo-scope")).toBeVisible();
+  await expect(page.locator(".torpedo-scope-line-center")).toBeVisible();
+  await expect(page.locator(".torpedo-scope-range-mid")).toBeHidden();
+  await expect(page.locator(".torpedo-scope-zoom-scale")).toContainText("Zoom");
+  await expect(page.locator(".torpedo-scope-bearing-scale")).toBeHidden();
+  await expect(page.locator(".torpedo-scope-rudder-scale")).toBeVisible();
+  await expect(page.locator("#torpedoScopeRudderMarker")).toBeVisible();
+  await expect(page.locator(".torpedo-scope .submarine-periscope-mode-panel")).toBeHidden();
+  await expect.poll(() => page.locator(".torpedo-scope-glass").evaluate((element) => getComputedStyle(element).borderRadius)).not.toBe("0px");
+});
+
+test("flak aim keys stay clear of the helm controls", async ({ page }) => {
+  for (const vehicle of ["submarine", "torpedo-boat"]) {
+    await page.goto(`/sea-battle/?setup=8&vehicle=${vehicle}&hide-beach=1`);
+    await page.waitForFunction((expectedVehicle) => document.body.dataset.playerVehicle === expectedVehicle, vehicle);
+
+    await page.keyboard.press("F");
+    await expect.poll(() => page.evaluate(() => document.body.dataset.flakView)).toBe("active");
+
+    const gap = await page.evaluate(() => {
+      const aim = document.querySelector(".weapon-aim-hints")?.getBoundingClientRect();
+      const controls = document.querySelector(".ship-controls-panel")?.getBoundingClientRect();
+      if (!aim || !controls) return null;
+      return controls.left - aim.right;
+    });
+    expect(gap).not.toBeNull();
+    expect(gap).toBeGreaterThanOrEqual(8);
+  }
 });
 
 test("remote submarine keeps its real flak visible and stows it while diving", async ({ page }) => {
