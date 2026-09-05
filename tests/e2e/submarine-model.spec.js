@@ -329,6 +329,18 @@ test("submarine periscope depth keeps the observation view above water", async (
   expect(surfacingStart.observationPeriscope).toBe("hidden");
   expect(surfacingStart.cameraY).toBeLessThan(0.75);
 
+  const surfacingSamples = [];
+  for (let i = 0; i < 8; i += 1) {
+    await page.waitForTimeout(300);
+    surfacingSamples.push(await diveSnapshot(page));
+  }
+  const surfacingBeforeBridge = surfacingSamples.filter((sample) => Math.abs(sample.depthOffset) >= 0.92);
+  expect(surfacingBeforeBridge.length).toBeGreaterThan(0);
+  for (const sample of surfacingBeforeBridge) {
+    expect(sample.torpedoView).toBe("active");
+    expect(sample.observationPeriscope).toBe("hidden");
+  }
+
   await expect.poll(() => diveSnapshot(page).then((snapshot) => Math.abs(snapshot.depthOffset)), { timeout: 12_000 }).toBeLessThan(0.92);
   const surfacingBridgeSwitch = await diveSnapshot(page);
   expect(surfacingBridgeSwitch.torpedoView).toBe("hidden");
@@ -347,7 +359,7 @@ test("submarine periscope depth keeps the observation view above water", async (
   await page.waitForTimeout(1200);
   await page.keyboard.up("ArrowRight");
   const turnedPeriscope = await diveSnapshot(page);
-  expect(Math.abs(turnedPeriscope.observationYawDeg)).toBeGreaterThan(10);
+  expect(Math.abs(turnedPeriscope.observationYawDeg)).toBeGreaterThan(5);
 
   await page.evaluate(() => window.seaBattleScenarioTest.setPlayerNavigationState({ engineOrder: 2, speed: 0, heading: 0 }));
   await page.keyboard.press("2");
