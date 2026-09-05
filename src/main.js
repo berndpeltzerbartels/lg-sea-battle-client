@@ -1712,6 +1712,10 @@ function toggleCannonView() {
 }
 
 function setBattleStation(station) {
+  if (submarineMode && playerSubmarineDepthState !== submarineDepthStates.surface && station === "flak") {
+    updateBattleStationButtons();
+    return;
+  }
   if (submarineMode && station === "cannon") {
     station = "bridge";
   }
@@ -1721,9 +1725,6 @@ function setBattleStation(station) {
   if (submarineMode && station === "bridge" && canShowSubmarineTorpedoScope() && !submarineBridgeDiveHoldActive) {
     station = "torpedo";
     submarinePeriscopeMode = submarinePeriscopeModes.drive;
-  }
-  if (submarineMode && playerSubmarineDepthState !== submarineDepthStates.surface && station === "flak") {
-    station = "bridge";
   }
   flakViewActive = station === "flak";
   cannonViewActive = station === "cannon";

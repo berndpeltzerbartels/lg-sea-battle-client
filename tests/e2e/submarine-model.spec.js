@@ -82,6 +82,11 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("periscope");
   await page.keyboard.press("Shift+ArrowDown");
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("submerged");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("active");
+  await page.keyboard.press("F");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.flakView)).toBe("bridge");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("active");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("submerged");
   await page.keyboard.press("Shift+ArrowUp");
   await expect.poll(() => page.evaluate(() => document.body.dataset.playerDepthState)).toBe("periscope");
   await page.keyboard.press("Shift+ArrowUp");
