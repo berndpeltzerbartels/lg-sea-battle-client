@@ -1513,6 +1513,10 @@ body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .submarine-
   display: none;
 }
 
+body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .submarine-periscope-target-panel {
+  display: none;
+}
+
 body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-line-left,
 body[data-player-vehicle="torpedo-boat"][data-torpedo-view="active"] .torpedo-scope-line-right {
   width: 14%;
@@ -1754,12 +1758,23 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
   display: grid;
   grid-template-columns: 1fr;
   gap: 4px;
-  width: 146px;
+  width: 132px;
   transform: translateX(-50%);
   pointer-events: auto;
 }
 
-.submarine-periscope-mode-panel button {
+.submarine-periscope-target-panel {
+  position: absolute;
+  left: 50%;
+  top: 64.8%;
+  z-index: 6;
+  display: block;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+
+.submarine-periscope-mode-panel button,
+.submarine-periscope-target-panel button {
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
@@ -1777,14 +1792,17 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
 }
 
 .submarine-periscope-mode-panel button.is-active,
-.submarine-periscope-mode-panel button.is-aligning {
+.submarine-periscope-mode-panel button.is-aligning,
+.submarine-periscope-target-panel button.is-active,
+.submarine-periscope-target-panel button.is-aligning {
   border-color: var(--periscope-ink);
   background: rgb(255 255 255 / 24%);
   color: var(--periscope-ink-bold);
   box-shadow: 0 0 8px rgb(1 7 8 / 12%);
 }
 
-.submarine-periscope-mode-panel button kbd {
+.submarine-periscope-mode-panel button kbd,
+.submarine-periscope-target-panel button kbd {
   display: inline-grid;
   min-width: 16px;
   height: 13px;
@@ -2408,7 +2426,19 @@ body[data-player-vehicle="submarine"][data-observation-periscope="active"] .obse
 
 body[data-player-vehicle="submarine"][data-observation-periscope="active"] .observation-scope-reticle-line-left,
 body[data-player-vehicle="submarine"][data-observation-periscope="active"] .observation-scope-reticle-line-right {
-  display: none;
+  display: block;
+  top: 53.6%;
+  width: 5.2%;
+  height: 2px;
+  transform: translateY(-50%);
+}
+
+body[data-player-vehicle="submarine"][data-observation-periscope="active"] .observation-scope-reticle-line-left {
+  left: 39.6%;
+}
+
+body[data-player-vehicle="submarine"][data-observation-periscope="active"] .observation-scope-reticle-line-right {
+  right: 39.6%;
 }
 
 body[data-player-vehicle="submarine"][data-observation-periscope="active"] .observation-scope-reticle-line-vertical {
@@ -2419,11 +2449,11 @@ body[data-player-vehicle="submarine"][data-observation-periscope="active"] .obse
   transform: translateX(-50%);
   background: linear-gradient(
     180deg,
-    transparent 0 33.6%,
-    var(--periscope-ink-strong) 33.6% 46.6%,
-    transparent 46.6% 63.4%,
-    var(--periscope-ink-strong) 63.4% 76.4%,
-    transparent 76.4% 100%
+    transparent 0 42.1%,
+    var(--periscope-ink-strong) 42.1% 48.1%,
+    transparent 48.1% 60.2%,
+    var(--periscope-ink-strong) 60.2% 66.2%,
+    transparent 66.2% 100%
   );
 }
 

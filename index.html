@@ -390,9 +390,8 @@
         </div>
         <div class="observation-periscope-glass">
           <span class="submarine-periscope-mode-panel" aria-hidden="true">
-            <button type="button" data-submarine-periscope-mode="forward-scope"><kbd>1</kbd> Fahrt</button>
-            <button type="button" data-submarine-periscope-mode="align-to-bearing"><kbd>2</kbd> Zielen</button>
-            <button type="button" data-submarine-periscope-mode="observation-scope"><kbd>3</kbd> 360° Periskop</button>
+            <button class="periscope-mode-forward" type="button" data-submarine-periscope-mode="forward-scope"><kbd>1</kbd> Geradeaus</button>
+            <button class="periscope-mode-observation" type="button" data-submarine-periscope-mode="observation-scope"><kbd>2</kbd> 360°</button>
           </span>
           <span class="observation-scope-reticle-line observation-scope-reticle-line-left"></span>
           <span class="observation-scope-reticle-line observation-scope-reticle-line-right"></span>
@@ -400,6 +399,9 @@
           <span class="observation-scope-reticle-range observation-scope-reticle-range-near"></span>
           <span class="observation-scope-reticle-range observation-scope-reticle-range-mid"></span>
           <span class="observation-scope-reticle-range observation-scope-reticle-range-far"></span>
+          <span class="submarine-periscope-target-panel" aria-hidden="true">
+            <button class="periscope-mode-align" type="button" data-submarine-periscope-mode="align-to-bearing"><kbd>3</kbd> Ziel</button>
+          </span>
           <span class="observation-periscope-reference-line"></span>
           <i id="observationPeriscopeHeadingNeedle" class="observation-periscope-course-needle"></i>
           <span class="observation-periscope-scale observation-periscope-bearing-scale">
@@ -432,9 +434,8 @@
         <div class="torpedo-scope-vignette"></div>
         <div class="torpedo-scope-glass">
           <span class="submarine-periscope-mode-panel" aria-hidden="true">
-            <button type="button" data-submarine-periscope-mode="forward-scope"><kbd>1</kbd> Fahrt</button>
-            <button type="button" data-submarine-periscope-mode="align-to-bearing"><kbd>2</kbd> Zielen</button>
-            <button type="button" data-submarine-periscope-mode="observation-scope"><kbd>3</kbd> 360° Periskop</button>
+            <button class="periscope-mode-forward" type="button" data-submarine-periscope-mode="forward-scope"><kbd>1</kbd> Geradeaus</button>
+            <button class="periscope-mode-observation" type="button" data-submarine-periscope-mode="observation-scope"><kbd>2</kbd> 360°</button>
           </span>
           <span class="torpedo-scope-line torpedo-scope-line-left"></span>
           <span class="torpedo-scope-line torpedo-scope-line-right"></span>

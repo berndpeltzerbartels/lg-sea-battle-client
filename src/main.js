@@ -1695,8 +1695,8 @@ function isSubmarinePeriscopeModeKey(event) {
 }
 
 function getSubmarinePeriscopeModeFromInput(event) {
-  if (event.code === "Digit2" || event.key === "2") return submarinePeriscopeModes.alignToBearing;
-  if (event.code === "Digit3" || event.key === "3") return submarinePeriscopeModes.observationScope;
+  if (event.code === "Digit2" || event.key === "2") return submarinePeriscopeModes.observationScope;
+  if (event.code === "Digit3" || event.key === "3") return submarinePeriscopeModes.alignToBearing;
   return submarinePeriscopeModes.forwardScope;
 }
 
