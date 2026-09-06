@@ -786,6 +786,12 @@ test('ship wake follows actual speed while the engine is stopped', async ({ page
   expect(fastCoasting.bowVisibility).toBeGreaterThan(slowCoasting.bowVisibility);
   expect(fastCoasting.sternEdgeVisibility).toBeGreaterThan(slowCoasting.sternEdgeVisibility);
   expect(fastCoasting.sternChurnVisibility).toBeGreaterThan(slowCoasting.sternChurnVisibility);
+  expect(fastCoasting.sternEdgeCount).toBeGreaterThanOrEqual(14);
+  expect(fastCoasting.sternChurnCount).toBeGreaterThanOrEqual(9);
+  expect(fastCoasting.sternEdgeAverageScaleX).toBeLessThan(0.95);
+  expect(fastCoasting.sternEdgeAverageScaleZ).toBeLessThan(0.5);
+  expect(fastCoasting.sternChurnAverageScaleX).toBeLessThan(0.8);
+  expect(fastCoasting.sternChurnAverageScaleZ).toBeLessThan(0.4);
 });
 
 test('server position correction does not leave wake on a stopped ship', async ({ page, request }, testInfo) => {

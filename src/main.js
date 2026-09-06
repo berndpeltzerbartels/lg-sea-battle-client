@@ -8667,15 +8667,20 @@ function updateEnemyBowWake(wake, speed, time, dt = 1 / 60, sourcePosition = nul
     const kind = segment.metadata?.kind ?? "bow";
     const row = segment.metadata?.row ?? 1;
     const visibility = wakeRowVisibility(wakeIntensity, row);
-    segment.setEnabled(visibility > 0.015);
-    segment.visibility = visibility;
+    let segmentVisibility = visibility;
+    if (!isSubmarineWake && kind === "sternEdge") {
+      segmentVisibility *= clamp(1.08 - row * 0.09, 0.34, 1);
+    }
+    segment.setEnabled(segmentVisibility > 0.015);
+    segment.visibility = segmentVisibility;
     if (kind === "sternEdge") {
       if (isSubmarineWake) {
         segment.scaling.x = 0.14 + wakeIntensity * 0.22 + row * 0.012;
         segment.scaling.z = (0.18 + wakeIntensity * 0.24) * pulse;
       } else {
-        segment.scaling.x = 0.32 + wakeIntensity * 0.58 + row * 0.035;
-        segment.scaling.z = (0.42 + wakeIntensity * 0.54) * pulse;
+        const frontBias = clamp(1.05 - row * 0.075, 0.46, 1);
+        segment.scaling.x = (0.18 + wakeIntensity * 0.4) * frontBias;
+        segment.scaling.z = (0.13 + wakeIntensity * 0.18) * pulse * frontBias;
       }
     } else {
       if (isSubmarineWake) {
@@ -8690,6 +8695,10 @@ function updateEnemyBowWake(wake, speed, time, dt = 1 / 60, sourcePosition = nul
     if (isSubmarineWake && kind === "sternEdge") {
       segment.position.x = segment.metadata.baseX + Math.sin(time * 4.6 + index * 1.7) * 0.012 * wakeIntensity;
       segment.rotation.y = segment.metadata.baseRotationY + Math.sin(time * 3.9 + index) * 0.025 * wakeIntensity;
+    } else if (kind === "sternEdge") {
+      segment.position.x = segment.metadata.baseX + Math.sin(time * 5.4 + index * 1.45) * 0.014 * wakeIntensity;
+      segment.position.z = segment.metadata.baseZ + Math.sin(time * 4.2 + index * 0.78) * 0.026 * wakeIntensity;
+      segment.rotation.y = segment.metadata.baseRotationY + Math.sin(time * 5.0 + index * 0.9) * 0.16 * wakeIntensity;
     }
   });
 
@@ -8698,8 +8707,12 @@ function updateEnemyBowWake(wake, speed, time, dt = 1 / 60, sourcePosition = nul
     const row = patch.metadata?.row ?? 1;
     const visibility = wakeRowVisibility(wakeIntensity, row);
     const pulse = 0.82 + Math.sin(time * 2.6 + index * 1.7) * 0.08;
-    patch.setEnabled(visibility > 0.015);
-    patch.visibility = visibility;
+    let patchVisibility = visibility;
+    if (!isSubmarineWake && kind === "sternChurn") {
+      patchVisibility *= clamp(1.18 - row * 0.105, 0.22, 1);
+    }
+    patch.setEnabled(patchVisibility > 0.015);
+    patch.visibility = patchVisibility;
     if (kind === "sternChurn") {
       if (isSubmarineWake) {
         patch.scaling.x = (0.12 + wakeIntensity * 0.32) * pulse;
@@ -8707,8 +8720,12 @@ function updateEnemyBowWake(wake, speed, time, dt = 1 / 60, sourcePosition = nul
         patch.position.x = patch.metadata.baseX + Math.sin(time * 5.1 + index * 1.3) * 0.018 * wakeIntensity;
         patch.rotation.y = patch.metadata.baseRotationY + Math.sin(time * 4.4 + index) * 0.08 * wakeIntensity;
       } else {
-        patch.scaling.x = (0.24 + wakeIntensity * 0.86) * pulse;
-        patch.scaling.z = 0.18 + wakeIntensity * 0.5;
+        const frontBias = clamp(1.12 - row * 0.07, 0.5, 1);
+        patch.scaling.x = (0.17 + wakeIntensity * 0.46) * pulse * frontBias;
+        patch.scaling.z = (0.11 + wakeIntensity * 0.2) * frontBias;
+        patch.position.x = patch.metadata.baseX + Math.sin(time * 6.1 + index * 1.16) * 0.016 * wakeIntensity;
+        patch.position.z = patch.metadata.baseZ + Math.sin(time * 4.9 + index * 0.82) * 0.03 * wakeIntensity;
+        patch.rotation.y = patch.metadata.baseRotationY + Math.sin(time * 5.8 + index) * 0.24 * wakeIntensity;
       }
     } else {
       if (isSubmarineWake) {
@@ -9607,7 +9624,13 @@ function enemyWakeSnapshot(shipId) {
     strength: Number(wake.strength.toFixed(3)),
     bowVisibility: averageWakeVisibility(segments.filter((segment) => segment.kind === "bow")),
     sternEdgeVisibility: averageWakeVisibility(segments.filter((segment) => segment.kind === "sternEdge")),
-    sternChurnVisibility: averageWakeVisibility(churn.filter((patch) => patch.kind === "sternChurn"))
+    sternChurnVisibility: averageWakeVisibility(churn.filter((patch) => patch.kind === "sternChurn")),
+    sternEdgeCount: segments.filter((segment) => segment.kind === "sternEdge").length,
+    sternChurnCount: churn.filter((patch) => patch.kind === "sternChurn").length,
+    sternEdgeAverageScaleX: averageWakeScale(segments.filter((segment) => segment.kind === "sternEdge"), "scaleX"),
+    sternEdgeAverageScaleZ: averageWakeScale(segments.filter((segment) => segment.kind === "sternEdge"), "scaleZ"),
+    sternChurnAverageScaleX: averageWakeScale(churn.filter((patch) => patch.kind === "sternChurn"), "scaleX"),
+    sternChurnAverageScaleZ: averageWakeScale(churn.filter((patch) => patch.kind === "sternChurn"), "scaleZ")
   };
 }
 
@@ -9651,6 +9674,11 @@ function enemyPeriscopeWakeSnapshot(shipId) {
 function averageWakeVisibility(parts) {
   if (parts.length === 0) return 0;
   return Number((parts.reduce((sum, part) => sum + (part.enabled ? part.visibility : 0), 0) / parts.length).toFixed(3));
+}
+
+function averageWakeScale(parts, key) {
+  if (parts.length === 0) return 0;
+  return Number((parts.reduce((sum, part) => sum + (Number(part[key]) || 0), 0) / parts.length).toFixed(3));
 }
 
 function stationSnapshot() {
@@ -15262,14 +15290,14 @@ function createEnemyBowWake(scene, materials, parent, name, options = {}) {
   }
 
   for (let side = -1; side <= 1; side += 2) {
-    const sternRows = isSubmarineWake ? 3 : 4;
+    const sternRows = isSubmarineWake ? 3 : 7;
     for (let i = 0; i < sternRows; i += 1) {
-      const startX = side * (isSubmarineWake ? 0.03 + i * 0.012 : 0.72 + i * 0.035) * widthScale;
-      const startZ = (isSubmarineWake ? -4.52 - i * 0.03 : -4.04 - i * 0.05) * lengthScale;
-      const endX = side * (isSubmarineWake ? 0.08 + i * 0.025 : 0.88 + i * 0.09) * widthScale;
-      const endZ = (isSubmarineWake ? -4.78 - i * 0.18 : -4.84 - i * 0.48) * lengthScale;
+      const startX = side * (isSubmarineWake ? 0.03 + i * 0.012 : 0.64 + i * 0.018) * widthScale;
+      const startZ = (isSubmarineWake ? -4.52 - i * 0.03 : -3.98 - i * 0.02) * lengthScale;
+      const endX = side * (isSubmarineWake ? 0.08 + i * 0.025 : 0.76 + i * 0.03) * widthScale;
+      const endZ = (isSubmarineWake ? -4.78 - i * 0.18 : -4.24 - i * 0.12) * lengthScale;
       const segment = createWakeRibbon(`${name}_stern_edge_wake_${side}_${i}`, scene, materials.foam, root, startX, startZ, endX, endZ, surfaceY);
-      segment.metadata = { kind: "sternEdge", row: i + 1, baseX: segment.position.x, baseRotationY: segment.rotation.y };
+      segment.metadata = { kind: "sternEdge", row: i + 1, baseX: segment.position.x, baseZ: segment.position.z, baseRotationY: segment.rotation.y };
       segments.push(segment);
     }
   }
@@ -15290,20 +15318,27 @@ function createEnemyBowWake(scene, materials, parent, name, options = {}) {
     churn.push(patch);
   }
 
-  const sternChurnRows = isSubmarineWake ? 4 : 5;
+  const sternChurnRows = isSubmarineWake ? 4 : 9;
   for (let i = 0; i < sternChurnRows; i += 1) {
-    const patch = MeshBuilder.CreateBox(`${name}_stern_churn_${i}`, {
-      width: (isSubmarineWake ? 0.13 + (i % 2) * 0.055 : 0.22 + (i % 2) * 0.1) * widthScale,
-      height: 0.014,
-      depth: (isSubmarineWake ? 0.16 + i * 0.045 : 0.28 + i * 0.08) * lengthScale
-    }, scene);
+    const patch = isSubmarineWake
+      ? MeshBuilder.CreateBox(`${name}_stern_churn_${i}`, {
+          width: (0.13 + (i % 2) * 0.055) * widthScale,
+          height: 0.014,
+          depth: (0.16 + i * 0.045) * lengthScale
+        }, scene)
+      : MeshBuilder.CreateCylinder(`${name}_stern_churn_${i}`, {
+          diameter: 0.22 + (i % 3) * 0.026,
+          height: 0.014,
+          tessellation: 8
+        }, scene);
     patch.parent = root;
     patch.material = materials.foam;
-    patch.position.x = (i - (sternChurnRows - 1) * 0.5) * (isSubmarineWake ? 0.028 : 0.055) * widthScale;
+    const sternChurnOffset = isSubmarineWake ? 0 : ((i % 2) - 0.5) * 0.018;
+    patch.position.x = ((i - (sternChurnRows - 1) * 0.5) * (isSubmarineWake ? 0.028 : 0.032) + sternChurnOffset) * widthScale;
     patch.position.y = surfaceY;
-    patch.position.z = (isSubmarineWake ? -4.62 - i * 0.11 : -4.2 - i * 0.18) * lengthScale;
-    patch.rotation.y = -0.08 + i * 0.04;
-    patch.metadata = { kind: "sternChurn", row: i + 1, baseX: patch.position.x, baseRotationY: patch.rotation.y };
+    patch.position.z = (isSubmarineWake ? -4.62 - i * 0.11 : -4.05 - i * 0.06 - (i % 3) * 0.012) * lengthScale;
+    patch.rotation.y = -0.16 + i * 0.07 + (isSubmarineWake ? 0 : (i % 2) * 0.09);
+    patch.metadata = { kind: "sternChurn", row: i + 1, baseX: patch.position.x, baseZ: patch.position.z, baseRotationY: patch.rotation.y };
     churn.push(patch);
   }
 
