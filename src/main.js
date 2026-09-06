@@ -5258,7 +5258,10 @@ function createKillFeedMarker(teamId, vehicleType) {
 function createUnitMarker(teamId, vehicleType) {
   const marker = document.createElement("i");
   const teamClass = getRelativeUnitMarkerTeamClass(teamId);
-  marker.className = `unit-marker unit-marker-${teamClass} unit-marker-${vehicleType === "scout-plane" ? "plane" : "ship"}`;
+  const markerType = vehicleType === "scout-plane"
+    ? "plane"
+    : (vehicleType === "submarine" ? "submarine" : "ship");
+  marker.className = `unit-marker unit-marker-${teamClass} unit-marker-${markerType}`;
   marker.setAttribute("aria-hidden", "true");
   return marker;
 }
@@ -7106,10 +7109,14 @@ function drawRadarContactMarker(ctx, x, y, team, isPlayer = false, contactHeadin
     return;
   }
 
-  if (!isPlayer && Number.isFinite(contactHeading)) {
+  if (isPlayer && vehicleType === "submarine") {
+    drawRadarSubmarineMarker(ctx, x, y, color, 0, scaledMarker);
+  } else if (!isPlayer && Number.isFinite(contactHeading)) {
     const relativeHeading = contactHeading - radarHeading;
     if (vehicleType === "scout-plane") {
       drawRadarPlaneMarker(ctx, x, y, color, relativeHeading, scaledMarker);
+    } else if (vehicleType === "submarine") {
+      drawRadarSubmarineMarker(ctx, x, y, color, relativeHeading, scaledMarker);
     } else {
       drawRadarShipMarker(ctx, x, y, color, relativeHeading, scaledMarker);
     }
@@ -7338,6 +7345,30 @@ function drawRadarShipMarker(ctx, x, y, color, relativeHeading, markerScale = 1)
   ctx.closePath();
   ctx.stroke();
   ctx.fill();
+}
+
+function drawRadarSubmarineMarker(ctx, x, y, color, relativeHeading, markerScale = 1) {
+  const toPoint = createRadarMarkerPointMapper(x, y, relativeHeading, markerScale);
+  ctx.fillStyle = color;
+  ctx.strokeStyle = "rgba(2, 16, 21, 0.88)";
+  ctx.lineWidth = clamp(1.15 * markerScale, 0.75, 1.35);
+  ctx.beginPath();
+  moveToRadarMarkerPoint(ctx, toPoint, 0, 8.2);
+  lineToRadarMarkerPoint(ctx, toPoint, 1.35, 4.3);
+  lineToRadarMarkerPoint(ctx, toPoint, 1.15, -4.7);
+  lineToRadarMarkerPoint(ctx, toPoint, 0, -7.7);
+  lineToRadarMarkerPoint(ctx, toPoint, -1.15, -4.7);
+  lineToRadarMarkerPoint(ctx, toPoint, -1.35, 4.3);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(2, 16, 21, 0.55)";
+  ctx.lineWidth = clamp(0.75 * markerScale, 0.55, 0.9);
+  ctx.beginPath();
+  moveToRadarMarkerPoint(ctx, toPoint, 0, 3.0);
+  lineToRadarMarkerPoint(ctx, toPoint, 0, -2.6);
+  ctx.stroke();
 }
 
 function drawRadarPlaneMarker(ctx, x, y, color, relativeHeading, markerScale = 1) {

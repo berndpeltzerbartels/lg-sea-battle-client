@@ -3181,8 +3181,57 @@ body[data-player-vehicle="submarine"][data-torpedo-view="active"] .reset-game-bu
   margin-right: 3px;
 }
 
+.kill-feed-marker.unit-marker-submarine {
+  overflow: visible;
+  transform: translateY(-1px);
+}
+
 .unit-marker-ship {
   clip-path: polygon(50% 0, 75% 34%, 68% 100%, 50% 85%, 32% 100%, 25% 34%);
+}
+
+.unit-marker-submarine {
+  position: relative;
+  width: 13px;
+  height: 14px;
+  background: transparent;
+  clip-path: none;
+  color: #9be5df;
+}
+
+.unit-marker-submarine::before,
+.unit-marker-submarine::after {
+  content: "";
+  position: absolute;
+  display: block;
+  background: currentColor;
+}
+
+.unit-marker-submarine::before {
+  left: 3px;
+  bottom: 0;
+  width: 7px;
+  height: 8px;
+  border-radius: 50% 50% 46% 46% / 34% 34% 66% 66%;
+  clip-path: polygon(50% 0, 83% 34%, 74% 100%, 26% 100%, 17% 34%);
+}
+
+.unit-marker-submarine::after {
+  left: 4px;
+  top: 0;
+  width: 5px;
+  height: 9px;
+  clip-path: polygon(44% 0, 56% 0, 56% 34%, 72% 34%, 72% 100%, 28% 100%, 28% 34%, 44% 34%);
+}
+
+.unit-marker-submarine.unit-marker-light,
+.unit-marker-submarine.unit-marker-dark,
+.unit-marker-submarine.unit-marker-friendly,
+.unit-marker-submarine.unit-marker-enemy,
+.unit-marker-submarine.unit-marker-green,
+.unit-marker-submarine.unit-marker-sand,
+.unit-marker-submarine.unit-marker-unknown {
+  background: transparent;
 }
 
 .unit-marker-plane {
@@ -3191,30 +3240,37 @@ body[data-player-vehicle="submarine"][data-torpedo-view="active"] .reset-game-bu
 
 .unit-marker-light {
   background: #7fd7ff;
+  color: #7fd7ff;
 }
 
 .unit-marker-dark {
   background: #ff6b4a;
+  color: #ff6b4a;
 }
 
 .unit-marker-friendly {
   background: #7fd7ff;
+  color: #7fd7ff;
 }
 
 .unit-marker-enemy {
   background: #ff6b4a;
+  color: #ff6b4a;
 }
 
 .unit-marker-green {
   background: #75d28d;
+  color: #75d28d;
 }
 
 .unit-marker-sand {
   background: #e0c878;
+  color: #e0c878;
 }
 
 .unit-marker-unknown {
   background: rgb(247 251 255 / 58%);
+  color: rgb(247 251 255 / 58%);
 }
 
 .kill-feed-row span {
