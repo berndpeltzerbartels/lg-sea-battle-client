@@ -88,74 +88,6 @@ body.debug-marker-map {
   white-space: pre-wrap;
 }
 
-.login-active #renderCanvas,
-.login-active .hud,
-.login-active .sinking-water-overlay {
-  visibility: hidden;
-}
-
-.login-screen {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  display: grid;
-  place-items: center;
-  background: #0b2735;
-}
-
-.login-card {
-  display: grid;
-  width: min(280px, calc(100vw - 48px));
-  gap: 10px;
-  padding: 18px;
-  border: 1px solid rgb(192 230 238 / 32%);
-  border-radius: 8px;
-  background: rgb(5 24 34 / 84%);
-  box-shadow: 0 22px 70px rgb(0 0 0 / 32%);
-}
-
-.login-card strong {
-  font-size: 18px;
-}
-
-.login-card label {
-  font-size: 12px;
-  font-weight: 800;
-  color: #c7dce3;
-  text-transform: uppercase;
-}
-
-.login-card input,
-.login-card select {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 11px 12px;
-  border: 1px solid rgb(196 232 238 / 42%);
-  border-radius: 6px;
-  background: rgb(1 14 20 / 72%);
-  color: #f7fbff;
-  font: 900 24px/1 Inter, ui-sans-serif, system-ui, sans-serif;
-  letter-spacing: 0;
-  text-align: center;
-  text-transform: uppercase;
-}
-
-.login-card select {
-  min-height: 42px;
-  font-size: 15px;
-  cursor: pointer;
-}
-
-.login-card button {
-  min-height: 42px;
-  border: 0;
-  border-radius: 6px;
-  background: #d7edf1;
-  color: #092532;
-  font: 900 13px/1 Inter, ui-sans-serif, system-ui, sans-serif;
-  cursor: pointer;
-}
-
 #renderCanvas {
   position: fixed;
   left: var(--view-left);
@@ -2390,9 +2322,9 @@ body[data-player-vehicle="submarine"][data-torpedo-view="active"] .rudder-title 
   margin-bottom: 4px;
 }
 
-.observation-periscope-line,
+.observation-scope-reticle-line,
 .observation-periscope-ring,
-.observation-periscope-range {
+.observation-scope-reticle-range {
   position: absolute;
   z-index: 2;
   display: block;
@@ -2448,24 +2380,56 @@ body[data-player-vehicle="submarine"][data-torpedo-view="active"] .rudder-title 
   height: 54%;
 }
 
-.observation-periscope-range {
+.observation-scope-reticle-range {
   left: 50%;
   width: 38px;
   height: 2px;
   transform: translateX(-50%);
 }
 
-.observation-periscope-range-near {
+.observation-scope-reticle-range-near {
   top: 42%;
 }
 
-.observation-periscope-range-mid {
+.observation-scope-reticle-range-mid {
   top: 58%;
   width: 54px;
 }
 
-.observation-periscope-range-far {
+.observation-scope-reticle-range-far {
   top: 66%;
+}
+
+body[data-player-vehicle="submarine"][data-observation-periscope="active"] .observation-scope-reticle-range-mid,
+body[data-player-vehicle="submarine"][data-observation-periscope="active"] .observation-scope-reticle-range-near,
+body[data-player-vehicle="submarine"][data-observation-periscope="active"] .observation-scope-reticle-range-far {
+  display: none;
+}
+
+body[data-player-vehicle="submarine"][data-observation-periscope="active"] .observation-scope-reticle-line-left,
+body[data-player-vehicle="submarine"][data-observation-periscope="active"] .observation-scope-reticle-line-right {
+  display: none;
+}
+
+body[data-player-vehicle="submarine"][data-observation-periscope="active"] .observation-scope-reticle-line-vertical {
+  left: 50%;
+  top: 7%;
+  width: 2px;
+  height: 86%;
+  transform: translateX(-50%);
+  background: linear-gradient(
+    180deg,
+    transparent 0 33.6%,
+    var(--periscope-ink-strong) 33.6% 46.6%,
+    transparent 46.6% 63.4%,
+    var(--periscope-ink-strong) 63.4% 76.4%,
+    transparent 76.4% 100%
+  );
+}
+
+body[data-player-vehicle="submarine"][data-player-depth-state="submerged"][data-observation-periscope="active"] .observation-scope-reticle-line,
+body[data-player-vehicle="submarine"][data-player-depth-state="submerged"][data-observation-periscope="active"] .observation-scope-reticle-range {
+  display: none;
 }
 
 .cannon-scope-line,
