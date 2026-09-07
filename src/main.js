@@ -1013,8 +1013,8 @@ const engineOrders = engineOrderLabels.map((order, index) => ({
   speed: Number.isFinite(Number(engineSpeeds[index])) ? Number(engineSpeeds[index]) : defaultEngineSpeeds[index]
 }));
 const maxSubmarineForwardSpeed = 12.5;
-const maxSubmarinePeriscopeForwardSpeed = 7.5;
-const maxSubmarineSubmergedForwardSpeed = 6;
+const maxSubmarinePeriscopeForwardSpeed = 9;
+const maxSubmarineSubmergedForwardSpeed = 8;
 const submarinePeriscopeModes = {
   forwardScope: "forward-scope",
   alignToBearing: "align-to-bearing",
@@ -1169,7 +1169,7 @@ const radarRangeFactors = {
   near: combatRadarRangeFactor,
   far: scoutPlaneRadarRangeFactor
 };
-const submarineSubmergedRadarRangeFactor = 0.26;
+const submarineSubmergedRadarRangeFactor = 0.58;
 if (!singleRadarMode) {
   setupRadarRangeControl(radarRangeButton);
   setupTargetRadarControl(targetRadarButton);
@@ -7191,6 +7191,11 @@ function drawRadarContactMarker(ctx, x, y, team, isPlayer = false, contactHeadin
     return;
   }
 
+  if (!isPlayer && monochromeMode && Number.isFinite(contactHeading)) {
+    drawRadarUnderwaterHullMarker(ctx, x, y, color, contactHeading - radarHeading, vehicleType, scaledMarker);
+    return;
+  }
+
   if (isPlayer && vehicleType === "submarine") {
     drawRadarSubmarineMarker(ctx, x, y, color, 0, scaledMarker);
   } else if (!isPlayer && Number.isFinite(contactHeading)) {
@@ -7224,6 +7229,50 @@ function drawRadarContactMarker(ctx, x, y, team, isPlayer = false, contactHeadin
     ctx.fillStyle = color;
     ctx.fillText(label, x + labelOffsetX, y + labelOffsetY);
   }
+}
+
+function drawRadarUnderwaterHullMarker(ctx, x, y, color, relativeHeading, vehicleType = "torpedo-boat", markerScale = 1) {
+  const hullScale = clamp(markerScale * 1.9, 1.2, 2.4);
+  const toPoint = createRadarMarkerPointMapper(x, y, relativeHeading, hullScale);
+  const submarine = vehicleType === "submarine";
+  const sections = submarine ? submarineRadarHullSections() : torpedoBoatRadarHullSections();
+
+  ctx.save();
+  ctx.fillStyle = submarine ? "rgba(214, 248, 255, 0.7)" : "rgba(214, 248, 255, 0.64)";
+  ctx.strokeStyle = "rgba(247, 251, 255, 0.82)";
+  ctx.lineWidth = clamp(0.75 * hullScale, 0.9, 1.7);
+  ctx.beginPath();
+  sections.forEach((section, index) => {
+    const draw = index === 0 ? moveToRadarMarkerPoint : lineToRadarMarkerPoint;
+    draw(ctx, toPoint, section.halfWidth, section.z);
+  });
+  for (let index = sections.length - 1; index >= 0; index -= 1) {
+    lineToRadarMarkerPoint(ctx, toPoint, -sections[index].halfWidth, sections[index].z);
+  }
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function torpedoBoatRadarHullSections() {
+  return torpedoBoatHullSections().map((section) => ({
+    z: section.z,
+    halfWidth: section.topWidth * 0.5
+  }));
+}
+
+function submarineRadarHullSections() {
+  return [
+    { z: -3.6, halfWidth: 0.1 },
+    { z: -3.15, halfWidth: 0.5 },
+    { z: -2.1, halfWidth: 0.68 },
+    { z: -0.7, halfWidth: 0.75 },
+    { z: 1.15, halfWidth: 0.7 },
+    { z: 2.62, halfWidth: 0.42 },
+    { z: 3.6, halfWidth: 0.08 }
+  ];
 }
 
 function drawRadarSubmergedOwnSubmarineMarker(ctx, x, y, color, relativeHeading, markerScale = 1) {
