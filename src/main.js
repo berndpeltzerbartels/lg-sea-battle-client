@@ -4165,7 +4165,11 @@ function updatePlayerSubmarineDiveMotion(dt) {
     && playerSubmarineDepthState === submarineDepthStates.surface
     && !isSubmarinePastBridgePeriscopeSwitchDepth()) {
     submarineBridgeAscentHoldActive = false;
-    setBattleStation("bridge");
+    if (!flakViewActive) {
+      setBattleStation("bridge");
+    } else {
+      updateBattleStationButtons();
+    }
   }
 }
 
@@ -9113,6 +9117,7 @@ function installScenarioTestHooks() {
         periscopeLift: Number(playerSubmarinePeriscopeLift.toFixed(3)),
         observationPeriscope: document.body.dataset.observationPeriscope ?? "hidden",
         torpedoView: document.body.dataset.torpedoView ?? "hidden",
+        flakView: document.body.dataset.flakView ?? "bridge",
         submarinePeriscopeMode: document.body.dataset.submarinePeriscopeMode ?? "forward-scope",
         periscopeInk: document.body.dataset.periscopeInk ?? "dark",
         observationYawDeg: Number((normalizeAngle(observationPeriscopeYaw) * 180 / Math.PI).toFixed(1)),

@@ -168,7 +168,7 @@ test("flak aim keys stay clear of the helm controls", async ({ page }) => {
 });
 
 test("remote submarine keeps its real flak visible and stows it while diving", async ({ page }) => {
-  await page.goto("/sea-battle/?setup=8&vehicle=submarine&hide-beach=1&scenarioTest=1");
+  await page.goto("/sea-battle/index.html?setup=8&vehicle=submarine&hide-beach=1&scenarioTest=1");
   await page.waitForFunction(() => (
     window.seaBattleScenarioTest
     && document.body.dataset.scenarioTest === "ready"
@@ -481,6 +481,31 @@ test("submarine periscope depth keeps the observation view above water", async (
   const sharedTargetZoom = await diveSnapshot(page);
   expect(sharedTargetZoom.torpedoScopeZoom).toBe("IV");
   expect(sharedTargetZoom.torpedoScopeFov).toBe(sharedTargetZoom.observationPeriscopeFov);
+});
+
+test("submarine surfacing keeps a manually selected flak view", async ({ page }) => {
+  test.setTimeout(40_000);
+
+  await page.goto("/sea-battle/index.html?setup=8&vehicle=submarine&hide-beach=1&scenarioTest=1");
+  await page.waitForFunction(() => (
+    document.body.dataset.playerVehicle === "submarine"
+    && document.body.dataset.scenarioTest === "ready"
+  ));
+
+  await page.keyboard.press("Shift+ArrowDown");
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.depthState)).toBe("periscope");
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => Math.abs(snapshot.depthOffset - snapshot.targetDepthOffset)), { timeout: 12_000 }).toBeLessThan(0.05);
+
+  await page.keyboard.press("Shift+ArrowUp");
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.depthState)).toBe("surface");
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => Math.abs(snapshot.depthOffset)), { timeout: 5_000 }).toBeGreaterThan(0.92);
+  await page.evaluate(() => window.seaBattleScenarioTest.setStation("flak"));
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.flakView)).toBe("active");
+
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => Math.abs(snapshot.depthOffset)), { timeout: 12_000 }).toBeLessThan(0.92);
+  const surfaced = await diveSnapshot(page);
+  expect(surfaced.flakView).toBe("active");
+  expect(surfaced.torpedoView).toBe("hidden");
 });
 
 async function diveSnapshot(page) {
