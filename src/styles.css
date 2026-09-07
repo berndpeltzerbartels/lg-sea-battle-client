@@ -1687,6 +1687,10 @@ body[data-observation-periscope="active"] .observation-periscope {
 }
 
 .observation-periscope-glass {
+  --observation-horizon-y: 53.6%;
+  --observation-reticle-stroke: max(20px, 3.2%);
+  --observation-reticle-gap: 5.2%;
+  --observation-reticle-side-x: 10.6%;
   position: absolute;
   left: calc(var(--view-left) + (100vw - var(--view-left)) / 2);
   top: 50%;
@@ -1765,11 +1769,11 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
 
 .submarine-periscope-target-panel {
   position: absolute;
-  left: 50%;
-  top: 64.8%;
+  left: calc(50% + 14px);
+  top: calc(var(--observation-horizon-y) + var(--observation-reticle-gap) + var(--observation-reticle-stroke));
   z-index: 6;
   display: block;
-  transform: translate(-50%, 0);
+  transform: translate(0, -100%);
   pointer-events: auto;
 }
 
@@ -2427,34 +2431,63 @@ body[data-player-vehicle="submarine"][data-observation-periscope="active"] .obse
 body[data-player-vehicle="submarine"][data-observation-periscope="active"] .observation-scope-reticle-line-left,
 body[data-player-vehicle="submarine"][data-observation-periscope="active"] .observation-scope-reticle-line-right {
   display: block;
-  top: 53.6%;
-  width: 5.2%;
+  top: var(--observation-horizon-y);
+  width: var(--observation-reticle-stroke);
   height: 2px;
   transform: translateY(-50%);
 }
 
 body[data-player-vehicle="submarine"][data-observation-periscope="active"] .observation-scope-reticle-line-left {
-  left: 39.6%;
+  right: calc(50% + var(--observation-reticle-gap));
 }
 
 body[data-player-vehicle="submarine"][data-observation-periscope="active"] .observation-scope-reticle-line-right {
-  right: 39.6%;
+  left: calc(50% + var(--observation-reticle-gap));
 }
 
 body[data-player-vehicle="submarine"][data-observation-periscope="active"] .observation-scope-reticle-line-vertical {
   left: 50%;
-  top: 7%;
+  top: 0;
   width: 2px;
-  height: 86%;
+  height: 100%;
   transform: translateX(-50%);
   background: linear-gradient(
     180deg,
-    transparent 0 42.1%,
-    var(--periscope-ink-strong) 42.1% 48.1%,
-    transparent 48.1% 60.2%,
-    var(--periscope-ink-strong) 60.2% 66.2%,
-    transparent 66.2% 100%
+    transparent 0 calc(var(--observation-horizon-y) - var(--observation-reticle-gap) - var(--observation-reticle-stroke)),
+    var(--periscope-ink-strong) calc(var(--observation-horizon-y) - var(--observation-reticle-gap) - var(--observation-reticle-stroke)) calc(var(--observation-horizon-y) - var(--observation-reticle-gap)),
+    transparent calc(var(--observation-horizon-y) - var(--observation-reticle-gap)) calc(var(--observation-horizon-y) + var(--observation-reticle-gap)),
+    var(--periscope-ink-strong) calc(var(--observation-horizon-y) + var(--observation-reticle-gap)) calc(var(--observation-horizon-y) + var(--observation-reticle-gap) + var(--observation-reticle-stroke)),
+    transparent calc(var(--observation-horizon-y) + var(--observation-reticle-gap) + var(--observation-reticle-stroke)) 100%
   );
+}
+
+.observation-scope-horizon-marks {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.observation-scope-horizon-marks i {
+  position: absolute;
+  top: var(--horizon-mark-y, 50%);
+  width: 18px;
+  height: 2px;
+  background: var(--periscope-ink-soft);
+  transform: translateY(-50%);
+}
+
+.observation-scope-horizon-marks-left i {
+  left: var(--observation-reticle-side-x);
+}
+
+.observation-scope-horizon-marks-right i {
+  right: var(--observation-reticle-side-x);
+}
+
+.observation-scope-horizon-marks i.is-active {
+  width: 24px;
+  background: var(--periscope-ink-strong);
 }
 
 body[data-player-vehicle="submarine"][data-player-depth-state="submerged"][data-observation-periscope="active"] .observation-scope-reticle-line,

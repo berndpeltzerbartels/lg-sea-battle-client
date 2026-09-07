@@ -53,8 +53,8 @@ test("submarine cockpit exposes bridge and flak controls only", async ({ page })
   await expect(page.locator(".torpedo-scope")).toBeVisible();
   await expect(page.locator(".torpedo-scope .submarine-periscope-target-panel")).toHaveCount(0);
   await expect(page.locator(".torpedo-scope-rudder-scale")).toContainText("Ruder");
-  await expect(page.locator(".torpedo-scope-rudder-scale")).toContainText("S 35");
-  await expect(page.locator(".torpedo-scope-rudder-scale")).toContainText("P 35");
+  await expect(page.locator(".torpedo-scope-rudder-scale")).toContainText("S 45");
+  await expect(page.locator(".torpedo-scope-rudder-scale")).toContainText("P 45");
   await page.keyboard.press("2");
   await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("hidden");
   await expect.poll(() => page.evaluate(() => document.body.dataset.observationPeriscope)).toBe("active");
@@ -130,6 +130,22 @@ test("torpedo boat torpedo view keeps its own precision sight", async ({ page })
   await expect(page.locator("#torpedoScopeRudderMarker")).toBeVisible();
   await expect(page.locator(".torpedo-scope .submarine-periscope-mode-panel")).toBeHidden();
   await expect.poll(() => page.locator(".torpedo-scope-glass").evaluate((element) => getComputedStyle(element).borderRadius)).not.toBe("0px");
+});
+
+test("submarine helm uses finer rudder steps than the torpedo boat", async ({ page }) => {
+  await page.goto("/sea-battle/?setup=8&vehicle=submarine&hide-beach=1");
+  await page.waitForFunction(() => document.body.dataset.playerVehicle === "submarine");
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.rudderDegrees)).toBe("-1");
+  await page.locator(".rudder-gauge").click({ position: { x: 1, y: 12 } });
+  await expect.poll(() => page.evaluate(() => document.body.dataset.rudderDegrees)).toBe("-45");
+
+  await page.goto("/sea-battle/?setup=8&vehicle=torpedo-boat&hide-beach=1");
+  await page.waitForFunction(() => document.body.dataset.playerVehicle === "torpedo-boat");
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(() => page.evaluate(() => document.body.dataset.rudderDegrees)).toBe("-2");
+  await page.locator(".rudder-gauge").click({ position: { x: 1, y: 12 } });
+  await expect.poll(() => page.evaluate(() => document.body.dataset.rudderDegrees)).toBe("-35");
 });
 
 test("flak aim keys stay clear of the helm controls", async ({ page }) => {
@@ -452,12 +468,14 @@ test("submarine periscope depth keeps the observation view above water", async (
   await expect(page.locator(".observation-scope-reticle-line-left")).toBeVisible();
   await expect(page.locator(".observation-scope-reticle-line-right")).toBeVisible();
   await expect(page.locator(".observation-scope-reticle-range-mid")).toBeHidden();
+  const firstObservationHorizon = await page.locator(".observation-periscope-glass").evaluate((element) => getComputedStyle(element).getPropertyValue("--observation-horizon-y").trim());
   const zoomedObservationPeriscope = await diveSnapshot(page);
   expect(zoomedObservationPeriscope.observationPeriscopeZoom).toBe("III");
   expect(zoomedObservationPeriscope.observationPeriscopeFov).toBe(zoomedTargetPeriscope.torpedoScopeFov);
 
   await page.keyboard.press("Z");
   await expect.poll(() => page.evaluate(() => document.body.dataset.observationPeriscopeZoom)).toBe("IV");
+  await expect.poll(() => page.locator(".observation-periscope-glass").evaluate((element) => getComputedStyle(element).getPropertyValue("--observation-horizon-y").trim())).not.toBe(firstObservationHorizon);
   await page.keyboard.press("1");
   await expect.poll(() => page.evaluate(() => document.body.dataset.torpedoView)).toBe("active");
   const sharedTargetZoom = await diveSnapshot(page);

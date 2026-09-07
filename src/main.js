@@ -94,6 +94,8 @@ const observationPeriscopeHeadingMarker = document.getElementById("observationPe
 const observationPeriscopeBearingValue = document.getElementById("observationPeriscopeBearingValue");
 const observationPeriscopeYawMarker = document.getElementById("observationPeriscopeYawMarker");
 const observationPeriscopeZoomMarker = document.getElementById("observationPeriscopeZoomMarker");
+const observationPeriscopeGlass = document.querySelector(".observation-periscope-glass");
+const observationPeriscopeHorizonMarks = Array.from(document.querySelectorAll("[data-observation-horizon-mark]"));
 const engineValue = document.getElementById("engineValue");
 const telegraphSpeedValue = document.getElementById("telegraphSpeedValue");
 const telegraphOrderValue = document.getElementById("telegraphOrderValue");
@@ -130,6 +132,10 @@ const torpedoScopeBearingMarker = document.getElementById("torpedoScopeBearingMa
 const torpedoScopeTargetBearingMarker = document.getElementById("torpedoScopeTargetBearingMarker");
 const torpedoScopeRudderMarker = document.getElementById("torpedoScopeRudderMarker");
 const submarinePeriscopeModeButtons = Array.from(document.querySelectorAll("[data-submarine-periscope-mode]"));
+const rudderPortMarks = Array.from(document.querySelectorAll(".rudder-mark-port, .torpedo-scope-rudder-mark-port"));
+const rudderStarboardMarks = Array.from(document.querySelectorAll(".rudder-mark-starboard, .torpedo-scope-rudder-mark-starboard"));
+const rudderPortHalfMarks = Array.from(document.querySelectorAll(".torpedo-scope-rudder-mark-port-half"));
+const rudderStarboardHalfMarks = Array.from(document.querySelectorAll(".torpedo-scope-rudder-mark-starboard-half"));
 const flakHitAlert = document.getElementById("flakHitAlert");
 const rudderIndicator = document.getElementById("rudderIndicator");
 const rudderValue = document.getElementById("rudderValue");
@@ -1187,10 +1193,15 @@ let lastGameStreamMessageAt = 0;
 let debugTeleportPending = false;
 let fireTorpedoRequestInFlight = false;
 let dropBombRequestInFlight = false;
-const maxRudderDegrees = 35;
-const rudderStepDegrees = 2;
+const torpedoBoatMaxRudderDegrees = 35;
+const submarineMaxRudderDegrees = 45;
+const torpedoBoatRudderStepDegrees = 2;
+const submarineRudderStepDegrees = 1;
 const rudderHoldInitialDelaySeconds = 0.22;
-const rudderHoldDegreesPerSecond = 60;
+const torpedoBoatRudderHoldDegreesPerSecond = 60;
+const submarineRudderHoldDegreesPerSecond = 32;
+const torpedoBoatForwardTurnStrength = 0.24;
+const torpedoBoatReverseTurnStrength = -0.16;
 const maxSimulationFrameSeconds = 0.12;
 boat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
 const playerRespawnPoints = createPlayerRespawnPoints(playerShips, initialPlayerSpawn);
@@ -1274,10 +1285,11 @@ scene.onBeforeRenderObservable.add(() => {
   const playerActive = playerDamageState === "active";
 
   if (playerActive && heldRudderDirection !== 0 && time >= nextRudderHoldChangeTime) {
+    const maxRudder = getPlayerMaxRudderDegrees();
     rudderDegrees = clamp(
-      rudderDegrees + heldRudderDirection * rudderHoldDegreesPerSecond * dt,
-      -maxRudderDegrees,
-      maxRudderDegrees
+      rudderDegrees + heldRudderDirection * getRudderHoldDegreesPerSecond() * dt,
+      -maxRudder,
+      maxRudder
     );
   }
   if (playerActive && flakViewActive && heldFlakDirection !== 0) {
@@ -1359,9 +1371,9 @@ scene.onBeforeRenderObservable.add(() => {
     const response = scoutPlaneMode ? 1.1 : (Math.abs(targetSpeed) > Math.abs(speed) ? 0.45 : 0.42);
     speed += (targetSpeed - speed) * Math.min(1, dt * response);
 
-    const turnStrength = scoutPlaneMode ? 0.26 : (speed >= 0 ? 0.24 : -0.16);
+    const turnStrength = getPlayerTurnStrength(speed);
     const rudderGrip = scoutPlaneMode ? clamp(Math.abs(speed) / 7.2, 0.24, 1) : clamp(Math.abs(speed) / 4.2, 0, 1);
-    const steer = rudderDegrees / maxRudderDegrees;
+    const steer = rudderDegrees / torpedoBoatMaxRudderDegrees;
     const targetTurnVelocity = steer * turnStrength * rudderGrip;
     turnVelocity += (targetTurnVelocity - turnVelocity) * Math.min(1, dt * (scoutPlaneMode ? 1.75 : 2.0));
     const previousHeading = heading;
@@ -1885,7 +1897,7 @@ function updateSubmarineBearingAlignment(dt) {
   const rudderDemand = clamp(
     Math.abs(delta) * 180 / Math.PI * submarineBearingAlignRudderGain,
     submarineBearingAlignMinRudder,
-    maxRudderDegrees
+    getPlayerMaxRudderDegrees()
   );
   rudderDegrees = rudderSign * rudderDemand;
 }
@@ -3121,6 +3133,7 @@ function updateTorpedoScopeRudderDisplay() {
 function updateObservationPeriscopeZoomDisplay() {
   const label = currentSubmarinePeriscopeZoomLevel().label;
   document.body.dataset.observationPeriscopeZoom = label;
+  updateObservationPeriscopeHorizonMarks();
   if (observationPeriscopeZoomMarker) {
     const maxIndex = Math.max(1, submarinePeriscopeZoomLevels.length - 1);
     const ratio = submarinePeriscopeZoomLevelIndex / maxIndex;
@@ -3302,7 +3315,8 @@ function setupRudderDragControl(gauge) {
     const rect = gauge.getBoundingClientRect();
     if (rect.width <= 0) return;
     const ratio = clamp((event.clientX - rect.left) / rect.width, 0, 1);
-    rudderDegrees = clamp((ratio * 2 - 1) * maxRudderDegrees, -maxRudderDegrees, maxRudderDegrees);
+    const maxRudder = getPlayerMaxRudderDegrees();
+    rudderDegrees = clamp((ratio * 2 - 1) * maxRudder, -maxRudder, maxRudder);
   };
 
   gauge.addEventListener("pointerdown", (event) => {
@@ -4181,6 +4195,7 @@ function updateObservationPeriscopeViewState() {
 function updateObservationPeriscopeHeadingDisplay(active = isPlayerSubmarineObservationPeriscopeActive()) {
   const absoluteBearing = normalizeAngle(heading + observationPeriscopeYaw);
   const yawRatio = compassBearingRatio(absoluteBearing);
+  updateObservationPeriscopeHorizonMarks(active);
   if (observationPeriscopeHeadingMarker) {
     observationPeriscopeHeadingMarker.style.top = `${clamp(yawRatio * 100, 0, 100)}%`;
   }
@@ -4196,13 +4211,34 @@ function updateObservationPeriscopeHeadingDisplay(active = isPlayerSubmarineObse
   updateSubmarinePeriscopeModeUi();
 }
 
+function updateObservationPeriscopeHorizonMarks(active = isPlayerSubmarineObservationPeriscopeActive()) {
+  if (!observationPeriscopeGlass) return;
+  const viewPitch = submarineObservationPeriscopePitchBase + observationPeriscopePitch;
+  const horizonPercent = observationHorizonPercentForFov(currentSubmarinePeriscopeZoomLevel().fov, viewPitch);
+  observationPeriscopeGlass.style.setProperty("--observation-horizon-y", `${horizonPercent}%`);
+  if (!active) return;
+  observationPeriscopeHorizonMarks.forEach((mark) => {
+    const index = Number.parseInt(mark.dataset.observationHorizonMark ?? "", 10);
+    const level = submarinePeriscopeZoomLevels[index];
+    if (!level) return;
+    mark.style.setProperty("--horizon-mark-y", `${observationHorizonPercentForFov(level.fov, viewPitch)}%`);
+    mark.classList.toggle("is-active", index === submarinePeriscopeZoomLevelIndex);
+  });
+}
+
+function observationHorizonPercentForFov(fov, viewPitch) {
+  const halfFov = Math.max(0.01, fov / 2);
+  const offset = Math.tan(viewPitch) / Math.tan(halfFov) * 50;
+  return clamp(50 - offset, 18, 82).toFixed(2);
+}
+
 function signedAngleScaleLeft(angle) {
   const signed = clamp(getSignedAngularDistance(angle, 0), -Math.PI, Math.PI);
   return ((signed + Math.PI) / (Math.PI * 2)) * 100;
 }
 
-function rudderScaleLeft(degrees) {
-  return clamp((degrees + maxRudderDegrees) / (maxRudderDegrees * 2), 0, 1) * 100;
+function rudderScaleLeft(degrees, maxRudder = getPlayerMaxRudderDegrees()) {
+  return clamp((degrees + maxRudder) / (maxRudder * 2), 0, 1) * 100;
 }
 
 function updateTorpedoScopeBearingDisplay() {
@@ -4318,15 +4354,38 @@ function updateAltimeter(altitudeUnits) {
 }
 
 function stepRudderDegrees(currentDegrees, direction) {
-  const step = rudderStepDegrees * Math.sign(direction);
-  if (currentDegrees !== 0 && Math.sign(currentDegrees) !== Math.sign(step) && Math.abs(currentDegrees) <= rudderStepDegrees) {
+  const stepSize = getRudderStepDegrees();
+  const step = stepSize * Math.sign(direction);
+  if (currentDegrees !== 0 && Math.sign(currentDegrees) !== Math.sign(step) && Math.abs(currentDegrees) <= stepSize) {
     return 0;
   }
   const steppedDegrees = currentDegrees + step;
   if (currentDegrees !== 0 && Math.sign(currentDegrees) !== Math.sign(steppedDegrees)) {
     return 0;
   }
-  return clamp(steppedDegrees, -maxRudderDegrees, maxRudderDegrees);
+  const maxRudder = getPlayerMaxRudderDegrees();
+  return clamp(steppedDegrees, -maxRudder, maxRudder);
+}
+
+function getPlayerMaxRudderDegrees() {
+  return submarineMode ? submarineMaxRudderDegrees : torpedoBoatMaxRudderDegrees;
+}
+
+function maxRudderDegreesForVehicle(vehicleType) {
+  return vehicleType === "submarine" ? submarineMaxRudderDegrees : torpedoBoatMaxRudderDegrees;
+}
+
+function getRudderStepDegrees() {
+  return submarineMode ? submarineRudderStepDegrees : torpedoBoatRudderStepDegrees;
+}
+
+function getRudderHoldDegreesPerSecond() {
+  return submarineMode ? submarineRudderHoldDegreesPerSecond : torpedoBoatRudderHoldDegreesPerSecond;
+}
+
+function getPlayerTurnStrength(currentSpeed) {
+  if (scoutPlaneMode) return 0.26;
+  return currentSpeed >= 0 ? torpedoBoatForwardTurnStrength : torpedoBoatReverseTurnStrength;
 }
 
 function startGlobalMouseRudder(event) {
@@ -4357,7 +4416,8 @@ function isMouseTorpedoButton(button) {
 function updateGlobalMouseRudder(event) {
   if (!rightMouseRudderActive || playerDamageState !== "active" || (event.buttons & 2) === 0) return;
   const dragDegrees = (event.clientX - rightMouseRudderStartX) * 0.22;
-  rudderDegrees = clamp(rightMouseRudderStartDegrees + dragDegrees, -maxRudderDegrees, maxRudderDegrees);
+  const maxRudder = getPlayerMaxRudderDegrees();
+  rudderDegrees = clamp(rightMouseRudderStartDegrees + dragDegrees, -maxRudder, maxRudder);
 }
 
 async function loadGameConfig() {
@@ -6117,7 +6177,9 @@ function applyServerShipSnapshot(motion, ship) {
   motion.heading = Number.isFinite(ship.heading) ? blendAngle(motion.heading, ship.heading, 0.18) : motion.heading;
   motion.speed = !wakeTestOverrideActive && Number.isFinite(ship.speed) ? motion.speed + (ship.speed - motion.speed) * 0.18 : motion.speed;
   motion.engineOrder = !wakeTestOverrideActive && Number.isInteger(ship.engineOrder) ? ship.engineOrder : motion.engineOrder;
-  motion.rudder = Number.isFinite(ship.rudderDegrees) ? clamp(ship.rudderDegrees / maxRudderDegrees, -1, 1) : motion.rudder;
+  motion.rudder = Number.isFinite(ship.rudderDegrees)
+    ? clamp(ship.rudderDegrees / maxRudderDegreesForVehicle(motion.vehicleType), -1, 1)
+    : motion.rudder;
   updateSubmarinePeriscopeExtension(motion.boat, motion.periscopeLift ?? 0);
   if (wasInactive && correctionDistance > 55) {
     motion.root.position.x = motion.serverPosition.x;
@@ -6206,14 +6268,34 @@ function updateTelegraphSteps(steps, activeOrder) {
 }
 
 function updateRudderGauge(indicator, valueElement, degrees) {
-  const ratio = (degrees + maxRudderDegrees) / (maxRudderDegrees * 2);
+  const maxRudder = getPlayerMaxRudderDegrees();
+  const ratio = (degrees + maxRudder) / (maxRudder * 2);
   indicator?.style.setProperty("--rudder-ratio", String(ratio));
+  updateRudderLimitLabels(maxRudder);
 
   if (valueElement) {
     const roundedDegrees = Math.round(degrees);
     const side = roundedDegrees < 0 ? "P" : roundedDegrees > 0 ? "S" : "";
     valueElement.textContent = side ? `${Math.abs(roundedDegrees)}° ${side}` : "0°";
   }
+}
+
+function updateRudderLimitLabels(maxRudder) {
+  const portLabel = `P ${maxRudder}`;
+  const starboardLabel = `S ${maxRudder}`;
+  const halfRudder = Math.round(maxRudder / 2);
+  rudderPortMarks.forEach((mark) => {
+    mark.textContent = portLabel;
+  });
+  rudderStarboardMarks.forEach((mark) => {
+    mark.textContent = starboardLabel;
+  });
+  rudderPortHalfMarks.forEach((mark) => {
+    mark.textContent = `P ${halfRudder}`;
+  });
+  rudderStarboardHalfMarks.forEach((mark) => {
+    mark.textContent = `S ${halfRudder}`;
+  });
 }
 
 function updateWeaponElevationGauge(indicator, valueElement, pitch, minPitch, maxPitch) {
