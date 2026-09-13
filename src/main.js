@@ -9772,7 +9772,6 @@ function installScenarioTestHooks() {
         mesh.computeWorldMatrix(true);
         const positions = Array.from(mesh.getVerticesData("position") ?? []);
         const indices = Array.from(mesh.getIndices() ?? []);
-        const colors = Array.from(mesh.getVerticesData("color") ?? []);
         const ys = [];
         for (let index = 1; index < positions.length; index += 3) {
           ys.push(positions[index]);
@@ -9791,7 +9790,6 @@ function installScenarioTestHooks() {
           vertices: positions.length / 3,
           triangles: indices.length / 3,
           maxHorizontalTriangleEdge: Number(maxHorizontalTriangleEdge(positions, indices).toFixed(3)),
-          colorRange: Number(vertexColorRange(colors).toFixed(3)),
           minY: ys.length ? Number(Math.min(...ys).toFixed(3)) : null,
           maxY: ys.length ? Number(Math.max(...ys).toFixed(3)) : null
         };
@@ -17218,10 +17216,10 @@ function createAuthoredIslandSurface(land, scene, materials, parent) {
   });
   const lodSurfaces = splitAuthoredTerrainSurfaces(lodTerrain, renderLand);
 
-  createAuthoredTerrainMeshWithLod(`${land.name}_authored_seafloor`, surfaces.seaFloor, lodSurfaces.seaFloor, authoredSeaFloorMaterial(land, materials), scene, parent, "seafloor");
-  createAuthoredTerrainMeshWithLod(`${land.name}_authored_terrain`, surfaces.land, lodSurfaces.land, authoredLandMaterial(land, materials), scene, parent, "grass");
-  createAuthoredTerrainMeshWithLod(`${land.name}_authored_sand`, surfaces.sand, lodSurfaces.sand, materials.sand, scene, parent, "sand");
-  createAuthoredTerrainMeshWithLod(`${land.name}_authored_snow`, surfaces.snow, lodSurfaces.snow, materials.snow, scene, parent, "snow");
+  createAuthoredTerrainMeshWithLod(`${land.name}_authored_seafloor`, surfaces.seaFloor, lodSurfaces.seaFloor, authoredSeaFloorMaterial(land, materials), scene, parent);
+  createAuthoredTerrainMeshWithLod(`${land.name}_authored_terrain`, surfaces.land, lodSurfaces.land, authoredLandMaterial(land, materials), scene, parent);
+  createAuthoredTerrainMeshWithLod(`${land.name}_authored_sand`, surfaces.sand, lodSurfaces.sand, materials.sand, scene, parent);
+  createAuthoredTerrainMeshWithLod(`${land.name}_authored_snow`, surfaces.snow, lodSurfaces.snow, materials.snow, scene, parent);
 }
 
 function createAuthoredTerrainMeshData(land, options = {}) {
@@ -17623,18 +17621,6 @@ function horizontalVertexDistance(positions, a, b) {
   );
 }
 
-function vertexColorRange(colors) {
-  if (!colors.length) return 0;
-  let min = Infinity;
-  let max = -Infinity;
-  for (let index = 0; index < colors.length; index += 4) {
-    const brightness = (colors[index] + colors[index + 1] + colors[index + 2]) / 3;
-    min = Math.min(min, brightness);
-    max = Math.max(max, brightness);
-  }
-  return max - min;
-}
-
 function orientAuthoredTerrainTriangleForBabylon(triangle, vertices) {
   const positions = vertices.flatMap((point) => [point.x, point.h, point.z]);
   return triangleNormalY(positions, triangle[0], triangle[1], triangle[2]) < 0
@@ -17726,18 +17712,18 @@ function sanitizeAuthoredHeightFalloff(value) {
   return ["spike", "hill", "plateau"].includes(value) ? value : "spike";
 }
 
-function createAuthoredTerrainMeshWithLod(name, surface, lodSurface, material, scene, parent, colorProfile = null) {
-  const mesh = createAuthoredTerrainMesh(name, surface.positions, surface.indices, material, scene, parent, colorProfile);
+function createAuthoredTerrainMeshWithLod(name, surface, lodSurface, material, scene, parent) {
+  const mesh = createAuthoredTerrainMesh(name, surface.positions, surface.indices, material, scene, parent);
   if (!mesh) return null;
 
-  const lodMesh = createAuthoredTerrainMesh(`${name}_lod`, lodSurface.positions, lodSurface.indices, material, scene, parent, colorProfile);
+  const lodMesh = createAuthoredTerrainMesh(`${name}_lod`, lodSurface.positions, lodSurface.indices, material, scene, parent);
   if (lodMesh) {
     mesh.addLODLevel(authoredLodDistance, lodMesh);
   }
   return mesh;
 }
 
-function createAuthoredTerrainMesh(name, positions, indices, material, scene, parent, colorProfile = null) {
+function createAuthoredTerrainMesh(name, positions, indices, material, scene, parent) {
   if (!indices.length) return null;
   const compacted = compactIndexedVertexData(positions, indices);
   const normals = [];
@@ -17746,41 +17732,12 @@ function createAuthoredTerrainMesh(name, positions, indices, material, scene, pa
   vertexData.positions = compacted.positions;
   vertexData.indices = compacted.indices;
   vertexData.normals = normals;
-  if (colorProfile) {
-    vertexData.colors = createAuthoredTerrainVertexColors(compacted.positions, colorProfile);
-  }
   const mesh = new Mesh(name, scene);
   vertexData.applyToMesh(mesh);
-  mesh.useVertexColors = Boolean(colorProfile);
   mesh.parent = parent;
   mesh.material = material;
   mesh.receiveShadows = true;
   return prepareStaticLandscapeMesh(mesh);
-}
-
-function createAuthoredTerrainVertexColors(positions, profile) {
-  const colors = [];
-  for (let index = 0; index < positions.length; index += 3) {
-    const x = positions[index];
-    const y = positions[index + 1];
-    const z = positions[index + 2];
-    const noise = terrainNoise(x * 0.035, z * 0.035) * 0.5 + 0.5;
-    const broad = Math.sin(x * 0.007 + z * 0.004) * 0.5 + 0.5;
-    const heightTone = smoothstep(0, authoredSnowLineMeters * authoredTerrainVisualScale, y);
-    const tone = clamp(0.86 + noise * 0.16 + broad * 0.05 + heightTone * 0.08, 0.78, 1.12);
-
-    if (profile === "sand") {
-      colors.push(tone * 1.08, tone * 1.03, tone * 0.9, 1);
-    } else if (profile === "snow") {
-      colors.push(tone * 1.08, tone * 1.1, tone * 1.08, 1);
-    } else if (profile === "seafloor") {
-      const depthTone = clamp(0.74 + smoothstep(-320, 0, y) * 0.24 + noise * 0.08, 0.68, 1.02);
-      colors.push(depthTone * 0.84, depthTone * 1.02, depthTone * 1.05, 1);
-    } else {
-      colors.push(tone * 0.94, tone * 1.08, tone * 0.9, 1);
-    }
-  }
-  return colors;
 }
 
 function prepareStaticLandscapeMesh(mesh) {
