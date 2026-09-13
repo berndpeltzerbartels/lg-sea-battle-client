@@ -8,6 +8,9 @@ test('uploaded editor landscape is converted and rendered as authored polygon te
 
   try {
     await uploadAndStartLandscape(page, landscapeName, 'playwright-authored-hill.json', editorLandscape);
+    await openAdmin(page);
+    await expect(page.getByRole('radio', { name: landscapeName, exact: true })).toBeChecked();
+    await expect(page.getByRole('button', { name: `Landschaft ${landscapeName} löschen`, exact: true })).toBeDisabled();
 
     await expect.poll(async () => {
       const response = await request.get('/game/world');
@@ -306,9 +309,10 @@ async function uploadAndStartLandscape(page, landscapeName, fileName, editorLand
   });
   await page.getByRole('button', { name: 'Hochladen', exact: true }).click();
 
-  const tile = page.locator('article.tile').filter({ hasText: landscapeName }).first();
-  await expect(tile).toBeVisible();
-  await tile.getByRole('button', { name: /^starten$/i }).first().click();
+  const landscapeRadio = page.getByRole('radio', { name: landscapeName, exact: true });
+  await expect(landscapeRadio).toBeVisible();
+  await landscapeRadio.check();
+  await page.getByRole('button', { name: /^starten$/i }).click();
 }
 
 async function openAdmin(page) {
@@ -365,9 +369,14 @@ async function aimBridgeAtLandscape(page) {
 async function deleteLandscapeIfPresent(page, landscapeName) {
   try {
     await openAdmin(page);
-    const tile = page.locator('article.tile').filter({ hasText: landscapeName }).first();
-    if (await tile.isVisible({ timeout: 1_000 }).catch(() => false)) {
-      await tile.getByRole('button', { name: /löschen/i }).first().click();
+    const deleteButton = page.getByRole('button', { name: `Landschaft ${landscapeName} löschen`, exact: true }).first();
+    if (await deleteButton.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      if (await deleteButton.isDisabled()) {
+        await page.getByRole('radio', { name: 'Standardlandschaft', exact: true }).check();
+        await page.getByRole('button', { name: /^starten$/i }).click();
+        await expect(deleteButton).toBeEnabled();
+      }
+      await deleteButton.click();
     }
   } catch {
     // Best-effort cleanup only; the temp E2E runner removes its copied database.
