@@ -93,6 +93,7 @@ scene.clearColor = surfaceClearColor.clone();
 scene.fogMode = Scene.FOGMODE_EXP2;
 scene.fogColor = surfaceFogColor.clone();
 scene.fogDensity = surfaceFogDensity;
+scene.ambientColor = new Color3(0.075, 0.095, 0.075);
 
 const speedValue = document.getElementById("speedValue");
 const altitudeValue = document.getElementById("altitudeValue");
@@ -551,16 +552,16 @@ if (shipContrastDebug) {
 }
 const world = new TransformNode("world", scene);
 
-const sun = new DirectionalLight("sun", new Vector3(-0.45, -0.9, 0.32), scene);
-sun.position = new Vector3(35, 80, -45);
-sun.intensity = 1.2;
-sun.diffuse = new Color3(0.83, 0.85, 0.83);
-sun.specular = new Color3(0.48, 0.55, 0.62);
+const sun = new DirectionalLight("sun", new Vector3(-0.58, -0.78, 0.32), scene);
+sun.position = new Vector3(58, 76, -38);
+sun.intensity = 1.34;
+sun.diffuse = new Color3(0.98, 0.93, 0.8);
+sun.specular = new Color3(0.34, 0.38, 0.38);
 
 const ambient = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
-ambient.intensity = 0.42;
-ambient.diffuse = new Color3(0.5, 0.6, 0.7);
-ambient.groundColor = new Color3(0.2, 0.24, 0.28);
+ambient.intensity = 0.34;
+ambient.diffuse = new Color3(0.42, 0.54, 0.64);
+ambient.groundColor = new Color3(0.12, 0.18, 0.16);
 if (sideViewSandboxMode) {
   sun.direction = new Vector3(-0.55, -0.7, -0.45);
   sun.position = new Vector3(55, 70, 45);
@@ -13990,13 +13991,15 @@ function createMaterials(scene) {
   sand.zOffset = -2;
 
   const grass = new StandardMaterial("grass_material", scene);
-  grass.diffuseColor = new Color3(0.22, 0.34, 0.3);
-  grass.specularColor = new Color3(0.025, 0.035, 0.03);
+  grass.diffuseColor = new Color3(0.2, 0.36, 0.27);
+  grass.ambientColor = new Color3(0.16, 0.22, 0.14);
+  grass.specularColor = new Color3(0.018, 0.026, 0.02);
   grass.backFaceCulling = true;
 
   const terrain = new StandardMaterial("terrain_material", scene);
   terrain.diffuseColor = new Color3(0.22, 0.34, 0.3);
-  terrain.specularColor = new Color3(0.03, 0.04, 0.04);
+  terrain.ambientColor = new Color3(0.15, 0.2, 0.16);
+  terrain.specularColor = new Color3(0.018, 0.024, 0.022);
   terrain.backFaceCulling = true;
 
   const snow = new StandardMaterial("snow_material", scene);
