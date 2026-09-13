@@ -69,6 +69,7 @@ test('uploaded editor landscape is converted and rendered as authored polygon te
     expect(visuals[0].terrain.diffuse.g).toBeGreaterThan(visuals[0].terrain.diffuse.r);
     expect(visuals[0].terrain.vertices).toBeGreaterThan(80);
     expect(visuals[0].terrain.maxHorizontalTriangleEdge).toBeLessThan(320);
+    expect(visuals[0].terrain.colorRange).toBeGreaterThan(0.04);
     expect(visuals[0].terrain.minY).toBeGreaterThanOrEqual(0);
     expect(visuals[0].sand).toBeTruthy();
     expect(visuals[0].sand.material).toContain('sand');
