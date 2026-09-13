@@ -308,11 +308,17 @@ async function uploadAndStartLandscape(page, landscapeName, fileName, editorLand
     buffer: Buffer.from(JSON.stringify(editorLandscape, null, 2), 'utf8')
   });
   await page.getByRole('button', { name: 'Hochladen', exact: true }).click();
+  await expect(page.locator('#xis-toast-container .xis-toast').filter({
+    hasText: `Landschaft gespeichert: ${landscapeName}`
+  })).toBeVisible();
 
   const landscapeRadio = page.getByRole('radio', { name: landscapeName, exact: true });
   await expect(landscapeRadio).toBeVisible();
   await landscapeRadio.check();
   await page.getByRole('button', { name: /^starten$/i }).click();
+  await expect(page.locator('#xis-toast-container .xis-toast').filter({
+    hasText: 'Spiel gestartet.'
+  })).toBeVisible();
 }
 
 async function openAdmin(page) {
