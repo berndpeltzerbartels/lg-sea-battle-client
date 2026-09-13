@@ -28,16 +28,16 @@ import { createSubmarineModel } from "./submarineModel.js";
 
 const canvas = document.getElementById("renderCanvas");
 prepareGameFocus(canvas);
+const urlParams = new URLSearchParams(location.search);
+const scenarioTestMode = urlParams.get("scenarioTest") === "1";
 const engine = new Engine(canvas, true, {
-  preserveDrawingBuffer: false,
+  preserveDrawingBuffer: scenarioTestMode,
   stencil: false,
   antialias: true
 });
 
 const scene = new Scene(engine);
 document.body.dataset.appStarted = "true";
-const urlParams = new URLSearchParams(location.search);
-const scenarioTestMode = urlParams.get("scenarioTest") === "1";
 const directSideViewSandboxRequested = urlParams.get("setup") === "8"
   || urlParams.get("sandbox") === "side-view"
   || location.pathname.endsWith("/debug/side-view-sandbox");
@@ -71,11 +71,24 @@ const gameConfig = await loadGameConfig();
 const surfaceClearColor = new Color4(0.38, 0.5, 0.6, 1);
 const surfaceFogColor = new Color3(0.35, 0.46, 0.54);
 const surfaceFogDensity = 0.00135;
-const underwaterClearColor = new Color4(0.03, 0.16, 0.22, 1);
-const underwaterFogColor = new Color3(0.025, 0.14, 0.19);
-const underwaterFogDensity = 0.0048;
+const underwaterClearColor = new Color4(0.07, 0.22, 0.28, 1);
+const underwaterFogColor = new Color3(0.055, 0.2, 0.24);
+const underwaterFogDensity = 0.0016;
 const underwaterLandTopY = -0.1;
-const underwaterSeaFloorY = -16;
+const defaultUnderwaterSeaFloorY = -16;
+let underwaterSeaFloorY = defaultUnderwaterSeaFloorY;
+const authoredTerrainVisualScale = 1;
+const authoredSeaLevelMeters = 0;
+const authoredSnowLineMeters = 4500;
+const authoredDefaultHeightRadius = 160;
+const authoredDefaultTerrainSampleSpacing = 45;
+const authoredMaxInteriorTerrainSamples = 1800;
+const authoredLodTerrainSampleSpacing = 130;
+const authoredLodMaxInteriorTerrainSamples = 260;
+const authoredLodDistance = 1450;
+const authoredCoastlineSmoothingIterations = 2;
+const authoredLocalCoastlineCache = new WeakMap();
+const authoredWorldCoastlineCache = new WeakMap();
 scene.clearColor = surfaceClearColor.clone();
 scene.fogMode = Scene.FOGMODE_EXP2;
 scene.fogColor = surfaceFogColor.clone();
@@ -434,9 +447,13 @@ setupResetGameControl(resetGameButton);
 const playerLogin = await requirePlayerLogin();
 const playerInitials = playerLogin.initials;
 await requireRegisteredGameSession(playerLogin);
-const worldLandmasses = await loadWorldLandmasses();
+const worldMap = await loadWorldMap();
+const worldLandmasses = worldMap.landmasses;
+const worldMapObjects = worldMap.mapObjects;
+underwaterSeaFloorY = calculateUnderwaterSeaFloorY(worldLandmasses);
 document.body.dataset.worldSource = "server";
 document.body.dataset.worldLandmasses = String(worldLandmasses.length);
+document.body.dataset.worldMapObjects = String(worldMapObjects.length);
 const gameState = await loadGameState();
 document.body.dataset.gameStateSource = "server";
 document.body.dataset.serverGameState = gameState.state;
@@ -580,6 +597,7 @@ createWorldLandmasses(worldLandmasses, scene, materials, world);
 if (renderQuality.visualEffects !== "low") {
   navigationLights.push(...createNavigationLights(worldLandmasses, scene, materials, world, renderQuality.visualEffects));
 }
+navigationLights.push(...createWorldMapObjects(worldMapObjects, scene, materials, world));
 
 const boat = scoutPlaneMode
   ? createScoutPlane(scene, materials, "player_scout_plane", playerTeamId, true)
@@ -1356,7 +1374,8 @@ scene.onBeforeRenderObservable.add(() => {
   }
 
   // Heavy ship feel: the selected telegraph order is a target, and speed eases toward it.
-  const waterSafety = getShipWaterSafety(boat.root.position, heading, blockedWaters);
+  const playerCollisionHeight = getPlayerCollisionHeight();
+  const waterSafety = getShipWaterSafety(boat.root.position, heading, blockedWaters, playerCollisionHeight);
   let forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
   let nextWaterSafety = waterSafety;
 
@@ -1386,15 +1405,15 @@ scene.onBeforeRenderObservable.add(() => {
     boat.root.position.x = clamp(boat.root.position.x, -worldLimit, worldLimit);
     boat.root.position.z = clamp(boat.root.position.z, -worldLimit, worldLimit);
 
-    nextWaterSafety = getShipWaterSafety(boat.root.position, heading, blockedWaters);
+    nextWaterSafety = getShipWaterSafety(boat.root.position, heading, blockedWaters, playerCollisionHeight);
     const movementSafety = nextWaterSafety.isBlocked
-      ? getShipMovementWaterSafety(boat.root.position, heading, speed, blockedWaters)
+      ? getShipMovementWaterSafety(boat.root.position, heading, speed, blockedWaters, playerCollisionHeight)
       : nextWaterSafety;
     if (!scoutPlaneMode && movementSafety.isBlocked) {
       boat.root.position.copyFrom(previousPosition);
 
       // Grounding stops the ship, but a tiny escape nudge prevents numeric edge-locking.
-      const groundedSafety = getShipWaterSafety(boat.root.position, heading, blockedWaters);
+      const groundedSafety = getShipWaterSafety(boat.root.position, heading, blockedWaters, playerCollisionHeight);
       if (groundedSafety.isBlocked) {
         boat.root.position.addInPlace(getWaterEscapeVector(groundedSafety.blockedPoint ?? boat.root.position, blockedWaters).scale(0.18));
       }
@@ -4471,9 +4490,9 @@ function positiveNumber(value, fallback) {
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
-async function loadWorldLandmasses() {
+async function loadWorldMap() {
   if (directSideViewSandboxRequested) {
-    return [];
+    return { landmasses: [], mapObjects: [] };
   }
   const endpoint = getWorldMapEndpoint();
   const response = await fetch(endpoint, { cache: "no-store" });
@@ -4489,9 +4508,13 @@ async function loadWorldLandmasses() {
   console.info("[sea-battle] loaded world map from server", {
     endpoint,
     version: payload.version,
-    landmasses: payload.landmasses.length
+    landmasses: payload.landmasses.length,
+    mapObjects: Array.isArray(payload.mapObjects) ? payload.mapObjects.length : 0
   });
-  return payload.landmasses;
+  return {
+    landmasses: payload.landmasses,
+    mapObjects: Array.isArray(payload.mapObjects) ? payload.mapObjects : []
+  };
 }
 
 function failWorldMapLoad(endpoint, message) {
@@ -6745,6 +6768,18 @@ function drawInstrumentEllipse(ctx, x, y, rx, rz, fill, stroke, rotation = 0) {
 }
 
 function drawMapLandZone(ctx, zone, bounds, width, height, scale) {
+  if (hasAuthoredLandGeometry(zone)) {
+    drawInstrumentContours(
+      ctx,
+      authoredInstrumentSurfaceContours(zone),
+      (point) => worldToMapPoint(point, bounds, width, height, scale),
+      "rgba(98, 129, 89, 0.95)",
+      "rgba(238, 218, 164, 0.78)"
+    );
+    drawMapLandWater(ctx, zone, bounds, width, height, scale);
+    return;
+  }
+
   if (zone.kind !== "coastline") {
     const point = worldToMapPoint(zone, bounds, width, height, scale);
     drawInstrumentEllipse(ctx, point.x, point.y, getZoneVisualRx(zone) * scale, getZoneVisualRz(zone) * scale, "rgba(98, 129, 89, 0.95)", "rgba(238, 218, 164, 0.74)");
@@ -6778,7 +6813,9 @@ function drawMapLandUnion(ctx, zones, bounds, width, height, scale) {
 
 function addMapLandPath(ctx, zone, bounds, width, height, scale) {
   ctx.beginPath();
-  if (zone.kind !== "coastline") {
+  if (hasAuthoredLandGeometry(zone)) {
+    if (!addInstrumentContourPaths(ctx, authoredInstrumentSurfaceContours(zone), (point) => worldToMapPoint(point, bounds, width, height, scale))) return;
+  } else if (zone.kind !== "coastline") {
     const point = worldToMapPoint(zone, bounds, width, height, scale);
     ctx.ellipse(
       point.x,
@@ -7038,6 +7075,18 @@ function getLandDisplayName(zone) {
 }
 
 function drawRadarLandZone(ctx, zone, playerPosition, centerX, centerY, scale, heading) {
+  if (hasAuthoredLandGeometry(zone)) {
+    drawInstrumentContours(
+      ctx,
+      authoredInstrumentSurfaceContours(zone),
+      (point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading),
+      "rgba(96, 124, 83, 0.92)",
+      "rgba(232, 217, 159, 0.46)"
+    );
+    drawRadarLandWater(ctx, zone, playerPosition, centerX, centerY, scale, heading);
+    return;
+  }
+
   if (zone.kind !== "coastline") {
     const point = worldToRadarPoint(zone, playerPosition, centerX, centerY, scale, heading);
     drawInstrumentEllipse(ctx, point.x, point.y, getZoneRadarRx(zone) * scale, getZoneRadarRz(zone) * scale, "rgba(96, 124, 83, 0.92)", "rgba(232, 217, 159, 0.4)", -heading);
@@ -7073,7 +7122,9 @@ function drawRadarLandUnion(ctx, zones, playerPosition, centerX, centerY, scale,
 
 function addRadarLandPath(ctx, zone, playerPosition, centerX, centerY, scale, heading) {
   ctx.beginPath();
-  if (zone.kind !== "coastline") {
+  if (hasAuthoredLandGeometry(zone)) {
+    if (!addInstrumentContourPaths(ctx, authoredInstrumentSurfaceContours(zone), (point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading))) return;
+  } else if (zone.kind !== "coastline") {
     const point = worldToRadarPoint(zone, playerPosition, centerX, centerY, scale, heading);
     ctx.ellipse(
       point.x,
@@ -7110,6 +7161,33 @@ function drawInstrumentPolygon(ctx, points, fill, stroke) {
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
+}
+
+function drawInstrumentContours(ctx, contours, project, fill, stroke) {
+  if (!addInstrumentContourPaths(ctx, contours, project)) return;
+  ctx.fillStyle = fill;
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 1;
+  ctx.fill();
+  ctx.stroke();
+}
+
+function addInstrumentContourPaths(ctx, contours, project) {
+  const paths = Array.isArray(contours) ? contours : [];
+  let hasPath = false;
+  ctx.beginPath();
+  paths.forEach((contour) => {
+    if (!Array.isArray(contour) || contour.length < 3) return;
+    const first = project(contour[0]);
+    ctx.moveTo(first.x, first.y);
+    for (let index = 1; index < contour.length; index += 1) {
+      const point = project(contour[index]);
+      ctx.lineTo(point.x, point.y);
+    }
+    ctx.closePath();
+    hasPath = true;
+  });
+  return hasPath;
 }
 
 function getCoastContourPoints(zone, samples, boundary = "visual") {
@@ -9142,7 +9220,8 @@ function installScenarioTestHooks() {
         submarineWakeExposure: Number(getSubmarineWakeExposureRatio(playerSubmarineDepthOffset).toFixed(3)),
         cameraY: Number(cameraSetup.position.y.toFixed(3)),
         boatY: Number(boat.root.position.y.toFixed(3)),
-        waterlineY: 0
+        waterlineY: 0,
+        seaFloorY: Number(underwaterSeaFloorY.toFixed(3))
       };
     },
     async setPlayerNavigationState(state) {
@@ -9685,6 +9764,130 @@ function installScenarioTestHooks() {
       const snapshotTime = Number.isFinite(lastServerSnapshotTime) ? lastServerSnapshotTime : time;
       syncServerBombs([{ ...snapshot, droppedAt: Number.isFinite(snapshot?.droppedAt) ? snapshotTime + Number(snapshot.droppedAt) : snapshotTime }], [], time);
       return window.seaBattleScenarioTest.bombVisuals();
+    },
+    authoredLandscapeVisuals() {
+      const meshSnapshot = (mesh) => {
+        if (!mesh) return null;
+        mesh.computeWorldMatrix(true);
+        const positions = Array.from(mesh.getVerticesData("position") ?? []);
+        const ys = [];
+        for (let index = 1; index < positions.length; index += 3) {
+          ys.push(positions[index]);
+        }
+        const material = mesh.material;
+        return {
+          name: mesh.name,
+          material: material?.name ?? "",
+          diffuse: material?.diffuseColor
+            ? {
+              r: Number(material.diffuseColor.r.toFixed(3)),
+              g: Number(material.diffuseColor.g.toFixed(3)),
+              b: Number(material.diffuseColor.b.toFixed(3))
+            }
+            : null,
+          vertices: positions.length / 3,
+          triangles: (mesh.getIndices()?.length ?? 0) / 3,
+          minY: ys.length ? Number(Math.min(...ys).toFixed(3)) : null,
+          maxY: ys.length ? Number(Math.max(...ys).toFixed(3)) : null
+        };
+      };
+      return worldLandmasses
+        .filter(hasAuthoredLandGeometry)
+        .map((land) => ({
+          name: land.name,
+          material: land.material ?? "grass",
+          materialZones: land.materialZones?.length ?? 0,
+          polygonPoints: land.polygon?.length ?? 0,
+          heightPoints: land.heightPoints?.length ?? 0,
+          maxAuthoredMeters: Math.max(0, ...(land.heightPoints ?? []).map((point) => Number(point.h) || 0)),
+          terrain: meshSnapshot(scene.getMeshByName(`${land.name}_authored_terrain`)),
+          sand: meshSnapshot(scene.getMeshByName(`${land.name}_authored_sand`)),
+          snow: meshSnapshot(scene.getMeshByName(`${land.name}_authored_snow`)),
+          seaFloor: meshSnapshot(scene.getMeshByName(`${land.name}_authored_seafloor`)),
+          underwaterPlug: meshSnapshot(scene.getMeshByName(`${land.name}_authored_underwater_plug`))
+        }));
+    },
+    mapObjectVisuals() {
+      return (worldMapObjects ?? []).map((object) => {
+        const type = String(object.type ?? "").toLowerCase();
+        const suffix = type === "rock-beacon"
+          ? "rock_beacon"
+          : type === "lighthouse" || type === "lighthouse-striped"
+            ? "lighthouse"
+            : type || "object";
+        const root = scene.getTransformNodeByName(`${object.id ?? object.name ?? "placed"}_${suffix}`);
+        return {
+          id: object.id ?? null,
+          type,
+          x: Number(object.x ?? 0),
+          y: Number(object.y ?? NaN),
+          z: Number(object.z ?? 0),
+          rootX: root ? Number(root.position.x.toFixed(3)) : null,
+          rootY: root ? Number(root.position.y.toFixed(3)) : null,
+          rootZ: root ? Number(root.position.z.toFixed(3)) : null
+        };
+      });
+    },
+    browserViewPixelStats() {
+      const width = engine?.getRenderWidth?.(true) ?? canvas.width;
+      const height = engine?.getRenderHeight?.(true) ?? canvas.height;
+      if (width < 1 || height < 1) {
+        return null;
+      }
+      let pixels = null;
+      try {
+        const copy = document.createElement("canvas");
+        copy.width = width;
+        copy.height = height;
+        const context = copy.getContext("2d", { willReadFrequently: true });
+        context?.drawImage(canvas, 0, 0, width, height);
+        pixels = context?.getImageData(0, 0, width, height).data ?? null;
+      } catch {
+        pixels = null;
+      }
+      if (!pixels) {
+        const gl = engine?._gl;
+        if (!gl) return null;
+        pixels = new Uint8Array(width * height * 4);
+        gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      }
+      let sampled = 0;
+      let greenLand = 0;
+      let greenSurface = 0;
+      let dark = 0;
+      const xStart = Math.floor(width * 0.26);
+      const yStart = Math.floor(height * 0.10);
+      const yEnd = Math.floor(height * 0.72);
+      const step = 4;
+      for (let y = yStart; y < yEnd; y += step) {
+        for (let x = xStart; x < width; x += step) {
+          const index = (y * width + x) * 4;
+          const r = pixels[index];
+          const g = pixels[index + 1];
+          const b = pixels[index + 2];
+          sampled += 1;
+          if (g > 70 && g > r * 1.12 && g > b * 0.9) {
+            greenLand += 1;
+          }
+          if (g > 44 && g > r + 3 && g > b - 18 && r + g + b > 120 && r + g + b < 500) {
+            greenSurface += 1;
+          }
+          if (r + g + b < 70) {
+            dark += 1;
+          }
+        }
+      }
+      return {
+        width,
+        height,
+        sampled,
+        greenLand,
+        greenSurface,
+        dark,
+        greenLandRatio: Number((greenLand / Math.max(1, sampled)).toFixed(4)),
+        greenSurfaceRatio: Number((greenSurface / Math.max(1, sampled)).toFixed(4)),
+        darkRatio: Number((dark / Math.max(1, sampled)).toFixed(4))
+      };
     },
     async state() {
       const response = await fetch(getGameStateEndpoint(), { cache: "no-store" });
@@ -13787,12 +13990,19 @@ function createMaterials(scene) {
   sand.zOffset = -2;
 
   const grass = new StandardMaterial("grass_material", scene);
-  grass.diffuseColor = new Color3(0.19, 0.38, 0.29);
-  grass.specularColor = new Color3(0.03, 0.05, 0.03);
+  grass.diffuseColor = new Color3(0.22, 0.34, 0.3);
+  grass.specularColor = new Color3(0.025, 0.035, 0.03);
+  grass.backFaceCulling = true;
 
   const terrain = new StandardMaterial("terrain_material", scene);
   terrain.diffuseColor = new Color3(0.22, 0.34, 0.3);
   terrain.specularColor = new Color3(0.03, 0.04, 0.04);
+  terrain.backFaceCulling = true;
+
+  const snow = new StandardMaterial("snow_material", scene);
+  snow.diffuseColor = new Color3(0.78, 0.82, 0.78);
+  snow.specularColor = new Color3(0.18, 0.2, 0.2);
+  snow.backFaceCulling = true;
 
   const underwaterLand = new StandardMaterial("underwater_land_material", scene);
   underwaterLand.diffuseColor = new Color3(0.035, 0.075, 0.08);
@@ -13979,6 +14189,7 @@ function createMaterials(scene) {
     sand,
     grass,
     terrain,
+    snow,
     underwaterLand,
     underwaterFloor,
     shallow,
@@ -15739,6 +15950,260 @@ function createNavigationLights(landmasses, scene, materials, parent, visualEffe
   return lights.filter(Boolean);
 }
 
+function createWorldMapObjects(mapObjects, scene, materials, parent) {
+  return (mapObjects ?? []).flatMap((object, index) => {
+    const type = String(object.type ?? "").toLowerCase();
+    if (type === "lighthouse" || type === "lighthouse-striped") {
+      return [createPlacedLighthouse(object, index, scene, materials, parent)];
+    }
+    if (type === "rock-beacon") {
+      return [createPlacedRockBeacon(object, index, scene, materials, parent)];
+    }
+    if (type === "rock") {
+      createPlacedRock(object, scene, materials, parent);
+      return [];
+    }
+    if (type === "volcano") {
+      createPlacedVolcano(object, scene, materials, parent);
+      return [];
+    }
+    if (type === "harbor" || type === "base") {
+      createPlacedMarkerObject(object, scene, materials, parent);
+      return [];
+    }
+    return [];
+  }).filter(Boolean);
+}
+
+function createPlacedLighthouse(object, index, scene, materials, parent) {
+  const root = new TransformNode(`${object.id ?? object.name ?? "placed"}_lighthouse`, scene);
+  root.parent = parent;
+  root.position = new Vector3(
+    Number(object.x) || 0,
+    placedObjectY(object),
+    Number(object.z) || 0
+  );
+  const scale = positiveNumber(object.scale, 1) * lighthouseVisualScale * 1.28;
+  const baseHeight = 0.44 * scale;
+  const towerHeight = 14 * scale;
+  const towerTopY = baseHeight + towerHeight;
+  const lanternY = towerTopY + 1.15 * scale;
+
+  const base = MeshBuilder.CreateCylinder(`${root.name}_base`, {
+    diameterTop: 3.8 * scale,
+    diameterBottom: 4.6 * scale,
+    height: baseHeight,
+    tessellation: 10
+  }, scene);
+  base.parent = root;
+  base.position.y = baseHeight * 0.5;
+  base.material = materials.lighthouseCap;
+
+  const tower = MeshBuilder.CreateCylinder(`${root.name}_tower`, {
+    diameterTop: 2.2 * scale,
+    diameterBottom: 3.0 * scale,
+    height: towerHeight,
+    tessellation: 10
+  }, scene);
+  tower.parent = root;
+  tower.position.y = baseHeight + towerHeight * 0.5;
+  tower.material = getLighthouseTowerMaterial(object, scene, materials);
+
+  const gallery = MeshBuilder.CreateCylinder(`${root.name}_gallery`, {
+    diameterTop: 3.8 * scale,
+    diameterBottom: 4.0 * scale,
+    height: 0.5 * scale,
+    tessellation: 10
+  }, scene);
+  gallery.parent = root;
+  gallery.position.y = towerTopY + 0.15 * scale;
+  gallery.material = materials.lighthouseCap;
+
+  const lanternHouse = MeshBuilder.CreateCylinder(`${root.name}_lantern_house`, {
+    diameterTop: 2.35 * scale,
+    diameterBottom: 2.45 * scale,
+    height: 1.85 * scale,
+    tessellation: 10
+  }, scene);
+  lanternHouse.parent = root;
+  lanternHouse.position.y = lanternY;
+  const lanternMaterial = materials.glass.clone(`${root.name}_lantern_material`);
+  lanternMaterial.fogEnabled = false;
+  lanternMaterial.disableLighting = true;
+  lanternHouse.material = lanternMaterial;
+
+  const cap = MeshBuilder.CreateCylinder(`${root.name}_cap`, {
+    diameterTop: 2.25 * scale,
+    diameterBottom: 2.65 * scale,
+    height: 0.62 * scale,
+    tessellation: 10
+  }, scene);
+  cap.parent = root;
+  cap.position.y = towerTopY + 2.15 * scale;
+  cap.material = materials.lighthouseCap;
+
+  const lampMaterial = materials.beaconGlow.clone(`${root.name}_lamp_material`);
+  lampMaterial.fogEnabled = false;
+  lampMaterial.disableLighting = true;
+  const lamp = MeshBuilder.CreateCylinder(`${root.name}_lamp`, {
+    diameterTop: 1.08 * scale,
+    diameterBottom: 1.08 * scale,
+    height: 0.82 * scale,
+    tessellation: 12
+  }, scene);
+  lamp.parent = root;
+  lamp.position.y = lanternY + 0.15 * scale;
+  lamp.material = lampMaterial;
+  lamp.isPickable = false;
+
+  const beamPivot = new TransformNode(`${root.name}_beam_pivot`, scene);
+  beamPivot.parent = root;
+  beamPivot.position.y = lanternY;
+
+  const beam = MeshBuilder.CreateCylinder(`${root.name}_beam`, {
+    diameter: 1,
+    height: 82,
+    tessellation: 8
+  }, scene);
+  beam.parent = beamPivot;
+  beam.position.z = 41;
+  beam.rotation.x = Math.PI / 2;
+  beam.scaling.x = 0.32;
+  beam.scaling.z = 0.04;
+  beam.material = materials.beaconBeam;
+  beam.isPickable = false;
+  beam.setEnabled(false);
+
+  return {
+    kind: "lighthouse",
+    root,
+    lamp,
+    lampMaterial,
+    lanternMaterial,
+    beam,
+    beamPivot,
+    phase: index * 1.7 + stableNamePhase(object.id ?? object.name),
+    period: 5.8 + index * 0.9,
+    directionalPeak: 1.7
+  };
+}
+
+function createPlacedRockBeacon(object, index, scene, materials, parent) {
+  createPlacedRock(object, scene, materials, parent);
+  const root = new TransformNode(`${object.id ?? object.name ?? "placed"}_rock_beacon`, scene);
+  root.parent = parent;
+  root.position = new Vector3(Number(object.x) || 0, placedObjectY(object), Number(object.z) || 0);
+  const scale = positiveNumber(object.scale, 1);
+
+  const base = MeshBuilder.CreateCylinder(`${root.name}_base`, {
+    diameterTop: 0.32 * scale,
+    diameterBottom: 0.42 * scale,
+    height: 0.26 * scale,
+    tessellation: 8
+  }, scene);
+  base.parent = root;
+  base.position.y = 0.13 * scale;
+  base.material = materials.lighthouseCap;
+
+  const lampMaterial = materials.beaconGlow.clone(`${root.name}_lamp_material`);
+  const lamp = MeshBuilder.CreateCylinder(`${root.name}_lamp`, {
+    diameterTop: 0.24 * scale,
+    diameterBottom: 0.24 * scale,
+    height: 0.32 * scale,
+    tessellation: 10
+  }, scene);
+  lamp.parent = root;
+  lamp.position.y = 0.42 * scale;
+  lamp.material = lampMaterial;
+  lamp.isPickable = false;
+
+  return {
+    kind: "rock-beacon",
+    root,
+    lamp,
+    lampMaterial,
+    markerRange: 980,
+    phase: index * 0.82 + stableNamePhase(object.id ?? object.name),
+    period: 3.2 + (index % 2) * 0.7
+  };
+}
+
+function createPlacedRock(object, scene, materials, parent) {
+  const root = new TransformNode(`${object.id ?? object.name ?? "placed"}_rock`, scene);
+  root.parent = parent;
+  root.position = new Vector3(Number(object.x) || 0, placedObjectY(object), Number(object.z) || 0);
+  const scale = positiveNumber(object.scale, 1);
+  [0, 1, 2].forEach((i) => {
+    const radius = [7.5, 5.8, 4.8][i] * scale;
+    const height = [13, 18, 11][i] * scale;
+    const angle = i * 2.2 + stableNamePhase(object.id ?? object.name);
+    const stack = MeshBuilder.CreateCylinder(`${root.name}_stack_${i}`, {
+      diameterTop: radius * [0.72, 0.52, 0.64][i],
+      diameterBottom: radius,
+      height,
+      tessellation: 8
+    }, scene);
+    stack.parent = root;
+    stack.position.x = Math.cos(angle) * i * 3.2 * scale;
+    stack.position.z = Math.sin(angle) * i * 2.7 * scale;
+    stack.position.y = height * 0.5 - 1.5 * scale;
+    stack.rotation.x = Math.sin(angle) * 0.14;
+    stack.rotation.z = Math.cos(angle) * 0.13;
+    stack.rotation.y = angle * 0.92;
+    stack.material = materials.rock;
+    stack.receiveShadows = true;
+  });
+  return root;
+}
+
+function createPlacedVolcano(object, scene, materials, parent) {
+  const root = new TransformNode(`${object.id ?? object.name ?? "placed"}_volcano`, scene);
+  root.parent = parent;
+  root.position = new Vector3(Number(object.x) || 0, placedObjectY(object), Number(object.z) || 0);
+  const scale = positiveNumber(object.scale, 1);
+  const cone = MeshBuilder.CreateCylinder(`${root.name}_cone`, {
+    diameterTop: 9 * scale,
+    diameterBottom: 42 * scale,
+    height: 46 * scale,
+    tessellation: 16
+  }, scene);
+  cone.parent = root;
+  cone.position.y = 23 * scale;
+  cone.material = materials.rock;
+
+  const glow = MeshBuilder.CreateCylinder(`${root.name}_glow`, {
+    diameter: 10 * scale,
+    height: 0.8 * scale,
+    tessellation: 12
+  }, scene);
+  glow.parent = root;
+  glow.position.y = 46.6 * scale;
+  glow.material = materials.volcanicGlow;
+  return root;
+}
+
+function createPlacedMarkerObject(object, scene, materials, parent) {
+  const type = String(object.type ?? "");
+  const root = new TransformNode(`${object.id ?? object.name ?? "placed"}_${type}`, scene);
+  root.parent = parent;
+  root.position = new Vector3(Number(object.x) || 0, placedObjectY(object), Number(object.z) || 0);
+  const scale = positiveNumber(object.scale, 1);
+  const marker = MeshBuilder.CreateBox(`${root.name}_marker`, {
+    width: (type === "harbor" ? 32 : 24) * scale,
+    height: (type === "harbor" ? 8 : 16) * scale,
+    depth: (type === "harbor" ? 14 : 24) * scale
+  }, scene);
+  marker.parent = root;
+  marker.position.y = (type === "harbor" ? 4 : 8) * scale;
+  marker.material = type === "harbor" ? materials.deck : materials.lighthouseCap;
+  return root;
+}
+
+function placedObjectY(object) {
+  const y = Number(object.y);
+  return Number.isFinite(y) ? y : 0;
+}
+
 function chooseNavigationLighthouseLandmasses(landmasses, maxCount = 4) {
   const lighthouseLands = chooseLighthouseLandmasses(landmasses, maxCount);
   const byName = new Map(landmasses.map((land) => [String(land.name ?? ""), land]));
@@ -15948,7 +16413,7 @@ function lighthouseScaleFor(land) {
 }
 
 function isStripedLighthouse(land) {
-  return String(land.name ?? "").includes("blackwater");
+  return String(land.type ?? "") === "lighthouse-striped" || String(land.name ?? "").includes("blackwater");
 }
 
 function getLighthouseTowerMaterial(land, scene, materials) {
@@ -16227,6 +16692,10 @@ function getCenterPeakLighthousePosition(land) {
 }
 
 function getLandSurfaceHeightAt(land, worldX, worldZ) {
+  if (hasAuthoredLandGeometry(land)) {
+    return authoredTerrainVisualY(authoredTerrainMetersAtLocal(land, worldX - land.x, worldZ - land.z));
+  }
+
   const localX = worldX - land.x;
   const localZ = worldZ - land.z;
   const rx = land.rx ?? land.radius ?? 28;
@@ -16241,6 +16710,159 @@ function getLandSurfaceHeightAt(land, worldX, worldZ) {
   }
 
   return getSmallIslandTerrainHeightAt(land, localX, localZ, rx, rz);
+}
+
+function hasAuthoredLandGeometry(land) {
+  return Array.isArray(land.polygon) && land.polygon.length >= 3;
+}
+
+function authoredLocalPolygon(land) {
+  return (land.polygon ?? []).map((point) => ({
+    x: Number(point.x) - land.x,
+    z: Number(point.z) - land.z
+  }));
+}
+
+function authoredWorldPolygon(land) {
+  return (land.polygon ?? []).map((point) => ({
+    x: Number(point.x),
+    z: Number(point.z)
+  }));
+}
+
+function authoredLocalCoastline(land) {
+  const cached = authoredLocalCoastlineCache.get(land);
+  if (cached) return cached;
+  const coastline = smoothAuthoredClosedPolygon(authoredLocalPolygon(land), authoredCoastlineSmoothingIterations);
+  authoredLocalCoastlineCache.set(land, coastline);
+  return coastline;
+}
+
+function authoredWorldCoastline(land) {
+  const cached = authoredWorldCoastlineCache.get(land);
+  if (cached) return cached;
+  const coastline = smoothAuthoredClosedPolygon(authoredWorldPolygon(land), authoredCoastlineSmoothingIterations);
+  authoredWorldCoastlineCache.set(land, coastline);
+  return coastline;
+}
+
+function authoredTerrainMetersAtLocal(land, localX, localZ) {
+  return authoredTerrainHeightAt(authoredLocalTerrainIsland(land), localX, localZ);
+}
+
+function authoredTerrainHeightAt(island, x, z) {
+  const heightPoints = island.heightPoints ?? [];
+  if (heightPoints.length === 0) return authoredSeaFloorMeters(island);
+  if (heightPoints.length !== 1) return interpolateAuthoredHeight(island, x, z);
+
+  const boundary = island.polygon;
+  const peak = {
+    x: heightPoints[0].x,
+    z: heightPoints[0].z,
+    h: sanitizeAuthoredHeight(heightPoints[0].h),
+    radius: sanitizeAuthoredHeightRadius(heightPoints[0].radius ?? authoredDefaultHeightRadius),
+    falloff: sanitizeAuthoredHeightFalloff(heightPoints[0].falloff),
+    basePointIndexes: sanitizeAuthoredBasePointIndexes(heightPoints[0].basePointIndexes, boundary.length)
+  };
+  if (peak.basePointIndexes.length < 3) {
+    const distanceToPeak = Math.hypot(x - peak.x, z - peak.z);
+    const floor = authoredSeaFloorMeters(island);
+    if (distanceToPeak >= peak.radius) return floor;
+    return floor + (peak.h - floor) * authoredFalloffHeightMultiplier(distanceToPeak / peak.radius, peak.falloff);
+  }
+
+  const basePolygon = peak.basePointIndexes.map((index) => boundary[index]);
+  if (!pointInPolygon2d({ x, z }, basePolygon)) return authoredSeaFloorMeters(island);
+
+  for (let index = 0; index < peak.basePointIndexes.length; index += 1) {
+    const a = boundary[peak.basePointIndexes[index]];
+    const b = boundary[peak.basePointIndexes[(index + 1) % peak.basePointIndexes.length]];
+    const peakWeight = barycentricAuthoredWeightForPoint({ x, z }, a, b, peak);
+    if (peakWeight != null) return peak.h * peakWeight;
+  }
+  return interpolateAuthoredHeight(island, x, z);
+}
+
+function interpolateAuthoredHeight(island, x, z) {
+  const controls = [
+    ...island.polygon.map((point) => ({ x: point.x, z: point.z, h: authoredSeaFloorMeters(island), boundary: true })),
+    ...(island.heightPoints ?? []).map((point) => ({
+      x: point.x,
+      z: point.z,
+      h: sanitizeAuthoredHeight(point.h),
+      radius: sanitizeAuthoredHeightRadius(point.radius ?? authoredDefaultHeightRadius),
+      falloff: sanitizeAuthoredHeightFalloff(point.falloff),
+      boundary: false
+    }))
+  ];
+  if (!controls.length) return 0;
+  let total = 0;
+  let weightTotal = 0;
+  for (const point of controls) {
+    const distanceToControl = Math.hypot(x - point.x, z - point.z);
+    if (distanceToControl < 0.001) return point.h;
+    const radius = point.boundary ? 24 : sanitizeAuthoredHeightRadius(point.radius ?? authoredDefaultHeightRadius);
+    const d = Math.max(point.boundary ? 24 : radius * 0.16, distanceToControl);
+    const shape = point.boundary ? 1 : authoredFalloffWeightMultiplier(distanceToControl / radius, point.falloff);
+    const weight = shape * (point.boundary ? 3 : Math.max(0.25, radius / authoredDefaultHeightRadius)) / (d * d);
+    total += point.h * weight;
+    weightTotal += weight;
+  }
+  return weightTotal === 0 ? authoredSeaFloorMeters(island) : total / weightTotal;
+}
+
+function authoredSeaFloorMeters(land) {
+  const seaFloorMeters = Number(land.seaFloorHeight ?? -80);
+  if (!Number.isFinite(seaFloorMeters)) return -80;
+  return Math.min(-1, Math.max(-2000, Math.round(seaFloorMeters)));
+}
+
+function calculateUnderwaterSeaFloorY(landmasses) {
+  const authoredFloors = (landmasses ?? [])
+    .filter(hasAuthoredLandGeometry)
+    .map((land) => authoredSeaFloorMeters(land))
+    .filter((height) => Number.isFinite(height));
+  if (!authoredFloors.length) return defaultUnderwaterSeaFloorY;
+  return Math.min(defaultUnderwaterSeaFloorY, Math.min(...authoredFloors) - 12);
+}
+
+function authoredTerrainVisualY(heightMeters) {
+  const visualY = (Number(heightMeters) || 0) * authoredTerrainVisualScale;
+  if (visualY > 0) return Math.max(0.18, visualY);
+  return visualY;
+}
+
+function authoredFalloffHeightMultiplier(normalizedDistance, falloff) {
+  const t = clamp(1 - normalizedDistance, 0, 1);
+  if (falloff === "hill") return t * t * (3 - 2 * t);
+  if (falloff === "plateau") return 1 - smoothstep(0.38, 1, normalizedDistance);
+  return t * t;
+}
+
+function authoredFalloffWeightMultiplier(normalizedDistance, falloff) {
+  if (normalizedDistance >= 1) return 0.08;
+  return 0.18 + authoredFalloffHeightMultiplier(normalizedDistance, falloff) * 1.82;
+}
+
+function boundsForPoints(points) {
+  return points.reduce((bounds, point) => ({
+    minX: Math.min(bounds.minX, point.x),
+    maxX: Math.max(bounds.maxX, point.x),
+    minZ: Math.min(bounds.minZ, point.z),
+    maxZ: Math.max(bounds.maxZ, point.z)
+  }), { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity });
+}
+
+function pointInPolygon2d(point, polygon) {
+  let inside = false;
+  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
+    const current = polygon[index];
+    const previousPoint = polygon[previous];
+    const crosses = current.z > point.z !== previousPoint.z > point.z
+      && point.x < ((previousPoint.x - current.x) * (point.z - current.z)) / (previousPoint.z - current.z) + current.x;
+    if (crosses) inside = !inside;
+  }
+  return inside;
 }
 
 function getCoastlineTerrainHeightAt(land, localX, localZ, rx, rz) {
@@ -16296,7 +16918,7 @@ function stableNamePhase(name) {
 }
 
 function getLandZone(land) {
-  return {
+  const zone = {
     x: land.x,
     z: land.z,
     rx: land.rx,
@@ -16312,8 +16934,48 @@ function getLandZone(land) {
     radarOcclusion: land.radarOcclusion ?? true,
     fjords: land.fjords ?? [],
     waterways: land.waterways ?? [],
-    lakes: land.lakes ?? []
+    lakes: land.lakes ?? [],
+    polygon: land.polygon ?? [],
+    heightPoints: land.heightPoints ?? [],
+    seaFloorHeight: land.seaFloorHeight ?? 0,
+    material: land.material ?? "grass",
+    materialZones: land.materialZones ?? []
   };
+  zone.instrumentSurfaceContours = createAuthoredInstrumentSurfaceContours(zone);
+  return zone;
+}
+
+function authoredInstrumentSurfaceContours(land) {
+  if (Array.isArray(land.instrumentSurfaceContours)) return land.instrumentSurfaceContours;
+  return hasAuthoredLandGeometry(land) ? [authoredWorldCoastline(land)] : [];
+}
+
+function createAuthoredInstrumentSurfaceContours(land) {
+  if (!hasAuthoredLandGeometry(land)) return [];
+
+  const terrain = createAuthoredTerrainMeshData(land);
+  const vertices = terrain.vertices ?? [];
+  const indices = terrain.indices ?? [];
+  const hasAboveWater = vertices.some((vertex) => vertex.h >= authoredSeaLevelMeters);
+  const hasBelowWater = vertices.some((vertex) => vertex.h < authoredSeaLevelMeters);
+
+  if (!hasAboveWater) return [];
+  if (!hasBelowWater) return [authoredWorldCoastline(land)];
+
+  const surfacePolygons = [];
+  for (let index = 0; index < indices.length; index += 3) {
+    const triangle = [
+      vertices[indices[index]],
+      vertices[indices[index + 1]],
+      vertices[indices[index + 2]]
+    ];
+    const aboveWater = clipAuthoredHeightPolygon(triangle, authoredSeaLevelMeters, true);
+    if (aboveWater.length >= 3) {
+      surfacePolygons.push(aboveWater.map((point) => ({ x: point.x + land.x, z: point.z + land.z })));
+    }
+  }
+
+  return surfacePolygons.length ? surfacePolygons : [authoredWorldCoastline(land)];
 }
 
 function createCoastline(land, position, scene, materials, parent) {
@@ -16495,6 +17157,11 @@ function createIsland(land, position, scene, materials, parent) {
   islandRoot.position = position;
   islandRoot.parent = parent;
 
+  if (hasAuthoredLandGeometry(land)) {
+    createAuthoredIslandSurface(land, scene, materials, islandRoot);
+    return islandRoot;
+  }
+
   createLandUnderwaterPlug(land, Vector3.Zero(), rx, rz, scene, materials, islandRoot);
 
   if (!steepRock) {
@@ -16530,6 +17197,560 @@ function createIsland(land, position, scene, materials, parent) {
   }
 
   return islandRoot;
+}
+
+function createAuthoredIslandSurface(land, scene, materials, parent) {
+  const terrain = createAuthoredTerrainMeshData(land);
+  const renderLand = authoredLocalTerrainIsland(land);
+  const surfaces = splitAuthoredTerrainSurfaces(terrain, renderLand);
+  const lodTerrain = createAuthoredTerrainMeshData(land, {
+    sampleSpacing: authoredLodTerrainSampleSpacing,
+    maxInteriorTerrainSamples: authoredLodMaxInteriorTerrainSamples,
+    heightFalloffSteps: 6,
+    maxSeaLevelSteps: 28
+  });
+  const lodSurfaces = splitAuthoredTerrainSurfaces(lodTerrain, renderLand);
+
+  createAuthoredTerrainMeshWithLod(`${land.name}_authored_seafloor`, surfaces.seaFloor, lodSurfaces.seaFloor, authoredSeaFloorMaterial(land, materials), scene, parent);
+  createAuthoredTerrainMeshWithLod(`${land.name}_authored_terrain`, surfaces.land, lodSurfaces.land, authoredLandMaterial(land, materials), scene, parent);
+  createAuthoredTerrainMeshWithLod(`${land.name}_authored_sand`, surfaces.sand, lodSurfaces.sand, materials.sand, scene, parent);
+  createAuthoredTerrainMeshWithLod(`${land.name}_authored_snow`, surfaces.snow, lodSurfaces.snow, materials.snow, scene, parent);
+}
+
+function createAuthoredTerrainMeshData(land, options = {}) {
+  const island = authoredLocalTerrainIsland(land);
+  const boundaryVertices = createAuthoredRenderableCoastline(island.polygon)
+    .map((point) => ({ x: point.x, z: point.z, h: authoredSeaFloorMeters(island), boundary: true }));
+  const heightVertices = (island.heightPoints ?? []).map((point) => ({
+    x: point.x,
+    z: point.z,
+    h: sanitizeAuthoredHeight(point.h),
+    radius: sanitizeAuthoredHeightRadius(point.radius ?? authoredDefaultHeightRadius),
+    falloff: sanitizeAuthoredHeightFalloff(point.falloff),
+    boundary: false,
+    basePointIndexes: sanitizeAuthoredBasePointIndexes(point.basePointIndexes, boundaryVertices.length)
+  }));
+
+  const center = polygonCentroid2d(island.polygon);
+  const vertices = uniqueTerrainVertices([
+    ...boundaryVertices,
+    ...createAuthoredInteriorTerrainSamples(island, options),
+    ...heightVertices.flatMap((point) => createAuthoredSeaLevelVertices(island, point, options)),
+    ...heightVertices.flatMap((point) => createAuthoredHeightFalloffVertices(island, point, options)),
+    ...heightVertices,
+    { x: center.x, z: center.z, h: authoredTerrainMetersAtLocal(land, center.x, center.z), boundary: false }
+  ]);
+  const indices = triangulateAuthoredDelaunay(vertices)
+    .filter((triangle) => pointInPolygon2d(triangleCentroid2d(triangle, vertices), island.polygon))
+    .map((triangle) => orientAuthoredTerrainTriangleForBabylon(triangle, vertices))
+    .flat();
+
+  return { vertices, indices };
+}
+
+function authoredLocalTerrainIsland(land) {
+  return {
+    polygon: authoredLocalPolygon(land),
+    heightPoints: authoredLocalHeightPoints(land),
+    seaFloorHeight: land.seaFloorHeight,
+    material: land.material,
+    materialZones: authoredLocalMaterialZones(land)
+  };
+}
+
+function createAuthoredRenderableCoastline(polygon) {
+  return smoothAuthoredClosedPolygon(polygon, authoredCoastlineSmoothingIterations);
+}
+
+function createAuthoredHeightFalloffVertices(island, point, options = {}) {
+  if (point.basePointIndexes.length >= 3) return [];
+  const vertices = [];
+  const steps = options.heightFalloffSteps ?? 10;
+  const radius = sanitizeAuthoredHeightRadius(point.radius ?? authoredDefaultHeightRadius);
+  const floor = authoredSeaFloorMeters(island);
+  for (let index = 0; index < steps; index += 1) {
+    const angle = (index / steps) * Math.PI * 2;
+    const vertex = {
+      x: point.x + Math.cos(angle) * radius,
+      z: point.z + Math.sin(angle) * radius,
+      h: floor,
+      boundary: false,
+      falloff: true
+    };
+    if (pointInPolygon2d(vertex, island.polygon)) vertices.push(vertex);
+  }
+  return vertices;
+}
+
+function createAuthoredSeaLevelVertices(island, point, options = {}) {
+  const floor = authoredSeaFloorMeters(island);
+  const peakHeight = sanitizeAuthoredHeight(point.h);
+  if (floor >= authoredSeaLevelMeters || peakHeight <= authoredSeaLevelMeters) return [];
+
+  const radius = sanitizeAuthoredHeightRadius(point.radius ?? authoredDefaultHeightRadius);
+  const normalizedDistance = authoredSeaLevelNormalizedDistance(floor, peakHeight, point.falloff);
+  if (!Number.isFinite(normalizedDistance) || normalizedDistance <= 0 || normalizedDistance >= 1) return [];
+
+  const basePointCount = point.basePointIndexes.length >= 3 ? point.basePointIndexes.length : 0;
+  const maxSteps = options.maxSeaLevelSteps ?? 72;
+  const steps = Math.max(24, Math.min(maxSteps, basePointCount > 0 ? basePointCount * 3 : Math.round(radius / 18)));
+  const distance = radius * normalizedDistance;
+  const vertices = [];
+  for (let index = 0; index < steps; index += 1) {
+    const angle = (index / steps) * Math.PI * 2;
+    const vertex = {
+      x: point.x + Math.cos(angle) * distance,
+      z: point.z + Math.sin(angle) * distance,
+      h: authoredSeaLevelMeters,
+      boundary: false,
+      seaLevel: true
+    };
+    if (pointInPolygon2d(vertex, island.polygon)) vertices.push(vertex);
+  }
+  return vertices;
+}
+
+function authoredSeaLevelNormalizedDistance(floor, peakHeight, falloff) {
+  const target = (authoredSeaLevelMeters - floor) / (peakHeight - floor);
+  if (target <= 0 || target >= 1) return null;
+  if (falloff === "hill") {
+    return solveNormalizedDistanceForFalloff(target, (value) => {
+      const t = 1 - value;
+      return t * t * (3 - 2 * t);
+    });
+  }
+  if (falloff === "plateau") {
+    return solveNormalizedDistanceForFalloff(target, (value) => 1 - smoothstep(0.38, 1, value));
+  }
+  return 1 - Math.sqrt(target);
+}
+
+function solveNormalizedDistanceForFalloff(target, falloffValueAtDistance) {
+  let low = 0;
+  let high = 1;
+  for (let index = 0; index < 24; index += 1) {
+    const mid = (low + high) * 0.5;
+    if (falloffValueAtDistance(mid) > target) low = mid;
+    else high = mid;
+  }
+  return (low + high) * 0.5;
+}
+
+function createAuthoredInteriorTerrainSamples(island, options = {}) {
+  const polygon = island.polygon;
+  if (polygon.length < 3) return [];
+  const sampleSpacing = options.sampleSpacing ?? authoredDefaultTerrainSampleSpacing;
+  const maxInteriorTerrainSamples = options.maxInteriorTerrainSamples ?? authoredMaxInteriorTerrainSamples;
+  const bounds = boundsForPoints(polygon);
+  const area = Math.max(
+    sampleSpacing * sampleSpacing,
+    (bounds.maxX - bounds.minX) * (bounds.maxZ - bounds.minZ)
+  );
+  const spacing = Math.max(sampleSpacing, Math.sqrt(area / maxInteriorTerrainSamples));
+  const vertices = [];
+  for (let x = Math.ceil(bounds.minX / spacing) * spacing; x <= bounds.maxX; x += spacing) {
+    for (let z = Math.ceil(bounds.minZ / spacing) * spacing; z <= bounds.maxZ; z += spacing) {
+      if (!pointInPolygon2d({ x, z }, polygon)) continue;
+      vertices.push({ x, z, h: authoredTerrainHeightAt(island, x, z), boundary: false, sample: true });
+    }
+  }
+  return vertices;
+}
+
+function authoredLocalHeightPoints(land) {
+  return (land.heightPoints ?? []).map((point) => ({
+    x: Number(point.x) - land.x,
+    z: Number(point.z) - land.z,
+    h: point.h,
+    radius: point.radius,
+    falloff: point.falloff,
+    basePointIndexes: point.basePointIndexes
+  }));
+}
+
+function authoredLocalMaterialZones(land) {
+  return (land.materialZones ?? []).map((zone) => ({
+    id: zone.id,
+    material: zone.material,
+    polygon: (zone.polygon ?? []).map((point) => ({
+      x: Number(point.x) - land.x,
+      z: Number(point.z) - land.z
+    }))
+  }));
+}
+
+function smoothAuthoredClosedPolygon(points, iterations) {
+  if (!Array.isArray(points) || points.length < 3 || iterations <= 0) return points ?? [];
+  let smoothed = points.map((point) => ({ x: point.x, z: point.z }));
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    const next = [];
+    for (let index = 0; index < smoothed.length; index += 1) {
+      const current = smoothed[index];
+      const following = smoothed[(index + 1) % smoothed.length];
+      next.push({
+        x: current.x * 0.75 + following.x * 0.25,
+        z: current.z * 0.75 + following.z * 0.25
+      });
+      next.push({
+        x: current.x * 0.25 + following.x * 0.75,
+        z: current.z * 0.25 + following.z * 0.75
+      });
+    }
+    smoothed = next;
+  }
+  return smoothed;
+}
+
+function uniqueTerrainVertices(points) {
+  const seen = new Set();
+  return points.filter((point) => {
+    const key = `${Math.round(point.x * 100)}:${Math.round(point.z * 100)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function polygonCentroid2d(points) {
+  if (!points.length) return null;
+  const sum = points.reduce((acc, point) => ({ x: acc.x + point.x, z: acc.z + point.z }), { x: 0, z: 0 });
+  return { x: sum.x / points.length, z: sum.z / points.length };
+}
+
+function vertexPosition2d(index, positions) {
+  return { x: positions[index * 3], z: positions[index * 3 + 2] };
+}
+
+function triangleCentroid2d(triangle, source) {
+  const points = triangle.map((index) => Array.isArray(source) && source[index] && typeof source[index] === "object"
+    ? { x: source[index].x, z: source[index].z }
+    : vertexPosition2d(index, source));
+  return {
+    x: (points[0].x + points[1].x + points[2].x) / 3,
+    z: (points[0].z + points[1].z + points[2].z) / 3
+  };
+}
+
+function splitAuthoredTerrainSurfaces(terrain, land) {
+  const surfaces = {
+    land: createAuthoredSurfaceData(),
+    sand: createAuthoredSurfaceData(),
+    snow: createAuthoredSurfaceData(),
+    seaFloor: createAuthoredSurfaceData()
+  };
+
+  for (let index = 0; index < terrain.indices.length; index += 3) {
+    const triangle = [
+      terrain.vertices[terrain.indices[index]],
+      terrain.vertices[terrain.indices[index + 1]],
+      terrain.vertices[terrain.indices[index + 2]]
+    ];
+    const aboveWater = clipAuthoredHeightPolygon(triangle, authoredSeaLevelMeters, true);
+    const belowWater = clipAuthoredHeightPolygon(triangle, authoredSeaLevelMeters, false);
+    appendAuthoredSurfacePolygon(surfaceForAuthoredLandPolygon(aboveWater, surfaces, land), aboveWater);
+    appendAuthoredSurfacePolygon(surfaces.seaFloor, belowWater);
+  }
+
+  return surfaces;
+}
+
+function createAuthoredSurfaceData() {
+  return {
+    positions: [],
+    indices: [],
+    vertexIndexes: new Map()
+  };
+}
+
+function surfaceForAuthoredLandPolygon(points, surfaces, land) {
+  if (points.length >= 3 && points.every((point) => point.h >= authoredSnowLineMeters)) {
+    return surfaces.snow;
+  }
+  if (points.length >= 3 && authoredSurfaceMaterialAt(land, polygonCentroid2d(points)) === "sand") {
+    return surfaces.sand;
+  }
+  return surfaces.land;
+}
+
+function authoredLandMaterial(land, materials) {
+  return normalizedAuthoredMaterial(land.material) === "sand" ? materials.sand : materials.grass;
+}
+
+function authoredSeaFloorMaterial(land, materials) {
+  return normalizedAuthoredMaterial(land.material) === "sand" ? materials.sand : materials.underwaterLand;
+}
+
+function authoredSurfaceMaterialAt(land, point) {
+  if (!point) return normalizedAuthoredMaterial(land.material);
+  const zones = land.materialZones ?? [];
+  for (let index = zones.length - 1; index >= 0; index -= 1) {
+    const zone = zones[index];
+    if (normalizedAuthoredMaterial(zone.material) === "sand" && pointInPolygon2d(point, zone.polygon ?? [])) {
+      return "sand";
+    }
+  }
+  return normalizedAuthoredMaterial(land.material);
+}
+
+function normalizedAuthoredMaterial(value) {
+  const material = String(value ?? "grass").trim().toLowerCase();
+  return material === "sand" ? "sand" : "grass";
+}
+
+function clipAuthoredHeightPolygon(points, threshold, keepAbove) {
+  if (points.length < 3) return [];
+  const clipped = [];
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    const currentInside = keepAbove ? current.h >= threshold : current.h <= threshold;
+    const nextInside = keepAbove ? next.h >= threshold : next.h <= threshold;
+
+    if (currentInside && nextInside) {
+      clipped.push(next);
+    } else if (currentInside && !nextInside) {
+      clipped.push(interpolateAuthoredHeightThresholdPoint(current, next, threshold));
+    } else if (!currentInside && nextInside) {
+      clipped.push(interpolateAuthoredHeightThresholdPoint(current, next, threshold));
+      clipped.push(next);
+    }
+  }
+  return clipped;
+}
+
+function interpolateAuthoredHeightThresholdPoint(a, b, threshold) {
+  const range = b.h - a.h;
+  const t = Math.abs(range) < 0.000001 ? 0 : (threshold - a.h) / range;
+  return {
+    x: a.x + (b.x - a.x) * t,
+    z: a.z + (b.z - a.z) * t,
+    h: threshold
+  };
+}
+
+function appendAuthoredSurfacePolygon(surface, points) {
+  if (!surface || points.length < 3) return;
+  const pointIndexes = points.map((point) => authoredSurfaceVertexIndex(surface, point));
+  for (let index = 1; index < points.length - 1; index += 1) {
+    surface.indices.push(...orientAuthoredSurfaceTriangleForBabylon(surface.positions, pointIndexes[0], pointIndexes[index], pointIndexes[index + 1]));
+  }
+}
+
+function authoredSurfaceVertexIndex(surface, point) {
+  const y = authoredTerrainVisualY(point.h);
+  const key = `${Math.round(point.x * 1000)}:${Math.round(y * 1000)}:${Math.round(point.z * 1000)}`;
+  const existingIndex = surface.vertexIndexes.get(key);
+  if (existingIndex !== undefined) return existingIndex;
+  const index = surface.positions.length / 3;
+  surface.vertexIndexes.set(key, index);
+  surface.positions.push(point.x, y, point.z);
+  return index;
+}
+
+function orientAuthoredSurfaceTriangleForBabylon(positions, a, b, c) {
+  return triangleNormalY(positions, a, b, c) < 0 ? [a, b, c] : [a, c, b];
+}
+
+function triangleNormalY(positions, a, b, c) {
+  const ax = positions[a * 3];
+  const ay = positions[a * 3 + 1];
+  const az = positions[a * 3 + 2];
+  const ux = positions[b * 3] - ax;
+  const uy = positions[b * 3 + 1] - ay;
+  const uz = positions[b * 3 + 2] - az;
+  const vx = positions[c * 3] - ax;
+  const vy = positions[c * 3 + 1] - ay;
+  const vz = positions[c * 3 + 2] - az;
+  return uz * vx - ux * vz;
+}
+
+function orientAuthoredTerrainTriangleForBabylon(triangle, vertices) {
+  const positions = vertices.flatMap((point) => [point.x, point.h, point.z]);
+  return triangleNormalY(positions, triangle[0], triangle[1], triangle[2]) < 0
+    ? triangle
+    : [triangle[0], triangle[2], triangle[1]];
+}
+
+function triangulateAuthoredDelaunay(points) {
+  if (points.length < 3) return [];
+  const bounds = boundsForPoints(points);
+  const span = Math.max(bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ, 1);
+  const midX = (bounds.minX + bounds.maxX) * 0.5;
+  const midZ = (bounds.minZ + bounds.maxZ) * 0.5;
+  const workPoints = [
+    ...points,
+    { x: midX - span * 8, z: midZ - span * 4 },
+    { x: midX, z: midZ + span * 8 },
+    { x: midX + span * 8, z: midZ - span * 4 }
+  ];
+  const superStart = points.length;
+  let triangles = [[superStart, superStart + 1, superStart + 2]];
+
+  points.forEach((point, pointIndex) => {
+    const badTriangles = triangles.filter((triangle) => authoredCircumcircleContains(workPoints, triangle, point));
+    const polygon = [];
+    badTriangles.forEach((triangle) => {
+      [[triangle[0], triangle[1]], [triangle[1], triangle[2]], [triangle[2], triangle[0]]].forEach((edge) => {
+        const reverseIndex = polygon.findIndex((item) => item[0] === edge[1] && item[1] === edge[0]);
+        if (reverseIndex >= 0) polygon.splice(reverseIndex, 1);
+        else polygon.push(edge);
+      });
+    });
+    triangles = triangles.filter((triangle) => !badTriangles.includes(triangle));
+    polygon.forEach((edge) => triangles.push([edge[0], edge[1], pointIndex]));
+  });
+
+  return triangles.filter((triangle) => triangle.every((index) => index < points.length));
+}
+
+function authoredCircumcircleContains(points, triangle, point) {
+  const [a, b, c] = triangle.map((index) => points[index]);
+  const ax = a.x - point.x;
+  const az = a.z - point.z;
+  const bx = b.x - point.x;
+  const bz = b.z - point.z;
+  const cx = c.x - point.x;
+  const cz = c.z - point.z;
+  const determinant = (ax * ax + az * az) * (bx * cz - cx * bz)
+    - (bx * bx + bz * bz) * (ax * cz - cx * az)
+    + (cx * cx + cz * cz) * (ax * bz - bx * az);
+  return authoredTriangleOrientation(a, b, c) > 0 ? determinant > 0 : determinant < 0;
+}
+
+function authoredTriangleOrientation(a, b, c) {
+  return (b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x);
+}
+
+function barycentricAuthoredWeightForPoint(point, a, b, c) {
+  const denominator = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z);
+  if (Math.abs(denominator) < 0.000001) return null;
+  const weightA = ((b.z - c.z) * (point.x - c.x) + (c.x - b.x) * (point.z - c.z)) / denominator;
+  const weightB = ((c.z - a.z) * (point.x - c.x) + (a.x - c.x) * (point.z - c.z)) / denominator;
+  const weightC = 1 - weightA - weightB;
+  const tolerance = -0.000001;
+  return weightA >= tolerance && weightB >= tolerance && weightC >= tolerance ? weightC : null;
+}
+
+function sanitizeAuthoredBasePointIndexes(indexes, pointCount) {
+  if (!Array.isArray(indexes)) return [];
+  return [...new Set(indexes)]
+    .map((index) => Number(index))
+    .filter((index) => Number.isInteger(index) && index >= 0 && index < pointCount)
+    .sort((a, b) => a - b);
+}
+
+function sanitizeAuthoredHeight(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.round(Math.max(-500, Math.min(8000, numeric)));
+}
+
+function sanitizeAuthoredHeightRadius(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return authoredDefaultHeightRadius;
+  return Math.round(Math.max(20, Math.min(5000, numeric)));
+}
+
+function sanitizeAuthoredHeightFalloff(value) {
+  return ["spike", "hill", "plateau"].includes(value) ? value : "spike";
+}
+
+function createAuthoredTerrainMeshWithLod(name, surface, lodSurface, material, scene, parent) {
+  const mesh = createAuthoredTerrainMesh(name, surface.positions, surface.indices, material, scene, parent);
+  if (!mesh) return null;
+
+  const lodMesh = createAuthoredTerrainMesh(`${name}_lod`, lodSurface.positions, lodSurface.indices, material, scene, parent);
+  if (lodMesh) {
+    mesh.addLODLevel(authoredLodDistance, lodMesh);
+  }
+  return mesh;
+}
+
+function createAuthoredTerrainMesh(name, positions, indices, material, scene, parent) {
+  if (!indices.length) return null;
+  const compacted = compactIndexedVertexData(positions, indices);
+  const normals = [];
+  VertexData.ComputeNormals(compacted.positions, compacted.indices, normals);
+  const vertexData = new VertexData();
+  vertexData.positions = compacted.positions;
+  vertexData.indices = compacted.indices;
+  vertexData.normals = normals;
+  const mesh = new Mesh(name, scene);
+  vertexData.applyToMesh(mesh);
+  mesh.parent = parent;
+  mesh.material = material;
+  mesh.receiveShadows = true;
+  return prepareStaticLandscapeMesh(mesh);
+}
+
+function prepareStaticLandscapeMesh(mesh) {
+  mesh.isPickable = false;
+  mesh.alwaysSelectAsActiveMesh = false;
+  mesh.freezeWorldMatrix();
+  return mesh;
+}
+
+function compactIndexedVertexData(positions, indices) {
+  const remap = new Map();
+  const compactedPositions = [];
+  const compactedIndices = [];
+
+  indices.forEach((oldIndex) => {
+    let newIndex = remap.get(oldIndex);
+    if (newIndex === undefined) {
+      newIndex = compactedPositions.length / 3;
+      remap.set(oldIndex, newIndex);
+      compactedPositions.push(
+        positions[oldIndex * 3],
+        positions[oldIndex * 3 + 1],
+        positions[oldIndex * 3 + 2]
+      );
+    }
+    compactedIndices.push(newIndex);
+  });
+
+  return {
+    positions: compactedPositions,
+    indices: compactedIndices
+  };
+}
+
+function createAuthoredLandUnderwaterPlug(land, scene, materials, parent) {
+  const localPolygon = authoredLocalPolygon(land);
+  const floorY = underwaterSeaFloorY + 0.04;
+  const positions = [];
+  const indices = [];
+  const normals = [];
+
+  localPolygon.forEach((point) => {
+    positions.push(point.x, underwaterLandTopY, point.z, point.x, floorY, point.z);
+  });
+
+  const bottomCenter = positions.length / 3;
+  positions.push(0, floorY, 0);
+
+  for (let i = 0; i < localPolygon.length; i += 1) {
+    const next = (i + 1) % localPolygon.length;
+    const topA = i * 2;
+    const bottomA = topA + 1;
+    const topB = next * 2;
+    const bottomB = topB + 1;
+    indices.push(topA, bottomA, topB);
+    indices.push(topB, bottomA, bottomB);
+    indices.push(bottomA, bottomCenter, bottomB);
+  }
+
+  VertexData.ComputeNormals(positions, indices, normals);
+  const vertexData = new VertexData();
+  vertexData.positions = positions;
+  vertexData.indices = indices;
+  vertexData.normals = normals;
+  const mesh = new Mesh(`${land.name}_authored_underwater_plug`, scene);
+  vertexData.applyToMesh(mesh);
+  mesh.parent = parent;
+  mesh.material = materials.underwaterLand;
+  mesh.receiveShadows = true;
+  return mesh;
 }
 
 function createLandUnderwaterPlug(land, position, rx, rz, scene, materials, parent) {
@@ -16844,13 +18065,30 @@ function terrainNoise(x, z) {
 
 // Navigation blocks at the calculated waterline, while radar uses the inner
 // terrain contour so a flat beach does not cast a radar shadow.
-function getWaterSafety(position, zones) {
+function getPlayerCollisionHeight() {
+  if (!submarineMode) return 0;
+  return submarineDepthOffsets[getPlayerEffectiveSubmarineDepthState()] ?? 0;
+}
+
+function getWaterSafety(position, zones, collisionHeight = 0) {
   for (const zone of zones) {
+    const landWater = isInLandWater(position, zone);
+    if (landWater) continue;
+
+    if (hasAuthoredLandGeometry(zone)) {
+      if (
+        getZoneShapeDistance(position, zone, zone.rx, zone.rz) < 1
+        && authoredTerrainMetersAtLocal(zone, position.x - zone.x, position.z - zone.z) >= collisionHeight
+      ) {
+        return { isBlocked: true, isShallow: true, shallowAmount: 1 };
+      }
+      continue;
+    }
+
     const distance = getZoneShapeDistance(position, zone, zone.rx, zone.rz);
     const blockDistance = getZoneBlockDistance(zone, "navigation");
-    const landWater = isInLandWater(position, zone);
 
-    if (distance < blockDistance && !landWater) {
+    if (distance < blockDistance) {
       return { isBlocked: true, isShallow: true, shallowAmount: 1 };
     }
   }
@@ -16858,11 +18096,11 @@ function getWaterSafety(position, zones) {
   return { isBlocked: false, isShallow: false, shallowAmount: 0 };
 }
 
-function getShipWaterSafety(position, heading, zones) {
+function getShipWaterSafety(position, heading, zones, collisionHeight = 0) {
   let shallowAmount = 0;
 
   for (const sample of getShipNavigationSamples(position, heading)) {
-    const safety = getWaterSafety(sample.point, zones);
+    const safety = getWaterSafety(sample.point, zones, collisionHeight);
     if (safety.isBlocked) {
       return { ...safety, blockedPoint: sample.point, blockedSample: sample };
     }
@@ -16872,14 +18110,14 @@ function getShipWaterSafety(position, heading, zones) {
   return { isBlocked: false, isShallow: shallowAmount > 0, shallowAmount };
 }
 
-function getShipMovementWaterSafety(position, heading, speedValue, zones) {
+function getShipMovementWaterSafety(position, heading, speedValue, zones, collisionHeight = 0) {
   let shallowAmount = 0;
   const movementSign = Math.sign(speedValue);
   const samples = getShipNavigationSamples(position, heading)
     .filter((sample) => movementSign < 0 ? sample.forwardOffset <= 0.05 : sample.forwardOffset >= -0.05);
 
   for (const sample of samples) {
-    const safety = getWaterSafety(sample.point, zones);
+    const safety = getWaterSafety(sample.point, zones, collisionHeight);
     if (safety.isBlocked) {
       return { ...safety, blockedPoint: sample.point, blockedSample: sample };
     }
@@ -16913,6 +18151,10 @@ function getShipNavigationSamples(position, heading) {
 }
 
 function getZoneShapeDistance(position, zone, rx, rz) {
+  if (hasAuthoredLandGeometry(zone)) {
+    return pointInPolygon2d({ x: position.x - zone.x, z: position.z - zone.z }, authoredLocalCoastline(zone)) ? 0 : 999;
+  }
+
   const localX = position.x - zone.x;
   const localZ = position.z - zone.z;
   const nx = localX / rx;
