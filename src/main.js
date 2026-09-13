@@ -448,14 +448,16 @@ setupResetGameControl(resetGameButton);
 const playerLogin = await requirePlayerLogin();
 const playerInitials = playerLogin.initials;
 await requireRegisteredGameSession(playerLogin);
-const worldMap = await loadWorldMap();
-const worldLandmasses = worldMap.landmasses;
-const worldMapObjects = worldMap.mapObjects;
+let worldMap = await loadWorldMap();
+let worldLandmasses = worldMap.landmasses;
+let worldMapObjects = worldMap.mapObjects;
 underwaterSeaFloorY = calculateUnderwaterSeaFloorY(worldLandmasses);
 document.body.dataset.worldSource = "server";
 document.body.dataset.worldLandmasses = String(worldLandmasses.length);
 document.body.dataset.worldMapObjects = String(worldMapObjects.length);
 const gameState = await loadGameState();
+let currentSessionId = gameState.sessionId;
+let worldReloadPromise = null;
 document.body.dataset.gameStateSource = "server";
 document.body.dataset.serverGameState = gameState.state;
 document.body.dataset.serverShips = String(gameState.ships.length);
@@ -551,6 +553,7 @@ if (shipContrastDebug) {
   materials.sand.diffuseColor = new Color3(0.86, 0.82, 0.68);
 }
 const world = new TransformNode("world", scene);
+let landscapeRoot = null;
 
 const sun = new DirectionalLight("sun", new Vector3(-0.45, -0.9, 0.32), scene);
 sun.position = new Vector3(35, 80, -45);
@@ -593,12 +596,8 @@ const foam = createFoamPatches(scene, materials, world);
 const volcanoPlumes = [];
 const navigationLights = [];
 
-const blockedWaters = worldLandmasses.map(getLandZone);
-createWorldLandmasses(worldLandmasses, scene, materials, world);
-if (renderQuality.visualEffects !== "low") {
-  navigationLights.push(...createNavigationLights(worldLandmasses, scene, materials, world, renderQuality.visualEffects));
-}
-navigationLights.push(...createWorldMapObjects(worldMapObjects, scene, materials, world));
+const blockedWaters = [];
+rebuildWorldLandscape(worldMap);
 
 const boat = scoutPlaneMode
   ? createScoutPlane(scene, materials, "player_scout_plane", playerTeamId, true)
@@ -5681,6 +5680,7 @@ function applyServerGameSnapshot(snapshot) {
     document.body.dataset.playerStateSync = "sandbox-local";
     return;
   }
+  reloadWorldMapIfSessionChanged(snapshot);
   const snapshotClientTime = getSnapshotClientTime(snapshot);
   serverShipsById = indexShipsById(snapshot.ships);
   pendingCriticalFlakShipHitsByTarget = indexCriticalFlakShipHitsByTarget(snapshot.flakHits);
@@ -5777,6 +5777,28 @@ function applyServerGameSnapshot(snapshot) {
   document.body.dataset.serverFlakProjectiles = String(Array.isArray(snapshot.flakProjectiles) ? snapshot.flakProjectiles.length : 0);
   document.body.dataset.serverFlakImpacts = String(Array.isArray(snapshot.flakImpacts) ? snapshot.flakImpacts.length : 0);
   document.body.dataset.playerStateSync = "ok";
+}
+
+function reloadWorldMapIfSessionChanged(snapshot) {
+  if (!snapshot.sessionId || snapshot.sessionId === currentSessionId || worldReloadPromise) return;
+  const previousSessionId = currentSessionId;
+  currentSessionId = snapshot.sessionId;
+  document.body.dataset.worldReload = "loading";
+  document.body.dataset.worldReloadFrom = previousSessionId ?? "";
+  document.body.dataset.worldReloadTo = snapshot.sessionId;
+  worldReloadPromise = loadWorldMap()
+    .then((nextWorldMap) => {
+      rebuildWorldLandscape(nextWorldMap);
+      document.body.dataset.worldReload = "ok";
+    })
+    .catch((error) => {
+      document.body.dataset.worldReload = "error";
+      document.body.dataset.worldReloadError = error.message;
+      console.warn("[sea-battle] world map reload after session change failed", error);
+    })
+    .finally(() => {
+      worldReloadPromise = null;
+    });
 }
 
 function syncServerFlakImpacts(impacts) {
@@ -15867,6 +15889,42 @@ function createWorldLandmasses(landmasses, scene, materials, parent) {
       createIsland(land, position, scene, materials, parent);
     }
   });
+}
+
+function rebuildWorldLandscape(nextWorldMap) {
+  worldMap = {
+    landmasses: Array.isArray(nextWorldMap?.landmasses) ? nextWorldMap.landmasses : [],
+    mapObjects: Array.isArray(nextWorldMap?.mapObjects) ? nextWorldMap.mapObjects : []
+  };
+  worldLandmasses = worldMap.landmasses;
+  worldMapObjects = worldMap.mapObjects;
+  underwaterSeaFloorY = calculateUnderwaterSeaFloorY(worldLandmasses);
+  if (seaFloor) {
+    seaFloor.position.y = underwaterSeaFloorY;
+  }
+  blockedWaters.splice(0, blockedWaters.length, ...worldLandmasses.map(getLandZone));
+  volcanoPlumes.splice(0, volcanoPlumes.length);
+  navigationLights.splice(0, navigationLights.length);
+
+  if (landscapeRoot) {
+    landscapeRoot.dispose(false, true);
+  }
+  landscapeRoot = new TransformNode("landscape", scene);
+  landscapeRoot.parent = world;
+
+  createWorldLandmasses(worldLandmasses, scene, materials, landscapeRoot);
+  if (renderQuality.visualEffects !== "low") {
+    navigationLights.push(...createNavigationLights(worldLandmasses, scene, materials, landscapeRoot, renderQuality.visualEffects));
+  }
+  navigationLights.push(...createWorldMapObjects(worldMapObjects, scene, materials, landscapeRoot));
+
+  debugRespawnCandidatesLoaded = false;
+  debugRespawnCandidates = [];
+  if (debugMapEnabled) {
+    loadDebugRespawnCandidates();
+  }
+  document.body.dataset.worldLandmasses = String(worldLandmasses.length);
+  document.body.dataset.worldMapObjects = String(worldMapObjects.length);
 }
 
 function isVolcanicLandmass(land) {

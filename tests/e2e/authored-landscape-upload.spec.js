@@ -168,6 +168,43 @@ test('authored low and submerged terrain keeps objects below the waterline', asy
   }
 });
 
+test('running client reloads world map after admin starts another landscape', async ({ page, request }) => {
+  const landscapeName = `Playwright live reload ${Date.now()}`;
+  const editorLandscape = createWaterlineLandscape(landscapeName);
+  let adminPage;
+
+  try {
+    await enterGameThroughStartPage(page);
+    await page.goto('/app?scenarioTest=1&debug=1&bigMap=1&hide-beach=1');
+    await expect(page.locator('#renderCanvas')).toBeVisible();
+    await page.waitForFunction(() => window.seaBattleScenarioTest && document.body.dataset.scenarioTest === 'ready');
+
+    adminPage = await page.context().newPage();
+    await uploadAndStartLandscape(adminPage, landscapeName, 'playwright-live-reload.json', editorLandscape);
+
+    await expect.poll(async () => page.evaluate(() => ({
+      reload: document.body.dataset.worldReload ?? '',
+      landmasses: document.body.dataset.worldLandmasses ?? ''
+    })), {
+      timeout: 8_000,
+      message: 'already running client should reload world data after an admin start'
+    }).toEqual({
+      reload: 'ok',
+      landmasses: '2'
+    });
+
+    const visuals = await page.evaluate(() => window.seaBattleScenarioTest.authoredLandscapeVisuals());
+    expect(visuals.map((visual) => visual.name).sort()).toEqual(['emergent_bank', 'submerged_bank']);
+  } finally {
+    if (adminPage && !adminPage.isClosed()) {
+      await deleteLandscapeIfPresent(adminPage, landscapeName);
+      await adminPage.close();
+    } else {
+      await deleteLandscapeIfPresent(page, landscapeName);
+    }
+  }
+});
+
 function createEditorLandscape(name, islandName) {
   return {
     format: 'game-landscape-designer.v1',
