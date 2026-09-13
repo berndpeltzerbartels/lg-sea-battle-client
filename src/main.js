@@ -83,6 +83,7 @@ const authoredSnowLineMeters = 4500;
 const authoredDefaultHeightRadius = 160;
 const authoredDefaultTerrainSampleSpacing = 45;
 const authoredMaxInteriorTerrainSamples = 1800;
+const authoredHeightProfileRingSteps = 9;
 const authoredLodTerrainSampleSpacing = 130;
 const authoredLodMaxInteriorTerrainSamples = 260;
 const authoredLodDistance = 1450;
@@ -9770,6 +9771,7 @@ function installScenarioTestHooks() {
         if (!mesh) return null;
         mesh.computeWorldMatrix(true);
         const positions = Array.from(mesh.getVerticesData("position") ?? []);
+        const indices = Array.from(mesh.getIndices() ?? []);
         const ys = [];
         for (let index = 1; index < positions.length; index += 3) {
           ys.push(positions[index]);
@@ -9786,7 +9788,8 @@ function installScenarioTestHooks() {
             }
             : null,
           vertices: positions.length / 3,
-          triangles: (mesh.getIndices()?.length ?? 0) / 3,
+          triangles: indices.length / 3,
+          maxHorizontalTriangleEdge: Number(maxHorizontalTriangleEdge(positions, indices).toFixed(3)),
           minY: ys.length ? Number(Math.min(...ys).toFixed(3)) : null,
           maxY: ys.length ? Number(Math.max(...ys).toFixed(3)) : null
         };
@@ -17206,6 +17209,8 @@ function createAuthoredIslandSurface(land, scene, materials, parent) {
   const lodTerrain = createAuthoredTerrainMeshData(land, {
     sampleSpacing: authoredLodTerrainSampleSpacing,
     maxInteriorTerrainSamples: authoredLodMaxInteriorTerrainSamples,
+    heightProfileRings: 3,
+    heightProfileRingSteps: 6,
     heightFalloffSteps: 6,
     maxSeaLevelSteps: 28
   });
@@ -17235,6 +17240,7 @@ function createAuthoredTerrainMeshData(land, options = {}) {
   const vertices = uniqueTerrainVertices([
     ...boundaryVertices,
     ...createAuthoredInteriorTerrainSamples(island, options),
+    ...heightVertices.flatMap((point) => createAuthoredHeightProfileVertices(island, point, options)),
     ...heightVertices.flatMap((point) => createAuthoredSeaLevelVertices(island, point, options)),
     ...heightVertices.flatMap((point) => createAuthoredHeightFalloffVertices(island, point, options)),
     ...heightVertices,
@@ -17260,6 +17266,34 @@ function authoredLocalTerrainIsland(land) {
 
 function createAuthoredRenderableCoastline(polygon) {
   return smoothAuthoredClosedPolygon(polygon, authoredCoastlineSmoothingIterations);
+}
+
+function createAuthoredHeightProfileVertices(island, point, options = {}) {
+  if (point.basePointIndexes.length >= 3) return [];
+  const radius = sanitizeAuthoredHeightRadius(point.radius ?? authoredDefaultHeightRadius);
+  const ringCount = options.heightProfileRings ?? 5;
+  const maxSteps = options.heightProfileRingSteps ?? authoredHeightProfileRingSteps;
+  const vertices = [];
+
+  for (let ring = 1; ring <= ringCount; ring += 1) {
+    const ratio = ring / (ringCount + 1);
+    const ringRadius = radius * ratio;
+    const steps = Math.max(12, Math.round(maxSteps + ratio * radius / 12));
+    for (let index = 0; index < steps; index += 1) {
+      const angle = (index / steps) * Math.PI * 2;
+      const vertex = {
+        x: point.x + Math.cos(angle) * ringRadius,
+        z: point.z + Math.sin(angle) * ringRadius,
+        boundary: false,
+        profile: true
+      };
+      if (!pointInPolygon2d(vertex, island.polygon)) continue;
+      vertex.h = authoredTerrainHeightAt(island, vertex.x, vertex.z);
+      vertices.push(vertex);
+    }
+  }
+
+  return vertices;
 }
 
 function createAuthoredHeightFalloffVertices(island, point, options = {}) {
@@ -17562,6 +17596,29 @@ function triangleNormalY(positions, a, b, c) {
   const vy = positions[c * 3 + 1] - ay;
   const vz = positions[c * 3 + 2] - az;
   return uz * vx - ux * vz;
+}
+
+function maxHorizontalTriangleEdge(positions, indices) {
+  let maxEdge = 0;
+  for (let index = 0; index < indices.length; index += 3) {
+    const a = indices[index];
+    const b = indices[index + 1];
+    const c = indices[index + 2];
+    maxEdge = Math.max(
+      maxEdge,
+      horizontalVertexDistance(positions, a, b),
+      horizontalVertexDistance(positions, b, c),
+      horizontalVertexDistance(positions, c, a)
+    );
+  }
+  return maxEdge;
+}
+
+function horizontalVertexDistance(positions, a, b) {
+  return Math.hypot(
+    positions[a * 3] - positions[b * 3],
+    positions[a * 3 + 2] - positions[b * 3 + 2]
+  );
 }
 
 function orientAuthoredTerrainTriangleForBabylon(triangle, vertices) {
