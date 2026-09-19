@@ -5165,6 +5165,9 @@ function rememberKillFeedShipLabels(ships) {
     const controlledByHuman = isHumanController(ship.controlledBy);
     const label = createShipDesignation(ship);
     const vehicleType = getShipVehicleType(ship);
+    if (cached?.wasHuman && !controlledByHuman && ship.state !== "active") {
+      return;
+    }
     if (
       controlledByHuman ||
       !cached ||
