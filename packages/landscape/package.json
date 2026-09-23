@@ -1,0 +1,12 @@
+{
+  "name": "@sea-battle/landscape",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./geometry": "./geometry.js",
+    "./editor": "./editor.js"
+  },
+  "peerDependencies": { "@babylonjs/core": "^8.56.2" }
+}
