@@ -1,6 +1,5 @@
 import { createLandscapeMaterials } from "../packages/landscape/index.js";
 import { moveShipOnWater } from "./shipMovement.js";
-import { prepareLandscapeVisibility, updateLandscapeCameraLayers, SURFACE_LAYER, UNDERWATER_LAYER } from "./landscapeVisibility.js";
 import {
   createAuthoredIslandSurface,
   createAuthoredTerrainMeshData,
@@ -609,9 +608,7 @@ const seaFloor = MeshBuilder.CreateGround("underwater_sea_floor", { width: ocean
 seaFloor.position.y = underwaterSeaFloorY;
 seaFloor.material = materials.underwaterFloor;
 seaFloor.parent = world;
-seaFloor.layerMask = UNDERWATER_LAYER;
 const foam = createFoamPatches(scene, materials, world);
-foam.patches.forEach(patch => { patch.mesh.layerMask = SURFACE_LAYER; });
 const volcanoPlumes = [];
 const navigationLights = [];
 
@@ -1529,7 +1526,7 @@ scene.onBeforeRenderObservable.add(() => {
 
   materials.water.diffuseTexture.uOffset += dt * 0.0065;
   materials.water.diffuseTexture.vOffset += dt * 0.0115;
-  if (openSeaFoamEnabled && camera.position.y >= 0) {
+  if (openSeaFoamEnabled) {
     updateFoamPatches(foam, boat.root.position, time, blockedWaters);
   }
   updateVolcanoPlumes(volcanoPlumes, time);
@@ -2256,8 +2253,6 @@ function transformLocalShipPointWithoutTilt(localPoint, visualScale = 1) {
 }
 
 function updateCameraWaterAtmosphere() {
-  const underwater = updateLandscapeCameraLayers(camera);
-  document.body.dataset.landscapeView = underwater ? "underwater" : "surface";
   if (sideViewSandboxMode || scoutPlaneMode) {
     document.body.dataset.underwaterView = "false";
     document.body.style.setProperty("--underwater-view-ratio", "0");
@@ -15895,7 +15890,6 @@ function rebuildWorldLandscape(nextWorldMap) {
     navigationLights.push(...createNavigationLights(worldLandmasses, scene, materials, landscapeRoot, renderQuality.visualEffects));
   }
   navigationLights.push(...createWorldMapObjects(worldMapObjects, scene, materials, landscapeRoot));
-  prepareLandscapeVisibility(landscapeRoot);
 
   document.body.dataset.worldLandmasses = String(worldLandmasses.length);
   document.body.dataset.worldMapObjects = String(worldMapObjects.length);

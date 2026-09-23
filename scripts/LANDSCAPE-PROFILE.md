@@ -26,7 +26,22 @@ work, so it cannot distinguish this bottleneck from GPU rendering.
 Raw local captures: `/tmp/seabattle-profile-results.json` and
 `/tmp/seabattle-*.cpuprofile`. These temporary files are not required at runtime.
 
-## Implemented first: water-side visibility
+## Withdrawn experiment: water-side visibility
+
+Withdrawn after the user reported worse rendering and green overlaps on sand.
+The runtime is restored to 592a426, including its boat precision correction.
+The following records the experiment, not the current production behavior.
+An array-level comparison on the active compact-world snapshot found 400 terrain
+meshes before and after preparation, with unchanged positions, indices and LOD
+counts. This does not establish the cause of the user's visual regression; in
+particular the rendering tests below did not establish acceptable visual quality.
+
+Follow-up geometry check: the first compact formation's mountain contains 514 of
+669 triangles exactly at its base height (1.2 world height units). Every vertex
+of those 514 triangles is inside its supporting sandbank plateau, which has the
+same height. This is pre-existing coplanar overlap in the unmapped legacy terrain
+path; disabling water-side visibility does not fix it. Parent/child surface
+ownership needs correction, not a depth bias or another height offset.
 
 Static landscape is assigned to disjoint camera layers at load/rebuild. Meshes
 crossing zero height are split once, including interpolated normals and UVs.
