@@ -590,9 +590,9 @@ if (sideViewSandboxMode) {
   ambient.groundColor = new Color3(0.04, 0.045, 0.05);
 }
 
-const worldLimit = 5000;
 const oceanBaseSize = 2300;
-const oceanVisualSize = worldLimit * 2;
+// This patch follows the camera; its size is not a navigation boundary.
+const oceanVisualSize = 10000;
 const ocean = MeshBuilder.CreateGround("ocean", { width: oceanVisualSize, height: oceanVisualSize, subdivisions: 160 }, scene);
 ocean.material = materials.water;
 ocean.material.backFaceCulling = false;
@@ -1414,7 +1414,7 @@ scene.onBeforeRenderObservable.add(() => {
     holdWeaponWorldHeading(previousHeading, heading);
     forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
 
-    const moved = moveShipOnWater(boat.root.position, forward, speed * dt, worldLimit, (candidate) => {
+    const moved = moveShipOnWater(boat.root.position, forward, speed * dt, (candidate) => {
       const position = new Vector3(candidate.x, candidate.y, candidate.z);
       nextWaterSafety = getShipWaterSafety(position, heading, blockedWaters, playerCollisionHeight);
       if (scoutPlaneMode || !nextWaterSafety.isBlocked) return true;
