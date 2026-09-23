@@ -56,6 +56,8 @@ const urlParams = new URLSearchParams(location.search);
 const scenarioTestMode = urlParams.get("scenarioTest") === "1";
 const engine = new Engine(canvas, true, {
   preserveDrawingBuffer: scenarioTestMode,
+  // Keep GPU coordinates near the camera without changing simulation/world positions.
+  useLargeWorldRendering: true,
   stencil: false,
   antialias: true
 });
