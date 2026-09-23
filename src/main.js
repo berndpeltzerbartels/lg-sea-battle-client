@@ -13998,7 +13998,7 @@ function createFleetMaterials(scene, fleetId, palette) {
 }
 
 function createMaterials(scene) {
-  const {sand, grass, snow, underwaterLand} = createLandscapeMaterials(scene);
+  const {sand, terrainSand, grass, snow, underwaterLand} = createLandscapeMaterials(scene);
   const water = new StandardMaterial("water_material", scene);
   water.diffuseColor = new Color3(0.18, 0.36, 0.4);
   water.specularColor = new Color3(0.68, 0.74, 0.75);
@@ -14190,6 +14190,7 @@ function createMaterials(scene) {
   return {
     water,
     sand,
+    terrainSand,
     grass,
     terrain,
     snow,

@@ -1,5 +1,6 @@
 import { Mesh } from "@babylonjs/core/Meshes/mesh.js";
 import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData.js";
+import { hasCompletePlateauMapping } from "./mapped.js";
 import {
   createAuthoredTerrainMeshData,
   authoredLocalTerrainIsland,
@@ -16,7 +17,8 @@ export function createAuthoredIslandSurface(land, scene, materials, parent) {
   const terrain = createAuthoredTerrainMeshData(land);
   const renderLand = authoredLocalTerrainIsland(land);
   const surfaces = splitAuthoredTerrainSurfaces(terrain, renderLand);
-  const lodTerrain = createAuthoredTerrainMeshData(land, {
+  const mapped = hasCompletePlateauMapping(renderLand);
+  const lodTerrain = mapped ? terrain : createAuthoredTerrainMeshData(land, {
     sampleSpacing: authoredLodTerrainSampleSpacing,
     maxInteriorTerrainSamples: authoredLodMaxInteriorTerrainSamples,
     heightProfileRings: 3,
@@ -24,12 +26,12 @@ export function createAuthoredIslandSurface(land, scene, materials, parent) {
     heightFalloffSteps: 6,
     maxSeaLevelSteps: 28
   });
-  const lodSurfaces = splitAuthoredTerrainSurfaces(lodTerrain, renderLand);
+  const lodSurfaces = mapped ? surfaces : splitAuthoredTerrainSurfaces(lodTerrain, renderLand);
 
   return [
     createAuthoredTerrainMeshWithLod(`${land.name}_authored_seafloor`, surfaces.seaFloor, lodSurfaces.seaFloor, authoredSeaFloorMaterial(land, materials), scene, parent),
     createAuthoredTerrainMeshWithLod(`${land.name}_authored_terrain`, surfaces.land, lodSurfaces.land, authoredLandMaterial(land, materials), scene, parent),
-    createAuthoredTerrainMeshWithLod(`${land.name}_authored_sand`, surfaces.sand, lodSurfaces.sand, materials.sand, scene, parent),
+    createAuthoredTerrainMeshWithLod(`${land.name}_authored_sand`, surfaces.sand, lodSurfaces.sand, materials.terrainSand ?? materials.sand, scene, parent),
     createAuthoredTerrainMeshWithLod(`${land.name}_authored_snow`, surfaces.snow, lodSurfaces.snow, materials.snow, scene, parent)
   ].filter(Boolean);
 }
@@ -38,7 +40,7 @@ export function createAuthoredTerrainMeshWithLod(name, surface, lodSurface, mate
   const mesh = createAuthoredTerrainMesh(name, surface.positions, surface.indices, material, scene, parent);
   if (!mesh) return null;
 
-  const lodMesh = createAuthoredTerrainMesh(`${name}_lod`, lodSurface.positions, lodSurface.indices, material, scene, parent);
+  const lodMesh = surface === lodSurface ? null : createAuthoredTerrainMesh(`${name}_lod`, lodSurface.positions, lodSurface.indices, material, scene, parent);
   if (lodMesh) {
     mesh.addLODLevel(authoredLodDistance, lodMesh);
     // LOD meshes are siblings, so disposing the surface does not dispose them automatically.

@@ -1,4 +1,5 @@
-// Extracted unchanged from the game renderer. No DOM or Babylon dependency.
+import { mappedTerrainMesh, mappedTerrainHeight, hasCompletePlateauMapping } from "./mapped.js";
+// Shared game/editor geometry. No DOM or Babylon dependency.
 export const authoredTerrainVisualScale = 1;
 export const authoredSeaLevelMeters = 0;
 export const authoredSnowLineMeters = 4500;
@@ -11,9 +12,11 @@ export const authoredLodDistance = 1450;
 export const authoredCoastlineSmoothingIterations = 2;
 export const authoredLocalCoastlineCache = new WeakMap();
 export const authoredWorldCoastlineCache = new WeakMap();
+const mappedLocalIslandCache = new WeakMap();
 
 export function createAuthoredTerrainMeshData(land, options = {}) {
   const island = authoredLocalTerrainIsland(land);
+  if (hasCompletePlateauMapping(island)) return mappedTerrainMesh(island);
   const boundaryVertices = createAuthoredRenderableCoastline(island.polygon)
     .map((point) => ({ x: point.x, z: point.z, h: authoredTerrainBaseMeters(island), boundary: true }));
   const heightVertices = (island.heightPoints ?? []).filter((point) => !point.plateauGroupId).map((point) => ({
@@ -77,7 +80,8 @@ export function authoredLocalTerrainIsland(land) {
 export function authoredLocalPolygon(land) {
   return (land.polygon ?? []).map((point) => ({
     x: Number(point.x) - land.x,
-    z: Number(point.z) - land.z
+    z: Number(point.z) - land.z,
+    boundaryPointId: point.boundaryPointId
   }));
 }
 
@@ -91,7 +95,8 @@ export function authoredLocalHeightPoints(land) {
     basePointIndexes: point.basePointIndexes,
     plateauGroupId: point.plateauGroupId,
     basePlateauGroupId: point.basePlateauGroupId,
-    plateauOrder: point.plateauOrder
+    plateauOrder: point.plateauOrder,
+    plateauBoundaryPointId: point.plateauBoundaryPointId
   }));
 }
 
@@ -170,7 +175,7 @@ export function sanitizeAuthoredBasePointIndexes(indexes, pointCount) {
 
 export function authoredPlateausForIsland(island) {
   return authoredPlateauGroupsForIsland(island).map((points) => {
-    const polygon = smoothAuthoredClosedPolygon(orderedAuthoredPlateauPoints(points), 1);
+    const polygon = smoothAuthoredClosedPolygon(orderedAuthoredPlateauPoints(points), hasCompletePlateauMapping(island) ? 0 : 1);
     return {
       id: points[0].plateauGroupId,
       polygon,
@@ -236,7 +241,7 @@ export function polygonCentroid2d(points) {
 }
 
 export function createAuthoredSingleHeightPointSurfaces(island) {
-  const renderBoundary = createAuthoredRenderableCoastline(island.polygon);
+  const renderBoundary = hasCompletePlateauMapping(island) ? island.polygon : createAuthoredRenderableCoastline(island.polygon);
   return (island.heightPoints ?? []).filter((point) => !point.plateauGroupId).map((point) => {
     const base = authoredHeightPointBase(island, point, renderBoundary);
     const vertices = [
@@ -434,6 +439,7 @@ export function barycentricAuthoredWeightsForPoint(point, a, b, c) {
 }
 
 export function authoredTerrainHeightAt(island, x, z) {
+  if (hasCompletePlateauMapping(island)) return mappedTerrainHeight(island, { x, z });
   const heightPoints = island.heightPoints ?? [];
   const baseHeight = authoredTerrainBaseMeters(island);
   if (heightPoints.length === 0) return baseHeight;
@@ -710,21 +716,26 @@ export function compactIndexedVertexData(positions, indices) {
 }
 
 export function authoredSeaFloorMaterial(land, materials) {
-  return normalizedAuthoredMaterial(land.material) === "sand" ? materials.sand : materials.underwaterLand;
+  return normalizedAuthoredMaterial(land.material) === "sand" ? (materials.terrainSand ?? materials.sand) : materials.underwaterLand;
 }
 
 export function authoredLandMaterial(land, materials) {
-  return normalizedAuthoredMaterial(land.material) === "sand" ? materials.sand : materials.grass;
+  return normalizedAuthoredMaterial(land.material) === "sand" ? (materials.terrainSand ?? materials.sand) : materials.grass;
 }
 
 export function authoredTerrainMetersAtLocal(land, localX, localZ) {
-  return authoredTerrainHeightAt(authoredLocalTerrainIsland(land), localX, localZ);
+  let island = mappedLocalIslandCache.get(land);
+  if (!island) {
+    island = authoredLocalTerrainIsland(land);
+    if (hasCompletePlateauMapping(island)) mappedLocalIslandCache.set(land, island);
+  }
+  return authoredTerrainHeightAt(island, localX, localZ);
 }
 
 export function authoredWorldCoastline(land) {
   const cached = authoredWorldCoastlineCache.get(land);
   if (cached) return cached;
-  const coastline = smoothAuthoredClosedPolygon(authoredWorldPolygon(land), authoredCoastlineSmoothingIterations);
+  const coastline = smoothAuthoredClosedPolygon(authoredWorldPolygon(land), hasCompletePlateauMapping(authoredLocalTerrainIsland(land)) ? 0 : authoredCoastlineSmoothingIterations);
   authoredWorldCoastlineCache.set(land, coastline);
   return coastline;
 }
@@ -739,7 +750,7 @@ export function authoredWorldPolygon(land) {
 export function authoredLocalCoastline(land) {
   const cached = authoredLocalCoastlineCache.get(land);
   if (cached) return cached;
-  const coastline = smoothAuthoredClosedPolygon(authoredLocalPolygon(land), authoredCoastlineSmoothingIterations);
+  const coastline = smoothAuthoredClosedPolygon(authoredLocalPolygon(land), hasCompletePlateauMapping(authoredLocalTerrainIsland(land)) ? 0 : authoredCoastlineSmoothingIterations);
   authoredLocalCoastlineCache.set(land, coastline);
   return coastline;
 }

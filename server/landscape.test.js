@@ -43,6 +43,7 @@ test("shared renderer disposes all LOD geometry when rebuilding a preview", () =
   const materials = createLandscapeMaterials(scene);
   assert.deepEqual(materials.grass.diffuseColor.asArray(),[0.22,0.34,0.3]);
   assert.equal(materials.sand.zOffset,-2);
+  assert.equal(materials.terrainSand.zOffset,0);
   for(let i=0;i<3;i++) {
     const meshes = createAuthoredIslandSurface(editorIslandToLand(fixtures()[1]),scene,materials,root);
     assert.ok(meshes.length > 0);
@@ -51,6 +52,9 @@ test("shared renderer disposes all LOD geometry when rebuilding a preview", () =
     assert.equal(scene.meshes.length,0);
     assert.equal(scene.geometries.length,0);
   }
+  const bankMeshes = createAuthoredIslandSurface(editorIslandToLand(fixtures()[2]),scene,materials,root);
+  assert.ok(bankMeshes.length > 0);
+  assert.ok(bankMeshes.every(mesh => mesh.material === materials.terrainSand));
   scene.dispose();engine.dispose();
 });
 

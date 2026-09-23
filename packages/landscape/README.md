@@ -25,8 +25,27 @@ deduplicates Babylon when resolving the linked package.
 
 `npm test` in the client includes geometry fingerprints captured from checkpoint
 f64c2ed, editor/game input parity and repeated mesh/LOD disposal tests.
-Existing authored geometry is intentionally unchanged: plateau artifacts and
-manual boundary-link consumption are follow-up work, not silently fixed here.
+Unmapped legacy geometry retains its checkpoint behavior. Fully mapped landmasses
+use `boundaryPointId` / `plateauBoundaryPointId` to build explicit planar slope
+sectors. Extra outer vertices belong to the intervening boundary arc. Contours
+are not independently smoothed, which would invalidate the authored pairings.
+Multiple surfaces are combined into an exact upper envelope by clipping away
+covered triangle portions, including coplanar ties. No geometry refinement runs
+per frame. Mapped terrain does not build an identical duplicate LOD mesh.
+
+All plateaus of a landmass must be completely assigned to activate mapped geometry.
+Partial assignments retain the legacy view while editing; absent links are never
+guessed. Invalid complete mappings fail explicitly. Source files from older
+exports without assignments must be completed in the editor and exported again.
+The server preserves the IDs and uses the same planar sectors and maximum for
+its height-field preparation; its preparation cache version is now 2.
+
+Mapped regression tests cover single/multiple/overlapping plateau tops, reversed
+winding, extra boundary vertices, monotonic heights, exact area coverage and no
+overlapping faces. The upper envelope has a 20000-triangle output guard per landmass.
+Existing single-peak and unmapped terrain fingerprints remain unchanged.
+Authored sand uses `terrainSand` with zero depth bias. The original biased `sand`
+material is retained for legacy overlays, not underwater terrain triangles.
 The old hard-coded procedural game world remains supported in the game client.
 The previous editor terrain is archived under experiments/legacyTerrain.js;
 its historical tests are not evidence that the shared renderer fixes those cases.

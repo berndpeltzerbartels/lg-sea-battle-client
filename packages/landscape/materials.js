@@ -6,6 +6,10 @@ export function createLandscapeMaterials(scene) {
   sand.diffuseColor = new Color3(0.58, 0.58, 0.5);
   sand.specularColor = new Color3(0.035, 0.038, 0.035);
   sand.zOffset = -2;
+  // Authored terrain is a solid surface, not an overlay. A slope-dependent
+  // depth bias pulls submerged triangles through the water at the shoreline.
+  const terrainSand = sand.clone("terrain_sand_material");
+  terrainSand.zOffset = 0;
 
   const grass = new StandardMaterial("grass_material", scene);
   grass.diffuseColor = new Color3(0.22, 0.34, 0.3);
@@ -22,5 +26,5 @@ export function createLandscapeMaterials(scene) {
   underwaterLand.emissiveColor = new Color3(0.006, 0.02, 0.024);
   underwaterLand.specularColor = new Color3(0.01, 0.015, 0.015);
   underwaterLand.backFaceCulling = false;
-  return {sand, grass, snow, underwaterLand};
+  return {sand, terrainSand, grass, snow, underwaterLand};
 }
