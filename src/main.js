@@ -90,6 +90,11 @@ const authoredLodDistance = 1450;
 const authoredCoastlineSmoothingIterations = 2;
 const authoredLocalCoastlineCache = new WeakMap();
 const authoredWorldCoastlineCache = new WeakMap();
+const defaultCameraNearClip = 0.2;
+const defaultCameraFarClip = 4200;
+const closeWeaponCameraNearClip = 0.04;
+const closeWeaponCameraFarClip = 2200;
+const scoutPlaneCameraNearClip = 1.5;
 scene.clearColor = surfaceClearColor.clone();
 scene.fogMode = Scene.FOGMODE_EXP2;
 scene.fogColor = surfaceFogColor.clone();
@@ -435,8 +440,6 @@ const lighthouseHeightOffsets = new Map([
   ["eastern_delta_coast", -0.45]
 ]);
 let lastMapViewport = null;
-let debugRespawnCandidates = [];
-let debugRespawnCandidatesLoaded = false;
 let debugMapMarkers = [];
 let debugMapMarkersEdited = false;
 const clientBuildInfo = window.__SEA_BATTLE_CLIENT_VERSION__ ?? { version: "dev", commit: "local" };
@@ -533,9 +536,6 @@ setupMapZoomControl(mapZoom);
 setupDebugMapMarkerPanel();
 setupDebugMapTeleport(mapCanvas);
 updateDebugMapMarkerPanel();
-if (debugMapEnabled) {
-  loadDebugRespawnCandidates();
-}
 
 const clientCapability = createClientCapabilitySnapshot(engine, canvas);
 const renderQuality = applyRenderQuality(engine, clientCapability);
@@ -667,8 +667,8 @@ document.body.dataset.flakDemoStaticBoats = String(flakDemoMotions.length);
 document.body.dataset.meshCount = String(scene.meshes.length);
 
 const camera = new FreeCamera("follow_camera", new Vector3(0, 7, -13), scene);
-camera.minZ = 0.2;
-camera.maxZ = 4200;
+camera.minZ = defaultCameraNearClip;
+camera.maxZ = defaultCameraFarClip;
 camera.fov = scoutPlaneMode ? 1.02 : 0.78;
 scene.activeCamera = camera;
 
@@ -1570,7 +1570,7 @@ scene.onBeforeRenderObservable.add(() => {
     && !torpedoScopeActive
     && !bombBayViewActive;
 
-  camera.minZ = (cannonViewActive || flakViewActive || torpedoScopeActive) ? 0.03 : (bombBayViewActive ? 0.2 : (scoutPlaneMode ? 1.5 : 0.2));
+  updateCameraClipPlanes();
   camera.fov = torpedoScopeActive
     ? getTorpedoScopeFov()
     : (isPlayerSubmarineObservationPeriscopeActive()
@@ -1596,6 +1596,7 @@ scene.onBeforeRenderObservable.add(() => {
   hideOwnSubmarineBelowSurface();
   updateTorpedoViewState();
   document.body.dataset.camera = `${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)}`;
+  document.body.dataset.cameraClip = `${camera.minZ.toFixed(2)},${camera.maxZ.toFixed(0)}`;
   document.body.dataset.frameMs = (rawFrameSeconds * 1000).toFixed(1);
   document.body.dataset.simulationMs = (dt * 1000).toFixed(1);
   document.body.dataset.cameraRotation = `${camera.rotation.x.toFixed(2)},${camera.rotation.y.toFixed(2)},${camera.rotation.z.toFixed(2)}`;
@@ -2181,6 +2182,21 @@ function getPlayerCameraSetup(forward) {
     .add(forward.scale(scoutPlaneMode ? 90.0 : 24.0))
     .add(new Vector3(0, planeLookDown, 0));
   return { position, target };
+}
+
+function updateCameraClipPlanes() {
+  if (scoutPlaneMode) {
+    camera.minZ = scoutPlaneCameraNearClip;
+    camera.maxZ = defaultCameraFarClip;
+    return;
+  }
+  if (flakViewActive || cannonViewActive || torpedoScopeActive) {
+    camera.minZ = closeWeaponCameraNearClip;
+    camera.maxZ = closeWeaponCameraFarClip;
+    return;
+  }
+  camera.minZ = defaultCameraNearClip;
+  camera.maxZ = defaultCameraFarClip;
 }
 
 function getBridgeWindowCameraLocalPosition() {
@@ -4528,33 +4544,6 @@ function getWorldMapEndpoint() {
   return gameEndpoint("/game/world");
 }
 
-async function loadDebugRespawnCandidates() {
-  if (debugRespawnCandidatesLoaded) return;
-  debugRespawnCandidatesLoaded = true;
-  const endpoint = getDebugRespawnCandidatesEndpoint();
-  try {
-    const response = await fetch(endpoint, { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(`status ${response.status}`);
-    }
-    const payload = await response.json();
-    debugRespawnCandidates = Array.isArray(payload)
-      ? payload
-          .map((point) => ({ x: Number(point.x), z: Number(point.z) }))
-          .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.z))
-      : [];
-    document.body.dataset.debugRespawnCandidates = String(debugRespawnCandidates.length);
-  } catch (error) {
-    debugRespawnCandidatesLoaded = false;
-    document.body.dataset.debugRespawnCandidates = "error";
-    console.warn("[sea-battle] respawn candidate debug layer unavailable", error);
-  }
-}
-
-function getDebugRespawnCandidatesEndpoint() {
-  return gameEndpoint("/game/debug/respawn-candidates");
-}
-
 async function loadGameState() {
   if (directSideViewSandboxRequested) {
     return createDirectSideViewSandboxState();
@@ -4945,13 +4934,11 @@ function toggleDebugMap() {
       url.searchParams.delete("markers");
     }
     url.searchParams.delete("bigMap");
-    loadDebugRespawnCandidates();
   } else {
     url.searchParams.delete("debug");
     url.searchParams.delete("bigMap");
     url.searchParams.delete("markers");
     document.body.dataset.debugMapShips = "0";
-    document.body.dataset.debugRespawnCandidates = "0";
   }
   updateDebugMapMarkerPanel();
   if (mapCanvas && boat?.root?.position) {
@@ -4975,7 +4962,6 @@ function toggleDebugMarkerMap() {
   if (debugMapEnabled) {
     url.searchParams.set("debug", "1");
     url.searchParams.delete("bigMap");
-    loadDebugRespawnCandidates();
   } else {
     url.searchParams.delete("debug");
     url.searchParams.delete("bigMap");
@@ -5188,6 +5174,9 @@ function rememberKillFeedShipLabels(ships) {
     const controlledByHuman = isHumanController(ship.controlledBy);
     const label = createShipDesignation(ship);
     const vehicleType = getShipVehicleType(ship);
+    if (cached?.wasHuman && !controlledByHuman && ship.state !== "active") {
+      return;
+    }
     if (
       controlledByHuman ||
       !cached ||
@@ -6439,7 +6428,6 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, headi
   drawMapLandmarkMarkers(ctx, landZones, bounds, width, height, scale);
 
   if (debugMapEnabled) {
-    drawDebugRespawnCandidates(ctx, bounds, width, height, scale);
     drawDebugMapMarkers(ctx, bounds, width, height, scale);
     drawDebugMapShips(ctx, bounds, width, height, scale);
   }
@@ -6454,35 +6442,6 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, headi
   if (mapSectorValue) mapSectorValue.textContent = formatMapSector(playerPosition);
   if (mapCoordinateValue) mapCoordinateValue.textContent = `${formatWorldCoordinate(playerPosition)}\n${formatMapBounds(bounds)}\nZoom x${zoomScale}`;
   updateMapGridEdgeLabels(bounds, width, height, scale);
-}
-
-function drawDebugRespawnCandidates(ctx, bounds, width, height, scale) {
-  if (!debugRespawnCandidates.length) return;
-
-  let visibleCandidates = 0;
-  ctx.save();
-  ctx.font = bigMapEnabled ? "800 11px Inter, sans-serif" : "800 8px Inter, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  debugRespawnCandidates.forEach((position, index) => {
-    if (position.x < bounds.minX || position.x > bounds.maxX || position.z < bounds.minZ || position.z > bounds.maxZ) {
-      return;
-    }
-    const point = worldToMapPoint(position, bounds, width, height, scale);
-    const radius = bigMapEnabled ? 7 : 5;
-    ctx.fillStyle = "rgba(7, 31, 43, 0.82)";
-    ctx.strokeStyle = "rgba(171, 255, 245, 0.95)";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "rgba(211, 255, 250, 0.98)";
-    ctx.fillText(String(index + 1), point.x, point.y + 0.5);
-    visibleCandidates += 1;
-  });
-  ctx.restore();
-  document.body.dataset.debugRespawnCandidatesVisible = String(visibleCandidates);
 }
 
 function drawDebugMapMarkers(ctx, bounds, width, height, scale) {
@@ -6816,22 +6775,34 @@ function drawMapLandZone(ctx, zone, bounds, width, height, scale) {
 
 function drawMapLandUnion(ctx, zones, bounds, width, height, scale) {
   if (zones.length === 0) return;
-
-  const mask = document.createElement("canvas");
-  mask.width = Math.max(1, Math.ceil(width));
-  mask.height = Math.max(1, Math.ceil(height));
-  const maskCtx = mask.getContext("2d");
-  if (!maskCtx) return;
-
-  maskCtx.fillStyle = "#ffffff";
-  zones.forEach((zone) => addMapLandPath(maskCtx, zone, bounds, width, height, scale));
-
-  ctx.save();
-  ctx.drawImage(createColoredMaskCanvas(mask, "rgba(98, 129, 89, 0.95)"), 0, 0, width, height);
-  drawMaskOutline(ctx, mask, "rgba(238, 218, 164, 0.78)");
-  ctx.restore();
+  drawMapElevationLayers(ctx, zones, bounds, width, height, scale);
 
   zones.forEach((zone) => drawMapLandWater(ctx, zone, bounds, width, height, scale));
+}
+
+function drawMapElevationLayers(ctx, zones, bounds, width, height, scale) {
+  const mapWidth = (bounds.maxX - bounds.minX) * scale;
+  const mapHeight = (bounds.maxZ - bounds.minZ) * scale;
+  const insetX = (width - mapWidth) * 0.5;
+  const insetY = (height - mapHeight) * 0.5;
+  const colors = ["rgba(98, 129, 89, 0.95)", "rgba(82, 113, 79, 0.96)", "rgba(67, 96, 72, 0.97)"];
+
+  ctx.save();
+  ctx.transform(
+    scale,
+    0,
+    0,
+    -scale,
+    insetX - bounds.minX * scale,
+    insetY + bounds.maxZ * scale
+  );
+  for (const zone of zones) {
+    for (const [index, layer] of (zone.instrumentElevationLayers ?? []).entries()) {
+      ctx.fillStyle = colors[index] ?? colors[colors.length - 1];
+      for (const path of layer.paths ?? []) ctx.fill(path);
+    }
+  }
+  ctx.restore();
 }
 
 function addMapLandPath(ctx, zone, bounds, width, height, scale) {
@@ -7144,10 +7115,23 @@ function drawRadarLandUnion(ctx, zones, playerPosition, centerX, centerY, scale,
 }
 
 function addRadarLandPath(ctx, zone, playerPosition, centerX, centerY, scale, heading) {
-  ctx.beginPath();
   if (hasAuthoredLandGeometry(zone)) {
-    if (!addInstrumentContourPaths(ctx, authoredInstrumentSurfaceContours(zone), (point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading))) return;
+    const project = (point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading);
+    for (const contour of authoredInstrumentSurfaceContours(zone)) {
+      if (!Array.isArray(contour) || contour.length < 3) continue;
+      ctx.beginPath();
+      const first = project(contour[0]);
+      ctx.moveTo(first.x, first.y);
+      for (let index = 1; index < contour.length; index += 1) {
+        const point = project(contour[index]);
+        ctx.lineTo(point.x, point.y);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+    return;
   } else if (zone.kind !== "coastline") {
+    ctx.beginPath();
     const point = worldToRadarPoint(zone, playerPosition, centerX, centerY, scale, heading);
     ctx.ellipse(
       point.x,
@@ -7159,6 +7143,7 @@ function addRadarLandPath(ctx, zone, playerPosition, centerX, centerY, scale, he
       Math.PI * 2
     );
   } else {
+    ctx.beginPath();
     const points = getCoastContourPoints(zone, 80, "radar").map((point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading));
     if (points.length < 3) return;
     ctx.moveTo(points[0].x, points[0].y);
@@ -15918,11 +15903,6 @@ function rebuildWorldLandscape(nextWorldMap) {
   }
   navigationLights.push(...createWorldMapObjects(worldMapObjects, scene, materials, landscapeRoot));
 
-  debugRespawnCandidatesLoaded = false;
-  debugRespawnCandidates = [];
-  if (debugMapEnabled) {
-    loadDebugRespawnCandidates();
-  }
   document.body.dataset.worldLandmasses = String(worldLandmasses.length);
   document.body.dataset.worldMapObjects = String(worldMapObjects.length);
 }
@@ -16813,63 +16793,155 @@ function authoredTerrainMetersAtLocal(land, localX, localZ) {
 
 function authoredTerrainHeightAt(island, x, z) {
   const heightPoints = island.heightPoints ?? [];
-  if (heightPoints.length === 0) return authoredSeaFloorMeters(island);
-  if (heightPoints.length !== 1) return interpolateAuthoredHeight(island, x, z);
-
-  const boundary = island.polygon;
-  const peak = {
-    x: heightPoints[0].x,
-    z: heightPoints[0].z,
-    h: sanitizeAuthoredHeight(heightPoints[0].h),
-    radius: sanitizeAuthoredHeightRadius(heightPoints[0].radius ?? authoredDefaultHeightRadius),
-    falloff: sanitizeAuthoredHeightFalloff(heightPoints[0].falloff),
-    basePointIndexes: sanitizeAuthoredBasePointIndexes(heightPoints[0].basePointIndexes, boundary.length)
-  };
-  if (peak.basePointIndexes.length < 3) {
-    const distanceToPeak = Math.hypot(x - peak.x, z - peak.z);
-    const floor = authoredSeaFloorMeters(island);
-    if (distanceToPeak >= peak.radius) return floor;
-    return floor + (peak.h - floor) * authoredFalloffHeightMultiplier(distanceToPeak / peak.radius, peak.falloff);
-  }
-
-  const basePolygon = peak.basePointIndexes.map((index) => boundary[index]);
-  if (!pointInPolygon2d({ x, z }, basePolygon)) return authoredSeaFloorMeters(island);
-
-  for (let index = 0; index < peak.basePointIndexes.length; index += 1) {
-    const a = boundary[peak.basePointIndexes[index]];
-    const b = boundary[peak.basePointIndexes[(index + 1) % peak.basePointIndexes.length]];
-    const peakWeight = barycentricAuthoredWeightForPoint({ x, z }, a, b, peak);
-    if (peakWeight != null) return peak.h * peakWeight;
-  }
+  const baseHeight = authoredTerrainBaseMeters(island);
+  if (heightPoints.length === 0) return baseHeight;
+  const plateau = authoredPlateauAt(island, x, z);
+  if (plateau) return authoredStackedPlateauHeightAt(island, x, z, plateau);
   return interpolateAuthoredHeight(island, x, z);
 }
 
-function interpolateAuthoredHeight(island, x, z) {
-  const controls = [
-    ...island.polygon.map((point) => ({ x: point.x, z: point.z, h: authoredSeaFloorMeters(island), boundary: true })),
-    ...(island.heightPoints ?? []).map((point) => ({
-      x: point.x,
-      z: point.z,
-      h: sanitizeAuthoredHeight(point.h),
-      radius: sanitizeAuthoredHeightRadius(point.radius ?? authoredDefaultHeightRadius),
-      falloff: sanitizeAuthoredHeightFalloff(point.falloff),
-      boundary: false
-    }))
-  ];
-  if (!controls.length) return 0;
-  let total = 0;
-  let weightTotal = 0;
-  for (const point of controls) {
-    const distanceToControl = Math.hypot(x - point.x, z - point.z);
-    if (distanceToControl < 0.001) return point.h;
-    const radius = point.boundary ? 24 : sanitizeAuthoredHeightRadius(point.radius ?? authoredDefaultHeightRadius);
-    const d = Math.max(point.boundary ? 24 : radius * 0.16, distanceToControl);
-    const shape = point.boundary ? 1 : authoredFalloffWeightMultiplier(distanceToControl / radius, point.falloff);
-    const weight = shape * (point.boundary ? 3 : Math.max(0.25, radius / authoredDefaultHeightRadius)) / (d * d);
-    total += point.h * weight;
-    weightTotal += weight;
+function interpolateAuthoredHeight(island, x, z, defaultBoundary = island.polygon) {
+  let height = authoredTerrainBaseMeters(island);
+  for (const point of island.heightPoints ?? []) {
+    if (point.plateauGroupId) continue;
+    const base = authoredHeightPointBase(island, point, defaultBoundary);
+    const contribution = authoredHeightFromBasePolygon(point, base.polygon, base.floor, x, z);
+    if (contribution != null) height = Math.max(height, contribution);
   }
-  return weightTotal === 0 ? authoredSeaFloorMeters(island) : total / weightTotal;
+  return height;
+}
+
+function authoredTerrainBaseMeters(land) {
+  const numeric = Number(land.baseHeight ?? land.seaFloorHeight ?? -80);
+  if (!Number.isFinite(numeric)) return authoredSeaFloorMeters(land);
+  return Math.max(authoredSeaFloorMeters(land), Math.min(8000, numeric));
+}
+
+function authoredStackedPlateauHeightAt(island, x, z, plateau) {
+  let height = plateau.height;
+  for (const point of island.heightPoints ?? []) {
+    if (point.basePlateauGroupId !== plateau.id) continue;
+    const base = authoredHeightPointBase(island, point, plateau.polygon);
+    const contribution = authoredHeightFromBasePolygon(point, base.polygon, base.floor, x, z);
+    if (contribution != null) height = Math.max(height, contribution);
+  }
+  return height;
+}
+
+function authoredHeightPointBase(island, point, defaultBoundary) {
+  const basePointIndexes = sanitizeAuthoredBasePointIndexes(point.basePointIndexes, island.polygon.length);
+  if (basePointIndexes.length >= 3) {
+    return {
+      polygon: basePointIndexes.map((index) => island.polygon[index]),
+      floor: authoredTerrainBaseMeters(island)
+    };
+  }
+  const plateau = point.basePlateauGroupId ? authoredPlateauById(island, point.basePlateauGroupId) : null;
+  if (plateau) {
+    return {
+      polygon: plateau.polygon,
+      floor: plateau.height
+    };
+  }
+  return {
+    polygon: defaultBoundary,
+    floor: authoredTerrainBaseMeters(island)
+  };
+}
+
+function authoredHeightFromBasePolygon(point, basePolygon, floor, x, z) {
+  if (!basePolygon || basePolygon.length < 3 || !pointInPolygon2d({ x, z }, basePolygon)) return null;
+  const peak = {
+    x: point.x,
+    z: point.z,
+    h: sanitizeAuthoredHeight(point.h),
+    falloff: sanitizeAuthoredHeightFalloff(point.falloff)
+  };
+  for (let index = 0; index < basePolygon.length; index += 1) {
+    const a = basePolygon[index];
+    const b = basePolygon[(index + 1) % basePolygon.length];
+    const peakWeight = barycentricAuthoredWeightForPoint({ x, z }, a, b, peak);
+    if (peakWeight != null) {
+      const shapedWeight = authoredHeightProfileWeight(peakWeight, peak.falloff);
+      return floor + (peak.h - floor) * shapedWeight;
+    }
+  }
+  return floor;
+}
+
+function authoredHeightProfileWeight(linearWeight, falloff) {
+  const weight = Math.max(0, Math.min(1, linearWeight));
+  if (falloff === "plateau") return smoothstep(0, 0.58, weight);
+  if (falloff === "spike") return weight;
+  return weight * weight * (3 - 2 * weight);
+}
+
+function authoredPlateauAt(island, x, z) {
+  for (const plateau of authoredPlateausForIsland(island)) {
+    if (pointInPolygon2d({ x, z }, plateau.polygon)) return plateau;
+  }
+  return null;
+}
+
+function authoredPlateauById(island, plateauGroupId) {
+  return authoredPlateausForIsland(island).find((plateau) => plateau.id === plateauGroupId) ?? null;
+}
+
+function authoredPlateausForIsland(island) {
+  return authoredPlateauGroupsForIsland(island).map((points) => {
+    const polygon = smoothAuthoredClosedPolygon(orderedAuthoredPlateauPoints(points), 1);
+    return {
+      id: points[0].plateauGroupId,
+      polygon,
+      height: points.reduce((sum, point) => sum + sanitizeAuthoredHeight(point.h), 0) / points.length
+    };
+  });
+}
+
+function authoredPlateauGroupsForIsland(island) {
+  const groups = new Map();
+  (island.heightPoints ?? []).forEach((point) => {
+    if (!point.plateauGroupId) return;
+    const group = groups.get(point.plateauGroupId) ?? [];
+    group.push(point);
+    groups.set(point.plateauGroupId, group);
+  });
+  return [...groups.values()].filter((points) => points.length >= 3);
+}
+
+function sortAuthoredPointsAroundCenter(points) {
+  const center = polygonCentroid2d(points);
+  return [...points].sort((a, b) => Math.atan2(a.z - center.z, a.x - center.x) - Math.atan2(b.z - center.z, b.x - center.x));
+}
+
+function orderedAuthoredPlateauPoints(points) {
+  const ordered = [...points].sort((a, b) => Number(a.plateauOrder) - Number(b.plateauOrder));
+  return ordered.every((point, index) => point.plateauOrder === index) && isSimpleAuthoredPolygon(ordered)
+    ? ordered
+    : sortAuthoredPointsAroundCenter(points);
+}
+
+function isSimpleAuthoredPolygon(points) {
+  if (points.length < 4) return points.length >= 3;
+  for (let index = 0; index < points.length; index += 1) {
+    const a = points[index];
+    const b = points[(index + 1) % points.length];
+    for (let other = index + 1; other < points.length; other += 1) {
+      if (other === index || other === (index + 1) % points.length || (other + 1) % points.length === index) continue;
+      const c = points[other];
+      const d = points[(other + 1) % points.length];
+      if (authoredSegmentsIntersect(a, b, c, d)) return false;
+    }
+  }
+  return true;
+}
+
+function authoredSegmentsIntersect(a, b, c, d) {
+  const o1 = authoredTriangleOrientation(a, b, c);
+  const o2 = authoredTriangleOrientation(a, b, d);
+  const o3 = authoredTriangleOrientation(c, d, a);
+  const o4 = authoredTriangleOrientation(c, d, b);
+  return o1 * o2 < 0 && o3 * o4 < 0;
 }
 
 function authoredSeaFloorMeters(land) {
@@ -16999,11 +17071,28 @@ function getLandZone(land) {
     polygon: land.polygon ?? [],
     heightPoints: land.heightPoints ?? [],
     seaFloorHeight: land.seaFloorHeight ?? 0,
+    baseHeight: land.baseHeight ?? land.seaFloorHeight ?? 0,
+    baseLevel: land.baseLevel ?? "seaFloor",
+    baseLandmassId: land.baseLandmassId,
+    basePlateauGroupId: land.basePlateauGroupId,
     material: land.material ?? "grass",
     materialZones: land.materialZones ?? []
   };
-  zone.instrumentSurfaceContours = createAuthoredInstrumentSurfaceContours(zone);
+  zone.instrumentElevationLayers = createAuthoredInstrumentElevationLayers(zone);
+  zone.instrumentSurfaceContours = zone.instrumentElevationLayers[0]?.contours ?? [];
+  zone.instrumentElevationLayers.forEach((layer) => {
+    layer.paths = layer.contours.map(createWorldContourPath).filter(Boolean);
+  });
   return zone;
+}
+
+function createWorldContourPath(contour) {
+  if (typeof Path2D === "undefined" || !Array.isArray(contour) || contour.length < 3) return null;
+  const path = new Path2D();
+  path.moveTo(contour[0].x, contour[0].z);
+  for (let index = 1; index < contour.length; index += 1) path.lineTo(contour[index].x, contour[index].z);
+  path.closePath();
+  return path;
 }
 
 function authoredInstrumentSurfaceContours(land) {
@@ -17012,31 +17101,39 @@ function authoredInstrumentSurfaceContours(land) {
 }
 
 function createAuthoredInstrumentSurfaceContours(land) {
+  return createAuthoredInstrumentElevationLayers(land)[0]?.contours ?? [];
+}
+
+function createAuthoredInstrumentElevationLayers(land) {
   if (!hasAuthoredLandGeometry(land)) return [];
 
   const terrain = createAuthoredTerrainMeshData(land);
   const vertices = terrain.vertices ?? [];
   const indices = terrain.indices ?? [];
-  const hasAboveWater = vertices.some((vertex) => vertex.h >= authoredSeaLevelMeters);
-  const hasBelowWater = vertices.some((vertex) => vertex.h < authoredSeaLevelMeters);
-
-  if (!hasAboveWater) return [];
-  if (!hasBelowWater) return [authoredWorldCoastline(land)];
-
-  const surfacePolygons = [];
-  for (let index = 0; index < indices.length; index += 3) {
-    const triangle = [
-      vertices[indices[index]],
-      vertices[indices[index + 1]],
-      vertices[indices[index + 2]]
-    ];
-    const aboveWater = clipAuthoredHeightPolygon(triangle, authoredSeaLevelMeters, true);
-    if (aboveWater.length >= 3) {
-      surfacePolygons.push(aboveWater.map((point) => ({ x: point.x + land.x, z: point.z + land.z })));
+  const levels = [authoredSeaLevelMeters, 50, 150];
+  return levels.map((height, index) => {
+    const contours = [];
+    for (let triangleIndex = 0; triangleIndex < indices.length; triangleIndex += 3) {
+      const triangle = [
+        vertices[indices[triangleIndex]],
+        vertices[indices[triangleIndex + 1]],
+        vertices[indices[triangleIndex + 2]]
+      ];
+      const aboveLevel = clipAuthoredHeightPolygon(triangle, height, true);
+      if (aboveLevel.length >= 3) {
+        contours.push(aboveLevel.map((point) => ({ x: point.x + land.x, z: point.z + land.z })));
+      }
     }
-  }
-
-  return surfacePolygons.length ? surfacePolygons : [authoredWorldCoastline(land)];
+    const plateauPolygons = authoredPlateausForIsland(authoredLocalTerrainIsland(land))
+      .filter((plateau) => plateau.height >= height)
+      .map((plateau) => plateau.polygon.map((point) => ({ x: point.x + land.x, z: point.z + land.z })));
+    const combined = [...contours, ...plateauPolygons];
+    return {
+      height,
+      color: ["rgba(96, 124, 83, 0.92)", "rgba(82, 111, 75, 0.94)", "rgba(66, 94, 69, 0.96)"][index],
+      contours: combined.length || height > authoredSeaLevelMeters ? combined : [authoredWorldCoastline(land)]
+    };
+  });
 }
 
 function createCoastline(land, position, scene, materials, parent) {
@@ -17283,33 +17380,85 @@ function createAuthoredIslandSurface(land, scene, materials, parent) {
 function createAuthoredTerrainMeshData(land, options = {}) {
   const island = authoredLocalTerrainIsland(land);
   const boundaryVertices = createAuthoredRenderableCoastline(island.polygon)
-    .map((point) => ({ x: point.x, z: point.z, h: authoredSeaFloorMeters(island), boundary: true }));
-  const heightVertices = (island.heightPoints ?? []).map((point) => ({
+    .map((point) => ({ x: point.x, z: point.z, h: authoredTerrainBaseMeters(island), boundary: true }));
+  const heightVertices = (island.heightPoints ?? []).filter((point) => !point.plateauGroupId).map((point) => ({
     x: point.x,
     z: point.z,
     h: sanitizeAuthoredHeight(point.h),
     radius: sanitizeAuthoredHeightRadius(point.radius ?? authoredDefaultHeightRadius),
     falloff: sanitizeAuthoredHeightFalloff(point.falloff),
+    plateauGroupId: point.plateauGroupId,
+    basePlateauGroupId: point.basePlateauGroupId,
+    plateauOrder: point.plateauOrder,
     boundary: false,
     basePointIndexes: sanitizeAuthoredBasePointIndexes(point.basePointIndexes, boundaryVertices.length)
   }));
+  const plateaus = authoredPlateausForIsland(island);
+  const plateauVertices = plateaus.flatMap((plateau) => [
+    ...plateau.polygon.map((point) => ({
+        x: point.x,
+        z: point.z,
+        h: plateau.height,
+        plateauGroupId: plateau.id,
+        boundary: false
+      }))
+  ]);
 
-  const center = polygonCentroid2d(island.polygon);
+  const needsMaterialSamples = (island.materialZones ?? []).length > 0;
+  const needsHeightBlendSamples = heightVertices.length > 1;
+  const heightBlendSurfaces = needsHeightBlendSamples ? createAuthoredSingleHeightPointSurfaces(island) : [];
   const vertices = uniqueTerrainVertices([
     ...boundaryVertices,
-    ...createAuthoredInteriorTerrainSamples(island, options),
-    ...heightVertices.flatMap((point) => createAuthoredHeightProfileVertices(island, point, options)),
-    ...heightVertices.flatMap((point) => createAuthoredSeaLevelVertices(island, point, options)),
-    ...heightVertices.flatMap((point) => createAuthoredHeightFalloffVertices(island, point, options)),
+    ...(needsMaterialSamples || needsHeightBlendSamples
+      ? createAuthoredInteriorTerrainSamples(island, { ...options, heightBlend: needsHeightBlendSamples, heightBlendSurfaces })
+      : []),
     ...heightVertices,
-    { x: center.x, z: center.z, h: authoredTerrainMetersAtLocal(land, center.x, center.z), boundary: false }
+    ...plateauVertices
   ]);
-  const indices = triangulateAuthoredDelaunay(vertices)
+  const terrainTriangles = triangulateAuthoredDelaunay(vertices)
     .filter((triangle) => pointInPolygon2d(triangleCentroid2d(triangle, vertices), island.polygon))
-    .map((triangle) => orientAuthoredTerrainTriangleForBabylon(triangle, vertices))
-    .flat();
+    .filter((triangle) => !plateaus.some((plateau) => pointInPolygon2d(triangleCentroid2d(triangle, vertices), plateau.polygon)))
+    .map((triangle) => orientAuthoredTerrainTriangleForBabylon(triangle, vertices));
+  const plateauTriangles = plateaus.flatMap((plateau) => triangulateAuthoredPlateau(plateau, vertices));
+  const indices = [...terrainTriangles, ...plateauTriangles].flat();
 
   return { vertices, indices };
+}
+
+
+function triangulateAuthoredPlateau(plateau, vertices) {
+  const indexes = plateau.polygon.map((point) => vertices.findIndex((vertex) => vertex.x === point.x && vertex.z === point.z));
+  if (indexes.some((index) => index < 0)) return [];
+  return triangulateAuthoredSimplePolygon(plateau.polygon)
+    .map((triangle) => orientAuthoredTerrainTriangleForBabylon(triangle.map((index) => indexes[index]), vertices));
+}
+
+function triangulateAuthoredSimplePolygon(points) {
+  const remaining = points.map((_, index) => index);
+  const triangles = [];
+  const area = points.reduce((sum, point, index) => {
+    const next = points[(index + 1) % points.length];
+    return sum + point.x * next.z - next.x * point.z;
+  }, 0);
+  const winding = area >= 0 ? 1 : -1;
+  while (remaining.length > 3) {
+    let clipped = false;
+    for (let cursor = 0; cursor < remaining.length; cursor += 1) {
+      const previous = remaining[(cursor - 1 + remaining.length) % remaining.length];
+      const current = remaining[cursor];
+      const next = remaining[(cursor + 1) % remaining.length];
+      if (authoredTriangleOrientation(points[previous], points[current], points[next]) * winding <= 0) continue;
+      if (remaining.some((index) => index !== previous && index !== current && index !== next
+        && barycentricAuthoredWeightsForPoint(points[index], points[previous], points[current], points[next]) != null)) continue;
+      triangles.push([previous, current, next]);
+      remaining.splice(cursor, 1);
+      clipped = true;
+      break;
+    }
+    if (!clipped) return [];
+  }
+  if (remaining.length === 3) triangles.push([...remaining]);
+  return triangles;
 }
 
 function authoredLocalTerrainIsland(land) {
@@ -17317,6 +17466,10 @@ function authoredLocalTerrainIsland(land) {
     polygon: authoredLocalPolygon(land),
     heightPoints: authoredLocalHeightPoints(land),
     seaFloorHeight: land.seaFloorHeight,
+    baseHeight: land.baseHeight,
+    baseLevel: land.baseLevel,
+    baseLandmassId: land.baseLandmassId,
+    basePlateauGroupId: land.basePlateauGroupId,
     material: land.material,
     materialZones: authoredLocalMaterialZones(land)
   };
@@ -17326,40 +17479,15 @@ function createAuthoredRenderableCoastline(polygon) {
   return smoothAuthoredClosedPolygon(polygon, authoredCoastlineSmoothingIterations);
 }
 
-function createAuthoredHeightProfileVertices(island, point, options = {}) {
-  if (point.basePointIndexes.length >= 3) return [];
-  const radius = sanitizeAuthoredHeightRadius(point.radius ?? authoredDefaultHeightRadius);
-  const ringCount = options.heightProfileRings ?? 5;
-  const maxSteps = options.heightProfileRingSteps ?? authoredHeightProfileRingSteps;
-  const vertices = [];
-
-  for (let ring = 1; ring <= ringCount; ring += 1) {
-    const ratio = ring / (ringCount + 1);
-    const ringRadius = radius * ratio;
-    const steps = Math.max(12, Math.round(maxSteps + ratio * radius / 12));
-    for (let index = 0; index < steps; index += 1) {
-      const angle = (index / steps) * Math.PI * 2;
-      const vertex = {
-        x: point.x + Math.cos(angle) * ringRadius,
-        z: point.z + Math.sin(angle) * ringRadius,
-        boundary: false,
-        profile: true
-      };
-      if (!pointInPolygon2d(vertex, island.polygon)) continue;
-      vertex.h = authoredTerrainHeightAt(island, vertex.x, vertex.z);
-      vertices.push(vertex);
-    }
-  }
-
-  return vertices;
-}
-
 function createAuthoredHeightFalloffVertices(island, point, options = {}) {
+  if (point.plateauGroupId) return [];
+  if (point.basePlateauGroupId) return [];
   if (point.basePointIndexes.length >= 3) return [];
   const vertices = [];
   const steps = options.heightFalloffSteps ?? 10;
   const radius = sanitizeAuthoredHeightRadius(point.radius ?? authoredDefaultHeightRadius);
-  const floor = authoredSeaFloorMeters(island);
+  const basePlateau = point.basePlateauGroupId ? authoredPlateauById(island, point.basePlateauGroupId) : null;
+  const floor = basePlateau ? basePlateau.height : authoredTerrainBaseMeters(island);
   for (let index = 0; index < steps; index += 1) {
     const angle = (index / steps) * Math.PI * 2;
     const vertex = {
@@ -17369,13 +17497,17 @@ function createAuthoredHeightFalloffVertices(island, point, options = {}) {
       boundary: false,
       falloff: true
     };
-    if (pointInPolygon2d(vertex, island.polygon)) vertices.push(vertex);
+    if (!pointInPolygon2d(vertex, island.polygon)) continue;
+    if (basePlateau && !pointInPolygon2d(vertex, basePlateau.polygon)) continue;
+    vertices.push(vertex);
   }
   return vertices;
 }
 
 function createAuthoredSeaLevelVertices(island, point, options = {}) {
-  const floor = authoredSeaFloorMeters(island);
+  if (point.plateauGroupId) return [];
+  const basePlateau = point.basePlateauGroupId ? authoredPlateauById(island, point.basePlateauGroupId) : null;
+  const floor = basePlateau ? basePlateau.height : authoredTerrainBaseMeters(island);
   const peakHeight = sanitizeAuthoredHeight(point.h);
   if (floor >= authoredSeaLevelMeters || peakHeight <= authoredSeaLevelMeters) return [];
 
@@ -17397,7 +17529,9 @@ function createAuthoredSeaLevelVertices(island, point, options = {}) {
       boundary: false,
       seaLevel: true
     };
-    if (pointInPolygon2d(vertex, island.polygon)) vertices.push(vertex);
+    if (!pointInPolygon2d(vertex, island.polygon)) continue;
+    if (basePlateau && !pointInPolygon2d(vertex, basePlateau.polygon)) continue;
+    vertices.push(vertex);
   }
   return vertices;
 }
@@ -17431,22 +17565,71 @@ function solveNormalizedDistanceForFalloff(target, falloffValueAtDistance) {
 function createAuthoredInteriorTerrainSamples(island, options = {}) {
   const polygon = island.polygon;
   if (polygon.length < 3) return [];
-  const sampleSpacing = options.sampleSpacing ?? authoredDefaultTerrainSampleSpacing;
-  const maxInteriorTerrainSamples = options.maxInteriorTerrainSamples ?? authoredMaxInteriorTerrainSamples;
+  const directHeightBases = directAuthoredHeightBasePolygons(island);
   const bounds = boundsForPoints(polygon);
+  const width = bounds.maxX - bounds.minX;
+  const depth = bounds.maxZ - bounds.minZ;
+  const lodSampling = options.sampleSpacing != null && options.sampleSpacing >= authoredLodTerrainSampleSpacing;
+  const sampleSpacing = options.heightBlend
+    ? Math.max(2, Math.min(width, depth) / (lodSampling ? 10 : 20))
+    : (options.sampleSpacing ?? authoredDefaultTerrainSampleSpacing);
+  const maxInteriorTerrainSamples = options.heightBlend
+    ? Math.min(options.maxInteriorTerrainSamples ?? 520, lodSampling ? 140 : 520)
+    : (options.maxInteriorTerrainSamples ?? authoredMaxInteriorTerrainSamples);
   const area = Math.max(
     sampleSpacing * sampleSpacing,
-    (bounds.maxX - bounds.minX) * (bounds.maxZ - bounds.minZ)
+    width * depth
   );
   const spacing = Math.max(sampleSpacing, Math.sqrt(area / maxInteriorTerrainSamples));
   const vertices = [];
+  sampling:
   for (let x = Math.ceil(bounds.minX / spacing) * spacing; x <= bounds.maxX; x += spacing) {
     for (let z = Math.ceil(bounds.minZ / spacing) * spacing; z <= bounds.maxZ; z += spacing) {
       if (!pointInPolygon2d({ x, z }, polygon)) continue;
-      vertices.push({ x, z, h: authoredTerrainHeightAt(island, x, z), boundary: false, sample: true });
+      if (directHeightBases.some((basePolygon) => pointInPolygon2d({ x, z }, basePolygon))) continue;
+      const sampledHeight = options.heightBlend
+        ? authoredHeightFromSinglePointSurfaces(options.heightBlendSurfaces, { x, z }, authoredTerrainBaseMeters(island))
+        : authoredTerrainHeightAt(island, x, z);
+      vertices.push({ x, z, h: sampledHeight, boundary: false, sample: true });
+      if (vertices.length >= maxInteriorTerrainSamples) break sampling;
     }
   }
   return vertices;
+}
+
+function createAuthoredSingleHeightPointSurfaces(island) {
+  const renderBoundary = createAuthoredRenderableCoastline(island.polygon);
+  return (island.heightPoints ?? []).filter((point) => !point.plateauGroupId).map((point) => {
+    const base = authoredHeightPointBase(island, point, renderBoundary);
+    const vertices = [
+      ...base.polygon.map((boundaryPoint) => ({ ...boundaryPoint, h: base.floor })),
+      { x: point.x, z: point.z, h: sanitizeAuthoredHeight(point.h) }
+    ];
+    const triangles = triangulateAuthoredDelaunay(vertices)
+      .filter((triangle) => pointInPolygon2d(triangleCentroid2d(triangle, vertices), base.polygon));
+    return { vertices, triangles };
+  });
+}
+
+function authoredHeightFromSinglePointSurfaces(surfaces, point, fallback) {
+  let height = fallback;
+  for (const surface of surfaces ?? []) {
+    for (const triangle of surface.triangles) {
+      const [a, b, c] = triangle.map((index) => surface.vertices[index]);
+      const weights = barycentricAuthoredWeightsForPoint(point, a, b, c);
+      if (!weights) continue;
+      height = Math.max(height, a.h * weights.a + b.h * weights.b + c.h * weights.c);
+      break;
+    }
+  }
+  return height;
+}
+
+function directAuthoredHeightBasePolygons(island) {
+  return (island.heightPoints ?? [])
+    .filter((point) => !point.plateauGroupId && (point.basePlateauGroupId || sanitizeAuthoredBasePointIndexes(point.basePointIndexes, island.polygon.length).length >= 3))
+    .map((point) => authoredHeightPointBase(island, point, island.polygon).polygon)
+    .filter((polygon) => polygon.length >= 3);
 }
 
 function authoredLocalHeightPoints(land) {
@@ -17456,7 +17639,10 @@ function authoredLocalHeightPoints(land) {
     h: point.h,
     radius: point.radius,
     falloff: point.falloff,
-    basePointIndexes: point.basePointIndexes
+    basePointIndexes: point.basePointIndexes,
+    plateauGroupId: point.plateauGroupId,
+    basePlateauGroupId: point.basePlateauGroupId,
+    plateauOrder: point.plateauOrder
   }));
 }
 
@@ -17737,13 +17923,19 @@ function authoredTriangleOrientation(a, b, c) {
 }
 
 function barycentricAuthoredWeightForPoint(point, a, b, c) {
+  return barycentricAuthoredWeightsForPoint(point, a, b, c)?.c ?? null;
+}
+
+function barycentricAuthoredWeightsForPoint(point, a, b, c) {
   const denominator = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z);
   if (Math.abs(denominator) < 0.000001) return null;
   const weightA = ((b.z - c.z) * (point.x - c.x) + (c.x - b.x) * (point.z - c.z)) / denominator;
   const weightB = ((c.z - a.z) * (point.x - c.x) + (a.x - c.x) * (point.z - c.z)) / denominator;
   const weightC = 1 - weightA - weightB;
   const tolerance = -0.000001;
-  return weightA >= tolerance && weightB >= tolerance && weightC >= tolerance ? weightC : null;
+  return weightA >= tolerance && weightB >= tolerance && weightC >= tolerance
+    ? { a: weightA, b: weightB, c: weightC }
+    : null;
 }
 
 function sanitizeAuthoredBasePointIndexes(indexes, pointCount) {
@@ -17757,7 +17949,7 @@ function sanitizeAuthoredBasePointIndexes(indexes, pointCount) {
 function sanitizeAuthoredHeight(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return 0;
-  return Math.round(Math.max(-500, Math.min(8000, numeric)));
+  return Math.round(Math.max(-500, Math.min(8000, numeric)) * 10) / 10;
 }
 
 function sanitizeAuthoredHeightRadius(value) {

@@ -618,6 +618,91 @@ test('kill feed cache accepts a later vehicle type change for the same id', asyn
   expect(labels.vehicleType).toBe('scout-plane');
 });
 
+for (const [vehicleType, shipId] of [
+  ['torpedo-boat', 'dark-S9'],
+  ['submarine', 'dark-U9'],
+  ['scout-plane', 'dark-F9']
+]) {
+  test(`kill feed shows player initials for a human ${vehicleType} attacker`, async ({ page }) => {
+    await page.goto(`/sea-battle/index.html?setup=8&vehicle=${vehicleType}&scenarioTest=1`);
+    await page.waitForFunction(() => window.seaBattleScenarioTest);
+
+    const info = await page.evaluate(({ id, type }) => {
+      const ship = {
+        id,
+        teamId: 'dark',
+        controlledBy: 'player-ACE-kill-feed',
+        vehicleType: type,
+        state: 'active'
+      };
+      window.seaBattleScenarioTest.rememberKillFeedShips([ship]);
+      return window.seaBattleScenarioTest.killFeedInfoFor(id, ship, 'dark');
+    }, { id: shipId, type: vehicleType });
+
+    expect(info.label).toBe('ACE');
+    expect(info.vehicleType).toBe(vehicleType);
+  });
+
+  test(`kill feed keeps player initials after a human ${vehicleType} victim is sunk`, async ({ page }) => {
+    await page.goto(`/sea-battle/index.html?setup=8&vehicle=${vehicleType}&scenarioTest=1`);
+    await page.waitForFunction(() => window.seaBattleScenarioTest);
+
+    const info = await page.evaluate(({ id, type }) => {
+      window.seaBattleScenarioTest.rememberKillFeedShips([{
+        id,
+        teamId: 'dark',
+        controlledBy: 'player-ACE-kill-feed',
+        vehicleType: type,
+        state: 'active'
+      }]);
+      window.seaBattleScenarioTest.rememberKillFeedShips([{
+        id,
+        teamId: 'dark',
+        controlledBy: 'bot',
+        vehicleType: type,
+        state: 'sunk'
+      }]);
+      return window.seaBattleScenarioTest.killFeedInfoFor(id, null, 'dark');
+    }, { id: shipId, type: vehicleType });
+
+    expect(info.label).toBe('ACE');
+    expect(info.vehicleType).toBe(vehicleType);
+  });
+
+  test(`kill feed releases player initials when the ${vehicleType} respawns as a bot`, async ({ page }) => {
+    await page.goto(`/sea-battle/index.html?setup=8&vehicle=${vehicleType}&scenarioTest=1`);
+    await page.waitForFunction(() => window.seaBattleScenarioTest);
+
+    const info = await page.evaluate(({ id, type }) => {
+      window.seaBattleScenarioTest.rememberKillFeedShips([{
+        id,
+        teamId: 'dark',
+        controlledBy: 'player-ACE-kill-feed',
+        vehicleType: type,
+        state: 'active'
+      }]);
+      window.seaBattleScenarioTest.rememberKillFeedShips([{
+        id,
+        teamId: 'dark',
+        controlledBy: 'bot',
+        vehicleType: type,
+        state: 'sunk'
+      }]);
+      window.seaBattleScenarioTest.rememberKillFeedShips([{
+        id,
+        teamId: 'dark',
+        controlledBy: 'bot',
+        vehicleType: type,
+        state: 'active'
+      }]);
+      return window.seaBattleScenarioTest.killFeedInfoFor(id, null, 'dark');
+    }, { id: shipId, type: vehicleType });
+
+    expect(info.label).not.toBe('ACE');
+    expect(info.vehicleType).toBe(vehicleType);
+  });
+}
+
 test('torpedo fired from the player ship hits a ship directly ahead', async ({ page, request }, testInfo) => {
   await openScenario(page, request, TORPEDO_HULL_HIT_SCENARIO, testInfo);
   await captureFrames(page, testInfo, 'torpedo-before', 1, 0);
