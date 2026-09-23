@@ -1,4 +1,5 @@
 import { createLandscapeMaterials } from "../packages/landscape/index.js";
+import { moveShipOnWater } from "./shipMovement.js";
 import {
   createAuthoredIslandSurface,
   createAuthoredTerrainMeshData,
@@ -1413,24 +1414,15 @@ scene.onBeforeRenderObservable.add(() => {
     holdWeaponWorldHeading(previousHeading, heading);
     forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
 
-    const previousPosition = boat.root.position.clone();
-    boat.root.position.addInPlace(forward.scale(speed * dt));
-    boat.root.position.x = clamp(boat.root.position.x, -worldLimit, worldLimit);
-    boat.root.position.z = clamp(boat.root.position.z, -worldLimit, worldLimit);
-
-    nextWaterSafety = getShipWaterSafety(boat.root.position, heading, blockedWaters, playerCollisionHeight);
-    const movementSafety = nextWaterSafety.isBlocked
-      ? getShipMovementWaterSafety(boat.root.position, heading, speed, blockedWaters, playerCollisionHeight)
-      : nextWaterSafety;
-    if (!scoutPlaneMode && movementSafety.isBlocked) {
-      boat.root.position.copyFrom(previousPosition);
-
-      // Grounding stops the ship, but a tiny escape nudge prevents numeric edge-locking.
-      const groundedSafety = getShipWaterSafety(boat.root.position, heading, blockedWaters, playerCollisionHeight);
-      if (groundedSafety.isBlocked) {
-        boat.root.position.addInPlace(getWaterEscapeVector(groundedSafety.blockedPoint ?? boat.root.position, blockedWaters).scale(0.18));
-      }
-
+    const moved = moveShipOnWater(boat.root.position, forward, speed * dt, worldLimit, (candidate) => {
+      const position = new Vector3(candidate.x, candidate.y, candidate.z);
+      nextWaterSafety = getShipWaterSafety(position, heading, blockedWaters, playerCollisionHeight);
+      if (scoutPlaneMode || !nextWaterSafety.isBlocked) return true;
+      return !getShipMovementWaterSafety(position, heading, speed, blockedWaters, playerCollisionHeight).isBlocked;
+    });
+    document.body.dataset.playerMovementCorrection = moved ? "none" : "grounded-stop";
+    if (!moved) {
+      nextWaterSafety = waterSafety;
       speed = engineOrders[engineOrder].speed < 0 ? Math.min(speed, -1.2) : 0;
       turnVelocity *= 0.4;
     }
@@ -17695,34 +17687,6 @@ function isRadarBlockedAt(position, zones) {
   }
 
   return false;
-}
-
-function getWaterEscapeVector(position, zones) {
-  let escape = new Vector3(0, 0, 0);
-
-  for (const zone of zones) {
-    const localX = position.x - zone.x;
-    const localZ = position.z - zone.z;
-    const nx = localX / zone.rx;
-    const nz = localZ / zone.rz;
-    const distance = getZoneShapeDistance(position, zone, zone.rx, zone.rz);
-    const blockDistance = getZoneBlockDistance(zone, "navigation");
-
-    if (distance < blockDistance && !isInLandWater(position, zone)) {
-      if (distance < 0.001) {
-        escape.x += 1;
-      } else {
-        escape.x += nx / distance;
-        escape.z += nz / distance;
-      }
-    }
-  }
-
-  if (escape.lengthSquared() === 0) {
-    return Vector3.Zero();
-  }
-
-  return escape.normalize();
 }
 
 function isInFjordWater(position, zone) {
