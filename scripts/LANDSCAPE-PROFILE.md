@@ -1,5 +1,36 @@
 # Compact world investigation (2026-09-23)
 
+## Prepared instrument maps (2026-09-24)
+
+The Java importer now persists a separate `instrument_map_json` column containing
+world-space union contours at heights 0, 50 and 150. Mapped plateau sectors are
+clipped at those heights; scalar peak contours use the server's height profile.
+Water holes are removed before the land contributions are united. Built-in
+procedural maps are prepared on the server when first requested. Imported maps
+must have current persisted preparation; there is no repair-on-load fallback.
+
+The world response includes these layers as `instrumentMap`. The client creates
+three Path2D objects on world load and transforms them for map/radar views.
+The old triangle-to-map generation, per-frame mask canvases and synchronous
+pixel readback have been removed. No 3D terrain detail or fleet logic changed.
+
+Verification: all server/client tests; 50 mapped formations through the actual
+converter; desktop/mobile Canvas and full-game sandbox checks. The full-game
+probe recorded zero Canvas readbacks and about 0.6 ms per instrument update
+over 20 software-rendered frames. This is not a fleet or hardware FPS benchmark.
+
+Reproduce with a client dev server on port 5176 and a prepared WorldMap JSON:
+
+```sh
+node scripts/verify-instrument-map.mjs /tmp/seabattle-instrument-world.json
+node scripts/verify-game-instruments.mjs /tmp/seabattle-instrument-world.json
+```
+
+Generate that JSON using the server test with `MAPPED_LANDSCAPE_TEST_FILE` set to
+the mapped editor fixture and `MAPPED_LANDSCAPE_TEST_OUTPUT` set to the output
+path. Existing database landscapes must be reimported for the new preparation
+version. The source editor JSON format itself did not change.
+
 ## Scope
 
 Read-only snapshot of the active Java `/game/world`: 100 landmasses from the

@@ -1,5 +1,6 @@
 import { createLandscapeMaterials } from "../packages/landscape/index.js";
 import { moveShipOnWater } from "./shipMovement.js";
+import { prepareInstrumentPaths, radarTransform } from "./instrumentMap.js";
 import {
   createAuthoredIslandSurface,
   createAuthoredTerrainMeshData,
@@ -14,7 +15,6 @@ import {
   pointInPolygon2d,
   smoothstep,
   clamp,
-  clipAuthoredHeightPolygon,
   authoredTerrainVisualY,
   authoredTerrainMetersAtLocal,
   authoredWorldCoastline,
@@ -468,6 +468,7 @@ const playerLogin = await requirePlayerLogin();
 const playerInitials = playerLogin.initials;
 await requireRegisteredGameSession(playerLogin);
 let worldMap = await loadWorldMap();
+let instrumentPaths = [];
 let worldLandmasses = worldMap.landmasses;
 let worldMapObjects = worldMap.mapObjects;
 underwaterSeaFloorY = calculateUnderwaterSeaFloorY(worldLandmasses);
@@ -4515,7 +4516,7 @@ function positiveNumber(value, fallback) {
 
 async function loadWorldMap() {
   if (directSideViewSandboxRequested) {
-    return { landmasses: [], mapObjects: [] };
+    return { landmasses: [], mapObjects: [], instrumentMap: { version: 1, layers: [0, 50, 150].map(height => ({ height, contours: [] })) } };
   }
   const endpoint = getWorldMapEndpoint();
   const response = await fetch(endpoint, { cache: "no-store" });
@@ -4536,6 +4537,7 @@ async function loadWorldMap() {
   });
   return {
     landmasses: payload.landmasses,
+    instrumentMap: payload.instrumentMap,
     mapObjects: Array.isArray(payload.mapObjects) ? payload.mapObjects : []
   };
 }
@@ -6756,35 +6758,9 @@ function drawInstrumentEllipse(ctx, x, y, rx, rz, fill, stroke, rotation = 0) {
   ctx.stroke();
 }
 
-function drawMapLandZone(ctx, zone, bounds, width, height, scale) {
-  if (hasAuthoredLandGeometry(zone)) {
-    drawInstrumentContours(
-      ctx,
-      authoredInstrumentSurfaceContours(zone),
-      (point) => worldToMapPoint(point, bounds, width, height, scale),
-      "rgba(98, 129, 89, 0.95)",
-      "rgba(238, 218, 164, 0.78)"
-    );
-    drawMapLandWater(ctx, zone, bounds, width, height, scale);
-    return;
-  }
-
-  if (zone.kind !== "coastline") {
-    const point = worldToMapPoint(zone, bounds, width, height, scale);
-    drawInstrumentEllipse(ctx, point.x, point.y, getZoneVisualRx(zone) * scale, getZoneVisualRz(zone) * scale, "rgba(98, 129, 89, 0.95)", "rgba(238, 218, 164, 0.74)");
-    return;
-  }
-
-  const points = getCoastContourPoints(zone, 96).map((point) => worldToMapPoint(point, bounds, width, height, scale));
-  drawInstrumentPolygon(ctx, points, "rgba(98, 129, 89, 0.95)", "rgba(238, 218, 164, 0.78)");
-  drawMapLandWater(ctx, zone, bounds, width, height, scale);
-}
-
 function drawMapLandUnion(ctx, zones, bounds, width, height, scale) {
   if (zones.length === 0) return;
   drawMapElevationLayers(ctx, zones, bounds, width, height, scale);
-
-  zones.forEach((zone) => drawMapLandWater(ctx, zone, bounds, width, height, scale));
 }
 
 function drawMapElevationLayers(ctx, zones, bounds, width, height, scale) {
@@ -6803,76 +6779,11 @@ function drawMapElevationLayers(ctx, zones, bounds, width, height, scale) {
     insetX - bounds.minX * scale,
     insetY + bounds.maxZ * scale
   );
-  for (const zone of zones) {
-    for (const [index, layer] of (zone.instrumentElevationLayers ?? []).entries()) {
-      ctx.fillStyle = colors[index] ?? colors[colors.length - 1];
-      for (const path of layer.paths ?? []) ctx.fill(path);
-    }
+  for (const [index, path] of instrumentPaths.entries()) {
+    ctx.fillStyle = colors[index];
+    ctx.fill(path, "evenodd");
   }
   ctx.restore();
-}
-
-function addMapLandPath(ctx, zone, bounds, width, height, scale) {
-  ctx.beginPath();
-  if (hasAuthoredLandGeometry(zone)) {
-    if (!addInstrumentContourPaths(ctx, authoredInstrumentSurfaceContours(zone), (point) => worldToMapPoint(point, bounds, width, height, scale))) return;
-  } else if (zone.kind !== "coastline") {
-    const point = worldToMapPoint(zone, bounds, width, height, scale);
-    ctx.ellipse(
-      point.x,
-      point.y,
-      Math.max(1, getZoneVisualRx(zone) * scale),
-      Math.max(1, getZoneVisualRz(zone) * scale),
-      0,
-      0,
-      Math.PI * 2
-    );
-  } else {
-    const points = getCoastContourPoints(zone, 96).map((point) => worldToMapPoint(point, bounds, width, height, scale));
-    if (points.length < 3) return;
-    ctx.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i += 1) {
-      ctx.lineTo(points[i].x, points[i].y);
-    }
-    ctx.closePath();
-  }
-  ctx.fill();
-}
-
-function createColoredMaskCanvas(mask, fillStyle) {
-  const colored = document.createElement("canvas");
-  colored.width = mask.width;
-  colored.height = mask.height;
-  const coloredCtx = colored.getContext("2d");
-  if (!coloredCtx) return mask;
-  coloredCtx.fillStyle = fillStyle;
-  coloredCtx.fillRect(0, 0, colored.width, colored.height);
-  coloredCtx.globalCompositeOperation = "destination-in";
-  coloredCtx.drawImage(mask, 0, 0);
-  return colored;
-}
-
-function drawMaskOutline(ctx, mask, strokeStyle) {
-  const maskCtx = mask.getContext("2d");
-  if (!maskCtx) return;
-  const { width, height } = mask;
-  const pixels = maskCtx.getImageData(0, 0, width, height).data;
-  ctx.fillStyle = strokeStyle;
-
-  for (let y = 1; y < height - 1; y += 1) {
-    for (let x = 1; x < width - 1; x += 1) {
-      const alpha = pixels[(y * width + x) * 4 + 3];
-      if (alpha === 0) continue;
-      const touchesWater =
-        pixels[(y * width + x - 1) * 4 + 3] === 0 ||
-        pixels[(y * width + x + 1) * 4 + 3] === 0 ||
-        pixels[((y - 1) * width + x) * 4 + 3] === 0 ||
-        pixels[((y + 1) * width + x) * 4 + 3] === 0;
-      if (touchesWater) {
-        ctx.fillRect(x, y, 1, 1);
-      }
-    }
-  }
 }
 
 function formatMapBounds(bounds) {
@@ -7075,91 +6986,21 @@ function getLandDisplayName(zone) {
     .join(" ");
 }
 
-function drawRadarLandZone(ctx, zone, playerPosition, centerX, centerY, scale, heading) {
-  if (hasAuthoredLandGeometry(zone)) {
-    drawInstrumentContours(
-      ctx,
-      authoredInstrumentSurfaceContours(zone),
-      (point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading),
-      "rgba(96, 124, 83, 0.92)",
-      "rgba(232, 217, 159, 0.46)"
-    );
-    drawRadarLandWater(ctx, zone, playerPosition, centerX, centerY, scale, heading);
-    return;
-  }
-
-  if (zone.kind !== "coastline") {
-    const point = worldToRadarPoint(zone, playerPosition, centerX, centerY, scale, heading);
-    drawInstrumentEllipse(ctx, point.x, point.y, getZoneRadarRx(zone) * scale, getZoneRadarRz(zone) * scale, "rgba(96, 124, 83, 0.92)", "rgba(232, 217, 159, 0.4)", -heading);
-    return;
-  }
-
-  const points = getCoastContourPoints(zone, 80, "radar").map((point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading));
-  drawInstrumentPolygon(ctx, points, "rgba(96, 124, 83, 0.92)", "rgba(232, 217, 159, 0.46)");
-  drawRadarLandWater(ctx, zone, playerPosition, centerX, centerY, scale, heading);
-}
-
 function drawRadarLandUnion(ctx, zones, playerPosition, centerX, centerY, scale, heading, width, height, monochromeMode = false) {
   if (zones.length === 0) return;
-
-  const mask = document.createElement("canvas");
-  mask.width = Math.max(1, Math.ceil(width));
-  mask.height = Math.max(1, Math.ceil(height));
-  const maskCtx = mask.getContext("2d");
-  if (!maskCtx) return;
-
-  maskCtx.fillStyle = "#ffffff";
-  zones.forEach((zone) => addRadarLandPath(maskCtx, zone, playerPosition, centerX, centerY, scale, heading));
-
   ctx.save();
-  ctx.drawImage(createColoredMaskCanvas(mask, monochromeMode ? "rgba(141, 226, 245, 0.22)" : "rgba(96, 124, 83, 0.92)"), 0, 0, width, height);
-  drawMaskOutline(ctx, mask, monochromeMode ? "rgba(214, 248, 255, 0.58)" : "rgba(232, 217, 159, 0.46)");
+  ctx.transform(...radarTransform(playerPosition, centerX, centerY, scale, heading));
+  const colors = ["rgba(96, 124, 83, 0.92)", "rgba(82, 111, 75, 0.94)", "rgba(66, 94, 69, 0.96)"];
+  for (const [index, path] of instrumentPaths.entries()) {
+    ctx.fillStyle = monochromeMode ? "rgba(141, 226, 245, 0.22)" : colors[index];
+    ctx.fill(path, "evenodd");
+    if (monochromeMode) break;
+  }
+  ctx.lineWidth = 1 / scale;
+  ctx.strokeStyle = monochromeMode ? "rgba(214, 248, 255, 0.58)" : "rgba(232, 217, 159, 0.46)";
+  ctx.stroke(instrumentPaths[0]);
   ctx.restore();
 
-  if (!monochromeMode) {
-    zones.forEach((zone) => drawRadarLandWater(ctx, zone, playerPosition, centerX, centerY, scale, heading));
-  }
-}
-
-function addRadarLandPath(ctx, zone, playerPosition, centerX, centerY, scale, heading) {
-  if (hasAuthoredLandGeometry(zone)) {
-    const project = (point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading);
-    for (const contour of authoredInstrumentSurfaceContours(zone)) {
-      if (!Array.isArray(contour) || contour.length < 3) continue;
-      ctx.beginPath();
-      const first = project(contour[0]);
-      ctx.moveTo(first.x, first.y);
-      for (let index = 1; index < contour.length; index += 1) {
-        const point = project(contour[index]);
-        ctx.lineTo(point.x, point.y);
-      }
-      ctx.closePath();
-      ctx.fill();
-    }
-    return;
-  } else if (zone.kind !== "coastline") {
-    ctx.beginPath();
-    const point = worldToRadarPoint(zone, playerPosition, centerX, centerY, scale, heading);
-    ctx.ellipse(
-      point.x,
-      point.y,
-      Math.max(1, getZoneRadarRx(zone) * scale),
-      Math.max(1, getZoneRadarRz(zone) * scale),
-      -heading,
-      0,
-      Math.PI * 2
-    );
-  } else {
-    ctx.beginPath();
-    const points = getCoastContourPoints(zone, 80, "radar").map((point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading));
-    if (points.length < 3) return;
-    ctx.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i += 1) {
-      ctx.lineTo(points[i].x, points[i].y);
-    }
-    ctx.closePath();
-  }
-  ctx.fill();
 }
 
 function drawInstrumentPolygon(ctx, points, fill, stroke) {
@@ -15865,7 +15706,13 @@ function createWorldLandmasses(landmasses, scene, materials, parent) {
 }
 
 function rebuildWorldLandscape(nextWorldMap) {
+  try {
+    instrumentPaths = prepareInstrumentPaths(nextWorldMap?.instrumentMap);
+  } catch (error) {
+    failWorldMapLoad(getWorldMapEndpoint(), error.message);
+  }
   worldMap = {
+    instrumentMap: nextWorldMap.instrumentMap,
     landmasses: Array.isArray(nextWorldMap?.landmasses) ? nextWorldMap.landmasses : [],
     mapObjects: Array.isArray(nextWorldMap?.mapObjects) ? nextWorldMap.mapObjects : []
   };
@@ -16846,62 +16693,7 @@ function getLandZone(land) {
     material: land.material ?? "grass",
     materialZones: land.materialZones ?? []
   };
-  zone.instrumentElevationLayers = createAuthoredInstrumentElevationLayers(zone);
-  zone.instrumentSurfaceContours = zone.instrumentElevationLayers[0]?.contours ?? [];
-  zone.instrumentElevationLayers.forEach((layer) => {
-    layer.paths = layer.contours.map(createWorldContourPath).filter(Boolean);
-  });
   return zone;
-}
-
-function createWorldContourPath(contour) {
-  if (typeof Path2D === "undefined" || !Array.isArray(contour) || contour.length < 3) return null;
-  const path = new Path2D();
-  path.moveTo(contour[0].x, contour[0].z);
-  for (let index = 1; index < contour.length; index += 1) path.lineTo(contour[index].x, contour[index].z);
-  path.closePath();
-  return path;
-}
-
-function authoredInstrumentSurfaceContours(land) {
-  if (Array.isArray(land.instrumentSurfaceContours)) return land.instrumentSurfaceContours;
-  return hasAuthoredLandGeometry(land) ? [authoredWorldCoastline(land)] : [];
-}
-
-function createAuthoredInstrumentSurfaceContours(land) {
-  return createAuthoredInstrumentElevationLayers(land)[0]?.contours ?? [];
-}
-
-function createAuthoredInstrumentElevationLayers(land) {
-  if (!hasAuthoredLandGeometry(land)) return [];
-
-  const terrain = createAuthoredTerrainMeshData(land);
-  const vertices = terrain.vertices ?? [];
-  const indices = terrain.indices ?? [];
-  const levels = [authoredSeaLevelMeters, 50, 150];
-  return levels.map((height, index) => {
-    const contours = [];
-    for (let triangleIndex = 0; triangleIndex < indices.length; triangleIndex += 3) {
-      const triangle = [
-        vertices[indices[triangleIndex]],
-        vertices[indices[triangleIndex + 1]],
-        vertices[indices[triangleIndex + 2]]
-      ];
-      const aboveLevel = clipAuthoredHeightPolygon(triangle, height, true);
-      if (aboveLevel.length >= 3) {
-        contours.push(aboveLevel.map((point) => ({ x: point.x + land.x, z: point.z + land.z })));
-      }
-    }
-    const plateauPolygons = authoredPlateausForIsland(authoredLocalTerrainIsland(land))
-      .filter((plateau) => plateau.height >= height)
-      .map((plateau) => plateau.polygon.map((point) => ({ x: point.x + land.x, z: point.z + land.z })));
-    const combined = [...contours, ...plateauPolygons];
-    return {
-      height,
-      color: ["rgba(96, 124, 83, 0.92)", "rgba(82, 111, 75, 0.94)", "rgba(66, 94, 69, 0.96)"][index],
-      contours: combined.length || height > authoredSeaLevelMeters ? combined : [authoredWorldCoastline(land)]
-    };
-  });
 }
 
 function createCoastline(land, position, scene, materials, parent) {
@@ -17498,24 +17290,6 @@ function getCoastRadiusFactor(angle, land) {
   });
 
   return clamp(1 + (broad + bays + small) * roughness - fjordBite, 0.56, 1.42);
-}
-
-function drawMapLandWater(ctx, zone, bounds, width, height, scale) {
-  drawInstrumentWaterways(ctx, zone, (point) => worldToMapPoint(point, bounds, width, height, scale), scale, "rgba(7, 31, 43, 0.94)");
-
-  (zone.lakes ?? []).forEach((lake) => {
-    const point = worldToMapPoint({ x: zone.x + lake.x, z: zone.z + lake.z }, bounds, width, height, scale);
-    drawInstrumentEllipse(ctx, point.x, point.y, lake.rx * scale, lake.rz * scale, "rgba(7, 31, 43, 0.94)", "rgba(7, 31, 43, 0.72)");
-  });
-}
-
-function drawRadarLandWater(ctx, zone, playerPosition, centerX, centerY, scale, heading) {
-  drawInstrumentWaterways(ctx, zone, (point) => worldToRadarPoint(point, playerPosition, centerX, centerY, scale, heading), scale, "rgba(2, 22, 28, 0.94)");
-
-  (zone.lakes ?? []).forEach((lake) => {
-    const point = worldToRadarPoint({ x: zone.x + lake.x, z: zone.z + lake.z }, playerPosition, centerX, centerY, scale, heading);
-    drawInstrumentEllipse(ctx, point.x, point.y, lake.rx * scale, lake.rz * scale, "rgba(2, 22, 28, 0.94)", "rgba(2, 22, 28, 0.72)", -heading);
-  });
 }
 
 function drawInstrumentWaterways(ctx, zone, project, scale, strokeStyle) {
