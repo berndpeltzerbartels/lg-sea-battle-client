@@ -1,4 +1,4 @@
-import { createLandscapeMaterials } from "../packages/landscape/index.js";
+import { createLandscapeMaterials, createLandscapeLighting, updateLandscapeAtmosphere, createLandscapeWaterMaterial } from "../packages/landscape/index.js";
 import { moveShipOnWater } from "./shipMovement.js";
 import { prepareInstrumentPaths, radarTransform } from "./instrumentMap.js";
 import {
@@ -25,8 +25,6 @@ import {
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { Scene } from "@babylonjs/core/scene";
 import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
-import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
-import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { PointLight } from "@babylonjs/core/Lights/pointLight";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
@@ -94,12 +92,6 @@ const enemyBowWakeSurfaceY = -torpedoBoatModelWaterlineY + 0.018;
 const enemyBowWakeFullSpeed = 17.5;
 const torpedoBoatModelSinkDepth = 2.35;
 const gameConfig = await loadGameConfig();
-const surfaceClearColor = new Color4(0.38, 0.5, 0.6, 1);
-const surfaceFogColor = new Color3(0.35, 0.46, 0.54);
-const surfaceFogDensity = 0.00135;
-const underwaterClearColor = new Color4(0.07, 0.22, 0.28, 1);
-const underwaterFogColor = new Color3(0.055, 0.2, 0.24);
-const underwaterFogDensity = 0.0016;
 const underwaterLandTopY = -0.1;
 const defaultUnderwaterSeaFloorY = -16;
 let underwaterSeaFloorY = defaultUnderwaterSeaFloorY;
@@ -111,10 +103,7 @@ const defaultCameraFarClip = 4200;
 const closeWeaponCameraNearClip = 0.04;
 const closeWeaponCameraFarClip = 2200;
 const scoutPlaneCameraNearClip = 1.5;
-scene.clearColor = surfaceClearColor.clone();
-scene.fogMode = Scene.FOGMODE_EXP2;
-scene.fogColor = surfaceFogColor.clone();
-scene.fogDensity = surfaceFogDensity;
+updateLandscapeAtmosphere(scene, 1);
 
 const speedValue = document.getElementById("speedValue");
 const altitudeValue = document.getElementById("altitudeValue");
@@ -572,16 +561,7 @@ if (shipContrastDebug) {
 const world = new TransformNode("world", scene);
 let landscapeRoot = null;
 
-const sun = new DirectionalLight("sun", new Vector3(-0.45, -0.9, 0.32), scene);
-sun.position = new Vector3(35, 80, -45);
-sun.intensity = 1.2;
-sun.diffuse = new Color3(0.83, 0.85, 0.83);
-sun.specular = new Color3(0.48, 0.55, 0.62);
-
-const ambient = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
-ambient.intensity = 0.42;
-ambient.diffuse = new Color3(0.5, 0.6, 0.7);
-ambient.groundColor = new Color3(0.2, 0.24, 0.28);
+const { sun, ambient } = createLandscapeLighting(scene);
 if (sideViewSandboxMode) {
   sun.direction = new Vector3(-0.55, -0.7, -0.45);
   sun.position = new Vector3(55, 70, 45);
@@ -2259,29 +2239,9 @@ function updateCameraWaterAtmosphere() {
     document.body.style.setProperty("--underwater-view-ratio", "0");
     return;
   }
-  const ratio = clamp((0.08 - camera.position.y) / 1.1, 0, 1);
-  scene.clearColor = lerpColor4(surfaceClearColor, underwaterClearColor, ratio);
-  scene.fogColor = lerpColor3(surfaceFogColor, underwaterFogColor, ratio);
-  scene.fogDensity = mix(surfaceFogDensity, underwaterFogDensity, ratio);
+  const ratio = updateLandscapeAtmosphere(scene, camera.position.y);
   document.body.dataset.underwaterView = String(ratio > 0.05);
   document.body.style.setProperty("--underwater-view-ratio", ratio.toFixed(3));
-}
-
-function lerpColor3(start, end, ratio) {
-  return new Color3(
-    mix(start.r, end.r, ratio),
-    mix(start.g, end.g, ratio),
-    mix(start.b, end.b, ratio)
-  );
-}
-
-function lerpColor4(start, end, ratio) {
-  return new Color4(
-    mix(start.r, end.r, ratio),
-    mix(start.g, end.g, ratio),
-    mix(start.b, end.b, ratio),
-    mix(start.a, end.a, ratio)
-  );
 }
 
 function worldToLocalShipPointWithoutTilt(worldPoint) {
@@ -13834,14 +13794,7 @@ function createFleetMaterials(scene, fleetId, palette) {
 
 function createMaterials(scene) {
   const {sand, terrainSand, grass, snow, underwaterLand} = createLandscapeMaterials(scene);
-  const water = new StandardMaterial("water_material", scene);
-  water.diffuseColor = new Color3(0.18, 0.36, 0.4);
-  water.specularColor = new Color3(0.68, 0.74, 0.75);
-  water.emissiveColor = new Color3(0.025, 0.075, 0.08);
-  water.alpha = 1;
-  water.diffuseTexture = createWaterTexture(scene);
-  water.diffuseTexture.uScale = 34;
-  water.diffuseTexture.vScale = 34;
+  const water = createLandscapeWaterMaterial(scene);
 
   const terrain = new StandardMaterial("terrain_material", scene);
   terrain.diffuseColor = new Color3(0.22, 0.34, 0.3);
@@ -14079,34 +14032,6 @@ function createMaterials(scene) {
     beaconBeam,
     flakHitboxDebug
   };
-}
-
-function createWaterTexture(scene) {
-  const texture = new DynamicTexture("water_texture", { width: 256, height: 256 }, scene);
-  const context = texture.getContext();
-  context.fillStyle = "#3b7780";
-  context.fillRect(0, 0, 256, 256);
-
-  for (let i = 0; i < 34; i += 1) {
-    const y = 8 + i * 8;
-    context.beginPath();
-    context.strokeStyle = i % 2 === 0 ? "rgba(214, 231, 230, 0.22)" : "rgba(62, 98, 103, 0.15)";
-    context.lineWidth = i % 3 === 0 ? 1.35 : 0.75;
-
-    for (let x = -20; x <= 276; x += 12) {
-      const wave = Math.sin((x + i * 19) * 0.045) * 4;
-      if (x === -20) {
-        context.moveTo(x, y + wave);
-      } else {
-        context.lineTo(x, y + wave);
-      }
-    }
-
-    context.stroke();
-  }
-
-  texture.update(false);
-  return texture;
 }
 
 // Cheap open-sea orientation markers: opaque low-poly streaks recycled around the player.
