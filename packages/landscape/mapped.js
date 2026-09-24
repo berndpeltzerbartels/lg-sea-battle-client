@@ -4,12 +4,9 @@ import {
   authoredTriangleOrientation as cross, createAuthoredSingleHeightPointSurfaces,
   barycentricAuthoredWeightsForPoint
 } from "./geometry.js";
+import { signedArea as area, clip, subtract } from "./polygonClip.js";
 
 const prepared = new WeakMap();
-const area = points => points.reduce((sum, p, i) => {
-  const q = points[(i + 1) % points.length];
-  return sum + p.x * q.z - p.z * q.x;
-}, 0) / 2;
 
 export function hasCompletePlateauMapping(island) {
   const groups = authoredPlateauGroupsForIsland(island);
@@ -76,45 +73,6 @@ export function mappedTerrainHeight(island, point) {
     if (barycentricAuthoredWeightsForPoint(point, ...t)) height = Math.max(height, planeHeight(t, point));
   }
   return height;
-}
-
-// Clip convex polygons in x/z, preserving the source plane's interpolated height.
-function clip(polygon, distance, positive = true) {
-  const output = [];
-  for (let i = 0; i < polygon.length; i++) {
-    const a = polygon[i], b = polygon[(i + 1) % polygon.length];
-    const da = distance(a) * (positive ? 1 : -1), db = distance(b) * (positive ? 1 : -1);
-    if (da >= 0) output.push(a);
-    if ((da >= 0) !== (db >= 0)) {
-      const t = da / (da - db);
-      output.push({ x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t, h: a.h + (b.h - a.h) * t });
-    }
-  }
-  return output.filter((p, i) => {
-    const previous = output[(i + output.length - 1) % output.length];
-    return Math.hypot(p.x - previous.x, p.z - previous.z) > 1e-9;
-  });
-}
-
-function subtract(polygon, cutter) {
-  if (["x", "z"].some(axis => Math.max(...polygon.map(p => p[axis])) < Math.min(...cutter.map(p => p[axis]))
-    || Math.max(...cutter.map(p => p[axis])) < Math.min(...polygon.map(p => p[axis])))) return [polygon];
-  let overlap = polygon;
-  const sign = Math.sign(area(cutter));
-  for (let i = 0; i < cutter.length && overlap.length >= 3; i++) {
-    overlap = clip(overlap, p => cross(cutter[i], cutter[(i + 1) % cutter.length], p) * sign);
-  }
-  if (overlap.length < 3 || Math.abs(area(overlap)) < 1e-8) return [polygon];
-  let inside = polygon;
-  const outside = [];
-  for (let i = 0; i < cutter.length && inside.length >= 3; i++) {
-    const a = cutter[i], b = cutter[(i + 1) % cutter.length];
-    const distance = p => cross(a, b, p) * sign;
-    const part = clip(inside, distance, false);
-    if (part.length >= 3 && Math.abs(area(part)) > 1e-8) outside.push(part);
-    inside = clip(inside, distance);
-  }
-  return outside;
 }
 
 // Exact upper envelope: remove only the portion covered by a higher triangle.

@@ -1,4 +1,5 @@
 import { mappedTerrainMesh, mappedTerrainHeight, hasCompletePlateauMapping } from "./mapped.js";
+import { partition, signedArea } from "./polygonClip.js";
 // Shared game/editor geometry. No DOM or Babylon dependency.
 export const authoredTerrainVisualScale = 1;
 export const authoredSeaLevelMeters = 0;
@@ -580,6 +581,20 @@ export function splitAuthoredTerrainSurfaces(terrain, land) {
     seaFloor: createAuthoredSurfaceData()
   };
 
+  const sandCutters = normalizedAuthoredMaterial(land.material) === "sand" ? [] : (land.materialZones ?? [])
+    .filter(zone => normalizedAuthoredMaterial(zone.material) === "sand")
+    .flatMap(zone => {
+      const polygon = zone.polygon ?? [];
+      if (polygon.length < 3) throw new Error("Sandzone braucht mindestens drei Randpunkte.");
+      const triangles = triangulateAuthoredSimplePolygon(polygon);
+      if (!triangles.length) throw new Error("Sandzone kann nicht trianguliert werden.");
+      const direction = Math.sign(signedArea(polygon));
+      const convex = polygon.every((a, index) => polygon.every(p =>
+        authoredTriangleOrientation(a, polygon[(index + 1) % polygon.length], p) * direction >= -1e-10));
+      if (convex) return [polygon];
+      return triangles.map(triangle => triangle.map(index => polygon[index]));
+    });
+
   for (let index = 0; index < terrain.indices.length; index += 3) {
     const triangle = [
       terrain.vertices[terrain.indices[index]],
@@ -588,7 +603,26 @@ export function splitAuthoredTerrainSurfaces(terrain, land) {
     ];
     const aboveWater = clipAuthoredHeightPolygon(triangle, authoredSeaLevelMeters, true);
     const belowWater = clipAuthoredHeightPolygon(triangle, authoredSeaLevelMeters, false);
-    appendAuthoredSurfacePolygon(surfaceForAuthoredLandPolygon(aboveWater, surfaces, land), aboveWater);
+    if (aboveWater.length >= 3) {
+      if (aboveWater.every(point => point.h >= authoredSnowLineMeters)) {
+        appendAuthoredSurfacePolygon(surfaces.snow, aboveWater);
+      } else if (normalizedAuthoredMaterial(land.material) === "sand") {
+        appendAuthoredSurfacePolygon(surfaces.sand, aboveWater);
+      } else {
+        let remaining = [aboveWater];
+        for (const cutter of sandCutters) {
+          const next = [];
+          for (const polygon of remaining) {
+            const { inside, outside } = partition(polygon, cutter);
+            appendAuthoredSurfacePolygon(surfaces.sand, inside);
+            next.push(...outside);
+          }
+          remaining = next;
+          if (!remaining.length) break;
+        }
+        for (const polygon of remaining) appendAuthoredSurfacePolygon(surfaces.land, polygon);
+      }
+    }
     appendAuthoredSurfacePolygon(surfaces.seaFloor, belowWater);
   }
 
