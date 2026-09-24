@@ -21,10 +21,10 @@ export function fixtures() {
   ];
 }
 
-test("mesh and waterline splits retain checkpoint f64c2ed output", () => {
+test("mesh and waterline splits retain corrected peak and unchanged plateau output", () => {
   const expected = [
-    "4b7444376b5b57b8c84ff295cdd908e3ab1dd53a01d79bed5a67ce0e753d79d5",
-    "fa763c93091d9b268896723faeeb7897f3d515fdc8e64fb79ef148326e09f2b0",
+    "546624cc70e14dfec97219ad12d571d99d20de456dbf7b033a66460390013055",
+    "1abd3b9d9a32351b5129265ce04ca403198c0ec964a3fd87d4157f621183a070",
     "64a9fdc1b1d66c01deedd6eb437795c698d52841e875e1cdb4ad7a12e9062ab5"
   ];
   fixtures().forEach((island,index) => {

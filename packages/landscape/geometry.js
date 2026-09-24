@@ -33,6 +33,13 @@ export function createAuthoredTerrainMeshData(land, options = {}) {
     basePointIndexes: sanitizeAuthoredBasePointIndexes(point.basePointIndexes, boundaryVertices.length)
   }));
   const plateaus = authoredPlateausForIsland(island);
+  if (heightVertices.length === 1 && plateaus.length === 0) {
+    const triangles = triangulateVisiblePeakBoundary(boundaryVertices, heightVertices[0]);
+    if (triangles) {
+      const vertices = [...boundaryVertices, heightVertices[0]];
+      return { vertices, indices: triangles.map(triangle => orientAuthoredTerrainTriangleForBabylon(triangle, vertices)).flat() };
+    }
+  }
   const plateauVertices = plateaus.flatMap((plateau) => [
     ...plateau.polygon.map((point) => ({
         x: point.x,
@@ -249,10 +256,20 @@ export function createAuthoredSingleHeightPointSurfaces(island) {
       ...base.polygon.map((boundaryPoint) => ({ ...boundaryPoint, h: base.floor })),
       { x: point.x, z: point.z, h: sanitizeAuthoredHeight(point.h) }
     ];
-    const triangles = triangulateAuthoredDelaunay(vertices)
+    const triangles = (triangulateVisiblePeakBoundary(vertices.slice(0, -1), vertices.at(-1)) ?? triangulateAuthoredDelaunay(vertices))
       .filter((triangle) => pointInPolygon2d(triangleCentroid2d(triangle, vertices), base.polygon));
     return { vertices, triangles };
   });
+}
+
+function triangulateVisiblePeakBoundary(boundary, peak) {
+  if (boundary.length < 3) return null;
+  const winding = Math.sign(signedArea(boundary));
+  if (!winding) return null;
+  // A fan covers the polygon exactly only when the peak lies in its visibility kernel.
+  // For a re-entrant boundary outside that kernel, retain the general triangulation.
+  if (boundary.some((a, index) => winding * authoredTriangleOrientation(a, boundary[(index + 1) % boundary.length], peak) <= 0)) return null;
+  return boundary.map((_, index) => [index, (index + 1) % boundary.length, boundary.length]);
 }
 
 export function authoredHeightPointBase(island, point, defaultBoundary) {
