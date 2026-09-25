@@ -21,6 +21,28 @@ its material color. Shader warmup precedes measurements. PNG captures and camera
 fog, clip and visibility measurements go to `/tmp/island-appearance` by default.
 The optional first argument changes the output directory.
 
+## Straight Approach Integration Test
+
+Against the isolated Vite client (not the server's bundled production assets):
+
+```sh
+SEA_BATTLE_BASE_URL=http://127.0.0.1:5182 npx playwright test tests/e2e/island-appearance.spec.js --workers=1
+```
+
+Two identical islands are placed 250m apart in the direction of travel and offset
+sideways so neither hides the other. The boat follows a straight sequence of poses
+in 25m increments, with the normal bridge camera. Island visibility is measured
+individually by hiding just that island for a comparison frame.
+
+This is a characterization test: passing means the current defect is reproduced.
+It asserts that each island starts invisible, enters as a low strip less than 35%
+of its full image height, then grows to its full height. When the farther island
+first appears, the nearer one must already exceed 80% of its full height. A
+long-clip control must show both complete islands throughout the approach.
+After fixing the renderer, replace these defect expectations with continuous
+silhouette expectations; do not retain the disappearance as desired behavior.
+Measurements and screenshots are attached to the Playwright result directory.
+
 Initial reproduction with a 4200m far plane:
 
 - At frame 22 the island has 3800 visible pixels, spanning rows 343-401.
