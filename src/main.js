@@ -1,4 +1,5 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
+import { prepareInstrumentPaths, radarTransform } from "./instrumentMap.js";
 import { Scene } from "@babylonjs/core/scene";
 import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
@@ -434,7 +435,9 @@ setupResetGameControl(resetGameButton);
 const playerLogin = await requirePlayerLogin();
 const playerInitials = playerLogin.initials;
 await requireRegisteredGameSession(playerLogin);
-const worldLandmasses = await loadWorldLandmasses();
+const worldMap = await loadWorldLandmasses();
+const worldLandmasses = worldMap.landmasses;
+const instrumentPaths = prepareInstrumentPaths(worldMap.instrumentMap);
 document.body.dataset.worldSource = "server";
 document.body.dataset.worldLandmasses = String(worldLandmasses.length);
 const gameState = await loadGameState();
@@ -4473,7 +4476,7 @@ function positiveNumber(value, fallback) {
 
 async function loadWorldLandmasses() {
   if (directSideViewSandboxRequested) {
-    return [];
+    return { landmasses: [], instrumentMap: { version: 1, layers: [0, 50, 150].map(height => ({ height, contours: [] })) } };
   }
   const endpoint = getWorldMapEndpoint();
   const response = await fetch(endpoint, { cache: "no-store" });
@@ -4491,7 +4494,7 @@ async function loadWorldLandmasses() {
     version: payload.version,
     landmasses: payload.landmasses.length
   });
-  return payload.landmasses;
+  return payload;
 }
 
 function failWorldMapLoad(endpoint, message) {
@@ -6761,22 +6764,30 @@ function drawMapLandZone(ctx, zone, bounds, width, height, scale) {
 
 function drawMapLandUnion(ctx, zones, bounds, width, height, scale) {
   if (zones.length === 0) return;
+  drawMapElevationLayers(ctx, zones, bounds, width, height, scale);
+}
 
-  const mask = document.createElement("canvas");
-  mask.width = Math.max(1, Math.ceil(width));
-  mask.height = Math.max(1, Math.ceil(height));
-  const maskCtx = mask.getContext("2d");
-  if (!maskCtx) return;
-
-  maskCtx.fillStyle = "#ffffff";
-  zones.forEach((zone) => addMapLandPath(maskCtx, zone, bounds, width, height, scale));
+function drawMapElevationLayers(ctx, zones, bounds, width, height, scale) {
+  const mapWidth = (bounds.maxX - bounds.minX) * scale;
+  const mapHeight = (bounds.maxZ - bounds.minZ) * scale;
+  const insetX = (width - mapWidth) * 0.5;
+  const insetY = (height - mapHeight) * 0.5;
+  const colors = ["rgba(98, 129, 89, 0.95)", "rgba(82, 113, 79, 0.96)", "rgba(67, 96, 72, 0.97)"];
 
   ctx.save();
-  ctx.drawImage(createColoredMaskCanvas(mask, "rgba(98, 129, 89, 0.95)"), 0, 0, width, height);
-  drawMaskOutline(ctx, mask, "rgba(238, 218, 164, 0.78)");
+  ctx.transform(
+    scale,
+    0,
+    0,
+    -scale,
+    insetX - bounds.minX * scale,
+    insetY + bounds.maxZ * scale
+  );
+  for (const [index, path] of instrumentPaths.entries()) {
+    ctx.fillStyle = colors[index];
+    ctx.fill(path, "evenodd");
+  }
   ctx.restore();
-
-  zones.forEach((zone) => drawMapLandWater(ctx, zone, bounds, width, height, scale));
 }
 
 function addMapLandPath(ctx, zone, bounds, width, height, scale) {
@@ -7054,24 +7065,19 @@ function drawRadarLandZone(ctx, zone, playerPosition, centerX, centerY, scale, h
 
 function drawRadarLandUnion(ctx, zones, playerPosition, centerX, centerY, scale, heading, width, height, monochromeMode = false) {
   if (zones.length === 0) return;
-
-  const mask = document.createElement("canvas");
-  mask.width = Math.max(1, Math.ceil(width));
-  mask.height = Math.max(1, Math.ceil(height));
-  const maskCtx = mask.getContext("2d");
-  if (!maskCtx) return;
-
-  maskCtx.fillStyle = "#ffffff";
-  zones.forEach((zone) => addRadarLandPath(maskCtx, zone, playerPosition, centerX, centerY, scale, heading));
-
   ctx.save();
-  ctx.drawImage(createColoredMaskCanvas(mask, monochromeMode ? "rgba(141, 226, 245, 0.22)" : "rgba(96, 124, 83, 0.92)"), 0, 0, width, height);
-  drawMaskOutline(ctx, mask, monochromeMode ? "rgba(214, 248, 255, 0.58)" : "rgba(232, 217, 159, 0.46)");
+  ctx.transform(...radarTransform(playerPosition, centerX, centerY, scale, heading));
+  const colors = ["rgba(96, 124, 83, 0.92)", "rgba(82, 111, 75, 0.94)", "rgba(66, 94, 69, 0.96)"];
+  for (const [index, path] of instrumentPaths.entries()) {
+    ctx.fillStyle = monochromeMode ? "rgba(141, 226, 245, 0.22)" : colors[index];
+    ctx.fill(path, "evenodd");
+    if (monochromeMode) break;
+  }
+  ctx.lineWidth = 1 / scale;
+  ctx.strokeStyle = monochromeMode ? "rgba(214, 248, 255, 0.58)" : "rgba(232, 217, 159, 0.46)";
+  ctx.stroke(instrumentPaths[0]);
   ctx.restore();
 
-  if (!monochromeMode) {
-    zones.forEach((zone) => drawRadarLandWater(ctx, zone, playerPosition, centerX, centerY, scale, heading));
-  }
 }
 
 function addRadarLandPath(ctx, zone, playerPosition, centerX, centerY, scale, heading) {
