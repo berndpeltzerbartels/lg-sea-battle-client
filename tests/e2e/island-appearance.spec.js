@@ -4,13 +4,13 @@ import { promisify } from 'node:util';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
-// Characterization test: deliberately confirms the existing defect, not a fixed renderer.
+// Keep an explicit legacy-color control to demonstrate the original defect.
 test('straight bridge approach reproduces islands building upward at the far plane', async ({baseURL}, testInfo) => {
   test.setTimeout(180000);
   const output=testInfo.outputPath('straight-approach');
   await promisify(execFile)(process.execPath,['scripts/diagnose-island-appearance.mjs',output],{
     cwd:fileURLToPath(new URL('../../',import.meta.url)),
-    env:{...process.env,SEA_BATTLE_BASE_URL:baseURL,APPEARANCE_SCENARIO:'straight',ISLAND_DISTANCE:'4800'},
+    env:{...process.env,SEA_BATTLE_BASE_URL:baseURL,APPEARANCE_SCENARIO:'straight',ISLAND_DISTANCE:'4800',ISLAND_FOG_PROFILE:'legacy'},
     timeout:170000,maxBuffer:1024*1024
   });
   const report=JSON.parse(await readFile(`${output}/measurements.json`,'utf8'));
@@ -41,4 +41,32 @@ test('straight bridge approach reproduces islands building upward at the far pla
     const capture=Math.floor(frame/5)*5;
     await testInfo.attach(`approach-${capture}`,{path:`${output}/exp2-${String(capture).padStart(2,'0')}.png`,contentType:'image/png'});
   }
+});
+
+test('production fog hides clipping without increasing the bridge sight limit', async ({baseURL}, testInfo) => {
+  test.setTimeout(180000);
+  const output=testInfo.outputPath('fade-approach');
+  await promisify(execFile)(process.execPath,['scripts/diagnose-island-appearance.mjs',output],{
+    cwd:fileURLToPath(new URL('../../',import.meta.url)),
+    env:{...process.env,SEA_BATTLE_BASE_URL:baseURL,APPEARANCE_SCENARIO:'fade',ISLAND_DISTANCE:'4800',ISLAND_FOG_PROFILE:'production'},
+    timeout:170000,maxBuffer:1024*1024
+  });
+  const report=JSON.parse(await readFile(`${output}/measurements.json`,'utf8'));
+  await testInfo.attach('fade-measurements',{path:`${output}/measurements.json`,contentType:'application/json'});
+  const normal=report.scenarios.exp2;
+  const control=report.scenarios['exp2-long-clip'];
+  for(let island=0;island<2;island++){
+    expect(normal[0].islands[island].pixels).toBe(0);
+    expect(normal.some(row=>row.islands[island].pixels>100)).toBeTruthy();
+    for(let frame=0;frame<normal.length;frame++){
+      const a=normal[frame].islands[island], b=control[frame].islands[island];
+      expect(normal[frame].far).toBe(4200);
+      expect(control[frame].far).toBe(12000);
+      expect(Math.abs(a.pixels-b.pixels)).toBeLessThanOrEqual(Math.max(5,b.pixels*0.001));
+      expect(Math.abs(a.height-b.height)).toBeLessThanOrEqual(1);
+      expect(Math.abs(a.minY-b.minY)).toBeLessThanOrEqual(1);
+      expect(Math.abs(a.maxY-b.maxY)).toBeLessThanOrEqual(1);
+    }
+  }
+  await testInfo.attach('visible-nearby-islands',{path:`${output}/exp2-50.png`,contentType:'image/png'});
 });

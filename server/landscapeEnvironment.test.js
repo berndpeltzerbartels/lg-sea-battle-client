@@ -23,9 +23,11 @@ test('shared atmosphere transitions between surface and underwater without rebui
     assert.equal(updateLandscapeAtmosphere(scene, 10), 0);
     assert.equal(scene.fogDensity, 0.00135);
     assert.equal(scene.clearColor.r, 0.38);
+    assert.deepEqual(scene.fogColor.asArray(), scene.clearColor.asArray().slice(0,3));
     assert.equal(updateLandscapeAtmosphere(scene, -10), 1);
     assert.equal(scene.fogDensity, 0.0016);
     assert.ok(Math.abs(scene.clearColor.r - 0.07) < 1e-12);
+    assert.ok(Math.abs(scene.fogColor.r - 0.055) < 1e-12, 'underwater color remains unchanged');
     assert.ok(Math.abs(updateLandscapeAtmosphere(scene, -0.47) - 0.5) < 1e-12);
     assert.equal(scene.meshes.length, 0);
     assert.equal(scene.fogMode, Scene.FOGMODE_EXP2);
