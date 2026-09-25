@@ -22,8 +22,7 @@ export function updateLandscapeAtmosphere(scene, cameraY) {
   const mix = (a, b) => a + (b - a) * ratio;
   scene.clearColor = new Color4(mix(0.38, 0.07), mix(0.5, 0.22), mix(0.6, 0.28), 1);
   scene.fogMode = Scene.FOGMODE_EXP2;
-  // Above water, fully fogged terrain must disappear into the sky before it is clipped.
-  scene.fogColor = new Color3(mix(0.38, 0.055), mix(0.5, 0.2), mix(0.6, 0.24));
+  scene.fogColor = new Color3(mix(0.35, 0.055), mix(0.46, 0.2), mix(0.54, 0.24));
   scene.fogDensity = mix(0.00135, 0.0016);
   return ratio;
 }

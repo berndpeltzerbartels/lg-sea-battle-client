@@ -7,10 +7,7 @@ const base = process.env.SEA_BATTLE_BASE_URL ?? 'http://127.0.0.1:5182';
 const out = process.argv[2] ?? '/tmp/island-appearance';
 await mkdir(out, {recursive:true});
 const distance = Number(process.env.ISLAND_DISTANCE ?? 4800);
-const fade = process.env.APPEARANCE_SCENARIO === 'fade';
-const straight = fade || process.env.APPEARANCE_SCENARIO === 'straight';
-const fogProfile = process.env.ISLAND_FOG_PROFILE ?? 'production';
-assert.ok(['production','legacy','matched'].includes(fogProfile));
+const straight = process.env.APPEARANCE_SCENARIO === 'straight';
 const island = {
   name:'appearance-probe',kind:'island',x:0,z:distance,radius:300,rx:300,rz:300,
   seaFloorHeight:-80,baseHeight:0,material:'grass',
@@ -45,8 +42,6 @@ try {
       scene.onBeforeRenderObservable.add(()=>{
         scene.fogMode=probeMode;
         scene.fogStart=0; scene.fogEnd=2200;
-        if (${JSON.stringify(fogProfile)} === 'matched') scene.fogColor.copyFromFloats(scene.clearColor.r,scene.clearColor.g,scene.clearColor.b);
-        if (${JSON.stringify(fogProfile)} === 'legacy') scene.fogColor.copyFromFloats(0.35,0.46,0.54);
         if(probeFar) camera.maxZ=probeFar;
       });
       const probeMeshes=scene.meshes.filter(m=>m.name.startsWith('appearance-probe'));
@@ -101,7 +96,7 @@ try {
     await page.evaluate(()=>appearanceProbe.step({x:0,z:0,heading:0},0,12000));
     await page.waitForTimeout(100);
   }
-  const results={distance,fogProfile,scenario:fade?'fade':straight?'straight':'turn',separation:straight?250:0,scenarios:{}};
+  const results={distance,scenario:straight?'straight':'turn',separation:straight?250:0,scenarios:{}};
   const scenarios=straight ? [['exp2',2,null],['exp2-long-clip',2,12000]]
     : [['none',0,null],['linear',3,null],['exp',1,null],['exp2',2,null],['exp2-long-clip',2,12000]];
   for(const [name,mode,far] of scenarios){
@@ -110,8 +105,8 @@ try {
       // First turn from an empty view, then approach straight ahead.
       const t=Math.min(1,i/30);
       const angle=(1-t)*Math.PI/2;
-      const pose=straight ? {x:0,z:i*(fade?70:25),heading:0}
-        : {x:200*(Math.cos(angle)-1),z:200*Math.sin(t*Math.PI/2)+Math.max(0,i-30)*(fogProfile==='legacy'?40:120),heading:angle};
+      const pose=straight ? {x:0,z:i*25,heading:0}
+        : {x:200*(Math.cos(angle)-1),z:200*Math.sin(t*Math.PI/2)+Math.max(0,i-30)*40,heading:angle};
       const row=await page.evaluate(({pose,mode,far})=>appearanceProbe.step(pose,mode,far),{pose,mode,far});
       rows.push({frame:i,...pose,...row});
       if(i%5===0)await page.locator('#renderCanvas').screenshot({path:`${out}/${name}-${String(i).padStart(2,'0')}.png`});

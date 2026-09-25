@@ -3,7 +3,7 @@
 Run an isolated Vite client, then:
 
 ```sh
-ISLAND_FOG_PROFILE=legacy SEA_BATTLE_BASE_URL=http://127.0.0.1:5182 node scripts/diagnose-island-appearance.mjs
+SEA_BATTLE_BASE_URL=http://127.0.0.1:5182 node scripts/diagnose-island-appearance.mjs
 ```
 
 The script uses the real game, bridge camera, terrain renderer and lighting in an
@@ -34,34 +34,14 @@ sideways so neither hides the other. The boat follows a straight sequence of pos
 in 25m increments, with the normal bridge camera. Island visibility is measured
 individually by hiding just that island for a comparison frame.
 
-The first case explicitly restores the old fog color in the isolated browser.
-It is a characterization test: passing means the original defect is reproduced.
+This is a characterization test: passing means the current defect is reproduced.
 It asserts that each island starts invisible, enters as a low strip less than 35%
 of its full image height, then grows to its full height. When the farther island
 first appears, the nearer one must already exceed 80% of its full height. A
 long-clip control must show both complete islands throughout the approach.
-The separate production-color regression test approaches from 4800m to 600m.
-It requires the visible pixels and vertical bounds of each island to match the
-12000m control (within rasterization tolerance), while retaining the production
-4200m far plane. Both islands must eventually become visible: hiding everything
-cannot satisfy the test. The legacy case is not desired production behavior.
+After fixing the renderer, replace these defect expectations with continuous
+silhouette expectations; do not retain the disappearance as desired behavior.
 Measurements and screenshots are attached to the Playwright result directory.
-
-## First Visibility Experiment
-
-Above water, fog now converges to the sky's exact RGB color instead of a darker
-color. Density, near/far planes, lighting and geometry are unchanged. This removes
-the residual silhouette of fully fogged land that exposed the far-plane cut.
-It also means distant islands no longer remain visible merely because their fog
-color differs from the sky. This is a visibility tradeoff for user evaluation,
-not an extension of the visible horizon.
-
-`ISLAND_FOG_PROFILE=matched` applies the same color matching only inside the test;
-the default `production` profile uses the actual shared environment. The ordinary
-production turn replay approaches farther after turning so it eventually reaches
-visible terrain, whereas the legacy replay preserves the original shorter path.
-The `APPEARANCE_SCENARIO=fade` straight replay uses 70m samples instead of 25m.
-No additional meshes, passes or simulation work are introduced by this experiment.
 
 Initial reproduction with a 4200m far plane:
 
