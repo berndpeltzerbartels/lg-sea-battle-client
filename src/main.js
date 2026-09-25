@@ -14519,8 +14519,8 @@ function torpedoBoatHullSections() {
     { z: -3.45, topWidth: 1.06, chineWidth: 0.86, top: 0.54, chine: 0.18, keel: -0.02 },
     { z: -2.25, topWidth: 1.46, chineWidth: 1.18, top: 0.56, chine: 0.16, keel: -0.04 },
     { z: -1.1, topWidth: 1.58, chineWidth: 1.28, top: 0.57, chine: 0.15, keel: -0.05 },
-    { z: -0.22, topWidth: 1.58, chineWidth: 1.28, top: 0.57, chine: 0.15, keel: -0.05 },
-    { z: -0.04, topWidth: 1.56, chineWidth: 1.24, top: 0.74, chine: 0.15, keel: -0.05 },
+    { z: -0.22, topWidth: 1.58, chineWidth: 1.28, top: 0.57, chine: 0.15, keel: -0.05, deckCrease: true },
+    { z: -0.04, topWidth: 1.56, chineWidth: 1.24, top: 0.74, chine: 0.15, keel: -0.05, deckCrease: true },
     { z: 1.25, topWidth: 1.34, chineWidth: 1.06, top: 0.74, chine: 0.14, keel: -0.04 },
     { z: 2.42, topWidth: 0.872, chineWidth: 0.67, top: 0.74, chine: 0.121, keel: -0.021 },
     { z: 2.452, topWidth: 0.859, chineWidth: 0.658, top: 0.74, chine: 0.12, keel: -0.02 },
@@ -14648,8 +14648,14 @@ function createBoatDeckMesh(name, scene) {
   });
 
   for (let i = 0; i < sections.length - 1; i += 1) {
-    const a = i * 2;
+    let a = i * 2;
     const b = (i + 1) * 2;
+    // Separate normals across the ramp folds without moving or adding faces.
+    if (sections[i].deckCrease) {
+      const pair = positions.slice(a * 3, a * 3 + 6);
+      a = positions.length / 3;
+      positions.push(...pair);
+    }
     pushOrientedQuad(indices, positions, a, a + 1, b + 1, b, Vector3.Up());
   }
 
