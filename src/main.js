@@ -1,5 +1,6 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { prepareInstrumentPaths, radarTransform } from "./instrumentMap.js";
+import { mountCrewInbox } from "./crewInbox.js";
 import { Scene } from "@babylonjs/core/scene";
 import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
@@ -471,6 +472,7 @@ if (sideViewSandboxMode) {
   scene.fogMode = Scene.FOGMODE_NONE;
 }
 const playerId = playerLogin.playerId;
+if (!sideViewSandboxMode) mountCrewInbox(gameEndpoint("/crew-inbox.html"));
 const playerTeamId = getRequestedPlayerTeamId(gameState.ships, playerLogin.teamId);
 const playerShips = getTeamShips(gameState.ships, playerTeamId);
 const enemyShips = getEnemyShips(gameState.ships, playerTeamId);
