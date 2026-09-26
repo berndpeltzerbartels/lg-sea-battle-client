@@ -1,0 +1,35 @@
+.crew-occupied {
+  opacity: 0.5;
+  outline: 1px dashed #e8aa72;
+  cursor: not-allowed;
+}
+.crew-leave {
+  position: fixed;
+  right: 16px;
+  bottom: 12px;
+  z-index: 25;
+  padding: 7px 10px;
+  border: 1px solid #749491;
+  border-radius: 4px;
+  background: #102a30;
+  color: #dce9e5;
+  font: 12px system-ui, sans-serif;
+  letter-spacing: 0;
+}
+body[data-crew-station="flak"] .rudder-gauge,
+body[data-crew-station="cannon"] .rudder-gauge,
+body[data-crew-station="flak"] .telegraph-scale,
+body[data-crew-station="cannon"] .telegraph-scale {
+  pointer-events: none;
+  opacity: 0.45;
+}
+body[data-crew-station="flak"] .telegraph-key-hints,
+body[data-crew-station="cannon"] .telegraph-key-hints,
+body[data-crew-station="flak"] .rudder-key-hints,
+body[data-crew-station="cannon"] .rudder-key-hints,
+body[data-crew-station="bridge"] .align-weapons-group {
+  visibility: hidden;
+}
+@media (max-width: 600px) {
+  .crew-leave { top: 80px; bottom: auto; }
+}

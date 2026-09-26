@@ -1,6 +1,8 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { prepareInstrumentPaths, radarTransform } from "./instrumentMap.js";
 import { mountCrewInbox } from "./crewInbox.js";
+import { WeaponAimDisplay } from "./weaponAimDisplay.js";
+import "./crew.css";
 import { Scene } from "@babylonjs/core/scene";
 import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
@@ -472,11 +474,14 @@ if (sideViewSandboxMode) {
   scene.fogMode = Scene.FOGMODE_NONE;
 }
 const playerId = playerLogin.playerId;
+let crewState = !sideViewSandboxMode && playerVehicleType === "torpedo-boat"
+  ? await fetch(gameEndpoint(`/game/crew/${encodeURIComponent(playerId)}`)).then(r => r.json()) : null;
+let crewSwitchPending = false;
 if (!sideViewSandboxMode) mountCrewInbox(gameEndpoint("/crew-inbox.html"));
 const playerTeamId = getRequestedPlayerTeamId(gameState.ships, playerLogin.teamId);
 const playerShips = getTeamShips(gameState.ships, playerTeamId);
 const enemyShips = getEnemyShips(gameState.ships, playerTeamId);
-const initialPlayerSpawn = createPlayerSpawn(playerShips, playerId);
+const initialPlayerSpawn = createPlayerSpawn(playerShips, crewState?.controller ?? playerId);
 let playerServerShipId = initialPlayerSpawn.shipId;
 const initialPlayerShip = gameState.ships.find((ship) => ship.id === playerServerShipId);
 let playerBearingPosition = initialPlayerSpawn.position;
@@ -1079,6 +1084,8 @@ let flakYaw = submarineMode ? submarineFlakRestYaw : Math.PI;
 let flakPitch = submarineMode ? submarineFlakRestPitch : 0;
 let cannonYaw = 0;
 let cannonPitch = 0.04;
+const flakAimDisplay = new WeaponAimDisplay();
+const cannonAimDisplay = new WeaponAimDisplay();
 let cannonSightLevelIndex = 0;
 let cannonSightCycleDirection = 1;
 let weaponAlignTarget = null;
@@ -1282,12 +1289,34 @@ enemyMotions
   .filter((enemyMotion) => !enemyMotion.isServerControlled)
   .forEach((enemyMotion, index) => startLocalEnemyEventSource(enemyMotion, index));
 
+if (crewState) {
+  setBattleStation(crewState.station, true);
+  const leave = document.createElement("button");
+  leave.className = "crew-leave";
+  leave.textContent = "Von Bord gehen";
+  leave.addEventListener("click", async () => {
+    const response = await fetch(gameEndpoint("/game/crew/leave"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(crewCommand({})) });
+    if (response.ok) window.location.replace(startPageUrl());
+  });
+  document.body.append(leave);
+}
+
 scene.onBeforeRenderObservable.add(() => {
   const rawFrameSeconds = engine.getDeltaTime() / 1000;
   const dt = Math.min(rawFrameSeconds, maxSimulationFrameSeconds);
   time += dt;
   recordPerformanceFrame(rawFrameSeconds, dt);
   const playerActive = playerDamageState === "active";
+  if (crewState && crewState.station !== "bridge") {
+    heldRudderDirection = 0;
+    heldEngineDirection = 0;
+    rightMouseRudderActive = false;
+    const sharedShip = serverShipsById.get?.(crewState.shipId) ?? serverShipsById[crewState.shipId];
+    if (sharedShip) {
+      engineOrder = sharedShip.engineOrder;
+      rudderDegrees = sharedShip.rudderDegrees;
+    }
+  }
 
   if (playerActive && heldRudderDirection !== 0 && time >= nextRudderHoldChangeTime) {
     const maxRudder = getPlayerMaxRudderDegrees();
@@ -1349,6 +1378,8 @@ scene.onBeforeRenderObservable.add(() => {
   }
   updateWeaponAlignment(dt);
   updateSubmarineBearingAlignment(dt);
+  flakAimDisplay.update(playerServerShipId, flakYaw, flakPitch, crewState && crewState.station !== "flak", dt);
+  cannonAimDisplay.update(playerServerShipId, cannonYaw, cannonPitch, crewState && crewState.station !== "cannon", dt);
   updatePlayerFlakMount();
   updatePlayerCannonMount();
   updateCannonBarrelRecoil(boat.bowCannon, time);
@@ -1365,7 +1396,7 @@ scene.onBeforeRenderObservable.add(() => {
   let forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
   let nextWaterSafety = waterSafety;
 
-  if (playerActive) {
+  if (playerActive && (!crewState || crewState.station === "bridge")) {
     if (scoutPlaneMode) {
       engineOrder = 7;
     }
@@ -1433,6 +1464,8 @@ scene.onBeforeRenderObservable.add(() => {
         scoutPlaneVerticalSpeed = 0;
       }
     }
+  } else if (playerActive && crewState) {
+    applyPlayerServerTarget(dt);
   } else {
     heldRudderDirection = 0;
     heldElevatorDirection = 0;
@@ -1729,7 +1762,11 @@ function toggleCannonView() {
   setBattleStation("cannon");
 }
 
-function setBattleStation(station) {
+function setBattleStation(station, confirmed = false) {
+  if (crewState && !confirmed && crewState.station !== (station === "torpedo" ? "bridge" : station)) {
+    void changeCrewStation(station);
+    return;
+  }
   if (submarineMode && playerSubmarineDepthState !== submarineDepthStates.surface && station === "flak") {
     updateBattleStationButtons();
     return;
@@ -1746,6 +1783,7 @@ function setBattleStation(station) {
   }
   flakViewActive = station === "flak";
   cannonViewActive = station === "cannon";
+  if (crewState) cancelWeaponAlignment();
   if (!cannonViewActive) {
     setCannonSightLevel(0);
   }
@@ -1772,6 +1810,44 @@ function setBattleStation(station) {
   updateTorpedoViewState();
   updateBattleStationButtons();
 }
+
+function crewCommand(fields) {
+  return { playerId, shipId: crewState.shipId, revision: crewState.revision, station: crewState.station, ...fields };
+}
+
+async function changeCrewStation(station) {
+  if (crewSwitchPending) return;
+  crewSwitchPending = true;
+  updateBattleStationButtons();
+  try {
+    const response = await fetch(gameEndpoint("/game/crew/station"), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(crewCommand({ station: station === "torpedo" ? "bridge" : station }))
+    });
+    if (response.ok) {
+      applyCrewView(await response.json());
+      setBattleStation(station, true);
+      const ship = serverShipsById.get(crewState.shipId);
+      if (ship) alignPlayerBoatToServerShip(ship);
+    }
+  } catch (error) {
+    document.body.dataset.crewSwitchError = error.message;
+  } finally {
+    crewSwitchPending = false;
+    updateBattleStationButtons();
+  }
+}
+
+function applyCrewView(view) {
+  if (crewState && view.revision < crewState.revision) return;
+  const changed = !crewState || crewState.station !== view.station;
+  crewState = view;
+  if (changed) setBattleStation(view.station, true);
+  updateBattleStationButtons();
+}
+
+function weaponRequest(shot) { return crewState ? crewCommand({ shot }) : shot; }
+function crewHitRequest(hit) { return crewState ? crewCommand({ hit }) : hit; }
 
 function updateSteeringModifierHint() {
   document.body.dataset.steeringModifier = (flakViewActive || cannonViewActive) ? "shift" : "none";
@@ -1994,9 +2070,10 @@ function changeScoutPlaneTargetSpeed(direction) {
 
 function updatePlayerFlakMount() {
   if (!boat.sternFlak?.mount) return;
-  boat.sternFlak.mount.rotation.y = flakYaw;
+  const observed = crewState && crewState.station !== "flak";
+  boat.sternFlak.mount.rotation.y = observed ? flakAimDisplay.yaw : flakYaw;
   if (boat.sternFlak.elevationRoot) {
-    boat.sternFlak.elevationRoot.rotation.x = -flakPitch;
+    boat.sternFlak.elevationRoot.rotation.x = -(observed ? flakAimDisplay.pitch : flakPitch);
   }
   boat.sternFlak.currentPitch = flakPitch;
   updateSubmarineFlakStowVisual(boat.sternFlak, submarineMode ? playerSubmarineDepthOffset : 0, submarineMode && !flakViewActive);
@@ -2006,9 +2083,10 @@ function updatePlayerFlakMount() {
 
 function updatePlayerCannonMount() {
   if (!boat.bowCannon?.mount) return;
-  boat.bowCannon.mount.rotation.y = cannonYaw;
+  const observed = crewState && crewState.station !== "cannon";
+  boat.bowCannon.mount.rotation.y = observed ? cannonAimDisplay.yaw : cannonYaw;
   if (boat.bowCannon.elevationRoot) {
-    boat.bowCannon.elevationRoot.rotation.x = -cannonPitch;
+    boat.bowCannon.elevationRoot.rotation.x = -(observed ? cannonAimDisplay.pitch : cannonPitch);
   }
   document.body.dataset.cannonYaw = String(Math.round(normalizeAngle(cannonYaw) * 180 / Math.PI));
   document.body.dataset.cannonPitch = String(Math.round(cannonPitch * 180 / Math.PI));
@@ -2803,6 +2881,7 @@ function updateSideViewCameraControls() {
 }
 
 function alignWeaponsForBridge(mode = "flat") {
+  if (crewState && crewState.station === "bridge") return;
   const airDefense = mode === "air-defense";
   const flakWorldPitch = airDefense ? weaponAlignAirDefenseFlakPitch : weaponAlignFlatFlakPitch;
   const cannonWorldPitch = airDefense ? weaponAlignAirDefenseCannonPitch : weaponAlignFlatCannonPitch;
@@ -2828,15 +2907,21 @@ function updateWeaponAlignment(dt) {
   if (!weaponAlignTarget) return;
   weaponAlignTarget.flakPitch = flakPitchForWorldPitch(weaponAlignTarget.flakYaw, weaponAlignTarget.flakWorldPitch);
   weaponAlignTarget.cannonPitch = cannonPitchForWorldPitch(weaponAlignTarget.cannonYaw, weaponAlignTarget.cannonWorldPitch);
-  flakYaw = moveAngleToward(flakYaw, weaponAlignTarget.flakYaw, weaponAlignYawSpeed * dt);
-  flakPitch = moveValueToward(flakPitch, weaponAlignTarget.flakPitch, weaponAlignPitchSpeed * dt);
-  cannonYaw = moveValueToward(cannonYaw, weaponAlignTarget.cannonYaw, weaponAlignYawSpeed * dt);
-  cannonPitch = moveValueToward(cannonPitch, weaponAlignTarget.cannonPitch, weaponAlignPitchSpeed * dt);
+  if (!crewState || crewState.station === "flak") {
+    flakYaw = moveAngleToward(flakYaw, weaponAlignTarget.flakYaw, weaponAlignYawSpeed * dt);
+    flakPitch = moveValueToward(flakPitch, weaponAlignTarget.flakPitch, weaponAlignPitchSpeed * dt);
+  }
+  if (!crewState || crewState.station === "cannon") {
+    cannonYaw = moveValueToward(cannonYaw, weaponAlignTarget.cannonYaw, weaponAlignYawSpeed * dt);
+    cannonPitch = moveValueToward(cannonPitch, weaponAlignTarget.cannonPitch, weaponAlignPitchSpeed * dt);
+  }
   if (
-    Math.abs(shortestAngleDelta(flakYaw, weaponAlignTarget.flakYaw)) < 0.002
-    && Math.abs(flakPitch - weaponAlignTarget.flakPitch) < 0.002
-    && Math.abs(cannonYaw - weaponAlignTarget.cannonYaw) < 0.002
-    && Math.abs(cannonPitch - weaponAlignTarget.cannonPitch) < 0.002
+    (crewState && crewState.station !== "flak"
+      || Math.abs(shortestAngleDelta(flakYaw, weaponAlignTarget.flakYaw)) < 0.002
+      && Math.abs(flakPitch - weaponAlignTarget.flakPitch) < 0.002)
+    && (crewState && crewState.station !== "cannon"
+      || Math.abs(cannonYaw - weaponAlignTarget.cannonYaw) < 0.002
+      && Math.abs(cannonPitch - weaponAlignTarget.cannonPitch) < 0.002)
   ) {
     weaponAlignTarget = null;
   }
@@ -2917,6 +3002,20 @@ function updateBattleStationButtons() {
   flakViewButton?.classList.toggle("is-active", flakViewActive);
   cannonViewButton?.classList.toggle("is-active", cannonViewActive);
   torpedoAidButton?.classList.toggle("is-active", torpedoScopeActive);
+  if (crewState) {
+    for (const [station, button] of [["bridge", bridgeViewButton], ["bridge", torpedoAidButton], ["flak", flakViewButton], ["cannon", cannonViewButton]]) {
+      if (!button) continue;
+      const occupant = crewState.members.find(m => m.station === station);
+      const occupied = occupant && occupant.playerId !== playerId;
+      button.disabled = Boolean(occupied || crewSwitchPending);
+      button.classList.toggle("crew-occupied", Boolean(occupied));
+      button.dataset.occupant = occupant?.name ?? "";
+      button.title = occupied ? `Besetzt: ${occupant.name}` : occupant ? "Deine Position" : "Frei";
+      button.setAttribute("aria-label", `${station === "bridge" ? "Bruecke" : station === "flak" ? "Flak" : "Kanone"}: ${button.title}`);
+    }
+    document.body.dataset.crewStation = crewState.station;
+    document.body.dataset.crewMembers = String(crewState.members.length);
+  }
   if (submarineMode && torpedoAidButton) {
     const torpedoDisabled = !canUseSubmarineTorpedoScope();
     torpedoAidButton.disabled = torpedoDisabled;
@@ -4015,6 +4114,7 @@ function releaseDirectionalInput(direction) {
 }
 
 function changeEngineOrder(direction) {
+  if (crewState && crewState.station !== "bridge") return;
   engineOrder = clamp(engineOrder + direction, 0, engineOrders.length - 1);
 }
 
@@ -4363,6 +4463,7 @@ function updateAltimeter(altitudeUnits) {
 }
 
 function stepRudderDegrees(currentDegrees, direction) {
+  if (crewState && crewState.station !== "bridge") return currentDegrees;
   const stepSize = getRudderStepDegrees();
   const step = stepSize * Math.sign(direction);
   if (currentDegrees !== 0 && Math.sign(currentDegrees) !== Math.sign(step) && Math.abs(currentDegrees) <= stepSize) {
@@ -4398,6 +4499,7 @@ function getPlayerTurnStrength(currentSpeed) {
 }
 
 function startGlobalMouseRudder(event) {
+  if (crewState && crewState.station !== "bridge") return;
   if (playerDamageState !== "active" || event.button !== 2) return false;
   rightMouseRudderActive = true;
   rightMouseRudderStartX = event.clientX;
@@ -4423,6 +4525,7 @@ function isMouseTorpedoButton(button) {
 }
 
 function updateGlobalMouseRudder(event) {
+  if (crewState && crewState.station !== "bridge") return;
   if (!rightMouseRudderActive || playerDamageState !== "active" || (event.buttons & 2) === 0) return;
   const dragDegrees = (event.clientX - rightMouseRudderStartX) * 0.22;
   const maxRudder = getPlayerMaxRudderDegrees();
@@ -4643,6 +4746,7 @@ function formatBuildInfo(info) {
 }
 
 function getPlayerStateEndpoint() {
+  if (crewState) return gameEndpoint(`/game/crew/${crewState.station === "bridge" ? "motion" : "aim"}`);
   return gameEndpoint("/game/player-state");
 }
 
@@ -4674,7 +4778,7 @@ function createPlayerStatePayload(debugTeleport = false) {
 
 function sendFinalPlayerState() {
   if (sideViewSandboxMode || playerDamageState !== "active" || !playerId || !playerTeamId) return;
-  const payload = JSON.stringify(createPlayerStatePayload(debugTeleportPending));
+  const payload = JSON.stringify(crewState ? crewCommand({ motion: createPlayerStatePayload(false) }) : createPlayerStatePayload(debugTeleportPending));
   const endpoint = getPlayerStateEndpoint();
   if (navigator.sendBeacon) {
     const sent = navigator.sendBeacon(endpoint, new Blob([payload], { type: "application/json" }));
@@ -4695,6 +4799,7 @@ function sendFinalPlayerState() {
 }
 
 function getFireTorpedoEndpoint() {
+  if (crewState) return gameEndpoint("/game/crew/fire-torpedo");
   return gameEndpoint("/game/fire-torpedo");
 }
 
@@ -4703,14 +4808,17 @@ function getDropBombEndpoint() {
 }
 
 function getFireFlakEndpoint() {
+  if (crewState) return gameEndpoint("/game/crew/fire-flak");
   return gameEndpoint("/game/fire-flak");
 }
 
 function getFireCannonEndpoint() {
+  if (crewState) return gameEndpoint("/game/crew/fire-cannon");
   return gameEndpoint("/game/fire-cannon");
 }
 
 function getReportPlaneHitEndpoint() {
+  if (crewState) return gameEndpoint("/game/crew/report-plane-hit");
   return gameEndpoint("/game/report-plane-hit");
 }
 
@@ -5094,7 +5202,7 @@ function updatePlayerList(ships, killsByPlayer = {}) {
   humanShips.forEach((ship) => {
     const row = document.createElement("div");
     const teamClass = `player-list-row-${getTeamDefinition(ship.teamId)?.className ?? "dark"}`;
-    row.className = `player-list-row ${teamClass}${ship.controlledBy === playerId ? " player-list-row-own" : ""}`;
+    row.className = `player-list-row ${teamClass}${ship.controlledBy === (crewState?.controller ?? playerId) ? " player-list-row-own" : ""}`;
 
     const marker = createPlayerListMarker(ship);
 
@@ -5474,7 +5582,7 @@ async function sendPlayerState() {
     const response = await fetch(getPlayerStateEndpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(createPlayerStatePayload(debugTeleport)),
+      body: JSON.stringify(crewState ? crewCommand({ motion: createPlayerStatePayload(false) }) : createPlayerStatePayload(debugTeleport)),
       signal: controller.signal
     });
     if (!response.ok) {
@@ -5515,6 +5623,7 @@ function requestPlayerWeaponFire() {
 }
 
 async function requestPlayerTorpedoFire() {
+  if (crewState && crewState.station !== "bridge") return;
   if (fireTorpedoRequestInFlight || playerDamageState !== "active") return;
 
   fireTorpedoRequestInFlight = true;
@@ -5552,7 +5661,7 @@ async function requestPlayerTorpedoFire() {
     const response = await fetch(getFireTorpedoEndpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(fireRequest)
+      body: JSON.stringify(crewState ? crewCommand({ tubeSide: requestedTubeSide }) : fireRequest)
     });
     if (!response.ok) {
       if (response.status === 403) {
@@ -5673,10 +5782,14 @@ function applyServerGameSnapshot(snapshot) {
   updatePlayerList(snapshot.ships, snapshot.killsByPlayer);
   updateKillFeedFromSnapshot(snapshot);
 
-  const ownShip = snapshot.ships.find((ship) => ship.controlledBy === playerId && ship.teamId === playerTeamId);
+  const ownShip = snapshot.ships.find((ship) => ship.controlledBy === (crewState?.controller ?? playerId) && ship.teamId === playerTeamId);
   const previousOwnShip = snapshot.ships.find((ship) => ship.id === playerServerShipId);
   const activeIds = new Set(snapshot.ships.map((ship) => ship.id));
   if (ownShip) {
+    if (crewState) {
+      if (crewState.station !== "flak") { flakYaw = ownShip.flakYaw; flakPitch = ownShip.flakPitch; }
+      if (crewState.station !== "cannon") { cannonYaw = ownShip.cannonYaw; cannonPitch = ownShip.cannonPitch; }
+    }
     const assignedShipChanged = playerServerShipId !== ownShip.id;
     if (assignedShipChanged && playerServerSnapshotReceived && playerServerShipId) {
       sendClientGameEvent("player-ship-change-pending", {
@@ -5704,6 +5817,8 @@ function applyServerGameSnapshot(snapshot) {
         });
         alignPlayerBoatToServerShip(ownShip);
         playerServerSnapshotReceived = true;
+      } else if (crewState && crewState.station !== "bridge") {
+        updatePlayerServerTarget(ownShip, snapshot.t);
       } else {
         playerServerTarget = null;
         document.body.dataset.playerServerCorrection = "client-authoritative";
@@ -5713,7 +5828,7 @@ function applyServerGameSnapshot(snapshot) {
     playerServerSnapshotReceived &&
     playerServerShipId &&
     playerDamageState === "active" &&
-    (!previousOwnShip || previousOwnShip.controlledBy !== playerId || previousOwnShip.state !== "active")
+    (!previousOwnShip || previousOwnShip.controlledBy !== (crewState?.controller ?? playerId) || previousOwnShip.state !== "active")
   ) {
     pendingPlayerServerShip = null;
     document.body.dataset.pendingPlayerShipId = "";
@@ -6077,6 +6192,7 @@ function applyGameStreamMessage(data) {
     return;
   }
 
+  if (message.crew) applyCrewView(message.crew);
   applyServerGameSnapshot(message.state);
   document.body.dataset.gameEventSource = gameEventSourceReady ? "open" : "message";
   document.body.dataset.gameEventTime = String(message.state?.t ?? "");
@@ -9047,6 +9163,7 @@ function createCannonSystem(scene, materials, parent) {
 }
 
 function firePlayerFlak() {
+  if (crewState && crewState.station !== "flak") return;
   if (!flakViewActive || playerDamageState !== "active" || time < flakSystem.nextFireTime) return;
   if (submarineMode && playerSubmarineDepthState !== submarineDepthStates.surface) {
     document.body.dataset.flakFire = "blocked-submerged";
@@ -9069,6 +9186,7 @@ function firePlayerFlak() {
 }
 
 function firePlayerCannon() {
+  if (crewState && crewState.station !== "cannon") return;
   if (!cannonViewActive || playerDamageState !== "active") return;
   if (time < nextCannonFireTime) {
     document.body.dataset.cannonFire = "reloading";
@@ -9101,6 +9219,18 @@ function installScenarioTestHooks() {
   if (!scenarioTestMode) return;
 
   window.seaBattleScenarioTest = {
+    cannonAimDisplay() {
+      return { targetYaw: cannonYaw, targetPitch: cannonPitch,
+        yaw: boat.bowCannon.mount.rotation.y, pitch: -boat.bowCannon.elevationRoot.rotation.x };
+    },
+    cannonEffects() {
+      return {
+        blasts: cannonSystem.muzzleBlasts ?? 0,
+        smoke: cannonSystem.airHitEffects.filter(effect => effect.mesh?.name.startsWith("cannon_muzzle_smoke_")).length,
+        recoil: boat.bowCannon?.barrel?.position.z,
+        barrelBase: boat.bowCannon?.barrelBaseZ
+      };
+    },
     setStation(station) {
       setBattleStation(String(station ?? "bridge"));
       return stationSnapshot();
@@ -10139,7 +10269,7 @@ async function reportPlayerCannonShot(shot) {
     const response = await fetch(getFireCannonEndpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      body: JSON.stringify(weaponRequest({
         playerId,
         teamId: playerTeamId,
         shipId: playerServerShipId,
@@ -10151,7 +10281,7 @@ async function reportPlayerCannonShot(shot) {
         vz: shot.velocity.z,
         weaponYaw: shot.weaponYaw ?? cannonYaw,
         weaponPitch: shot.weaponPitch ?? cannonPitch
-      })
+      }))
     });
     if (response.status === 403) {
       expireActiveLogin("fire-cannon-403");
@@ -10170,7 +10300,7 @@ async function reportPlayerFlakShot(shot) {
     const response = await fetch(getFireFlakEndpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      body: JSON.stringify(weaponRequest({
         playerId,
         teamId: playerTeamId,
         shipId: playerServerShipId,
@@ -10182,7 +10312,7 @@ async function reportPlayerFlakShot(shot) {
         vz: shot.velocity.z,
         weaponYaw: shot.weaponYaw ?? flakYaw,
         weaponPitch: shot.weaponPitch ?? flakPitch
-      })
+      }))
     });
     if (response.status === 403) {
       expireActiveLogin("fire-flak-403");
@@ -10207,7 +10337,7 @@ async function reportLocalPlaneHit(hit, weaponType) {
     const response = await fetch(getReportPlaneHitEndpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      body: JSON.stringify(crewHitRequest({
         playerId,
         teamId: playerTeamId,
         shipId: playerServerShipId,
@@ -10216,7 +10346,7 @@ async function reportLocalPlaneHit(hit, weaponType) {
         x: hit.position.x,
         y: hit.position.y,
         z: hit.position.z
-      })
+      }))
     });
     if (response.status === 403) {
       expireActiveLogin("report-plane-hit-403");
@@ -10561,6 +10691,7 @@ function createFlakMuzzleFlash(system, position, direction) {
 }
 
 function createCannonMuzzleBlast(system, position, direction) {
+  system.muzzleBlasts = (system.muzzleBlasts ?? 0) + 1;
   const flashId = system.nextId;
   const flash = MeshBuilder.CreateSphere(`cannon_muzzle_flash_${flashId}`, {
     diameter: 0.82 * shipGunVisualScale,
@@ -11665,7 +11796,7 @@ function syncServerFlakProjectiles(projectiles, snapshotClientTime = time) {
   const activeFlakIds = new Set();
   const activeCannonIds = new Set();
   projectiles
-    .filter((snapshot) => snapshot.shipId !== playerServerShipId)
+    .filter((snapshot) => snapshot.shooterPlayerId !== playerId)
     .forEach((snapshot) => {
       const system = isCannonServerProjectile(snapshot.id) ? cannonSystem : flakSystem;
       const visualId = getServerProjectileVisualId(snapshot);
@@ -11738,6 +11869,33 @@ function emphasizeServerCannonProjectile(visual, materials) {
 }
 
 function createRemoteMuzzleEffectForProjectile(snapshot) {
+  if (snapshot?.shipId === playerServerShipId) {
+    const cannon = isCannonServerProjectile(snapshot.id);
+    // Resolve the muzzle from authoritative aim, not the observer's delayed pose.
+    const weapon = cannon ? boat.bowCannon : boat.sternFlak;
+    const savedYaw = weapon.mount.rotation.y;
+    const savedPitch = weapon.elevationRoot.rotation.x;
+    let shot;
+    try {
+      weapon.mount.rotation.y = cannon ? cannonYaw : flakYaw;
+      weapon.elevationRoot.rotation.x = -(cannon ? cannonPitch : flakPitch);
+      weapon.mount.computeWorldMatrix(true);
+      shot = cannon ? getPlayerCannonShot() : getPlayerFlakShot();
+    } finally {
+      weapon.mount.rotation.y = savedYaw;
+      weapon.elevationRoot.rotation.x = savedPitch;
+      weapon.mount.computeWorldMatrix(true);
+      weapon.elevationRoot.computeWorldMatrix(true);
+    }
+    if (!shot) return;
+    if (cannon) {
+      triggerCannonBarrelRecoil(boat.bowCannon, time);
+      createCannonMuzzleBlast(cannonSystem, shot.muzzle, shot.direction);
+    } else {
+      createFlakMuzzleFlash(flakSystem, shot.muzzle, shot.direction);
+    }
+    return;
+  }
   const motion = snapshot?.shipId ? enemyMotions.find((candidate) => candidate.id === snapshot.shipId) : null;
   if (!motion || motion.id === playerServerShipId || !motion.root?.isEnabled?.()) return;
   const isCannonProjectile = isCannonServerProjectile(snapshot.id);
