@@ -26,8 +26,7 @@ body[data-crew-station="cannon"] .telegraph-scale {
 body[data-crew-station="flak"] .telegraph-key-hints,
 body[data-crew-station="cannon"] .telegraph-key-hints,
 body[data-crew-station="flak"] .rudder-key-hints,
-body[data-crew-station="cannon"] .rudder-key-hints,
-body[data-crew-station="bridge"] .align-weapons-group {
+body[data-crew-station="cannon"] .rudder-key-hints {
   visibility: hidden;
 }
 @media (max-width: 600px) {

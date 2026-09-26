@@ -2881,7 +2881,9 @@ function updateSideViewCameraControls() {
 }
 
 function alignWeaponsForBridge(mode = "flat") {
-  if (crewState && crewState.station === "bridge") return;
+  if (crewState && crewState.station === "bridge") {
+    return alignUnoccupiedCrewWeapons(mode);
+  }
   const airDefense = mode === "air-defense";
   const flakWorldPitch = airDefense ? weaponAlignAirDefenseFlakPitch : weaponAlignFlatFlakPitch;
   const cannonWorldPitch = airDefense ? weaponAlignAirDefenseCannonPitch : weaponAlignFlatCannonPitch;
@@ -2895,6 +2897,22 @@ function alignWeaponsForBridge(mode = "flat") {
     mode: airDefense ? "air-defense" : "flat"
   };
   document.body.dataset.weaponAlign = weaponAlignTarget.mode;
+}
+
+async function alignUnoccupiedCrewWeapons(mode) {
+  const command = crewCommand({ mode });
+  try {
+    const response = await fetch(gameEndpoint("/game/crew/align-weapons"), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(command)
+    });
+    if (!response.ok) throw new Error(`Weapon alignment failed: ${response.status}`);
+    // The next regular snapshot supplies the authoritative angles to observers.
+    document.body.dataset.weaponAlign = mode;
+  } catch (error) {
+    document.body.dataset.weaponAlign = "error";
+    document.body.dataset.weaponAlignError = error.message;
+  }
 }
 
 function cancelWeaponAlignment() {
@@ -8155,7 +8173,7 @@ function createEnemyMotion(vehicle, heading, engineOrder, index = 0, serverShip 
     propellerRoot: vehicle.propellerRoot,
     propellerRoots: vehicle.propellerRoots,
     shadow: vehicle.shadow,
-    flakYaw: Number.isFinite(serverShip?.flakYaw) ? serverShip.flakYaw : 0,
+    flakYaw: Number.isFinite(serverShip?.flakYaw) ? serverShip.flakYaw : Math.PI,
     flakPitch: Number.isFinite(serverShip?.flakPitch) ? serverShip.flakPitch : 0,
     cannonYaw: Number.isFinite(serverShip?.cannonYaw) ? serverShip.cannonYaw : 0,
     cannonPitch: Number.isFinite(serverShip?.cannonPitch) ? serverShip.cannonPitch : 0,
