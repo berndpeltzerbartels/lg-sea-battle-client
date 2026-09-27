@@ -7,6 +7,23 @@ const source = readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
 const start = source.indexOf("function applyServerGameSnapshot(snapshot) {");
 const guard = source.slice(start, source.indexOf("  const snapshotClientTime =", start)) + " accepted++; }";
 
+test("restart check works without a crew stream and tolerates an offline server", async () => {
+  const start = source.indexOf("async function checkServerRestart() {");
+  const end = source.indexOf("\n}\n", start) + 2;
+  const ctx = {
+    serverRestartPending: false, gameState: { instanceId: "old" },
+    getGameStateEndpoint: () => "/game/state",
+    fetch: async () => { throw new Error("offline"); },
+    applyServerGameSnapshot: snapshot => { ctx.serverRestartPending = snapshot.instanceId === "new"; }
+  };
+  const check = runInNewContext(source.slice(start, end) + "\ncheckServerRestart", ctx);
+  assert.equal(await check(), false);
+  ctx.fetch = async () => ({ ok: true, json: async () => ({ instanceId: "old", ships: [] }) });
+  assert.equal(await check(), false);
+  ctx.fetch = async () => ({ ok: true, json: async () => ({ instanceId: "new", ships: [] }) });
+  assert.equal(await check(), true);
+});
+
 test("new server instance sinks once even with identical ship IDs; old packets cannot revive it", () => {
   const ctx = {
     gameState: { instanceId: "old" }, serverRestartPending: false,

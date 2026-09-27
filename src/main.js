@@ -5637,6 +5637,7 @@ async function sendPlayerState() {
       signal: controller.signal
     });
     if (!response.ok) {
+      if ((response.status === 403 || response.status === 409) && await checkServerRestart()) return;
       if (response.status === 403) {
         expireActiveLogin("player-state-403");
         return;
@@ -5944,6 +5945,21 @@ function applyServerGameSnapshot(snapshot) {
   document.body.dataset.playerStateSync = "ok";
 }
 
+async function checkServerRestart() {
+  if (serverRestartPending) return true;
+  try {
+    const response = await fetch(getGameStateEndpoint(), { cache: "no-store" });
+    if (!response.ok) return false;
+    const snapshot = await response.json();
+    if (gameState.instanceId && snapshot.instanceId && gameState.instanceId !== snapshot.instanceId) {
+      applyServerGameSnapshot(snapshot);
+    }
+  } catch {
+    // The server may still be starting; the next reconnect or command retries.
+  }
+  return serverRestartPending;
+}
+
 function syncServerFlakImpacts(impacts) {
   if (!Array.isArray(impacts)) return;
   impacts.forEach((impact) => {
@@ -6232,6 +6248,7 @@ function connectGameEventStream() {
   gameEventSource.onopen = () => {
     gameEventSourceReady = true;
     document.body.dataset.gameEventSource = "open";
+    void checkServerRestart();
   };
   gameEventSource.onmessage = (event) => {
     applyGameStreamMessage(event.data);
@@ -6239,6 +6256,7 @@ function connectGameEventStream() {
   gameEventSource.onerror = () => {
     gameEventSourceReady = false;
     document.body.dataset.gameEventSource = "error";
+    void checkServerRestart();
   };
 }
 
