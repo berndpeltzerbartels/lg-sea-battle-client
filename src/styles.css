@@ -4930,3 +4930,66 @@ body[data-cannon-view="active"] .weapon-aim-hints {
     transform: translateY(1px);
   }
 }
+
+.map-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+#expandDebugMap {
+  display: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgb(155 229 223 / 40%);
+  border-radius: 4px;
+  background: #092732;
+  color: #c7f4ef;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+body[data-debug-map="true"] #expandDebugMap {
+  display: block;
+}
+
+body[data-debug-map="true"] .nav-panel {
+  display: grid !important;
+  z-index: 20;
+}
+
+body[data-debug-map="true"] .map-control {
+  display: grid;
+}
+
+body.debug-map-expanded[data-debug-map="true"] .nav-panel {
+  position: fixed;
+  inset: 12px auto auto 12px;
+  z-index: 100;
+  width: min(1100px, calc(100vw - 24px));
+  height: calc(100dvh - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  grid-template-columns: minmax(0, 1fr);
+  --map-canvas-height: max(120px, calc(100dvh - 190px));
+}
+
+body.debug-map-expanded .nav-instrument-map {
+  display: block;
+  background: #051b28;
+}
+
+@media (max-height: 735px) {
+  body[data-debug-map="true"] {
+    --map-panel-height: 280px;
+  }
+  body[data-debug-map="true"] .nav-panel {
+    --map-canvas-height: 160px;
+  }
+  body.debug-map-expanded[data-debug-map="true"] .nav-panel {
+    --map-canvas-height: max(120px, calc(100dvh - 190px));
+  }
+}

@@ -60,6 +60,14 @@ const shipContrastDebug = directSideViewSandboxRequested && urlParams.get("shipC
 let debugMapEnabled = urlParams.get("debug") === "1";
 let debugMarkerMapEnabled = debugMapEnabled && urlParams.get("markers") === "1";
 let bigMapEnabled = debugMapEnabled && urlParams.get("bigMap") !== "0";
+document.getElementById("expandDebugMap")?.addEventListener("click", (event) => {
+  const expanded = document.body.classList.toggle("debug-map-expanded");
+  event.currentTarget.setAttribute("aria-expanded", String(expanded));
+  const label = expanded ? "Karte verkleinern" : "Karte vergrößern";
+  event.currentTarget.setAttribute("aria-label", label);
+  event.currentTarget.title = label;
+  event.currentTarget.textContent = expanded ? "\u00d7" : "\u2922";
+});
 const hideBeachDebug = urlParams.get("hide-beach") === "1";
 document.body.classList.toggle("big-map", bigMapEnabled);
 document.body.dataset.bigMap = String(bigMapEnabled);
@@ -447,6 +455,7 @@ const instrumentPaths = prepareInstrumentPaths(worldMap.instrumentMap);
 document.body.dataset.worldSource = "server";
 document.body.dataset.worldLandmasses = String(worldLandmasses.length);
 const gameState = await loadGameState();
+let serverRestartPending = false;
 document.body.dataset.gameStateSource = "server";
 document.body.dataset.serverGameState = gameState.state;
 document.body.dataset.serverShips = String(gameState.ships.length);
@@ -3301,6 +3310,8 @@ function setupDebugMapTeleport(canvas) {
 }
 
 function teleportPlayerToDebugMapPosition(target) {
+    if (playerDamageState !== "active" || serverRestartPending || debugTeleportPending
+        || (crewState && crewState.station !== "bridge")) return;
     boat.root.position.x = target.x;
     boat.root.position.z = target.z;
     playerBearingPosition = new Vector3(target.x, boat.root.position.y, target.z);
@@ -5050,6 +5061,14 @@ function toggleDebugMap() {
   debugMapEnabled = !debugMapEnabled;
   if (!debugMapEnabled) {
     debugMarkerMapEnabled = false;
+    document.body.classList.remove("debug-map-expanded");
+    const expandButton = document.getElementById("expandDebugMap");
+    expandButton?.setAttribute("aria-expanded", "false");
+    expandButton?.setAttribute("aria-label", "Karte vergrößern");
+    if (expandButton) {
+      expandButton.title = "Karte vergrößern";
+      expandButton.textContent = "\u2922";
+    }
   }
   bigMapEnabled = debugMapEnabled;
   document.body.dataset.debugMap = String(debugMapEnabled);
@@ -5603,6 +5622,7 @@ function syncMultiplayerState(now) {
 }
 
 async function sendPlayerState() {
+  if (serverRestartPending) return;
   playerStateRequestInFlight = true;
   playerStateRequestStartedAt = time;
   const requestStartedAt = beginHttpRequest();
@@ -5613,7 +5633,7 @@ async function sendPlayerState() {
     const response = await fetch(getPlayerStateEndpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(crewState ? crewCommand({ motion: createPlayerStatePayload(false) }) : createPlayerStatePayload(debugTeleport)),
+      body: JSON.stringify(crewState ? crewCommand({ motion: createPlayerStatePayload(debugTeleport) }) : createPlayerStatePayload(debugTeleport)),
       signal: controller.signal
     });
     if (!response.ok) {
@@ -5623,9 +5643,14 @@ async function sendPlayerState() {
       }
       throw new Error(`Player state request failed with ${response.status}`);
     }
-    await response.json();
+    const snapshot = await response.json();
     if (debugTeleport) {
       debugTeleportPending = false;
+      applyServerGameSnapshot(snapshot);
+      const confirmedShip = snapshot.ships?.find(ship => ship.id === playerServerShipId && ship.state === "active");
+      if (confirmedShip && !serverRestartPending && playerDamageState === "active") {
+        alignPlayerBoatToServerShip(confirmedShip);
+      }
     }
     document.body.dataset.playerStateSync = "command-ok";
   } catch (error) {
@@ -5803,6 +5828,15 @@ function applyServerGameSnapshot(snapshot) {
   if (!snapshot || !Array.isArray(snapshot.ships)) return;
   if (sideViewSandboxMode) {
     document.body.dataset.playerStateSync = "sandbox-local";
+    return;
+  }
+  if (serverRestartPending) return;
+  if (gameState.instanceId && snapshot.instanceId && gameState.instanceId !== snapshot.instanceId) {
+    serverRestartPending = true;
+    pendingPlayerServerShip = null;
+    playerServerTarget = null;
+    document.body.dataset.serverRestart = "sinking";
+    if (playerDamageState === "active") beginPlayerSinking(null, time);
     return;
   }
   const snapshotClientTime = getSnapshotClientTime(snapshot);
@@ -6546,7 +6580,7 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, headi
   if (debugMapEnabled) {
     drawDebugMapHeightOverlay(ctx, visibleLandZones, bounds, width, height, scale);
   }
-  if (!debugMarkerMapEnabled) {
+  if (!debugMapEnabled && !debugMarkerMapEnabled) {
     drawMapLandLabels(ctx, visibleLandZones, bounds, width, height, scale);
   }
   drawMapLandmarkMarkers(ctx, landZones, bounds, width, height, scale);
@@ -6635,7 +6669,6 @@ function drawDebugMapShips(ctx, bounds, width, height, scale) {
     }
     const point = worldToMapPoint(position, bounds, width, height, scale);
     drawMapUnitMarker(ctx, point.x, point.y, ship, Number.isFinite(ship.heading) ? ship.heading : 0);
-    drawMapShipLabel(ctx, createShipDesignation(ship), point.x + 7, point.y, mapShipColor(ship));
     visibleShips += 1;
   }
   document.body.dataset.debugMapShips = String(visibleShips);
@@ -7115,9 +7148,6 @@ function drawMapLandmarkMarkers(ctx, zones, bounds, width, height, scale) {
   lighthouseLands.forEach((zone, index) => {
     const position = getLighthousePosition(zone, index);
     drawMapLightMarker(ctx, position, bounds, width, height, scale, "lighthouse");
-    if (debugMapEnabled && !debugMarkerMapEnabled) {
-      drawMapLighthouseDebugLabel(ctx, zone, position, bounds, width, height, scale);
-    }
   });
   zones
     .filter((zone) => isVolcanicLandmass(zone))
@@ -7326,6 +7356,8 @@ function drawMapUnitMarker(ctx, x, y, ship, markerHeading) {
   const color = mapShipColor(ship);
   if (getShipVehicleType(ship) === "scout-plane") {
     drawRadarPlaneMarker(ctx, x, y, color, markerHeading);
+  } else if (getShipVehicleType(ship) === "submarine") {
+    drawRadarSubmarineMarker(ctx, x, y, color, markerHeading);
   } else {
     drawRadarShipMarker(ctx, x, y, color, markerHeading);
   }
@@ -8781,6 +8813,10 @@ function updateScoutPlaneFlakHitSequence(playerPlane, now, dt) {
 }
 
 function respawnPlayerBoat(playerBoat) {
+  if (serverRestartPending) {
+    location.reload();
+    return;
+  }
   if (scoutPlaneMode) {
     respawnPlayerScoutPlane(playerBoat);
     return;
@@ -8846,6 +8882,10 @@ function resetPlayerSubmarineDepthAfterRespawn(playerBoat) {
 }
 
 function respawnPlayerScoutPlane(playerPlane) {
+  if (serverRestartPending) {
+    location.reload();
+    return;
+  }
   resetTransientWeaponVisualsAfterRespawn();
   playerRespawnIndex = (playerRespawnIndex + 1) % playerRespawnPoints.length;
   const spawn = playerRespawnPoints[playerRespawnIndex];
