@@ -2,6 +2,8 @@ import { Engine } from "@babylonjs/core/Engines/engine";
 import { prepareInstrumentPaths, radarTransform } from "./instrumentMap.js";
 import { mountCrewInbox } from "./crewInbox.js";
 import { WeaponAimDisplay } from "./weaponAimDisplay.js";
+import { prioritizeMuzzleLight, preserveEnvironmentLight } from "./muzzleLighting.js";
+import { WeaponHeadingHold, WeaponShotEvents } from "./weaponPresentation.js";
 import "./crew.css";
 import { Scene } from "@babylonjs/core/scene";
 import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
@@ -545,12 +547,14 @@ if (shipContrastDebug) {
 const world = new TransformNode("world", scene);
 
 const sun = new DirectionalLight("sun", new Vector3(-0.45, -0.9, 0.32), scene);
+preserveEnvironmentLight(sun);
 sun.position = new Vector3(35, 80, -45);
 sun.intensity = 1.2;
 sun.diffuse = new Color3(0.83, 0.85, 0.83);
 sun.specular = new Color3(0.48, 0.55, 0.62);
 
 const ambient = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
+preserveEnvironmentLight(ambient);
 ambient.intensity = 0.42;
 ambient.diffuse = new Color3(0.5, 0.6, 0.7);
 ambient.groundColor = new Color3(0.2, 0.24, 0.28);
@@ -1089,6 +1093,8 @@ const cannonAimDisplay = new WeaponAimDisplay();
 let cannonSightLevelIndex = 0;
 let cannonSightCycleDirection = 1;
 let weaponAlignTarget = null;
+const weaponHeadingHold = new WeaponHeadingHold();
+const weaponShotEvents = new WeaponShotEvents();
 let heldFlakDirection = 0;
 let heldFlakPitchDirection = 0;
 let heldFlakStartTime = 0;
@@ -1327,10 +1333,12 @@ scene.onBeforeRenderObservable.add(() => {
     );
   }
   if (playerActive && flakViewActive && heldFlakDirection !== 0) {
+    weaponHeadingHold.manual("flak");
     cancelWeaponAlignment();
     flakYaw = normalizeAngle(flakYaw + heldFlakDirection * getHeldFlakSpeed(heldFlakStartTime, flakYawFineSpeed, flakYawMediumSpeed, flakYawFastSpeed, flakYawVeryFastSpeed, flakYawMaxSpeed, flakYawExtremeSpeed) * dt);
   }
   if (playerActive && flakViewActive && heldFlakPitchDirection !== 0) {
+    weaponHeadingHold.manual("flak");
     cancelWeaponAlignment();
     flakPitch = clamp(
       flakPitch + heldFlakPitchDirection * getHeldFlakSpeed(heldFlakPitchStartTime, flakPitchFineSpeed, flakPitchMediumSpeed, flakPitchFastSpeed, flakPitchVeryFastSpeed, flakPitchMaxSpeed, flakPitchExtremeSpeed) * dt,
@@ -1339,10 +1347,12 @@ scene.onBeforeRenderObservable.add(() => {
     );
   }
   if (playerActive && cannonViewActive && heldCannonDirection !== 0) {
+    weaponHeadingHold.manual("cannon");
     cancelWeaponAlignment();
     cannonYaw = normalizeAngle(cannonYaw + heldCannonDirection * getHeldCannonSpeed(heldCannonStartTime, cannonYawFineSpeed, cannonYawExtremeSpeed) * dt);
   }
   if (playerActive && cannonViewActive && heldCannonPitchDirection !== 0) {
+    weaponHeadingHold.manual("cannon");
     cancelWeaponAlignment();
     cannonPitch = clamp(
       cannonPitch + heldCannonPitchDirection * getHeldCannonSpeed(heldCannonPitchStartTime, cannonPitchFineSpeed, cannonPitchExtremeSpeed) * dt,
@@ -2097,10 +2107,10 @@ function holdWeaponWorldHeading(previousHeading, nextHeading) {
   const headingDelta = clamp(getSignedAngularDistance(nextHeading, previousHeading), -weaponHeadingHoldMaxDelta, weaponHeadingHoldMaxDelta);
   if (Math.abs(headingDelta) < 0.00001) return;
 
-  if (flakViewActive) {
+  if (flakViewActive && weaponHeadingHold.follows("flak")) {
     flakYaw = normalizeAngle(flakYaw - headingDelta);
   }
-  if (cannonViewActive) {
+  if (cannonViewActive && weaponHeadingHold.follows("cannon")) {
     cannonYaw = normalizeAngle(cannonYaw - headingDelta);
   }
 }
@@ -2881,6 +2891,8 @@ function updateSideViewCameraControls() {
 }
 
 function alignWeaponsForBridge(mode = "flat") {
+  if (!crewState || crewState.station === "flak" || crewState.station === "bridge") weaponHeadingHold.align("flak");
+  if (!crewState || crewState.station === "cannon" || crewState.station === "bridge") weaponHeadingHold.align("cannon");
   if (crewState && crewState.station === "bridge") {
     return alignUnoccupiedCrewWeapons(mode);
   }
@@ -5881,6 +5893,7 @@ function applyServerGameSnapshot(snapshot) {
     Array.isArray(snapshot.bombImpacts) ? snapshot.bombImpacts : [],
     snapshotClientTime
   );
+  weaponShotEvents.consume(snapshot.sessionId, snapshot.weaponShots ?? [], playerId, createRemoteMuzzleEffectForProjectile);
   syncServerFlakProjectiles(
     Array.isArray(snapshot.flakProjectiles) ? snapshot.flakProjectiles : [],
     snapshotClientTime
@@ -9363,6 +9376,9 @@ function installScenarioTestHooks() {
         } : null
       };
     },
+    weaponHeadingHoldState() {
+      return { flak: weaponHeadingHold.follows("flak"), cannon: weaponHeadingHold.follows("cannon") };
+    },
     setCannonSightLevelForTest(index) {
       setBattleStation("cannon");
       setCannonSightLevel(Number(index ?? 0));
@@ -10692,6 +10708,7 @@ function createFlakMuzzleFlash(system, position, direction) {
   flash.position.copyFrom(position.add(direction.scale(0.08 * shipGunVisualScale)));
 
   const light = new PointLight(`${flash.name}_light`, flash.position.clone(), system.scene);
+  prioritizeMuzzleLight(light);
   light.diffuse = new Color3(1.0, 0.76, 0.42);
   light.specular = new Color3(1.0, 0.78, 0.5);
   light.intensity = 2.0;
@@ -10721,6 +10738,7 @@ function createCannonMuzzleBlast(system, position, direction) {
   flash.isPickable = false;
 
   const light = new PointLight(`${flash.name}_light`, flash.position.clone(), system.scene);
+  prioritizeMuzzleLight(light);
   light.diffuse = new Color3(1.0, 0.84, 0.54);
   light.specular = new Color3(1.0, 0.92, 0.72);
   light.intensity = 5.2;
@@ -11869,7 +11887,6 @@ function createServerFlakProjectile(system, snapshot, snapshotClientTime = time,
   }
   visual.age = Math.max(0, snapshotClientTime - (Number.isFinite(snapshot.firedAt) ? snapshot.firedAt : snapshotClientTime));
   system.serverVisuals.set(visualId, visual);
-  createRemoteMuzzleEffectForProjectile(snapshot);
   return visual;
 }
 
