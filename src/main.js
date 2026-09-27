@@ -6798,7 +6798,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   }
 
   if (Number.isFinite(options.bridgeWeaponHeading)) {
-    drawRadarWeaponLines(ctx, centerX, centerY, radius, heading, options.bridgeWeaponHeading, cannonYaw, flakYaw);
+    drawRadarWeaponLines(ctx, centerX, centerY, radius, heading, options.bridgeWeaponHeading, cannonAimDisplay.yaw, flakAimDisplay.yaw);
   }
 
   const nearestVisible = visibleContacts.reduce((nearest, contact) => (
