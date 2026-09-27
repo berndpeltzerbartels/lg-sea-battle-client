@@ -15282,13 +15282,23 @@ function createBowCannon(scene, materials, parent, name, teamMaterials, bowZ = 2
   barrel.rotation.x = Math.PI / 2;
   barrel.material = metalMaterial;
 
+  const opening = MeshBuilder.CreateDisc(`${name}_cannon_opening`, {
+    radius: 0.026 * cannonScale,
+    tessellation: 14
+  }, scene);
+  opening.parent = barrel;
+  opening.position.y = barrelLength * 0.5 + 0.0002 * cannonScale;
+  opening.rotation.x = Math.PI / 2;
+  opening.material = materials.tubeOpening;
+  opening.isPickable = false;
+
   return {
     mount,
     elevationRoot,
     barrel,
     barrelBaseZ: barrel.position.z,
     muzzleZ: barrel.position.z + barrelLength * 0.5,
-    viewHiddenMeshes: isPlayer ? [platform, turretBase, turretRoof, barrel] : []
+    viewHiddenMeshes: isPlayer ? [platform, turretBase, turretRoof, barrel, opening] : []
   };
 }
 
