@@ -4,6 +4,7 @@ import { mountCrewInbox } from "./crewInbox.js";
 import { WeaponAimDisplay } from "./weaponAimDisplay.js";
 import { prioritizeMuzzleLight, preserveEnvironmentLight } from "./muzzleLighting.js";
 import { WeaponHeadingHold, WeaponShotEvents } from "./weaponPresentation.js";
+import { drawRadarWeaponLines } from "./radarWeaponLines.js";
 import "./crew.css";
 import { Scene } from "@babylonjs/core/scene";
 import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
@@ -6473,16 +6474,19 @@ function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, player
   }
   const radarRange = getSelectedRadarRange();
   const observationPeriscopeActive = isPlayerSubmarineObservationPeriscopeActive();
+  const bridgeWeaponsVisible = !scoutPlaneMode && playerVehicleType === "torpedo-boat" && !flakViewActive && !cannonViewActive;
   const radarTargetLineMode = observationPeriscopeActive
     ? "periscope"
-    : (flakViewActive ? "flak" : (cannonViewActive ? "cannon" : (torpedoScopeActive ? "torpedo" : "hidden")));
+    : (flakViewActive ? "flak" : (cannonViewActive ? "cannon" : (torpedoScopeActive || bridgeWeaponsVisible ? "torpedo" : "hidden")));
   document.body.dataset.radarTargetLineMode = radarTargetLineMode;
   drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, radarHeading, radarRange, {
     flakLookHeading: options.flakLookHeading,
     periscopeLookHeading: observationPeriscopeActive ? normalizeAngle(heading + observationPeriscopeYaw) : null,
-    targetMode: !scoutPlaneMode && (flakViewActive || cannonViewActive || torpedoScopeActive || observationPeriscopeActive),
+    targetMode: !scoutPlaneMode && (flakViewActive || cannonViewActive || torpedoScopeActive || observationPeriscopeActive || bridgeWeaponsVisible),
+    torpedoFiringHeading: heading,
     targetLineMode: radarTargetLineMode === "hidden" ? "torpedo" : radarTargetLineMode,
-    radarTorpedoes: radarTorpedoSnapshots
+    radarTorpedoes: radarTorpedoSnapshots,
+    bridgeWeaponHeading: bridgeWeaponsVisible ? heading : null
   });
   document.body.dataset.radarHeading = String(Math.round(normalizeAngle(radarHeading) * 180 / Math.PI));
 }
@@ -6787,10 +6791,14 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
       radarRange,
       scale,
       options.targetLineMode === "torpedo"
-        ? heading
+        ? options.torpedoFiringHeading
         : (options.targetLineMode === "periscope" ? options.periscopeLookHeading : options.flakLookHeading),
       options.targetLineMode ?? "torpedo"
     );
+  }
+
+  if (Number.isFinite(options.bridgeWeaponHeading)) {
+    drawRadarWeaponLines(ctx, centerX, centerY, radius, heading, options.bridgeWeaponHeading, cannonYaw, flakYaw);
   }
 
   const nearestVisible = visibleContacts.reduce((nearest, contact) => (
@@ -7559,8 +7567,8 @@ function drawRadarTargetLine(ctx, centerX, centerY, radius, playerPosition, visi
   const endY = centerY - Math.cos(relative) * outer;
 
   ctx.save();
-  ctx.strokeStyle = obstruction ? "rgba(255, 239, 164, 0.58)" : "rgba(155, 229, 223, 0.42)";
-  ctx.lineWidth = 1.0;
+  ctx.strokeStyle = obstruction ? "rgba(255, 239, 164, 0.9)" : "rgba(155, 229, 223, 0.42)";
+  ctx.lineWidth = obstruction ? 2.5 : 1.0;
   ctx.lineCap = "round";
   ctx.beginPath();
   ctx.moveTo(centerX + Math.sin(relative) * inner, centerY - Math.cos(relative) * inner);
