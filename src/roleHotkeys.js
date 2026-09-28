@@ -7,7 +7,7 @@ export function roleHotkeys({ role, members = [], playerId, depthChargesReady = 
   if (role === 'bridge') {
     keys.push(['↑ ↓', 'Fahrt'], ['← →', 'Ruder'], ['Leertaste', 'Torpedo'], ['T', 'Torpedo-Präzision']);
     if (torpedoScope) keys.push(['Z', 'Vergrößerung']);
-    if (['flak', 'cannon', 'lookout'].some(free)) keys.push(['A / ⇧A', 'Freie Posten ausrichten']);
+    if (['flak', 'cannon', 'lookout'].some(free)) keys.push(['A', 'Geschütze ausrichten'], ['⇧A', 'Flugabwehr']);
   } else {
     keys.push(['↑ ↓ ← →', role === 'lookout' ? 'Blickrichtung' : 'Zielen'], ['A', 'Ausrichten']);
     if (role === 'lookout') keys.push(['Z', 'Fernglas'], ['⇧C / ⇧F', 'Kanone / Flak ausrichten']);

@@ -5,7 +5,7 @@ test('role hints exclude occupied posts and gunner depth charges', () => {
   const members = [{ playerId: 'gunner', station: 'flak' }, { playerId: 'two', station: 'cannon' }, { playerId: 'three', station: 'lookout' }];
   const bridge = roleHotkeys({ role: 'bridge', playerId: 'captain', members });
   assert.ok(bridge.some(([k]) => k === 'W'));
-  assert.ok(!bridge.some(([k]) => ['F', 'C', 'O', 'A / ⇧A'].includes(k)));
+  assert.ok(!bridge.some(([k]) => ['F', 'C', 'O', 'A', '⇧A'].includes(k)));
   const flak = roleHotkeys({ role: 'flak', playerId: 'gunner', members });
   assert.ok(!flak.some(([k]) => k === 'W'));
   assert.ok(flak.some(([k]) => k === 'A'));
