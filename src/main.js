@@ -1069,9 +1069,9 @@ const submarinePeriscopeModes = {
   alignToBearing: "align-to-bearing",
   observationScope: "observation-scope"
 };
-const submarineBearingAlignTolerance = Math.PI / 120;
+const submarineBearingAlignTolerance = Math.PI / 360;
 const submarineBearingAlignRudderGain = 2.15;
-const submarineBearingAlignMinRudder = 8;
+const submarineBearingAlignMinRudder = 2;
 const submarineBearingAlignStopSpeed = 0.28;
 const submarineEngineStopIndex = engineOrders.findIndex((order) => order.speed === 0);
 const submarineEngineAheadOneThirdIndex = engineOrders.findIndex((order) => order.shortLabel === "1/3");
@@ -2120,7 +2120,7 @@ function updateSubmarineBearingAlignment(dt) {
   }
   if (!canUseSubmarineTorpedoScope()) return;
   const delta = shortestAngleDelta(heading, submarineBearingAlignTarget);
-  const nearlyAligned = Math.abs(delta) <= submarineBearingAlignTolerance && Math.abs(turnVelocity) < 0.04;
+  const nearlyAligned = Math.abs(delta) <= submarineBearingAlignTolerance && Math.abs(turnVelocity) < 0.01;
   if (nearlyAligned) {
     rudderDegrees = 0;
     submarinePeriscopeMode = submarinePeriscopeModes.forwardScope;
@@ -6177,6 +6177,12 @@ function syncServerProjectileHitEffects(hits, ownShip = null) {
       flakSystem.hitEffectIds = new Set(Array.from(flakSystem.hitEffectIds).slice(-48));
     }
     const targetMotion = enemyMotions.find((motion) => motion.id === hit.targetShipId);
+    if (Number.isFinite(hit.y) && hit.y < 0 && Number.isFinite(hit.x) && Number.isFinite(hit.z)) {
+      // Ship-bound explosions can be hidden below the opaque water surface.
+      const surfacePosition = new Vector3(hit.x, 0, hit.z);
+      torpedoSystem.hits += 1;
+      createTorpedoShipWaterColumn(torpedoSystem, surfacePosition, targetMotion?.heading ?? 0);
+    }
     if (isScoutPlaneMotion(targetMotion)) {
       if (targetMotion.state !== "air-hit") {
         beginEnemyScoutPlaneAirHit(targetMotion, hit, time);
@@ -6501,6 +6507,10 @@ function applyServerShipSnapshot(motion, ship) {
   if (motion.state === "sinking") return;
 
   if (ship.state === "sunk") {
+    if (motion.state === "sunk") {
+      motion.root.setEnabled(false);
+      return;
+    }
     if (isScoutPlaneMotion(motion)) {
       motion.serverState = "sunk";
       motion.root.setEnabled(false);
@@ -6513,17 +6523,21 @@ function applyServerShipSnapshot(motion, ship) {
     motion.serverHeading = Number.isFinite(ship.heading) ? ship.heading : motion.serverHeading;
     motion.root.position.x = motion.serverPosition.x;
     motion.root.position.z = motion.serverPosition.z;
+    if (motion.vehicleType === "submarine" && Number.isFinite(ship.y)) {
+      motion.serverPosition.y = remoteVehicleY(ship);
+      motion.root.position.y = motion.serverPosition.y;
+      motion.depthState = getShipDepthState(ship);
+      motion.depthOffset = getRemoteSubmarineDepthOffset(ship);
+    }
     motion.heading = Number.isFinite(ship.heading) ? ship.heading : motion.heading;
     motion.root.setEnabled(true);
     const criticalFlakHit = pendingCriticalFlakShipHitsByTarget.get(motion.id);
     if (criticalFlakHit && !flakSystem.hitEffectIds.has(criticalFlakHit.id)) {
-      flakSystem.hitEffectIds.add(criticalFlakHit.id);
       beginEnemyShipCriticalHit(motion, criticalFlakHit, time);
       return;
     }
     const cannonHit = pendingCannonShipHitsByTarget.get(motion.id);
     if (cannonHit && !flakSystem.hitEffectIds.has(cannonHit.id)) {
-      flakSystem.hitEffectIds.add(cannonHit.id);
       beginEnemyCannonShipHit(motion, cannonHit, time);
       return;
     }
@@ -8702,6 +8716,7 @@ function beginEnemySinking(motion, side, time) {
   motion.sinkAge = 0;
   motion.sinkSide = side || -1;
   motion.sinkStartY = motion.root.position.y;
+  motion.submergedSinking = motion.vehicleType === "submarine" && motion.sinkStartY < submarineWaterlineY - 0.1;
   motion.engineOrder = 0;
   motion.rudder = 0;
   motion.rollImpulse = motion.sinkSide * (fromCriticalShipHit ? 0.06 : fromCannonShipHit ? 0.12 : 0.5);
@@ -8718,6 +8733,11 @@ function beginEnemySinking(motion, side, time) {
 
 function beginEnemyShipCriticalHit(motion, hit, now) {
   if (motion.state !== "active" && motion.state !== "sinking") return;
+
+  if (motion.vehicleType === "submarine" && motion.root.position.y < submarineWaterlineY - 0.1) {
+    if (motion.state === "active") beginEnemySinking(motion, getStableSinkSide(motion.id), now);
+    return;
+  }
 
   const position = getProjectileHitPosition(hit);
   const anchor = createShipDamageAnchor(flakSystem, motion, position, 7.5, {
@@ -8844,8 +8864,10 @@ function updateEnemySinking(motion, dt, time) {
   const ease = easeInOutCubic(t);
   const roll = motion.sinkSide * ((motion.sinkRollStart ?? 0.12) + ease * (motion.sinkRollAmount ?? 1.45)) + motion.rollImpulse;
   const pitch = -ease * 0.28 + Math.sin(time * 1.7) * (1 - t) * 0.025;
-  motion.root.position.y = motion.sinkStartY - ease * torpedoBoatSinkDepth + Math.sin(time * 3.1) * (1 - t) * 0.035;
-  motion.root.rotationQuaternion = Quaternion.FromEulerAngles(pitch, motion.heading, roll);
+  motion.root.position.y = motion.sinkStartY - ease * torpedoBoatSinkDepth
+    + (motion.submergedSinking ? 0 : Math.sin(time * 3.1) * (1 - t) * 0.035);
+  motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
+    motion.submergedSinking ? 0 : pitch, motion.heading, motion.submergedSinking ? 0 : roll);
   updateEnemyBowWake(motion.bowWake, 0, time, dt, motion.root.position, motion.heading);
 
   if (t >= 1) {
