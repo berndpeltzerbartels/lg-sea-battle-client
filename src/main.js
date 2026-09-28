@@ -36,6 +36,7 @@ import { createDepthChargeRacks, depthChargeLanes, depthChargeExitHalfWidth } fr
 import { createDepthChargeAnimator } from "./depthChargeAnimation.js";
 import { createDepthChargeEvents } from "./depthChargeEvents.js";
 import { createZoomIdleTimer, submarineEchoStrength } from "./instrumentHelpers.js";
+import { submarineSeaMotionFactor } from "./submarineSeaMotion.js";
 import { roleHotkeys } from "./roleHotkeys.js";
 
 const canvas = document.getElementById("renderCanvas");
@@ -238,11 +239,6 @@ const submarineDepthTransitionSpeed = 0.28;
 const submarinePeriscopeLiftSpeed = 0.55;
 const submarineWakeFadeStartDepth = 0.42;
 const submarineWakeFadeEndDepth = 0.95;
-const submarineBobbingRatios = {
-  surface: 1,
-  periscope: 0,
-  submerged: 0
-};
 const teamDefinitions = [
   { id: "light", label: "Light", className: "light", shipBase: 50 },
   { id: "dark", label: "Dark", className: "dark", shipBase: 80 },
@@ -1608,7 +1604,7 @@ scene.onBeforeRenderObservable.add(() => {
     boat.root.position.y = scoutPlaneMode
       ? scoutPlaneAltitude
       : (submarineMode ? getPlayerSubmarineWaterlineY() : torpedoBoatWaterlineY) + bob * getPlayerSubmarineBobbingRatio();
-    const submarineUnderwaterMotionFactor = submarineMode && playerSubmarineDepthState !== submarineDepthStates.surface ? 0 : 1;
+    const submarineUnderwaterMotionFactor = submarineMode ? getPlayerSubmarineBobbingRatio() : 1;
     const torpedoBoatTrimPitch = scoutPlaneMode ? 0 : getTorpedoBoatTrimPitch(speed);
     const submarineMotionFactor = submarineMode ? 0.08 * submarineUnderwaterMotionFactor : 1;
     const submarineRollFactor = submarineMode ? 0.04 * submarineUnderwaterMotionFactor : 1;
@@ -4679,11 +4675,7 @@ function getPlayerSubmarineWaterlineY() {
 }
 
 function getPlayerSubmarineBobbingRatio() {
-  return mix(
-    submarineBobbingRatios.surface,
-    submarineBobbingRatios[playerSubmarineDepthState] ?? 1,
-    getPlayerSubmarineDepthRatio()
-  );
+  return submarineMode ? submarineSeaMotionFactor(playerSubmarineDepthState, playerSubmarineDepthOffset) : 1;
 }
 
 function getPlayerSubmarineDepthRatio() {
@@ -8722,12 +8714,7 @@ function getRemoteMotionWaterlineY(motion) {
 
 function getRemoteSubmarineBobbingRatio(motion) {
   if (motion.vehicleType !== "submarine") return 1;
-  const targetRatio = submarineBobbingRatios[motion.depthState] ?? 1;
-  const targetOffset = submarineDepthOffsets[motion.depthState] ?? 0;
-  const ratio = targetOffset === 0
-    ? clamp(Math.abs(motion.depthOffset ?? 0) / Math.abs(submarineDepthOffsets.periscope), 0, 1)
-    : clamp(Math.abs((motion.depthOffset ?? 0) / targetOffset), 0, 1);
-  return mix(submarineBobbingRatios.surface, targetRatio, ratio);
+  return submarineSeaMotionFactor(motion.depthState, motion.depthOffset);
 }
 
 function createEnemyMotion(vehicle, heading, engineOrder, index = 0, serverShip = null) {
@@ -8868,10 +8855,11 @@ function updateEnemyMotion(motion, dt, time, playerPosition, landZones) {
   motion.root.position.y = waterlineY + Math.sin(time * 1.6 + 1.9) * bobAmplitude;
   const trimPitch = getTorpedoBoatTrimPitch(motion.speed);
   const roll = -motion.turnVelocity * 0.42 + motion.rollImpulse + Math.sin(time * 1.4) * 0.01;
+  const seaMotion = getRemoteSubmarineBobbingRatio(motion);
   motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
-    trimPitch + Math.sin(time * 1.9 + 0.8) * 0.015,
+    (trimPitch + Math.sin(time * 1.9 + 0.8) * 0.015) * seaMotion,
     motion.heading,
-    roll
+    roll * seaMotion
   );
   const submarineWakeExposure = motion.vehicleType === "submarine"
     ? getSubmarineWakeExposureRatio(motion.depthOffset ?? 0)
@@ -8923,10 +8911,11 @@ function updateServerEnemyMotion(motion, dt, time) {
     motion.root.position.y = waterlineY + Math.sin(time * 1.6 + 1.9) * bobAmplitude;
     const trimPitch = getTorpedoBoatTrimPitch(motion.speed);
     const roll = Math.sin(time * 1.4) * 0.01;
+    const seaMotion = getRemoteSubmarineBobbingRatio(motion);
     motion.root.rotationQuaternion = Quaternion.FromEulerAngles(
-      trimPitch + Math.sin(time * 1.9 + 0.8) * 0.015,
+      (trimPitch + Math.sin(time * 1.9 + 0.8) * 0.015) * seaMotion,
       motion.heading,
-      roll
+      roll * seaMotion
     );
     const submarineWakeExposure = motion.vehicleType === "submarine"
       ? getSubmarineWakeExposureRatio(motion.depthOffset ?? 0)
