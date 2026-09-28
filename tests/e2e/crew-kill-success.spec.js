@@ -33,7 +33,7 @@ test('crew sees only its own ship kills, including human alias, once per event',
   }
   await pages[0].screenshot({ path: testInfo.outputPath('crew-success.png') });
   for (const page of pages) {
-    await expect(page.locator('#crewKillSuccess')).toBeHidden({ timeout: 6000 });
+    await expect(page.locator('#crewKillSuccess')).toBeHidden({ timeout: 8000 });
     await deliver(page, 'our-ship', 'cannon-own');
     await expect(page.locator('#crewKillSuccess')).toBeHidden();
     await deliver(page, 'our-ship', 'flak-own-second');

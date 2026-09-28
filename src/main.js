@@ -5767,7 +5767,7 @@ function showCrewKillSuccess(events) {
   ).join(" / ");
   toast.hidden = false;
   clearTimeout(killSuccessTimer);
-  killSuccessTimer = setTimeout(() => { toast.hidden = true; }, 4500);
+  killSuccessTimer = setTimeout(() => { toast.hidden = true; }, 6000);
 }
 
 function rememberKillFeedShipLabels(ships) {

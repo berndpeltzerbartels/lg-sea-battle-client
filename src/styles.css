@@ -5171,20 +5171,22 @@ body.debug-map-expanded .nav-instrument-map {
 }
 .crew-kill-success {
   position: fixed;
-  top: 88px;
-  left: 50%;
+  top: clamp(96px, 16vh, 144px);
+  left: calc(50% + var(--view-left, 0px) / 2);
   transform: translateX(-50%);
   z-index: 35;
   width: max-content;
-  max-width: min(520px, calc(100vw - 32px));
+  max-width: min(600px, calc(100vw - var(--view-left, 0px) - 24px));
   box-sizing: border-box;
-  padding: 10px 16px;
-  border: 1px solid rgba(140, 225, 198, .5);
+  padding: 14px 22px;
+  border: 1px solid #a4f0cc;
+  border-left: 4px solid #a4f0cc;
   border-radius: 4px;
-  background: rgba(12, 37, 34, .92);
-  color: #d6fff0;
-  font-size: 14px;
-  font-weight: 600;
+  background: rgba(8, 27, 23, .96);
+  color: #ecfff6;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .35);
+  font-size: 18px;
+  font-weight: 700;
   line-height: 1.4;
   text-align: center;
   overflow-wrap: anywhere;
