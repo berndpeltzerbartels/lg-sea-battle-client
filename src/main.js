@@ -32,6 +32,8 @@ import "@babylonjs/core/Shaders/postprocess.vertex";
 import "@babylonjs/core/Materials/Textures/dynamicTexture";
 import "./styles.css";
 import { createSubmarineModel } from "./submarineModel.js";
+import { createDepthChargeRacks, depthChargeLanes, depthChargeExitHalfWidth } from "./depthChargeRacks.js";
+import { createDepthChargeAnimator } from "./depthChargeAnimation.js";
 
 const canvas = document.getElementById("renderCanvas");
 prepareGameFocus(canvas);
@@ -44,6 +46,8 @@ const engine = new Engine(canvas, true, {
 const scene = new Scene(engine);
 document.body.dataset.appStarted = "true";
 const urlParams = new URLSearchParams(location.search);
+const depthChargeLayout = urlParams.get("depthChargeLayout") === "throwers" ? "throwers" : "stern";
+let depthChargePreview = null;
 const scenarioTestMode = urlParams.get("scenarioTest") === "1";
 const directSideViewSandboxRequested = urlParams.get("setup") === "8"
   || urlParams.get("sandbox") === "side-view"
@@ -1361,6 +1365,7 @@ if (crewState) {
 scene.onBeforeRenderObservable.add(() => {
   const rawFrameSeconds = engine.getDeltaTime() / 1000;
   const dt = Math.min(rawFrameSeconds, maxSimulationFrameSeconds);
+  if (depthChargePreview?.active) depthChargePreview.update(dt);
   time += dt;
   recordPerformanceFrame(rawFrameSeconds, dt);
   const playerActive = playerDamageState === "active";
@@ -2938,6 +2943,17 @@ function setupSideViewCameraTuner() {
   panel.className = "side-view-camera-panel";
   panel.innerHTML = `
     <div class="side-view-camera-title">Kamera Entwurf</div>
+    ${submarineMode ? "" : `<div class="side-view-camera-mode" role="group" aria-label="Wasserbomben">
+      <button type="button" data-depth-charge-layout="stern">Heckgestelle</button>
+      <button type="button" data-depth-charge-layout="throwers">Seitenwerfer</button>
+    </div>
+    <div class="side-view-camera-mode" role="group" aria-label="Wasserbomben abwerfen">
+      <button type="button" data-depth-charge-fire="0">Backbord (2)</button>
+      <button type="button" data-depth-charge-fire="1">Steuerbord (2)</button>
+    </div>
+    <div class="side-view-camera-mode">
+      <button type="button" data-depth-charge-refill>Neu bestücken</button>
+    </div>`}
     <div class="side-view-camera-mode" role="group" aria-label="Kameramodus">
       <button type="button" data-camera-mode="orbit">Orbit</button>
       <button type="button" data-camera-mode="ship">An Bord</button>
@@ -2951,6 +2967,43 @@ function setupSideViewCameraTuner() {
     <div class="side-view-camera-hint">Ziehen dreht, Rad zoomt. Link aktualisiert sich.</div>
   `;
   document.body.appendChild(panel);
+
+  if (boat.depthCharges) {
+    const fireButtons = [...panel.querySelectorAll('[data-depth-charge-fire]')];
+    const refillButton = panel.querySelector('[data-depth-charge-refill]');
+    depthChargePreview = createDepthChargeAnimator(boat.depthCharges, {
+      replenishMagazine: depthChargeLayout === 'stern',
+      onLaunch: (position, _direction, thrown) => {
+        if (thrown) createShipSuperstructureSmoke(cannonSystem, position, 3, .3);
+      },
+      onSplash: (position, direction) => createCannonWaterImpactEffect(cannonSystem, position, direction),
+      onChange: states => {
+        states.forEach((state, index) => {
+          const label = index === 0 ? 'Backbord' : 'Steuerbord';
+          fireButtons[index].disabled = state.busy || state.remaining === 0;
+          fireButtons[index].textContent = `${label} (${state.busy ? 'Lädt' : state.remaining})`;
+        });
+        refillButton.disabled = states.some(state => state.busy);
+      }
+    });
+    boat.depthCharges.root.onDisposeObservable.addOnce(() => depthChargePreview?.dispose());
+    fireButtons.forEach((button, index) => button.addEventListener('click', () => {
+      depthChargePreview.fire(index, getForwardVector(heading).scale(speed));
+      button.blur();
+    }));
+    refillButton.addEventListener('click', () => depthChargePreview.reset());
+  }
+
+  panel.querySelectorAll("[data-depth-charge-layout]").forEach(button => {
+    const selected = button.dataset.depthChargeLayout === depthChargeLayout;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+    button.addEventListener("click", () => {
+      const next = new URL(location.href);
+      next.searchParams.set("depthChargeLayout", button.dataset.depthChargeLayout);
+      location.assign(next.href);
+    });
+  });
 
   const modeButtons = [...panel.querySelectorAll("[data-camera-mode]")];
   const fovInput = panel.querySelector('[data-camera-control="fov"]');
@@ -14752,11 +14805,13 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
 
   const bowCannon = createBowCannon(scene, materials, root, name, teamMaterials, 2.54, true);
   const sternFlak = createSternFlak(scene, materials, root, name, teamMaterials, playerSternFlakZ, true);
+  const depthCharges = createDepthChargeRacks(scene, root, name, getTorpedoBoatDeckY, depthChargeLayout);
 
   return {
     root,
     bowCannon,
     sternFlak,
+    depthCharges,
     flakDeckView: null,
     flakViewHiddenMeshes: sternFlak.viewHiddenMeshes ?? [],
     cannonViewHiddenMeshes: bowCannon.viewHiddenMeshes ?? [],
@@ -15210,23 +15265,27 @@ function createBoatSternBulwarkCapMesh(name, scene) {
   const sternHalfWidth = stern.topWidth * 0.5;
   const sternRimWidth = Math.min(torpedoBoatSternBulwarkRimWidth, sternHalfWidth * 0.55);
   const sternTopY = stern.top + getTorpedoBoatSternBulwarkLift(stern.z);
-  const sternStart = positions.length / 3;
   const sternInnerZ = stern.z + sternRimWidth;
-  positions.push(
-    -sternHalfWidth, sternTopY, stern.z,
-    sternHalfWidth, sternTopY, stern.z,
-    sternHalfWidth, sternTopY, sternInnerZ,
-    -sternHalfWidth, sternTopY, sternInnerZ,
-    -sternHalfWidth, stern.top - 0.006, stern.z,
-    sternHalfWidth, stern.top - 0.006, stern.z,
-    sternHalfWidth, stern.top - 0.006, sternInnerZ,
-    -sternHalfWidth, stern.top - 0.006, sternInnerZ
-  );
-  pushOrientedQuad(indices, positions, sternStart, sternStart + 1, sternStart + 2, sternStart + 3, Vector3.Up());
-  pushOrientedQuad(indices, positions, sternStart, sternStart + 4, sternStart + 5, sternStart + 1, new Vector3(0, 0, -1));
-  pushOrientedQuad(indices, positions, sternStart + 3, sternStart + 2, sternStart + 6, sternStart + 7, new Vector3(0, 0, 1));
-  pushOrientedQuad(indices, positions, sternStart, sternStart + 3, sternStart + 7, sternStart + 4, new Vector3(-1, 0, 0));
-  pushOrientedQuad(indices, positions, sternStart + 1, sternStart + 5, sternStart + 6, sternStart + 2, new Vector3(1, 0, 0));
+  // Two real openings at the discharge rails; retain the centre and corner stanchions.
+  const spans = depthChargeLayout === "throwers" ? [[-sternHalfWidth, sternHalfWidth]] : [
+    [-sternHalfWidth, depthChargeLanes[0] - depthChargeExitHalfWidth],
+    [depthChargeLanes[0] + depthChargeExitHalfWidth, depthChargeLanes[1] - depthChargeExitHalfWidth],
+    [depthChargeLanes[1] + depthChargeExitHalfWidth, sternHalfWidth]
+  ];
+  for (const [left, right] of spans) {
+    const sternStart = positions.length / 3;
+    positions.push(
+      left, sternTopY, stern.z, right, sternTopY, stern.z,
+      right, sternTopY, sternInnerZ, left, sternTopY, sternInnerZ,
+      left, stern.top - 0.006, stern.z, right, stern.top - 0.006, stern.z,
+      right, stern.top - 0.006, sternInnerZ, left, stern.top - 0.006, sternInnerZ
+    );
+    pushOrientedQuad(indices, positions, sternStart, sternStart + 1, sternStart + 2, sternStart + 3, Vector3.Up());
+    pushOrientedQuad(indices, positions, sternStart, sternStart + 4, sternStart + 5, sternStart + 1, new Vector3(0, 0, -1));
+    pushOrientedQuad(indices, positions, sternStart + 3, sternStart + 2, sternStart + 6, sternStart + 7, new Vector3(0, 0, 1));
+    pushOrientedQuad(indices, positions, sternStart, sternStart + 3, sternStart + 7, sternStart + 4, new Vector3(-1, 0, 0));
+    pushOrientedQuad(indices, positions, sternStart + 1, sternStart + 5, sternStart + 6, sternStart + 2, new Vector3(1, 0, 0));
+  }
 
   return createMeshFromData(name, scene, positions, indices, { reverseFaces: true });
 }
@@ -15849,8 +15908,9 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = 
     : null;
 
   const bowWake = createEnemyBowWake(scene, materials, root, name);
+  const depthCharges = createDepthChargeRacks(scene, root, name, getTorpedoBoatDeckY, depthChargeLayout);
 
-  return { root, bowWake, bowCannon, sternFlak };
+  return { root, bowWake, bowCannon, sternFlak, depthCharges };
 }
 
 function createEnemyBowWake(scene, materials, parent, name, options = {}) {
