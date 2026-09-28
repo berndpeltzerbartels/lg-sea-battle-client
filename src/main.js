@@ -35,6 +35,7 @@ import { createSubmarineModel } from "./submarineModel.js";
 import { createDepthChargeRacks, depthChargeLanes, depthChargeExitHalfWidth } from "./depthChargeRacks.js";
 import { createDepthChargeAnimator } from "./depthChargeAnimation.js";
 import { createDepthChargeEvents } from "./depthChargeEvents.js";
+import { roleHotkeys } from "./roleHotkeys.js";
 
 const canvas = document.getElementById("renderCanvas");
 prepareGameFocus(canvas);
@@ -55,6 +56,7 @@ const depthChargeEvents = createDepthChargeEvents(animateDepthChargeRelease, exp
 let depthChargeReadyAt = 0;
 let depthChargeRequestPending = false;
 let depthChargeAudio = null;
+let hotkeySignature = "";
 const scenarioTestMode = urlParams.get("scenarioTest") === "1";
 const directSideViewSandboxRequested = urlParams.get("setup") === "8"
   || urlParams.get("sandbox") === "side-view"
@@ -1116,6 +1118,7 @@ let lookoutBinocularsActive = false;
 const handledLookoutDecisions = new Set();
 let lookoutRequestWasPending = false;
 let lookoutYaw = 0;
+let lookoutAlignTarget = false;
 let lookoutPitch = 0;
 const lookoutHeldDirections = new Set();
 let lookoutYawStartTime = 0;
@@ -1667,6 +1670,11 @@ scene.onBeforeRenderObservable.add(() => {
     const pitchSpeed = getHeldCannonSpeed(lookoutPitchStartTime, cannonPitchFineSpeed, cannonPitchExtremeSpeed, sightLevel);
     lookoutYaw = normalizeAngle(lookoutYaw + dt * yawSpeed * (Number(lookoutHeldDirections.has("right")) - Number(lookoutHeldDirections.has("left"))));
     lookoutPitch = clamp(lookoutPitch + dt * pitchSpeed * (Number(lookoutHeldDirections.has("up")) - Number(lookoutHeldDirections.has("down"))), -1.2, 1.2);
+    if (lookoutAlignTarget) {
+      lookoutYaw = moveAngleToward(lookoutYaw, 0, weaponAlignYawSpeed * dt);
+      lookoutPitch = moveValueToward(lookoutPitch, 0, weaponAlignPitchSpeed * dt);
+      if (Math.abs(lookoutYaw) < .002 && Math.abs(lookoutPitch) < .002) lookoutAlignTarget = false;
+    }
   }
   const cameraSetup = getPlayerCameraSetup(forward);
   const desiredCameraPosition = cameraSetup.position;
@@ -1976,6 +1984,10 @@ async function changeCrewStation(station) {
 function applyCrewView(view) {
   if (crewState && view.revision < crewState.revision) return;
   const changed = !crewState || crewState.station !== view.station;
+  if (crewState && view.lookoutReset !== crewState.lookoutReset) {
+    lookoutYaw = 0;
+    lookoutPitch = 0;
+  }
   crewState = view;
   if (changed) setBattleStation(view.station, true);
   updateBattleStationButtons();
@@ -3122,6 +3134,10 @@ function updateSideViewCameraControls() {
 }
 
 function alignWeaponsForBridge(mode = "flat") {
+  if (lookoutViewActive) {
+    lookoutAlignTarget = true;
+    return;
+  }
   if (!crewState || crewState.station === "flak" || crewState.station === "bridge") weaponHeadingHold.align("flak");
   if (!crewState || crewState.station === "cannon" || crewState.station === "bridge") weaponHeadingHold.align("cannon");
   if (crewState && crewState.station === "bridge") {
@@ -3152,13 +3168,16 @@ function updateDepthChargeButton() {
   if (!button) return;
   button.hidden = !canDropDepthCharges();
   const remaining = Math.max(0, Math.ceil(depthChargeReadyAt - time));
-  button.disabled = !playerActive || depthChargeRequestPending || remaining > 0;
+  button.disabled = playerDamageState !== "active" || depthChargeRequestPending || remaining > 0;
   const label = remaining ? `Wasserbomben (${remaining}s)` : "Wasserbomben";
-  if (button.firstElementChild.textContent !== label) button.firstElementChild.textContent = label;
+  if (button.firstElementChild.textContent !== label) {
+    button.firstElementChild.textContent = label;
+    updateRoleHotkeys();
+  }
 }
 
 async function dropDepthCharges() {
-  if (!canDropDepthCharges() || !playerActive || depthChargeRequestPending || time < depthChargeReadyAt) return;
+  if (!canDropDepthCharges() || playerDamageState !== "active" || depthChargeRequestPending || time < depthChargeReadyAt) return;
   // Audio must be unlocked by a user gesture, never by a network event.
   const Audio = window.AudioContext || window.webkitAudioContext;
   if (Audio) {
@@ -3381,6 +3400,37 @@ function updateBattleStationButtons() {
     torpedoAidButton.classList.toggle("is-disabled", torpedoDisabled);
   }
   updateCannonSightDisplay();
+  const nothingFree = crewState?.station === "bridge" && ["flak", "cannon", "lookout"].every(station =>
+    crewState.members.some(m => m.station === station));
+  if (alignWeaponsButton) alignWeaponsButton.disabled = !!nothingFree;
+  if (alignAirDefenseButton) {
+    alignAirDefenseButton.disabled = !!nothingFree;
+    alignAirDefenseButton.hidden = lookoutViewActive;
+  }
+  updateRoleHotkeys();
+}
+
+function updateRoleHotkeys() {
+  const panel = document.getElementById("roleHotkeys");
+  if (!panel) return;
+  panel.hidden = playerVehicleType !== "torpedo-boat" || sideViewSandboxMode;
+  if (panel.hidden) return;
+  const role = crewState?.station ?? (lookoutViewActive ? "lookout" : cannonViewActive ? "cannon" : flakViewActive ? "flak" : "bridge");
+  const entries = roleHotkeys({ role, members: crewState?.members, playerId,
+    depthChargesReady: canDropDepthCharges() && time >= depthChargeReadyAt,
+    radarModes: !singleRadarMode, torpedoScope: torpedoScopeActive });
+  const signature = JSON.stringify(entries);
+  if (signature === hotkeySignature) return;
+  hotkeySignature = signature;
+  panel.replaceChildren(...entries.map(([key, label]) => {
+    const row = document.createElement("div");
+    const shortcut = document.createElement("kbd");
+    shortcut.textContent = key;
+    const text = document.createElement("span");
+    text.textContent = label;
+    row.append(shortcut, text);
+    return row;
+  }));
 }
 
 function cycleCannonSightLevel() {
@@ -4310,6 +4360,7 @@ function formatInputEvent(event) {
 
 function pressDirectionalInput(direction, options = {}) {
   if (lookoutViewActive) {
+    lookoutAlignTarget = false;
     if (!lookoutHeldDirections.has(direction)) {
       if (direction === "left" || direction === "right") lookoutYawStartTime = time;
       else lookoutPitchStartTime = time;

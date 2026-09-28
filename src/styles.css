@@ -1225,6 +1225,29 @@ body[data-player-vehicle="submarine"] .align-weapons-group {
 #depthChargeButton:not([hidden]) { grid-column: 1 / -1; }
 .align-weapons-button:disabled { opacity: .45; cursor: default; }
 
+.role-hotkeys { display: none; }
+@media (min-width: 1400px) and (min-height: 850px) {
+  .role-hotkeys:not([hidden]) {
+    display: grid;
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    width: 226px;
+    padding: 10px;
+    box-sizing: border-box;
+    gap: 5px;
+    border: 1px solid rgb(155 229 223 / 22%);
+    border-radius: 4px;
+    background: rgb(2 20 29 / 78%);
+    color: rgb(230 242 241 / 75%);
+    font: 11px/1.35 Inter, Arial, sans-serif;
+    pointer-events: none;
+    z-index: 4;
+  }
+  .role-hotkeys > div { display: grid; grid-template-columns: 76px 1fr; gap: 5px; }
+  .role-hotkeys kbd { color: #9be5df; font: inherit; }
+}
+
 .align-weapons-button:hover,
 .align-weapons-button:focus-visible {
   border-color: rgb(255 107 74 / 72%);
