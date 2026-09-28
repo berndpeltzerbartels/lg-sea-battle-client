@@ -21,7 +21,7 @@ const constants = ['playerSternFlakScale', 'flakBarrelLength', 'flakBarrelCenter
 const buildFlak = new Function('MeshBuilder', 'TransformNode', 'getTorpedoBoatDeckY', 'createOpenFlakTurretWall',
   `${constants}\n${extract('createSternFlak')}\nreturn createSternFlak;`)(MeshBuilder, TransformNode, deckY, (name, scene) => new Mesh(name, scene));
 
-for (const layout of ['stern', 'throwers']) test(`${layout}: shared geometry, one loaded charge and one accessible reserve per side`, () => {
+for (const layout of ['stern', 'throwers', 'combined']) test(`${layout}: shared geometry, one loaded charge and one accessible reserve per side`, () => {
   const engine = new NullEngine();
   try {
     const scene = new Scene(engine);
@@ -29,7 +29,7 @@ for (const layout of ['stern', 'throwers']) test(`${layout}: shared geometry, on
       const boat = new TransformNode(name, scene);
       const model = createDepthChargeRacks(scene, boat, name, deckY, layout);
       assert.equal(model.root.parent, boat);
-      assert.equal(model.racks.length, 2);
+      assert.equal(model.racks.length, layout === 'combined' ? 4 : 2);
       for (const rack of model.racks) {
         assert.equal(rack.charges.length, 2);
         assert.equal((rack.gate ?? rack.cup).parent, rack.root);
@@ -39,12 +39,13 @@ for (const layout of ['stern', 'throwers']) test(`${layout}: shared geometry, on
         for (const mesh of rack.root.getChildMeshes()) {
           mesh.computeWorldMatrix(true);
           const bounds = mesh.getBoundingInfo().boundingBox;
-          if (layout === 'stern') {
+          if (rack.gate) {
             assert.ok(bounds.maximumWorld.z < -3.8, 'magazine and rails remain behind the flak');
             assert.ok(bounds.maximumWorld.y < .675, 'less than half a metre above the deck at boat scale');
           } else {
-            assert.ok(bounds.minimumWorld.z > -1.5 && bounds.maximumWorld.z < -1.1, 'between funnel and flak');
-            assert.ok(Math.abs(bounds.minimumWorld.x) < .73 && Math.abs(bounds.maximumWorld.x) < .73, 'inside the deck edge');
+            assert.ok(bounds.minimumWorld.z > 0 && bounds.maximumWorld.z < .2, 'forward of the funnel and behind torpedo tubes');
+            assert.ok(Math.abs(bounds.minimumWorld.x) < .78 && Math.abs(bounds.maximumWorld.x) < .78, 'inside the deck edge');
+            assert.ok(Math.min(Math.abs(bounds.minimumWorld.x), Math.abs(bounds.maximumWorld.x)) > .46, 'clear of the central deckhouse');
           }
           assert.equal(mesh.isPickable, false);
         }
@@ -52,14 +53,14 @@ for (const layout of ['stern', 'throwers']) test(`${layout}: shared geometry, on
         assert.notEqual(charge.root.position.z, charge.restPosition.z);
       }
       const meshes = model.root.getChildMeshes();
-      assert.ok(meshes.reduce((sum, mesh) => sum + mesh.getTotalIndices() / 3, 0) < 3600);
-      assert.ok(meshes.reduce((sum, mesh) => sum + mesh.subMeshes.length, 0) <= 32);
+      assert.ok(meshes.reduce((sum, mesh) => sum + mesh.getTotalIndices() / 3, 0) < (layout === 'combined' ? 7200 : 3600));
+      assert.ok(meshes.reduce((sum, mesh) => sum + mesh.subMeshes.length, 0) <= (layout === 'combined' ? 64 : 34));
     }
     assert.equal(scene.materials.filter(m => m.name.startsWith('depth_charge_')).length, 4);
   } finally { engine.dispose(); }
 });
 
-for (const layout of ['stern', 'throwers']) test(`${layout}: actual flak firing rays clear the equipment throughout the aft hemisphere`, () => {
+for (const layout of ['stern', 'throwers', 'combined']) test(`${layout}: actual flak firing rays clear the equipment throughout the aft hemisphere`, () => {
   const engine = new NullEngine();
   try {
     const scene = new Scene(engine);

@@ -33,7 +33,7 @@ test('depth charge layouts switch without changing the camera and leave aft flak
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/sea-battle/?vehicle=torpedo-boat&sandbox=side-view&scenarioTest=1&viewMode=orbit&viewDistance=27&viewHeight=1.6&viewYaw=155');
   await page.waitForFunction(() => window.seaBattleScenarioTest);
-  for (const [layout, label] of [['stern', 'Heckgestelle'], ['throwers', 'Seitenwerfer']]) {
+  for (const [layout, label] of [['stern', 'Heckgestelle'], ['throwers', 'Seitenwerfer'], ['combined', 'Heck + Seiten']]) {
     const button = page.getByRole('button', { name: label, exact: true });
     await button.click();
     await page.waitForURL(new RegExp(`depthChargeLayout=${layout}`));
@@ -78,5 +78,32 @@ test('depth charge layouts switch without changing the camera and leave aft flak
   }
   await page.setViewportSize({ width: 844, height: 390 });
   await page.screenshot({ path: testInfo.outputPath('throwers-mobile-landscape.png') });
+  expect(errors).toEqual([]);
+});
+
+test('combined side throwers visibly fire and reload on desktop and mobile', async ({ page }, testInfo) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/sea-battle/?vehicle=torpedo-boat&sandbox=side-view&scenarioTest=1&depthChargeLayout=combined&viewMode=orbit&viewDistance=17&viewHeight=1.6&viewYaw=65');
+  await page.waitForFunction(() => window.seaBattleScenarioTest);
+  await page.screenshot({ path: testInfo.outputPath('combined-ready.png') });
+  const blocked = await page.evaluate(() => {
+    const failures = [];
+    for (let degrees = -180; degrees <= 180; degrees += 5) {
+      const shot = window.seaBattleScenarioTest.cannonShotLineAt({ yaw: degrees * Math.PI / 180, pitch: 0 });
+      if (shot.blocked && shot.blocker?.includes('depth_rack')) failures.push(shot);
+    }
+    return failures;
+  });
+  expect(blocked).toEqual([]);
+  const button = page.locator('[data-depth-charge-fire="3"]');
+  await button.click();
+  await expect(button).toBeDisabled();
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: testInfo.outputPath('combined-flight.png') });
+  await expect(button).toHaveText('Werfer SB (2)', { timeout: 10000 });
+  await expect(button).toBeEnabled();
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({ path: testInfo.outputPath('combined-mobile.png') });
   expect(errors).toEqual([]);
 });

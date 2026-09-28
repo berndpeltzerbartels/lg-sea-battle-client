@@ -125,7 +125,8 @@ function createSternRack(scene, parent, name, x, deckY, materials) {
 function createSideThrower(scene, parent, name, side, deckY, materials) {
   const root = new TransformNode(name, scene);
   root.parent = parent;
-  root.position.set(side * .48, deckY(-1.27), -1.27);
+  root.position.set(side * .65, deckY(.1), .1);
+  root.scaling.setAll(.75);
   const parts = [];
   box(scene, parts, materials.frame, [.23, .015, .19], [0, .009, 0]);
   cylinder(scene, parts, materials.frame, .1, .06, [0, .04, 0]);
@@ -140,6 +141,17 @@ function createSideThrower(scene, parent, name, side, deckY, materials) {
     box(scene, parts, materials.frame, [.116, .026, .014], [-side * .18, .019, z]);
     for (const end of [-1, 1]) box(scene, parts, materials.frame, [.012, .038, .014], [-side * .18 + end * .052, .029, z]);
   }
+  const cover = box(scene, parts, materials.frame, [.125, .004, Math.hypot(.08, .09)], [-side * .18, .065, -.08]);
+  cover.rotation.x = -Math.atan2(.09, .08);
+  for (const edge of [-1, 1]) {
+    const panel = box(scene, parts, materials.frame, [.005, 1, .08], [-side * .18 + edge * .06, 0, -.08]);
+    const positions = panel.getVerticesData('position');
+    for (let i = 0; i < positions.length; i += 3) positions[i + 1] = positions[i + 1] > 0 ? .065 + positions[i + 2] * 1.125 : .014;
+    const normals = [];
+    VertexData.ComputeNormals(positions, panel.getIndices(), normals);
+    panel.setVerticesData('position', positions);
+    panel.setVerticesData('normal', normals);
+  }
   mergeByMaterial(parts, root, `${name}_frame`);
   const cup = new TransformNode(`${name}_launch_cup`, scene);
   cup.parent = root;
@@ -147,6 +159,7 @@ function createSideThrower(scene, parent, name, side, deckY, materials) {
   const cupParts = [];
   box(scene, cupParts, materials.steel, [.103, .012, .11], [0, 0, 0]);
   for (const end of [-1, 1]) box(scene, cupParts, materials.frame, [.012, .032, .114], [end * .05, .012, 0]);
+  cylinder(scene, cupParts, materials.steel, .028, .09, [-side * .032, -.032, 0], -side * Math.PI / 4);
   mergeByMaterial(cupParts, cup, `${name}_cup`);
   const loaded = createCharge(scene, cup, `${name}_charge_0`, materials, [0, .054, 0], Math.PI / 2);
   const spare = createCharge(scene, root, `${name}_charge_1`, materials, [-side * .18, .071, 0], Math.PI / 2);
@@ -173,12 +186,14 @@ function createSideThrower(scene, parent, name, side, deckY, materials) {
 }
 
 // Shared local/remote geometry; each charge remains independent for later replicated drops.
-export function createDepthChargeRacks(scene, parent, name, deckY, layout = 'stern') {
+export function createDepthChargeRacks(scene, parent, name, deckY, layout = 'combined') {
   const materials = rackMaterials(scene);
   const root = new TransformNode(`${name}_depth_charges`, scene);
   root.parent = parent;
   const racks = depthChargeLanes.map((x, index) => layout === 'throwers'
     ? createSideThrower(scene, root, `${name}_depth_rack_${index}`, Math.sign(x), deckY, materials)
     : createSternRack(scene, root, `${name}_depth_rack_${index}`, x, deckY, materials));
+  if (layout === 'combined') racks.push(...depthChargeLanes.map((x, index) =>
+    createSideThrower(scene, root, `${name}_depth_rack_${index + 2}`, Math.sign(x), deckY, materials)));
   return { root, racks, layout };
 }

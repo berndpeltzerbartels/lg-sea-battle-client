@@ -65,7 +65,7 @@ test('bridge and lookout share replicated releases, explosions, controls and rol
   await pages[0].keyboard.press('KeyW');
   expect(requests).toBe(1);
   state.t = 2.5;
-  state.depthCharges.push({ ...state.depthCharges[0], id: 'charge-1', lane: 1, releasedAt: 2.5, explodesAt: 5, x: .675 });
+  state.depthCharges.push({ ...state.depthCharges[0], id: 'charge-1', lane: 2, releasedAt: 2.5, explodesAt: 5, x: -24, z: .3 });
   await broadcast();
   state.t = 2.5;
   state.depthCharges[0].exploded = true;

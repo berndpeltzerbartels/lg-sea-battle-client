@@ -29,6 +29,32 @@ test('four-round alternating salvo reloads each rack before its next release', (
   } finally { engine.dispose(); }
 });
 
+test('combined salvos launch all four stations and replenish both throwers without accumulating geometry', () => {
+  const engine = new NullEngine();
+  try {
+    const scene = new Scene(engine);
+    const boat = new TransformNode('boat', scene);
+    boat.scaling.setAll(3);
+    const model = createDepthChargeRacks(scene, boat, 'boat', () => .74);
+    const count = scene.meshes.length;
+    const splashes = [];
+    const animation = createDepthChargeAnimator(model, { replenishMagazine: true, onSplash: p => splashes.push(p) });
+    for (let salvo = 0; salvo < 3; salvo++) {
+      for (let lane = 0; lane < 4; lane++) {
+        const target = new Vector3(lane >= 2 ? (lane === 2 ? -24 : 24) : 0, 0, lane >= 2 ? .3 : -13);
+        assert.equal(animation.fire(lane, Vector3.Zero(), target), true);
+        for (let frame = 0; frame < 150; frame++) animation.update(1 / 60);
+        assert.ok(Vector3.Distance(splashes.at(-1), target) < 1e-7);
+      }
+      animation.update(3);
+      assert.equal(scene.meshes.length, count);
+      assert.ok(animation.state().every(s => !s.busy && s.remaining === 2));
+    }
+    assert.equal(splashes.length, 12);
+    animation.dispose();
+  } finally { engine.dispose(); }
+});
+
 test('replicated release lands at the authoritative blast position', () => {
   const engine = new NullEngine();
   try {
@@ -121,6 +147,8 @@ for (const layout of ['stern', 'throwers']) for (const dt of [1 / 60, .23, 5]) {
       if (layout === 'throwers') {
         assert.ok(splashes[0].z > launches[0].position.z + 5, 'port throw follows rotated ship');
         assert.ok(splashes[1].z < launches[1].position.z - 5, 'starboard throw follows rotated ship');
+        assert.ok(Math.abs(splashes[0].z - 224) < 1e-7, 'preview uses the same 24 metre lateral spread');
+        assert.ok(Math.abs(splashes[1].z - 176) < 1e-7);
       }
       for (const splash of splashes) assert.equal(splash.y, 0);
       assert.equal(animation.fire(0), true, 'reloaded charge fires too');

@@ -2865,6 +2865,8 @@ body.debug-marker-map .map-control {
   z-index: 8;
   display: grid;
   width: min(280px, calc(100vw - 36px));
+  max-height: calc(100dvh - 36px);
+  overflow-y: auto;
   gap: 8px;
   padding: 12px;
   box-sizing: border-box;

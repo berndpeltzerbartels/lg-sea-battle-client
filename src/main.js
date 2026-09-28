@@ -48,7 +48,7 @@ const engine = new Engine(canvas, true, {
 const scene = new Scene(engine);
 document.body.dataset.appStarted = "true";
 const urlParams = new URLSearchParams(location.search);
-const depthChargeLayout = urlParams.get("sandbox") === "side-view" && urlParams.get("depthChargeLayout") === "throwers" ? "throwers" : "stern";
+const depthChargeLayout = urlParams.get("sandbox") === "side-view" && ["stern", "throwers"].includes(urlParams.get("depthChargeLayout")) ? urlParams.get("depthChargeLayout") : "combined";
 let depthChargePreview = null;
 const depthChargeAnimators = new WeakMap();
 const activeDepthChargeAnimators = new Set();
@@ -2981,10 +2981,12 @@ function setupSideViewCameraTuner() {
     ${submarineMode ? "" : `<div class="side-view-camera-mode" role="group" aria-label="Wasserbomben">
       <button type="button" data-depth-charge-layout="stern">Heckgestelle</button>
       <button type="button" data-depth-charge-layout="throwers">Seitenwerfer</button>
+      <button type="button" data-depth-charge-layout="combined">Heck + Seiten</button>
     </div>
     <div class="side-view-camera-mode" role="group" aria-label="Wasserbomben abwerfen">
       <button type="button" data-depth-charge-fire="0">Backbord (2)</button>
       <button type="button" data-depth-charge-fire="1">Steuerbord (2)</button>
+      ${depthChargeLayout === 'combined' ? '<button type="button" data-depth-charge-fire="2">Werfer BB (2)</button><button type="button" data-depth-charge-fire="3">Werfer SB (2)</button>' : ''}
     </div>
     <div class="side-view-camera-mode">
       <button type="button" data-depth-charge-refill>Neu bestücken</button>
@@ -3007,14 +3009,14 @@ function setupSideViewCameraTuner() {
     const fireButtons = [...panel.querySelectorAll('[data-depth-charge-fire]')];
     const refillButton = panel.querySelector('[data-depth-charge-refill]');
     depthChargePreview = createDepthChargeAnimator(boat.depthCharges, {
-      replenishMagazine: depthChargeLayout === 'stern',
+      replenishMagazine: depthChargeLayout !== 'throwers',
       onLaunch: (position, _direction, thrown) => {
         if (thrown) createShipSuperstructureSmoke(cannonSystem, position, 3, .3);
       },
       onSplash: (position, direction) => createCannonWaterImpactEffect(cannonSystem, position, direction),
       onChange: states => {
         states.forEach((state, index) => {
-          const label = index === 0 ? 'Backbord' : 'Steuerbord';
+          const label = ['Backbord', 'Steuerbord', 'Werfer BB', 'Werfer SB'][index];
           fireButtons[index].disabled = state.busy || state.remaining === 0;
           fireButtons[index].textContent = `${label} (${state.busy ? 'Lädt' : state.remaining})`;
         });
