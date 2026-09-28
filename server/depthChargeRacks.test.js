@@ -44,8 +44,9 @@ for (const layout of ['stern', 'throwers', 'combined']) test(`${layout}: shared 
             assert.ok(bounds.maximumWorld.y < .675, 'less than half a metre above the deck at boat scale');
           } else {
             assert.ok(bounds.minimumWorld.z > 0 && bounds.maximumWorld.z < .2, 'forward of the funnel and behind torpedo tubes');
-            assert.ok(Math.abs(bounds.minimumWorld.x) < .78 && Math.abs(bounds.maximumWorld.x) < .78, 'inside the deck edge');
-            assert.ok(Math.min(Math.abs(bounds.minimumWorld.x), Math.abs(bounds.maximumWorld.x)) > .46, 'clear of the central deckhouse');
+            assert.ok(Math.abs(bounds.minimumWorld.x) < .46 && Math.abs(bounds.maximumWorld.x) < .46, 'entire apparatus sits above the platform, leaving the side passage free');
+            assert.ok(Math.abs(rack.root.position.y - .916) < 1e-8, 'mount rests exactly on the platform roof');
+            assert.ok(bounds.minimumWorld.y >= .913, 'only the mounting pivot may inset slightly into the roof');
           }
           assert.equal(mesh.isPickable, false);
         }

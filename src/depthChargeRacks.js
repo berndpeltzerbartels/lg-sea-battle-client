@@ -125,7 +125,9 @@ function createSternRack(scene, parent, name, x, deckY, materials) {
 function createSideThrower(scene, parent, name, side, deckY, materials) {
   const root = new TransformNode(name, scene);
   root.parent = parent;
-  root.position.set(side * .65, deckY(.1), .1);
+  // Match the flat roof of the aft deckhouse, including its deck-fitting inset.
+  const platformY = Math.max(deckY(-.31), deckY(.27)) + .18 - .004;
+  root.position.set(side * .32, platformY, .1);
   root.scaling.setAll(.75);
   const parts = [];
   box(scene, parts, materials.frame, [.23, .015, .19], [0, .009, 0]);

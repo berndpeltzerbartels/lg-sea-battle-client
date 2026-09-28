@@ -71,6 +71,31 @@ test('replicated release lands at the authoritative blast position', () => {
   } finally { engine.dispose(); }
 });
 
+test('raised throwers clear the side passage and rail on their way to the unchanged impact area', () => {
+  const engine = new NullEngine();
+  try {
+    const scene = new Scene(engine);
+    const boat = new TransformNode('boat', scene);
+    boat.scaling.setAll(3);
+    const model = createDepthChargeRacks(scene, boat, 'boat', () => .74);
+    const animation = createDepthChargeAnimator(model);
+    for (const lane of [2, 3]) {
+      animation.fire(lane);
+      let crossed = false;
+      for (let frame = 0; frame < 180; frame++) {
+        animation.update(1 / 120);
+        const flight = scene.meshes.find(mesh => mesh.name.includes(`depth_rack_${lane}_`) && mesh.name.includes('_flight_'));
+        if (flight && Math.abs(flight.position.x) >= .8 * 3 && !crossed) {
+          assert.ok(flight.position.y > 3.3, 'barrel is above the railing while crossing the deck edge');
+          crossed = true;
+        }
+      }
+      assert.ok(crossed);
+    }
+    animation.dispose();
+  } finally { engine.dispose(); }
+});
+
 for (const dt of [1 / 60, .23, 5]) test(`stern preview replenishes its visible reserve repeatedly without adding meshes, dt=${dt}`, () => {
   const engine = new NullEngine();
   try {
