@@ -1081,7 +1081,7 @@ const engineOrders = engineOrderLabels.map((order, index) => ({
 }));
 const maxSubmarineForwardSpeed = 12.5;
 const maxSubmarinePeriscopeForwardSpeed = 9;
-const maxSubmarineSubmergedForwardSpeed = 8;
+const maxSubmarineSubmergedForwardSpeed = 6;
 const submarinePeriscopeModes = {
   forwardScope: "forward-scope",
   alignToBearing: "align-to-bearing",
