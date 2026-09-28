@@ -15088,7 +15088,7 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
 
   const bowCannon = createBowCannon(scene, materials, root, name, teamMaterials, 2.54, true);
   const sternFlak = createSternFlak(scene, materials, root, name, teamMaterials, playerSternFlakZ, true);
-  const depthCharges = createDepthChargeRacks(scene, root, name, getTorpedoBoatDeckY, depthChargeLayout);
+  const depthCharges = createDepthChargeRacks(scene, root, name, getTorpedoBoatDeckY, depthChargeLayout, teamMaterials.hull);
 
   return {
     root,
@@ -16191,7 +16191,7 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = 
     : null;
 
   const bowWake = createEnemyBowWake(scene, materials, root, name);
-  const depthCharges = createDepthChargeRacks(scene, root, name, getTorpedoBoatDeckY, depthChargeLayout);
+  const depthCharges = createDepthChargeRacks(scene, root, name, getTorpedoBoatDeckY, depthChargeLayout, teamMaterials.hull);
 
   return { root, bowWake, bowCannon, sternFlak, depthCharges };
 }

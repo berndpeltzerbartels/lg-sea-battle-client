@@ -188,8 +188,9 @@ function createSideThrower(scene, parent, name, side, deckY, materials) {
 }
 
 // Shared local/remote geometry; each charge remains independent for later replicated drops.
-export function createDepthChargeRacks(scene, parent, name, deckY, layout = 'combined') {
-  const materials = rackMaterials(scene);
+export function createDepthChargeRacks(scene, parent, name, deckY, layout = 'combined', teamMaterial = null) {
+  const neutral = rackMaterials(scene);
+  const materials = teamMaterial ? { ...neutral, frame: teamMaterial, paint: teamMaterial } : neutral;
   const root = new TransformNode(`${name}_depth_charges`, scene);
   root.parent = parent;
   const racks = depthChargeLanes.map((x, index) => layout === 'throwers'
