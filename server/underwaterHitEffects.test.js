@@ -9,10 +9,10 @@ const fn = source.slice(start, source.indexOf('\nfunction ', start + 1));
 const snapshotStart = source.indexOf('function applyServerShipSnapshot(');
 const snapshotFn = source.slice(snapshotStart, source.indexOf('\nfunction ', snapshotStart + 1));
 
-function fixture(hasTarget) {
+function fixture(hasTarget, vehicleType = 'submarine', hasSnapshot = false) {
   const splashes = [];
   const system = { hitEffectIds: new Set() };
-  const target = { id: 'sub', vehicleType: 'submarine', state: 'active', heading: 0,
+  const target = { id: 'sub', vehicleType, state: 'active', heading: 0,
     root: { position: new Vector3(0, -5, 0), setEnabled() {} }, serverPosition: Vector3.Zero() };
   let explosions = 0;
   const begin = motion => {
@@ -21,13 +21,13 @@ function fixture(hasTarget) {
     explosions++;
   };
   const sync = new Function('flakSystem', 'scoutPlaneMode', 'playerServerShipId', 'pendingPlayerServerShip',
-    'enemyMotions', 'Vector3', 'isScoutPlaneMotion', 'isCannonServerProjectile', 'time',
+    'enemyMotions', 'serverShipsById', 'Vector3', 'isScoutPlaneMotion', 'isCannonServerProjectile', 'time',
     'torpedoSystem', 'createTorpedoShipWaterColumn', 'beginEnemyCannonShipHit',
     'beginEnemyShipCriticalHit', 'createScoutPlaneCriticalHitSequence', 'getProjectileHitPosition',
     `${fn}; return syncServerProjectileHitEffects;`)(system, false, 'own', null,
-    hasTarget ? [target] : [], Vector3, () => false,
+    hasTarget ? [target] : [], new Map(hasSnapshot ? [['sub', { id: 'sub', vehicleType, heading: 0 }]] : []), Vector3, () => false,
     id => id.startsWith('cannon-'), 0,
-    { hits: 0 }, (_, position) => splashes.push({ position }),
+    { hits: 0 }, (_, position, heading, scale) => splashes.push({ position, scale }),
     begin, begin, () => {}, hit => new Vector3(hit.x, hit.y, hit.z));
   const snapshot = hit => {
     const apply = new Function('isScoutPlaneMotion', 'remoteVehicleY', 'getShipDepthState',
@@ -72,8 +72,20 @@ for (const weapon of ['cannon', 'flak']) {
   }
 }
 
-test('above-water hits do not acquire an additional water effect', () => {
-  const { sync, splashes } = fixture(true);
+test('above-water surface ship hits do not acquire an additional water effect', () => {
+  const { sync, splashes } = fixture(true, 'torpedo-boat');
   sync([{ id: 'cannon-1', targetShipId: 'sub', x: 4, y: .5, z: 8 }]);
   assert.equal(splashes.length, 0);
 });
+
+for (const weapon of ['cannon', 'flak']) for (const hasTarget of [true, false]) {
+  test(`${weapon} periscope kill emits one large water explosion, visual target present=${hasTarget}`, () => {
+    const { sync, splashes } = fixture(hasTarget, 'submarine', true);
+    const hit = { id: `${weapon}-periscope`, targetShipId: 'sub', x: 4, y: .5, z: 8 };
+    sync([hit]);
+    sync([hit]);
+    assert.equal(splashes.length, 1);
+    assert.equal(splashes[0].scale, 1.6);
+    assert.deepEqual(splashes[0].position, new Vector3(4, 0, 8));
+  });
+}

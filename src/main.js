@@ -6426,11 +6426,13 @@ function syncServerProjectileHitEffects(hits, ownShip = null) {
       flakSystem.hitEffectIds = new Set(Array.from(flakSystem.hitEffectIds).slice(-48));
     }
     const targetMotion = enemyMotions.find((motion) => motion.id === hit.targetShipId);
-    if (Number.isFinite(hit.y) && hit.y < 0 && Number.isFinite(hit.x) && Number.isFinite(hit.z)) {
-      // Ship-bound explosions can be hidden below the opaque water surface.
+    const targetShip = serverShipsById.get(hit.targetShipId) ?? (ownShip?.id === hit.targetShipId ? ownShip : null);
+    const submarineHit = targetShip?.vehicleType === "submarine" || targetMotion?.vehicleType === "submarine";
+    if ((submarineHit || Number.isFinite(hit.y) && hit.y < 0) && Number.isFinite(hit.x) && Number.isFinite(hit.z)) {
+      // A periscope hit may be above water even though it destroys a submerged hull.
       const surfacePosition = new Vector3(hit.x, 0, hit.z);
       torpedoSystem.hits += 1;
-      createTorpedoShipWaterColumn(torpedoSystem, surfacePosition, targetMotion?.heading ?? 0);
+      createTorpedoShipWaterColumn(torpedoSystem, surfacePosition, targetMotion?.heading ?? targetShip?.heading ?? 0, submarineHit ? 1.6 : 1);
     }
     if (isScoutPlaneMotion(targetMotion)) {
       if (targetMotion.state !== "air-hit") {
