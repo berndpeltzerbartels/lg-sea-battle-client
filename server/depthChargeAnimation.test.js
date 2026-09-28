@@ -71,6 +71,27 @@ test('replicated release lands at the authoritative blast position', () => {
   } finally { engine.dispose(); }
 });
 
+test('a replicated follow-up arriving before the final reload frame is not lost', () => {
+  const engine = new NullEngine();
+  try {
+    const scene = new Scene(engine);
+    const model = createDepthChargeRacks(scene, new TransformNode('boat', scene), 'boat', () => .74);
+    let launches = 0;
+    const animation = createDepthChargeAnimator(model, {
+      replenishMagazine: true, queueWhileReloading: true, onLaunch: () => launches++
+    });
+    assert.equal(animation.fire(2), true);
+    animation.update(4.7);
+    assert.equal(animation.fire(2), true);
+    assert.equal(animation.fire(2), false, 'only one waiting visual release');
+    animation.update(.11);
+    assert.equal(launches, 2);
+    animation.update(5);
+    assert.equal(animation.active, false);
+    animation.dispose();
+  } finally { engine.dispose(); }
+});
+
 test('raised throwers clear the side passage and rail on their way to the unchanged impact area', () => {
   const engine = new NullEngine();
   try {

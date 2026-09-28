@@ -6,12 +6,12 @@ const smooth = value => {
 };
 
 // Visual-only controller: explicit triggers can later come from replicated server events.
-export function createDepthChargeAnimator(model, { onLaunch = () => {}, onSplash = () => {}, onChange = () => {}, replenishMagazine = false } = {}) {
+export function createDepthChargeAnimator(model, { onLaunch = () => {}, onSplash = () => {}, onChange = () => {}, replenishMagazine = false, queueWhileReloading = false } = {}) {
   const cupPositions = model.racks.map(rack => rack.cup?.position.clone());
   const initial = model.racks.map(rack => rack.charges.map(charge => ({
     parent: charge.root.parent, position: charge.root.position.clone(), rotation: charge.root.rotation.clone(), enabled: charge.root.isEnabled()
   })));
-  const lanes = model.racks.map(() => ({ loaded: 0, reserve: 1, animation: null }));
+  const lanes = model.racks.map(() => ({ loaded: 0, reserve: 1, animation: null, pending: null }));
   let sequence = 0;
   let disposed = false;
 
@@ -74,6 +74,11 @@ export function createDepthChargeAnimator(model, { onLaunch = () => {}, onSplash
     fire(index, shipVelocity = Vector3.Zero(), landingPosition = null) {
       const lane = lanes[index];
       const thrower = !!model.racks[index]?.cup;
+      // A server release may arrive just before the last local reload frame.
+      if (!disposed && lane?.animation && queueWhileReloading && replenishMagazine && !lane.pending) {
+        lane.pending = { velocity: shipVelocity.clone(), position: landingPosition?.clone() ?? null };
+        return true;
+      }
       if (disposed || !lane || lane.animation || lane.loaded === null) return false;
       lane.animation = { age: 0, chargeIndex: lane.loaded, reloadIndex: lane.reserve, shipVelocity: shipVelocity.clone(), launchAt: thrower ? 0 : .45, launched: false, transferStarted: false, seated: false, flight: null };
       lane.loaded = null;
@@ -164,6 +169,11 @@ export function createDepthChargeAnimator(model, { onLaunch = () => {}, onSplash
         if (age >= finishAt && animation.launched && !animation.flight) {
           lane.animation = null;
           onChange(controller.state());
+          if (lane.pending) {
+            const pending = lane.pending;
+            lane.pending = null;
+            controller.fire(index, pending.velocity, pending.position);
+          }
         }
       });
     },
@@ -180,13 +190,13 @@ export function createDepthChargeAnimator(model, { onLaunch = () => {}, onSplash
         setArm(rack, rack.armRestAngle);
         if (rack.gate) rack.gate.rotation.x = 0;
         if (rack.cup) rack.cup.position.copyFrom(cupPositions[index]);
-        lanes[index] = { loaded: 0, reserve: 1, animation: null };
+        lanes[index] = { loaded: 0, reserve: 1, animation: null, pending: null };
       });
       onChange(controller.state());
       return true;
     },
     dispose() {
-      for (const lane of lanes) { lane.animation?.flight?.mesh.dispose(); lane.animation = null; }
+      for (const lane of lanes) { lane.animation?.flight?.mesh.dispose(); lane.animation = null; lane.pending = null; }
       disposed = true;
     }
   };

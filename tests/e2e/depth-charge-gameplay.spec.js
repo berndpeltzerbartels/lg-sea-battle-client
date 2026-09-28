@@ -12,7 +12,7 @@ test('bridge and lookout share replicated releases, explosions, controls and rol
     vehicleType: 'torpedo-boat', torpedoesRemaining: 12, flakYaw: Math.PI, flakPitch: 0, cannonYaw: 0, cannonPitch: 0, depthState: 'surface' };
   const state = { type: 'state', sessionId: 'depth-test', instanceId: 'depth-test', state: 'running', t: 0,
     ships: [ship], torpedoes: [], torpedoImpacts: [], bombs: [], bombImpacts: [], flakProjectiles: [], weaponShots: [],
-    flakHits: [], flakImpacts: [], ramHits: [], depthCharges: [], killsByPlayer: {}, destroyedShipsByTeam: {} };
+    flakHits: [], flakImpacts: [], ramHits: [], depthCharges: [], depthChargeControls: {}, killsByPlayer: {}, destroyedShipsByTeam: {} };
   const pages = [];
   let requests = 0;
   for (const member of members) {
@@ -36,8 +36,9 @@ test('bridge and lookout share replicated releases, explosions, controls and rol
       else if (path.endsWith('/world')) body = { landmasses: [], instrumentMap: { version: 1, layers: [0, 50, 150].map(height => ({ height, contours: [] })) } };
       else if (path.endsWith('/depth-charges')) {
         requests++;
-        state.depthCharges = [{ id: 'charge-0', shipId: 'boat', playerId: member.playerId, lane: 0, releasedAt: 0,
-          explodesAt: 2.5, x: -.675, z: -13, heading: 0, radius: 24, readyAt: 13, exploded: false, targetShipIds: [] }];
+        if (requests === 1) state.depthCharges = [{ id: 'charge-0', shipId: 'boat', playerId: member.playerId, lane: 0, releasedAt: 0,
+          explodesAt: 2.5, x: -.675, z: -13, heading: 0, radius: 24, readyAt: 4.8, exploded: false, targetShipIds: [] }];
+        state.depthChargeControls = { boat: { active: true, queued: requests > 1, readyAt: 4.8 } };
         body = state;
       } else if (path.includes('/crew/')) body = crew;
       else if (path.endsWith('/state')) body = state;
@@ -59,11 +60,20 @@ test('bridge and lookout share replicated releases, explosions, controls and rol
   await expect.poll(() => requests).toBe(1);
   await broadcast();
   for (const page of pages) {
-    await expect(page.locator('#depthChargeButton')).toBeDisabled();
+    await expect(page.locator('#depthChargeButton')).toBeEnabled();
+    await expect(page.locator('#depthChargeButton')).toContainText('Weitere Serie vormerken');
     expect(await page.evaluate(() => window.seaBattleScenarioTest.depthChargeEffects().activeRacks)).toBe(1);
   }
   await pages[0].keyboard.press('KeyW');
-  expect(requests).toBe(1);
+  await expect.poll(() => requests).toBe(2);
+  await broadcast();
+  for (const page of pages) {
+    await expect(page.locator('#depthChargeButton')).toBeDisabled();
+    await expect(page.locator('#depthChargeButton')).toContainText('Serie vorgemerkt');
+    await page.keyboard.press('KeyW');
+  }
+  expect(requests).toBe(2);
+  await pages[0].screenshot({ path: testInfo.outputPath('queued-salvo.png') });
   state.t = 2.5;
   state.depthCharges.push({ ...state.depthCharges[0], id: 'charge-1', lane: 2, releasedAt: 2.5, explodesAt: 5, x: -24, z: .3 });
   await broadcast();
@@ -83,6 +93,9 @@ test('bridge and lookout share replicated releases, explosions, controls and rol
   await broadcast();
   await broadcast();
   for (const page of pages) expect(await page.evaluate(() => window.seaBattleScenarioTest.depthChargeEffects().hits)).toBe(2);
+  state.depthChargeControls.boat.queued = false;
+  await broadcast();
+  for (const page of pages) await expect(page.locator('#depthChargeButton')).toBeEnabled();
   expect(await pages[0].evaluate(() => window.seaBattleScenarioTest.torpedoWaterEffect())).toBe(true);
   await pages[1].keyboard.down('ArrowRight');
   await pages[1].waitForTimeout(500);

@@ -54,6 +54,8 @@ const depthChargeAnimators = new WeakMap();
 const activeDepthChargeAnimators = new Set();
 const depthChargeEvents = createDepthChargeEvents(animateDepthChargeRelease, explodeDepthCharge);
 let depthChargeReadyAt = 0;
+let depthChargeSalvoActive = false;
+let depthChargeSalvoQueued = false;
 let depthChargeRequestPending = false;
 let depthChargeAudio = null;
 let hotkeySignature = "";
@@ -3175,8 +3177,9 @@ function updateDepthChargeButton() {
   if (!button) return;
   button.hidden = !canDropDepthCharges();
   const remaining = Math.max(0, Math.ceil(depthChargeReadyAt - time));
-  button.disabled = playerDamageState !== "active" || depthChargeRequestPending || remaining > 0;
-  const label = remaining ? `Wasserbomben (${remaining}s)` : "Wasserbomben";
+  button.disabled = playerDamageState !== "active" || depthChargeRequestPending || depthChargeSalvoQueued;
+  const label = depthChargeSalvoQueued ? "Serie vorgemerkt"
+    : depthChargeSalvoActive || remaining > 0 ? "Weitere Serie vormerken" : "Wasserbomben";
   if (button.firstElementChild.textContent !== label) {
     button.firstElementChild.textContent = label;
     updateRoleHotkeys();
@@ -3184,7 +3187,7 @@ function updateDepthChargeButton() {
 }
 
 async function dropDepthCharges() {
-  if (!canDropDepthCharges() || playerDamageState !== "active" || depthChargeRequestPending || time < depthChargeReadyAt) return;
+  if (!canDropDepthCharges() || playerDamageState !== "active" || depthChargeRequestPending || depthChargeSalvoQueued) return;
   // Audio must be unlocked by a user gesture, never by a network event.
   unlockDepthChargeAudio();
   depthChargeRequestPending = true;
@@ -3194,7 +3197,7 @@ async function dropDepthCharges() {
     });
     if (!response.ok) throw new Error(`Abwurf nicht moeglich (${response.status})`);
     applyServerGameSnapshot(await response.json());
-    document.body.dataset.depthChargeStatus = "released";
+    document.body.dataset.depthChargeStatus = depthChargeSalvoQueued ? "queued" : "released";
   } catch (error) {
     document.body.dataset.depthChargeStatus = error.message;
     const button = document.getElementById("depthChargeButton");
@@ -3220,6 +3223,7 @@ function animateDepthChargeRelease(charge) {
   if (!animator) {
     animator = createDepthChargeAnimator(model, {
       replenishMagazine: true,
+      queueWhileReloading: true,
       onSplash: (position, direction) => createCannonWaterImpactEffect(cannonSystem, position, direction)
     });
     depthChargeAnimators.set(model, animator);
@@ -3429,7 +3433,7 @@ function updateRoleHotkeys() {
   if (panel.hidden) return;
   const role = crewState?.station ?? (lookoutViewActive ? "lookout" : cannonViewActive ? "cannon" : flakViewActive ? "flak" : "bridge");
   const entries = roleHotkeys({ role, members: crewState?.members, playerId,
-    depthChargesReady: canDropDepthCharges() && time >= depthChargeReadyAt,
+    depthChargesReady: canDropDepthCharges() && !depthChargeSalvoQueued,
     radarModes: !singleRadarMode, torpedoScope: torpedoScopeActive });
   const signature = JSON.stringify(entries);
   if (signature === hotkeySignature) return;
@@ -6334,10 +6338,10 @@ function applyServerGameSnapshot(snapshot) {
   );
   radarTorpedoSnapshots = Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes : [];
   depthChargeEvents.consume(snapshot.instanceId, snapshot.depthCharges ?? [], snapshot.t);
-  for (const charge of snapshot.depthCharges ?? []) {
-    if (charge.shipId === playerServerShipId)
-      depthChargeReadyAt = Math.max(depthChargeReadyAt, time + charge.readyAt - snapshot.t);
-  }
+  const chargeControl = snapshot.depthChargeControls?.[playerServerShipId];
+  depthChargeReadyAt = chargeControl ? time + chargeControl.readyAt - snapshot.t : 0;
+  depthChargeSalvoActive = chargeControl?.active ?? false;
+  depthChargeSalvoQueued = chargeControl?.queued ?? false;
   syncServerBombs(
     Array.isArray(snapshot.bombs) ? snapshot.bombs : [],
     Array.isArray(snapshot.bombImpacts) ? snapshot.bombImpacts : [],
