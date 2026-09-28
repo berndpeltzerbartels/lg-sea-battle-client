@@ -12,4 +12,10 @@ test('role hints exclude occupied posts and gunner depth charges', () => {
   const lookout = roleHotkeys({ role: 'lookout', depthChargesReady: false });
   assert.ok(lookout.some(([k]) => k === 'Z'));
   assert.ok(!lookout.some(([k]) => k === 'W'));
+  assert.equal(lookout.filter(([k]) => k === 'C').length, 1);
+  assert.equal(lookout.filter(([k]) => k === 'F').length, 1);
+  assert.ok(!lookout.some(([k]) => k.includes('⇧C') || k.includes('⇧F')));
+  const occupiedLookout = roleHotkeys({ role: 'lookout', playerId: 'look', members });
+  assert.ok(occupiedLookout.some(([k, label]) => k === 'C' && label.includes('Zustimmung')));
+  assert.ok(occupiedLookout.some(([k, label]) => k === 'F' && label.includes('Zustimmung')));
 });

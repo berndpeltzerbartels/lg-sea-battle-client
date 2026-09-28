@@ -701,7 +701,7 @@ scene.activeCamera = camera;
 window.addEventListener("keydown", (event) => {
   if (isStartupErrorVisible() || isSystemShortcutEvent(event)) return;
   const lookoutShortcut = event.code === "KeyO" || (lookoutViewActive &&
-    (event.key?.toLowerCase() === "z" || (event.shiftKey && ["KeyF", "KeyC"].includes(event.code))));
+    (event.key?.toLowerCase() === "z" || ["KeyF", "KeyC"].includes(event.code)));
   if (isHudControlEvent(event) && !(lookoutShortcut && !isTextEditingElement(event.target))) return;
   document.body.dataset.lastKey = formatInputEvent(event);
   const playerActive = playerDamageState === "active";
@@ -718,7 +718,7 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     return;
   }
-  if (playerActive && lookoutViewActive && event.shiftKey && ["KeyF", "KeyC"].includes(event.code)) {
+  if (playerActive && lookoutViewActive && ["KeyF", "KeyC"].includes(event.code)) {
     if (!event.repeat) void aimFromLookout(event.code === "KeyF" ? "flak" : "cannon");
     event.preventDefault();
     return;
@@ -1960,6 +1960,8 @@ async function aimFromLookout(weapon) {
     }
     weaponHeadingHold.align(weapon);
     lookoutFeedback.textContent = `${weapon === "flak" ? "Flak" : "Kanone"} ausgerichtet`;
+    if (crewState) await changeCrewStation(weapon);
+    else setBattleStation(weapon);
   } catch (error) {
     lookoutFeedback.textContent = error.message;
   }
@@ -3406,8 +3408,8 @@ function updateBattleStationButtons() {
     const occupant = crewState?.members.find(m => m.station === weapon);
     if (button) {
       const request = crewState?.aimRequests?.find(r => r.weapon === weapon);
-      button.disabled = Boolean(request);
-      button.querySelector("small").textContent = request ? (request.status === "pending" ? "Angefragt" : "Beantwortet") : occupant ? `${occupant.name} fragen` : "Ausrichten";
+      button.disabled = Boolean(request || crewSwitchPending);
+      button.querySelector("small").textContent = request ? (request.status === "pending" ? "Angefragt" : "Beantwortet") : occupant ? `${occupant.name} fragen` : "Ausrichten & übernehmen";
     }
   }
   if (submarineMode && torpedoAidButton) {
