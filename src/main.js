@@ -13588,6 +13588,10 @@ function getPlayerRamHit(playerPosition, playerHeading, playerSpeed, enemyMotion
   for (const enemyMotion of enemyMotions) {
     if (enemyMotion.teamId === playerTeamId) continue;
     if (isScoutPlaneMotion(enemyMotion)) continue;
+    const playerDeep = submarineMode && getPlayerEffectiveSubmarineDepthState() === submarineDepthStates.submerged;
+    const targetDeep = getShipVehicleType(enemyMotion) === "submarine"
+      && getShipDepthState(enemyMotion) === submarineDepthStates.submerged;
+    if (playerDeep !== targetDeep) continue;
     const hitPoint = bowProbePoints.find((point) => pointHitsEnemyHull(point, enemyMotion, 0.16));
     if (!hitPoint) continue;
 
