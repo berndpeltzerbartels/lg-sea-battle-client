@@ -35,6 +35,7 @@ import { createSubmarineModel } from "./submarineModel.js";
 import { createDepthChargeRacks, depthChargeLanes, depthChargeExitHalfWidth } from "./depthChargeRacks.js";
 import { createDepthChargeAnimator } from "./depthChargeAnimation.js";
 import { createDepthChargeEvents } from "./depthChargeEvents.js";
+import { createZoomIdleTimer, submarineEchoStrength } from "./instrumentHelpers.js";
 import { roleHotkeys } from "./roleHotkeys.js";
 
 const canvas = document.getElementById("renderCanvas");
@@ -59,6 +60,11 @@ let depthChargeSalvoQueued = false;
 let depthChargeRequestPending = false;
 let depthChargeAudio = null;
 let hotkeySignature = "";
+const zoomIdleTimer = createZoomIdleTimer();
+for (const event of ['keydown', 'keyup', 'pointerdown', 'pointermove', 'wheel', 'input']) {
+  window.addEventListener(event, () => zoomIdleTimer.touch(performance.now()), { capture: true, passive: true });
+}
+let nextSubmarineEchoUpdate = 0;
 const scenarioTestMode = urlParams.get("scenarioTest") === "1";
 const directSideViewSandboxRequested = urlParams.get("setup") === "8"
   || urlParams.get("sandbox") === "side-view"
@@ -266,6 +272,8 @@ const shipFleetMaterialPalettes = {
 const worldMetersPerUnit = 20;
 const vehicleScale = gameConfig.vehicleScale;
 const torpedoBoatVisualScale = vehicleScale.torpedoBoat;
+const echoHullSections = torpedoBoatHullSections();
+const submarineEchoRadius = (echoHullSections[echoHullSections.length - 1].z - echoHullSections[0].z) * torpedoBoatVisualScale * 3;
 const submarineVisualScale = torpedoBoatVisualScale;
 const scoutPlaneVisualScale = vehicleScale.scoutPlane;
 const shipGunVisualScale = vehicleScale.torpedoBoat;
@@ -1388,6 +1396,7 @@ if (crewState) {
 scene.onBeforeRenderObservable.add(() => {
   const rawFrameSeconds = engine.getDeltaTime() / 1000;
   const dt = Math.min(rawFrameSeconds, maxSimulationFrameSeconds);
+  if (zoomIdleTimer.expired(performance.now())) resetGameZooms();
   if (depthChargePreview?.active) depthChargePreview.update(dt);
   for (const animator of activeDepthChargeAnimators) {
     animator.update(dt);
@@ -1935,6 +1944,21 @@ function toggleLookoutBinoculars() {
   lookoutBinocularsActive = !lookoutBinocularsActive;
   document.body.dataset.lookoutBinoculars = lookoutBinocularsActive ? "active" : "inactive";
   document.getElementById("lookoutZoomButton")?.setAttribute("aria-pressed", String(lookoutBinocularsActive));
+}
+
+function resetGameZooms() {
+  setCannonSightLevel(0);
+  cannonSightCycleDirection = 1;
+  submarinePeriscopeZoomLevelIndex = 0;
+  submarinePeriscopeZoomCycleDirection = 1;
+  torpedoBoatScopeZoomLevelIndex = 0;
+  torpedoBoatScopeZoomCycleDirection = 1;
+  updateSubmarinePeriscopeZoomDisplays();
+  updateTorpedoScopeZoomDisplay();
+  if (lookoutBinocularsActive) toggleLookoutBinoculars();
+  if (mapZoom) mapZoom.value = mapZoom.defaultValue;
+  radarModeOverride = null;
+  radarModeOverrideUntil = 0;
 }
 
 async function aimFromLookout(weapon) {
@@ -6956,6 +6980,7 @@ function updateWeaponElevationGauge(indicator, valueElement, pitch, minPitch, ma
 }
 
 function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, playerPosition, radarContacts, landZones, heading, radarHeading = heading, options = {}) {
+  updateSubmarineEcho(playerPosition);
   drawMapInstrument(mapCanvas, playerPosition, landZones, mapZoom, heading);
   if (!singleRadarMode) {
     updateAutomaticRadarMode(radarContacts, playerPosition);
@@ -6978,6 +7003,20 @@ function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, player
     bridgeWeaponHeading: bridgeWeaponsVisible ? heading : null
   });
   document.body.dataset.radarHeading = String(Math.round(normalizeAngle(radarHeading) * 180 / Math.PI));
+}
+
+function updateSubmarineEcho(playerPosition) {
+  const instrument = document.getElementById('submarineEcho');
+  if (!instrument) return;
+  instrument.hidden = playerVehicleType !== 'torpedo-boat';
+  if (instrument.hidden || time < nextSubmarineEchoUpdate) return;
+  nextSubmarineEchoUpdate = time + .1;
+  const strength = submarineEchoStrength(serverShipsById.values(), playerServerShipId, playerPosition, submarineEchoRadius);
+  const value = Math.round(strength * 100);
+  const meter = document.getElementById('submarineEchoMeter');
+  meter.style.setProperty('--echo-strength', String(strength));
+  meter.setAttribute('aria-valuenow', String(value));
+  instrument.dataset.contact = String(value > 0);
 }
 
 function updateAutomaticRadarMode(radarContacts, playerPosition) {
@@ -9764,6 +9803,12 @@ function installScenarioTestHooks() {
   if (!scenarioTestMode) return;
 
   window.seaBattleScenarioTest = {
+    expireZoomIdle() { zoomIdleTimer.touch(performance.now() - 30001); },
+    echoContacts(ships) {
+      serverShipsById = new Map(ships.map(ship => [ship.id, ship]));
+      nextSubmarineEchoUpdate = 0;
+      updateSubmarineEcho(boat.root.position);
+    },
     stationState() { return stationSnapshot(); },
     depthChargeEffects() {
       return { activeRacks: activeDepthChargeAnimators.size, effects: torpedoSystem.hitEffects.length,

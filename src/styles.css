@@ -2858,6 +2858,33 @@ body.debug-marker-map .map-control {
   background: rgb(255 139 128 / 22%);
 }
 
+.submarine-echo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  color: #9be5df;
+  font-size: 9px;
+}
+.submarine-echo[hidden] { display: none; }
+.submarine-echo > span { flex-shrink: 0; }
+.submarine-echo-meter {
+  flex: 1;
+  min-width: 40px;
+  height: 9px;
+  border-bottom: 1px solid #547f82;
+  background: repeating-linear-gradient(to right, #547f82 0 1px, transparent 1px 10%);
+}
+.submarine-echo-meter > i {
+  display: block;
+  height: 4px;
+  margin-top: 4px;
+  background: #9be5df;
+  transform-origin: left;
+  transform: scaleX(var(--echo-strength, 0));
+  transition: transform 100ms linear;
+}
+
 .side-view-camera-panel {
   position: fixed;
   right: 18px;
