@@ -7,6 +7,28 @@ import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { createDepthChargeRacks } from '../src/depthChargeRacks.js';
 import { createDepthChargeAnimator } from '../src/depthChargeAnimation.js';
 
+test('four-round alternating salvo reloads each rack before its next release', () => {
+  const engine = new NullEngine();
+  try {
+    const scene = new Scene(engine);
+    const boat = new TransformNode('boat', scene);
+    const model = createDepthChargeRacks(scene, boat, 'boat', () => .52, 'stern');
+    const meshes = scene.meshes.length;
+    let splashes = 0;
+    const animation = createDepthChargeAnimator(model, { replenishMagazine: true, onSplash: () => splashes++ });
+    for (let shot = 0; shot < 4; shot++) {
+      assert.equal(animation.fire(shot % 2), true);
+      for (let frame = 0; frame < 150; frame++) animation.update(1 / 60);
+    }
+    animation.update(3);
+    assert.equal(splashes, 4);
+    assert.equal(animation.active, false);
+    assert.equal(scene.meshes.length, meshes);
+    assert.ok(animation.state().every(lane => lane.remaining === 2));
+    animation.dispose();
+  } finally { engine.dispose(); }
+});
+
 test('replicated release lands at the authoritative blast position', () => {
   const engine = new NullEngine();
   try {

@@ -3191,7 +3191,6 @@ async function dropDepthCharges() {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(crewCommand())
     });
     if (!response.ok) throw new Error(`Abwurf nicht moeglich (${response.status})`);
-    depthChargeReadyAt = time + 8;
     applyServerGameSnapshot(await response.json());
     document.body.dataset.depthChargeStatus = "released";
   } catch (error) {
@@ -6335,7 +6334,7 @@ function applyServerGameSnapshot(snapshot) {
   depthChargeEvents.consume(snapshot.instanceId, snapshot.depthCharges ?? [], snapshot.t);
   for (const charge of snapshot.depthCharges ?? []) {
     if (charge.shipId === playerServerShipId)
-      depthChargeReadyAt = Math.max(depthChargeReadyAt, time + charge.releasedAt + 8 - charge.lane * 1.2 - snapshot.t);
+      depthChargeReadyAt = Math.max(depthChargeReadyAt, time + charge.readyAt - snapshot.t);
   }
   syncServerBombs(
     Array.isArray(snapshot.bombs) ? snapshot.bombs : [],

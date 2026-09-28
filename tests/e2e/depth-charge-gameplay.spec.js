@@ -37,7 +37,7 @@ test('bridge and lookout share replicated releases, explosions, controls and rol
       else if (path.endsWith('/depth-charges')) {
         requests++;
         state.depthCharges = [{ id: 'charge-0', shipId: 'boat', playerId: member.playerId, lane: 0, releasedAt: 0,
-          explodesAt: 2.5, x: -.675, z: -13, heading: 0, radius: 12, exploded: false, targetShipIds: [] }];
+          explodesAt: 2.5, x: -.675, z: -13, heading: 0, radius: 24, readyAt: 13, exploded: false, targetShipIds: [] }];
         body = state;
       } else if (path.includes('/crew/')) body = crew;
       else if (path.endsWith('/state')) body = state;
@@ -64,8 +64,8 @@ test('bridge and lookout share replicated releases, explosions, controls and rol
   }
   await pages[0].keyboard.press('KeyW');
   expect(requests).toBe(1);
-  state.t = 1.2;
-  state.depthCharges.push({ ...state.depthCharges[0], id: 'charge-1', lane: 1, releasedAt: 1.2, explodesAt: 3.7, x: .675 });
+  state.t = 2.5;
+  state.depthCharges.push({ ...state.depthCharges[0], id: 'charge-1', lane: 1, releasedAt: 2.5, explodesAt: 5, x: .675 });
   await broadcast();
   state.t = 2.5;
   state.depthCharges[0].exploded = true;
@@ -78,7 +78,7 @@ test('bridge and lookout share replicated releases, explosions, controls and rol
   }
   await broadcast();
   await pages[0].screenshot({ path: testInfo.outputPath('bridge-water-explosion.png') });
-  state.t = 3.7;
+  state.t = 5;
   state.depthCharges[1].exploded = true;
   await broadcast();
   await broadcast();
