@@ -40,11 +40,11 @@ test('combined salvos launch all four stations and replenish both throwers witho
     const splashes = [];
     const animation = createDepthChargeAnimator(model, { replenishMagazine: true, onSplash: p => splashes.push(p) });
     for (let salvo = 0; salvo < 3; salvo++) {
-      for (let lane = 0; lane < 4; lane++) {
-        const target = new Vector3(lane >= 2 ? (lane === 2 ? -24 : 24) : 0, 0, lane >= 2 ? .3 : -13);
-        assert.equal(animation.fire(lane, Vector3.Zero(), target), true);
+      for (const lanes of [[0], [2, 3], [1]]) {
+        const targets = lanes.map(lane => new Vector3(lane >= 2 ? (lane === 2 ? -24 : 24) : 0, 0, lane >= 2 ? .3 : -13));
+        lanes.forEach((lane, i) => assert.equal(animation.fire(lane, Vector3.Zero(), targets[i]), true));
         for (let frame = 0; frame < 150; frame++) animation.update(1 / 60);
-        assert.ok(Vector3.Distance(splashes.at(-1), target) < 1e-7);
+        targets.forEach(target => assert.ok(splashes.slice(-lanes.length).some(p => Vector3.Distance(p, target) < 1e-7)));
       }
       animation.update(3);
       assert.equal(scene.meshes.length, count);
