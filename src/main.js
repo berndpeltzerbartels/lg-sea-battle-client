@@ -135,6 +135,11 @@ const targetRadarButton = document.getElementById("targetRadarButton");
 const flakViewButton = document.getElementById("flakViewButton");
 const cannonViewButton = document.getElementById("cannonViewButton");
 const bridgeViewButton = document.getElementById("bridgeViewButton");
+const lookoutViewButton = document.getElementById("lookoutViewButton");
+const lookoutHud = document.getElementById("lookoutHud");
+const lookoutFeedback = document.getElementById("lookoutFeedback");
+const lookoutCannonButton = document.getElementById("lookoutCannonButton");
+const lookoutFlakButton = document.getElementById("lookoutFlakButton");
 const alignWeaponsButton = document.getElementById("alignWeaponsButton");
 const alignAirDefenseButton = document.getElementById("alignAirDefenseButton");
 const alignWeaponsLabel = document.getElementById("alignWeaponsLabel");
@@ -680,10 +685,29 @@ scene.activeCamera = camera;
 
 window.addEventListener("keydown", (event) => {
   if (isStartupErrorVisible() || isSystemShortcutEvent(event)) return;
-  if (isHudControlEvent(event)) return;
+  const lookoutShortcut = event.code === "KeyO" || (lookoutViewActive &&
+    (event.key?.toLowerCase() === "z" || (event.shiftKey && ["KeyF", "KeyC"].includes(event.code))));
+  if (isHudControlEvent(event) && !(lookoutShortcut && !isTextEditingElement(event.target))) return;
   document.body.dataset.lastKey = formatInputEvent(event);
   const playerActive = playerDamageState === "active";
 
+  if (playerActive && !scoutPlaneMode && !submarineMode
+      && event.code === "KeyO" && !event.repeat) {
+    setBattleStation("lookout");
+    event.preventDefault();
+    return;
+  }
+
+  if (playerActive && lookoutViewActive && event.key?.toLowerCase() === "z") {
+    if (!event.repeat) toggleLookoutBinoculars();
+    event.preventDefault();
+    return;
+  }
+  if (playerActive && lookoutViewActive && event.shiftKey && ["KeyF", "KeyC"].includes(event.code)) {
+    if (!event.repeat) void aimFromLookout(event.code === "KeyF" ? "flak" : "cannon");
+    event.preventDefault();
+    return;
+  }
   if (playerActive && submarineMode && event.shiftKey && isInputKey(event, "up") && !event.repeat) {
     stepPlayerSubmarineDepthState("up");
     event.preventDefault();
@@ -878,6 +902,7 @@ window.addEventListener("pointercancel", () => {
 });
 
 window.addEventListener("blur", () => {
+  lookoutHeldDirections.clear();
   mouseButtonMask = 0;
   debugOrbitDragActive = false;
   debugOrbitPointerId = null;
@@ -1070,6 +1095,15 @@ let nextEngineHoldChangeTime = 0;
 let heldRudderDirection = 0;
 let nextRudderHoldChangeTime = 0;
 let flakViewActive = false;
+let lookoutViewActive = false;
+let lookoutBinocularsActive = false;
+const handledLookoutDecisions = new Set();
+let lookoutRequestWasPending = false;
+let lookoutYaw = 0;
+let lookoutPitch = 0;
+const lookoutHeldDirections = new Set();
+let lookoutYawStartTime = 0;
+let lookoutPitchStartTime = 0;
 let cannonViewActive = false;
 let torpedoScopeActive = false;
 let bombBayViewActive = false;
@@ -1203,6 +1237,13 @@ if (!singleRadarMode) {
   setupTargetRadarControl(targetRadarButton);
 }
 setupBridgeViewControl(bridgeViewButton);
+lookoutViewButton?.addEventListener("click", () => { setBattleStation("lookout"); focusGameCanvas(); });
+document.getElementById("lookoutZoomButton")?.addEventListener("click", () => { toggleLookoutBinoculars(); focusGameCanvas(); });
+lookoutCannonButton?.addEventListener("click", () => { void aimFromLookout("cannon"); focusGameCanvas(); });
+lookoutFlakButton?.addEventListener("click", () => { void aimFromLookout("flak"); focusGameCanvas(); });
+document.getElementById("acceptLookoutAim")?.addEventListener("click", () => void decideLookoutAim(true));
+document.getElementById("declineLookoutAim")?.addEventListener("click", () => void decideLookoutAim(false));
+if (lookoutViewButton) lookoutViewButton.hidden = scoutPlaneMode || submarineMode;
 setupFlakViewControl(flakViewButton);
 setupCannonViewControl(cannonViewButton);
 setupAlignWeaponsControl(alignWeaponsButton);
@@ -1597,12 +1638,20 @@ scene.onBeforeRenderObservable.add(() => {
     turnVelocity *= 0.25;
   }
 
+  if (lookoutViewActive && playerActive) {
+    const sightLevel = cannonSightLevels[lookoutBinocularsActive ? 2 : 0];
+    const yawSpeed = getHeldCannonSpeed(lookoutYawStartTime, cannonYawFineSpeed, cannonYawExtremeSpeed, sightLevel);
+    const pitchSpeed = getHeldCannonSpeed(lookoutPitchStartTime, cannonPitchFineSpeed, cannonPitchExtremeSpeed, sightLevel);
+    lookoutYaw = normalizeAngle(lookoutYaw + dt * yawSpeed * (Number(lookoutHeldDirections.has("right")) - Number(lookoutHeldDirections.has("left"))));
+    lookoutPitch = clamp(lookoutPitch + dt * pitchSpeed * (Number(lookoutHeldDirections.has("up")) - Number(lookoutHeldDirections.has("down"))), -1.2, 1.2);
+  }
   const cameraSetup = getPlayerCameraSetup(forward);
   const desiredCameraPosition = cameraSetup.position;
   const desiredTarget = cameraSetup.target;
   const shakeOffset = getRamShakeOffset(heading, ramShake, time);
   ramShake = Math.max(0, ramShake - dt * 2.6);
   const bridgeInteriorViewActive = !sideViewSandboxMode
+    && !lookoutViewActive
     && !scoutPlaneMode
     && !flakViewActive
     && !cannonViewActive
@@ -1610,7 +1659,7 @@ scene.onBeforeRenderObservable.add(() => {
     && !bombBayViewActive;
 
   camera.minZ = (cannonViewActive || flakViewActive || torpedoScopeActive) ? 0.03 : (bombBayViewActive ? 0.2 : (scoutPlaneMode ? 1.5 : 0.2));
-  camera.fov = torpedoScopeActive
+  camera.fov = lookoutViewActive ? (lookoutBinocularsActive ? 0.195 : 0.78) : torpedoScopeActive
     ? getTorpedoScopeFov()
     : (isPlayerSubmarineObservationPeriscopeActive()
     ? getObservationPeriscopeFov()
@@ -1622,7 +1671,7 @@ scene.onBeforeRenderObservable.add(() => {
   camera.position.copyFrom(cameraPosition);
   camera.setTarget(desiredTarget);
   updateCameraWaterAtmosphere();
-  if (!sideViewSandboxMode && !scoutPlaneMode && !flakViewActive && !cannonViewActive) {
+  if (!lookoutViewActive && !sideViewSandboxMode && !scoutPlaneMode && !flakViewActive && !cannonViewActive) {
     camera.rotation.x = -Math.abs(camera.rotation.x);
   }
   updateObservationPeriscopeViewState();
@@ -1783,6 +1832,7 @@ function toggleCannonView() {
 }
 
 function setBattleStation(station, confirmed = false) {
+  if (station === "lookout" && (scoutPlaneMode || submarineMode)) return;
   if (crewState && !confirmed && crewState.station !== (station === "torpedo" ? "bridge" : station)) {
     void changeCrewStation(station);
     return;
@@ -1802,6 +1852,13 @@ function setBattleStation(station, confirmed = false) {
     submarinePeriscopeMode = submarinePeriscopeModes.forwardScope;
   }
   flakViewActive = station === "flak";
+  lookoutViewActive = station === "lookout";
+  lookoutBinocularsActive = false;
+  lookoutHeldDirections.clear();
+  document.body.dataset.lookoutView = lookoutViewActive ? "active" : "inactive";
+  document.body.dataset.lookoutBinoculars = "inactive";
+  if (lookoutHud) lookoutHud.hidden = !lookoutViewActive;
+  if (lookoutFeedback) lookoutFeedback.textContent = "";
   cannonViewActive = station === "cannon";
   if (crewState) cancelWeaponAlignment();
   if (!cannonViewActive) {
@@ -1835,6 +1892,41 @@ function crewCommand(fields) {
   return { playerId, shipId: crewState.shipId, revision: crewState.revision, station: crewState.station, ...fields };
 }
 
+function toggleLookoutBinoculars() {
+  if (!lookoutViewActive) return;
+  lookoutBinocularsActive = !lookoutBinocularsActive;
+  document.body.dataset.lookoutBinoculars = lookoutBinocularsActive ? "active" : "inactive";
+  document.getElementById("lookoutZoomButton")?.setAttribute("aria-pressed", String(lookoutBinocularsActive));
+}
+
+async function aimFromLookout(weapon) {
+  if (!lookoutViewActive || playerDamageState !== "active") return;
+  const yaw = normalizeAngle(lookoutYaw);
+  const pitch = weapon === "flak" ? flakPitchForWorldPitch(yaw, lookoutPitch) : cannonPitchForWorldPitch(yaw, lookoutPitch);
+  try {
+    if (crewState) {
+      const response = await fetch(gameEndpoint("/game/crew/lookout-aim"), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(crewCommand({ weapon, yaw, pitch }))
+      });
+      if (!response.ok) throw new Error("Geschuetz nicht verfuegbar");
+      const result = await response.json();
+      if (result.requested) {
+        lookoutFeedback.textContent = "Zustimmung angefragt";
+        return;
+      }
+      applyServerGameSnapshot(result.snapshot);
+    } else {
+      if (weapon === "flak") { flakYaw = yaw; flakPitch = pitch; }
+      else { cannonYaw = yaw; cannonPitch = pitch; }
+    }
+    weaponHeadingHold.align(weapon);
+    lookoutFeedback.textContent = `${weapon === "flak" ? "Flak" : "Kanone"} ausgerichtet`;
+  } catch (error) {
+    lookoutFeedback.textContent = error.message;
+  }
+}
+
 async function changeCrewStation(station) {
   if (crewSwitchPending) return;
   crewSwitchPending = true;
@@ -1864,6 +1956,55 @@ function applyCrewView(view) {
   crewState = view;
   if (changed) setBattleStation(view.station, true);
   updateBattleStationButtons();
+  updateLookoutAimRequests();
+}
+
+function updateLookoutAimRequests() {
+  const requests = crewState?.aimRequests ?? [];
+  for (const request of requests) {
+    if (request.status !== "accepted" || request.recipient !== playerId || handledLookoutDecisions.has(request.id)) continue;
+    handledLookoutDecisions.add(request.id);
+    if (handledLookoutDecisions.size > 32) handledLookoutDecisions.delete(handledLookoutDecisions.values().next().value);
+    if (request.weapon === "flak") { flakYaw = request.yaw; flakPitch = request.pitch; }
+    else { cannonYaw = request.yaw; cannonPitch = request.pitch; }
+    cancelWeaponAlignment();
+    weaponHeadingHold.align(request.weapon);
+  }
+  const incoming = requests.find(r => r.recipient === playerId && r.status === "pending");
+  const panel = document.getElementById("lookoutAimRequest");
+  panel.hidden = !incoming;
+  panel.dataset.requestId = incoming?.id ?? "";
+  if (incoming) {
+    const name = crewState.members.find(m => m.playerId === incoming.requester)?.name ?? "Ausguck";
+    document.getElementById("lookoutAimRequestText").textContent = `${name} moechte deine ${incoming.weapon === "flak" ? "Flak" : "Kanone"} einmalig ausrichten.`;
+  }
+  if (lookoutViewActive && requests.length) {
+    const latest = requests.at(-1);
+    lookoutFeedback.textContent = latest.status === "accepted" ? "Ausrichtung angenommen"
+      : latest.status === "declined" ? "Ausrichtung abgelehnt" : "Warte auf Zustimmung";
+  } else if (lookoutViewActive && lookoutRequestWasPending) {
+    lookoutFeedback.textContent = "Anfrage beendet";
+  }
+  lookoutRequestWasPending = requests.some(r => r.requester === playerId && r.status === "pending");
+}
+
+async function decideLookoutAim(accept) {
+  const panel = document.getElementById("lookoutAimRequest");
+  const requestId = panel.dataset.requestId;
+  if (!crewState || !requestId) return;
+  const buttons = panel.querySelectorAll("button");
+  buttons.forEach(button => { button.disabled = true; });
+  const errorOutput = document.getElementById("lookoutAimRequestError");
+  errorOutput.textContent = "";
+  try {
+    const response = await fetch(gameEndpoint("/game/crew/lookout-aim-decision"), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(crewCommand({ requestId, accept }))
+    });
+    if (!response.ok) throw new Error("Anfrage nicht mehr verfuegbar");
+    applyCrewView(await response.json());
+  } catch (error) { errorOutput.textContent = error.message; }
+  finally { buttons.forEach(button => { button.disabled = false; }); focusGameCanvas(); }
 }
 
 function weaponRequest(shot) { return crewState ? crewCommand({ shot }) : shot; }
@@ -2149,8 +2290,7 @@ function getHeldWeaponSpeed(startTime, fineSpeed, mediumSpeed, fastSpeed, veryFa
   return getContinuousHeldWeaponSpeed(startTime, fineSpeed, extremeSpeed, timings.extreme);
 }
 
-function getHeldCannonSpeed(startTime, fineSpeed, extremeSpeed) {
-  const sightLevel = currentCannonSightLevel();
+function getHeldCannonSpeed(startTime, fineSpeed, extremeSpeed, sightLevel = currentCannonSightLevel()) {
   const startSpeed = fineSpeed * sightLevel.startSpeedFactor;
   const rampSeconds = cannonHoldTimings.extreme * sightLevel.rampFactor;
   return getContinuousHeldWeaponSpeed(startTime, startSpeed, extremeSpeed, rampSeconds);
@@ -2164,6 +2304,15 @@ function getContinuousHeldWeaponSpeed(startTime, fineSpeed, maxSpeed, rampSecond
 }
 
 function getPlayerCameraSetup(forward) {
+  if (lookoutViewActive) {
+    const roof = getBridgeWindowCameraLocalPosition().roofPosition;
+    const position = transformLocalShipPointWithoutTilt(roof, torpedoBoatVisualScale);
+    position.y += 1;
+    const yaw = heading + lookoutYaw;
+    const target = position.add(new Vector3(Math.sin(yaw) * Math.cos(lookoutPitch),
+      Math.sin(lookoutPitch), Math.cos(yaw) * Math.cos(lookoutPitch)).scale(100));
+    return { position, target };
+  }
   if (sideViewSandboxMode) {
     return getDebugOrbitCameraSetup();
   }
@@ -2282,6 +2431,7 @@ function getBridgeWindowCameraLocalPosition() {
   const windowY = bridgeHouseCenterY + bridgeWindowYOffset;
   const windowFrontZ = bridgeHouseZ + bridgeHouseDepth * 0.5;
   return {
+    roofPosition: new Vector3(0, bridgeBaseTopY + bridgeHouseHeight, bridgeHouseZ),
     position: new Vector3(0, windowY, windowFrontZ - 0.035),
     target: new Vector3(0, windowY - 0.035, windowFrontZ + 72)
   };
@@ -3038,12 +3188,13 @@ function shortestAngleDelta(from, to) {
 }
 
 function updateBattleStationButtons() {
-  bridgeViewButton?.classList.toggle("is-active", !flakViewActive && !cannonViewActive && !torpedoScopeActive);
+  bridgeViewButton?.classList.toggle("is-active", !lookoutViewActive && !flakViewActive && !cannonViewActive && !torpedoScopeActive);
+  lookoutViewButton?.classList.toggle("is-active", lookoutViewActive);
   flakViewButton?.classList.toggle("is-active", flakViewActive);
   cannonViewButton?.classList.toggle("is-active", cannonViewActive);
   torpedoAidButton?.classList.toggle("is-active", torpedoScopeActive);
   if (crewState) {
-    for (const [station, button] of [["bridge", bridgeViewButton], ["bridge", torpedoAidButton], ["flak", flakViewButton], ["cannon", cannonViewButton]]) {
+    for (const [station, button] of [["lookout", lookoutViewButton], ["bridge", bridgeViewButton], ["bridge", torpedoAidButton], ["flak", flakViewButton], ["cannon", cannonViewButton]]) {
       if (!button) continue;
       const occupant = crewState.members.find(m => m.station === station);
       const occupied = occupant && occupant.playerId !== playerId;
@@ -3051,10 +3202,18 @@ function updateBattleStationButtons() {
       button.classList.toggle("crew-occupied", Boolean(occupied));
       button.dataset.occupant = occupant?.name ?? "";
       button.title = occupied ? `Besetzt: ${occupant.name}` : occupant ? "Deine Position" : "Frei";
-      button.setAttribute("aria-label", `${station === "bridge" ? "Bruecke" : station === "flak" ? "Flak" : "Kanone"}: ${button.title}`);
+      button.setAttribute("aria-label", `${station === "lookout" ? "Ausguck" : station === "bridge" ? "Bruecke" : station === "flak" ? "Flak" : "Kanone"}: ${button.title}`);
     }
     document.body.dataset.crewStation = crewState.station;
     document.body.dataset.crewMembers = String(crewState.members.length);
+  }
+  for (const [weapon, button] of [["cannon", lookoutCannonButton], ["flak", lookoutFlakButton]]) {
+    const occupant = crewState?.members.find(m => m.station === weapon);
+    if (button) {
+      const request = crewState?.aimRequests?.find(r => r.weapon === weapon);
+      button.disabled = Boolean(request);
+      button.querySelector("small").textContent = request ? (request.status === "pending" ? "Angefragt" : "Beantwortet") : occupant ? `${occupant.name} fragen` : "Ausrichten";
+    }
   }
   if (submarineMode && torpedoAidButton) {
     const torpedoDisabled = !canUseSubmarineTorpedoScope();
@@ -3990,6 +4149,14 @@ function formatInputEvent(event) {
 }
 
 function pressDirectionalInput(direction, options = {}) {
+  if (lookoutViewActive) {
+    if (!lookoutHeldDirections.has(direction)) {
+      if (direction === "left" || direction === "right") lookoutYawStartTime = time;
+      else lookoutPitchStartTime = time;
+    }
+    lookoutHeldDirections.add(direction);
+    return;
+  }
   const repeat = Boolean(options.repeat);
   const shiftKey = Boolean(options.shiftKey);
 
@@ -4126,6 +4293,7 @@ function pressDirectionalInput(direction, options = {}) {
 }
 
 function releaseDirectionalInput(direction) {
+  lookoutHeldDirections.delete(direction);
   if (direction === "up") {
     if (heldEngineDirection > 0) heldEngineDirection = 0;
     if (heldObservationPeriscopePitchDirection > 0) heldObservationPeriscopePitchDirection = 0;
@@ -4819,6 +4987,7 @@ function createPlayerStatePayload(debugTeleport = false) {
 }
 
 function sendFinalPlayerState() {
+  if (crewState?.station === "lookout") return;
   if (sideViewSandboxMode || playerDamageState !== "active" || !playerId || !playerTeamId) return;
   const payload = JSON.stringify(crewState ? crewCommand({ motion: createPlayerStatePayload(false) }) : createPlayerStatePayload(debugTeleportPending));
   const endpoint = getPlayerStateEndpoint();
@@ -5622,6 +5791,7 @@ function syncMultiplayerState(now) {
 }
 
 async function sendPlayerState() {
+  if (crewState?.station === "lookout") return;
   if (serverRestartPending) return;
   playerStateRequestInFlight = true;
   playerStateRequestStartedAt = time;
@@ -5666,6 +5836,7 @@ async function sendPlayerState() {
 }
 
 function requestPlayerWeaponFire() {
+  if (lookoutViewActive) return;
   if (submarineMode && !canFireSubmarineTorpedoAtCurrentDepth()) {
     document.body.dataset.fireTorpedoSync = "blocked";
     document.body.dataset.fireTorpedoSyncError = "submarine-submerged";
@@ -6526,13 +6697,14 @@ function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, player
   }
   const radarRange = getSelectedRadarRange();
   const observationPeriscopeActive = isPlayerSubmarineObservationPeriscopeActive();
-  const bridgeWeaponsVisible = !scoutPlaneMode && playerVehicleType === "torpedo-boat" && !flakViewActive && !cannonViewActive;
+  const bridgeWeaponsVisible = !lookoutViewActive && !scoutPlaneMode && playerVehicleType === "torpedo-boat" && !flakViewActive && !cannonViewActive;
   const radarTargetLineMode = observationPeriscopeActive
     ? "periscope"
     : (flakViewActive ? "flak" : (cannonViewActive ? "cannon" : (torpedoScopeActive || bridgeWeaponsVisible ? "torpedo" : "hidden")));
   document.body.dataset.radarTargetLineMode = radarTargetLineMode;
   drawRadarInstrument(radarCanvas, radarStatus, playerPosition, radarContacts, landZones, radarHeading, radarRange, {
     flakLookHeading: options.flakLookHeading,
+    lookoutHeading: lookoutViewActive ? heading + lookoutYaw : null,
     periscopeLookHeading: observationPeriscopeActive ? normalizeAngle(heading + observationPeriscopeYaw) : null,
     targetMode: !scoutPlaneMode && (flakViewActive || cannonViewActive || torpedoScopeActive || observationPeriscopeActive || bridgeWeaponsVisible),
     torpedoFiringHeading: heading,
@@ -6850,6 +7022,9 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
 
   if (Number.isFinite(options.bridgeWeaponHeading)) {
     drawRadarWeaponLines(ctx, centerX, centerY, radius, heading, options.bridgeWeaponHeading, cannonAimDisplay.yaw, flakAimDisplay.yaw);
+  }
+  if (Number.isFinite(options.lookoutHeading)) {
+    drawRadarFlakLookIndicator(ctx, centerX, centerY, radius, options.lookoutHeading, heading);
   }
 
   const nearestVisible = visibleContacts.reduce((nearest, contact) => (
@@ -10023,6 +10198,10 @@ function averageWakeScale(parts, key) {
 
 function stationSnapshot() {
   return {
+    lookout: lookoutViewActive,
+    binoculars: lookoutBinocularsActive,
+    lookoutYaw,
+    lookoutPitch,
     flak: flakViewActive,
     cannon: cannonViewActive,
     torpedo: torpedoScopeActive,

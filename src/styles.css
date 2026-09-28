@@ -10,7 +10,7 @@ body {
   --control-panel-width: min(430px, calc(100vw - var(--view-left) - 44px));
   --flak-control-panel-width: min(530px, calc(100vw - var(--view-left) - 44px));
   --control-panel-height: 86px;
-  --battle-station-height: 112px;
+  --battle-station-height: 132px;
   --radar-size: calc(var(--instrument-panel-inner-width) - 20px);
   --radar-panel-extra-height: 53px;
   --map-panel-chrome-height: 112px;
@@ -943,6 +943,124 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
   left: 7%;
   top: 8px;
   min-width: 64px;
+}
+
+.battle-station-lookout {
+  left: 43%;
+  top: 8px;
+  transform: translateX(-50%);
+}
+
+.battle-station[hidden], .lookout-hud[hidden] { display: none; }
+
+.lookout-hud {
+  position: fixed;
+  left: calc(50% + var(--instrument-panel-width) / 2);
+  bottom: 12%;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(420px, calc(100vw - var(--instrument-panel-width) - 24px));
+  gap: 8px;
+  z-index: 15;
+  text-align: center;
+}
+.lookout-hud button {
+  padding: 8px 4px;
+  border: 1px solid #89aaa9;
+  border-radius: 4px;
+  color: #edf7f4;
+  background: #162628e6;
+  font: 600 12px/1.5 Arial, sans-serif;
+  cursor: pointer;
+}
+.lookout-hud button:disabled { opacity: .55; cursor: default; }
+.lookout-hud button[aria-pressed="true"] { border-color: #f1d79b; color: #f1d79b; }
+.lookout-hud kbd, .lookout-hud small { display: block; font-size: 11px; overflow-wrap: anywhere; }
+.lookout-hud output { grid-column: 1 / -1; min-height: 20px; color: #fff; font: 13px Arial, sans-serif; text-shadow: 0 1px 3px #000; }
+.lookout-binocular-mask { display: none; }
+.lookout-aim-request {
+  position: fixed;
+  right: 16px;
+  top: 24%;
+  z-index: 16;
+  width: min(260px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid #89aaa9;
+  border-radius: 4px;
+  background: #162628f2;
+  color: #edf7f4;
+  font: 13px/1.5 Arial, sans-serif;
+}
+.lookout-aim-request[hidden] { display: none; }
+.lookout-aim-request p { margin: 8px 0; }
+.lookout-aim-request button { padding: 7px; margin-right: 6px; cursor: pointer; }
+.lookout-aim-request output { display: block; }
+body[data-lookout-binoculars="active"] .lookout-binocular-mask {
+  display: grid;
+  place-items: center;
+  position: fixed;
+  left: calc(50% + var(--instrument-panel-width) / 2);
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(70vh, calc(100vw - var(--instrument-panel-width) - 24px));
+  aspect-ratio: 1;
+  border-radius: 50%;
+  box-shadow: 0 0 0 200vmax rgb(0 0 0 / 85%), inset 0 0 30px #000;
+  pointer-events: none;
+  z-index: 3;
+}
+.lookout-reticle { display: none; }
+body[data-lookout-view="active"] .lookout-reticle {
+  display: block;
+  position: fixed;
+  left: calc(50% + var(--view-left) / 2);
+  top: 50%;
+  width: 24px;
+  height: 24px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 4;
+}
+.lookout-reticle::before, .lookout-reticle::after {
+  content: "";
+  position: absolute;
+  background: #edf7e5;
+  box-shadow: 0 0 2px 1px #000b;
+}
+.lookout-reticle::before { left: 0; top: 11px; width: 24px; height: 2px; }
+.lookout-reticle::after { left: 11px; top: 0; width: 2px; height: 24px; }
+body[data-lookout-view="active"] .ship-controls-panel,
+body[data-lookout-view="active"] .side-view-camera-panel,
+body[data-lookout-view="active"] .align-weapons-group { display: none; }
+body[data-lookout-view="active"] .nav-instrument-radar,
+body[data-lookout-view="active"] .battle-station-panel { z-index: 4; }
+
+@media (max-width: 700px) {
+  .lookout-hud { width: calc(100vw - var(--view-left) - 16px); bottom: 10px; gap: 4px; }
+  .lookout-hud button { font-size: 10px; }
+  .lookout-hud kbd, .lookout-hud small { font-size: 9px; }
+  body[data-lookout-binoculars="active"] .lookout-binocular-mask { width: calc(100vw - var(--view-left) - 12px); }
+  body[data-player-vehicle="torpedo-boat"] { --battle-station-height: 152px; }
+  body[data-player-vehicle="torpedo-boat"] .battle-station-hull { display: none; }
+  body[data-player-vehicle="torpedo-boat"] .battle-station-panel {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: 34px;
+    align-content: start;
+    gap: 4px;
+    padding: 6px;
+  }
+  body[data-player-vehicle="torpedo-boat"] .battle-station {
+    position: static;
+    transform: none;
+    min-width: 0;
+    width: 100%;
+    font-size: 8px;
+    padding: 2px;
+  }
+  body[data-player-vehicle="torpedo-boat"] .battle-station.is-active::after { display: none; }
 }
 
 .battle-station-torpedo-precision {

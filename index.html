@@ -265,6 +265,21 @@
   </head>
   <body>
     <canvas id="renderCanvas"></canvas>
+    <div class="lookout-binocular-mask" aria-hidden="true"></div>
+    <div class="lookout-reticle" aria-hidden="true"></div>
+    <section id="lookoutHud" class="lookout-hud" aria-label="Ausguck" hidden>
+      <button id="lookoutZoomButton" type="button" aria-pressed="false">Fernglas <kbd>Z</kbd></button>
+      <button id="lookoutCannonButton" type="button">Kanone <kbd>Shift+C</kbd><small>Ausrichten</small></button>
+      <button id="lookoutFlakButton" type="button">Flak <kbd>Shift+F</kbd><small>Ausrichten</small></button>
+      <output id="lookoutFeedback" aria-live="polite"></output>
+    </section>
+    <section id="lookoutAimRequest" class="lookout-aim-request" aria-label="Ausrichtungsanfrage" hidden>
+      <strong>Ausguck</strong>
+      <p id="lookoutAimRequestText"></p>
+      <button id="acceptLookoutAim" type="button">Ausrichten</button>
+      <button id="declineLookoutAim" type="button">Ablehnen</button>
+      <output id="lookoutAimRequestError" aria-live="polite"></output>
+    </section>
     <div id="sinkingWaterOverlay" class="sinking-water-overlay" aria-hidden="true"></div>
     <div id="planeHitFlash" class="plane-hit-flash" aria-hidden="true"></div>
     <div class="mobile-orientation-hint" aria-hidden="true">
@@ -356,6 +371,9 @@
         <button id="bridgeViewButton" class="battle-station battle-station-bridge" type="button" aria-label="Brücke wählen">
           <span>Brücke</span>
           <kbd>B</kbd>
+        </button>
+        <button id="lookoutViewButton" class="battle-station battle-station-lookout" type="button" aria-label="Ausguck wählen">
+          <span>Ausguck</span><kbd>O</kbd>
         </button>
         <button id="torpedoAidButton" class="battle-station battle-station-torpedo-precision" type="button" aria-label="Torpedo-Präzision wählen">
           <span>Torpedo Präzision</span>
