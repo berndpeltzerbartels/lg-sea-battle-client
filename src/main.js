@@ -12661,7 +12661,7 @@ function renderServerTorpedoImpacts(impacts) {
     if (impact.reason === "expired") {
       createRangeSplash(torpedoSystem, position, headingValue);
     } else if (impact.reason === "ship-hit") {
-      createTorpedoShipWaterColumn(torpedoSystem, position, headingValue);
+      createTorpedoShipWaterColumn(torpedoSystem, position, headingValue, 1.2);
     } else if (impact.reason === "land-hit") {
       createHitChurn(torpedoSystem, position, headingValue, 1.45);
     } else {
@@ -13652,7 +13652,7 @@ function updateTorpedoSystem(system, dt, time, enemyMotions, landZones, playerPo
         enemyId: hitEnemy.id,
         enemyPosition: summarizeVector(hitEnemy.root.position)
       }, landZones);
-      createTorpedoShipWaterColumn(system, torpedo.root.position, torpedo.heading);
+      createTorpedoShipWaterColumn(system, torpedo.root.position, torpedo.heading, 1.2);
       disposeTorpedo(torpedo);
       return false;
     }
@@ -13664,7 +13664,7 @@ function updateTorpedoSystem(system, dt, time, enemyMotions, landZones, playerPo
       recordTorpedoEvent(system, torpedo, "player-hit", time, {
         playerPosition: summarizeVector(playerPosition)
       }, landZones);
-      createTorpedoShipWaterColumn(system, torpedo.root.position, torpedo.heading);
+      createTorpedoShipWaterColumn(system, torpedo.root.position, torpedo.heading, 1.2);
       disposeTorpedo(torpedo);
       return false;
     }
@@ -14109,7 +14109,8 @@ function createAirDroppedTorpedoSurfaceWake(system, position, heading) {
   }
 }
 
-function createTorpedoShipWaterColumn(system, position, heading) {
+function createTorpedoShipWaterColumn(system, position, heading, scale = 1) {
+  const firstEffect = system.hitEffects.length;
   const forward = getForwardVector(heading);
   const right = getRightVector(heading);
   const effectId = system.hits;
@@ -14190,6 +14191,14 @@ function createTorpedoShipWaterColumn(system, position, heading) {
       grow: new Vector3(3.2 + i * 0.26, 0.15, 2.2 + i * 0.18),
       seed: effectId + 140 + i
     });
+  }
+  if (scale !== 1) {
+    for (let i = firstEffect; i < system.hitEffects.length; i++) {
+      const effect = system.hitEffects[i];
+      effect.mesh.scaling.scaleInPlace(scale);
+      effect.baseScale.scaleInPlace(scale);
+      effect.velocity.scaleInPlace(Math.sqrt(scale));
+    }
   }
 }
 
