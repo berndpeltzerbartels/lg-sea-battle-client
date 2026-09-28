@@ -5742,6 +5742,9 @@ function updateKillFeedFromSnapshot(snapshot) {
   ].sort((left, right) => left.t - right.t);
 
   const crewSuccesses = [];
+  const successShipId = crewState?.shipId
+    ?? snapshot.ships?.find(ship => ship.controlledBy === playerId)?.id
+    ?? playerServerShipId;
   candidates.forEach((event) => {
     if (killFeedEventIds.has(event.key)) return;
     killFeedEventIds.add(event.key);
@@ -5749,7 +5752,7 @@ function updateKillFeedFromSnapshot(snapshot) {
     nextKillFeedNumber += 1;
     event.highlight = true;
     killFeedEvents.unshift(event);
-    if (killNotificationsInitialized && event.sourceShipId === playerServerShipId) crewSuccesses.push(event);
+    if (killNotificationsInitialized && event.sourceShipId === successShipId) crewSuccesses.push(event);
   });
   killNotificationsInitialized = true;
   if (crewSuccesses.length) showCrewKillSuccess(crewSuccesses);
@@ -5807,7 +5810,7 @@ function rememberKillFeedShipLabels(ships) {
   }
 }
 
-function collectKillFeedImpacts(impacts, type, weaponLabel, isKill = (impact) => impact?.reason === "ship-hit") {
+function collectKillFeedImpacts(impacts, type, weaponLabel, isKill = (impact) => impact?.reason === "ship-hit" || impact?.reason === "plane-hit") {
   if (!Array.isArray(impacts)) return [];
   return impacts
     .filter((impact) => impact?.id && impact?.shipId && impact?.targetShipId && isKill(impact))
