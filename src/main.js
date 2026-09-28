@@ -48,7 +48,7 @@ const engine = new Engine(canvas, true, {
 const scene = new Scene(engine);
 document.body.dataset.appStarted = "true";
 const urlParams = new URLSearchParams(location.search);
-const depthChargeLayout = urlParams.get("depthChargeLayout") === "throwers" ? "throwers" : "stern";
+const depthChargeLayout = urlParams.get("sandbox") === "side-view" && urlParams.get("depthChargeLayout") === "throwers" ? "throwers" : "stern";
 let depthChargePreview = null;
 const depthChargeAnimators = new WeakMap();
 const activeDepthChargeAnimators = new Set();
@@ -1267,6 +1267,11 @@ setupFlakViewControl(flakViewButton);
 setupCannonViewControl(cannonViewButton);
 setupAlignWeaponsControl(alignWeaponsButton);
 document.getElementById("depthChargeButton")?.addEventListener("click", () => { void dropDepthCharges(); focusGameCanvas(); });
+window.addEventListener("pointerdown", unlockDepthChargeAudio, { once: true });
+window.addEventListener("keydown", unlockDepthChargeAudio, { once: true });
+const hotkeyLayoutObserver = new ResizeObserver(placeRoleHotkeys);
+for (const element of document.querySelectorAll("#roleHotkeys, .player-list, #lookoutHud")) hotkeyLayoutObserver.observe(element);
+window.addEventListener("resize", placeRoleHotkeys);
 setupAlignWeaponsControl(alignAirDefenseButton, "air-defense");
 setupTorpedoAidControl(torpedoAidButton);
 setupSubmarineDepthControl(submarineSurfaceButton);
@@ -3179,11 +3184,7 @@ function updateDepthChargeButton() {
 async function dropDepthCharges() {
   if (!canDropDepthCharges() || playerDamageState !== "active" || depthChargeRequestPending || time < depthChargeReadyAt) return;
   // Audio must be unlocked by a user gesture, never by a network event.
-  const Audio = window.AudioContext || window.webkitAudioContext;
-  if (Audio) {
-    depthChargeAudio ??= new Audio();
-    depthChargeAudio.resume().catch(() => {});
-  }
+  unlockDepthChargeAudio();
   depthChargeRequestPending = true;
   try {
     const response = await fetch(gameEndpoint("/game/crew/depth-charges"), {
@@ -3200,11 +3201,19 @@ async function dropDepthCharges() {
   } finally { depthChargeRequestPending = false; }
 }
 
+function unlockDepthChargeAudio() {
+  if (playerVehicleType !== "torpedo-boat") return;
+  const Audio = window.AudioContext || window.webkitAudioContext;
+  if (Audio) {
+    depthChargeAudio ??= new Audio();
+    depthChargeAudio.resume().catch(() => {});
+  }
+}
+
 function animateDepthChargeRelease(charge) {
   const own = charge.shipId === playerServerShipId;
   const motion = own ? null : enemyMotions.find(m => m.id === charge.shipId);
   const model = own ? boat.depthCharges : motion?.boat?.depthCharges;
-  if (own) depthChargeReadyAt = Math.max(depthChargeReadyAt, time + 8 - charge.lane * 1.2);
   if (!model || model.root.isDisposed()) return;
   let animator = depthChargeAnimators.get(model);
   if (!animator) {
@@ -3217,7 +3226,7 @@ function animateDepthChargeRelease(charge) {
       animator.dispose(); activeDepthChargeAnimators.delete(animator);
     });
   }
-  if (animator.fire(charge.lane, getForwardVector(own ? heading : motion.heading).scale(own ? speed : motion.speed || 0)))
+  if (animator.fire(charge.lane, getForwardVector(own ? heading : motion.heading).scale(own ? speed : motion.speed || 0), new Vector3(charge.x, 0, charge.z)))
     activeDepthChargeAnimators.add(animator);
 }
 
@@ -3227,9 +3236,11 @@ function explodeDepthCharge(charge) {
   if (distance > 1800) return;
   torpedoSystem.hits += 1;
   const start = torpedoSystem.hitEffects.length;
-  createTorpedoShipWaterColumn(torpedoSystem, position, charge.heading);
+  if (start < 180) createTorpedoShipWaterColumn(torpedoSystem, position, charge.heading);
+  else if (start < 220) createRangeSplash(torpedoSystem, position, charge.heading);
   // Reuse the bounded water-effect geometry, increasing size instead of particle count.
   for (const effect of torpedoSystem.hitEffects.slice(start)) {
+    if (effect.light || effect.skyFlash) continue;
     effect.mesh.scaling.scaleInPlace(1.6);
     effect.baseScale.scaleInPlace(1.6);
     effect.velocity.scaleInPlace(1.35);
@@ -3431,6 +3442,19 @@ function updateRoleHotkeys() {
     row.append(shortcut, text);
     return row;
   }));
+  placeRoleHotkeys();
+}
+
+function placeRoleHotkeys() {
+  const panel = document.getElementById("roleHotkeys");
+  if (!panel) return;
+  const box = panel.getBoundingClientRect();
+  const overlaps = [...document.querySelectorAll(".player-list, .crew-leave, #lookoutHud")].some(element => {
+    const other = element.getBoundingClientRect();
+    return other.width > 0 && other.height > 0 && box.left < other.right && box.right > other.left
+      && box.top < other.bottom + 8 && box.bottom > other.top - 8;
+  });
+  panel.style.visibility = overlaps ? "hidden" : "visible";
 }
 
 function cycleCannonSightLevel() {
@@ -6309,6 +6333,10 @@ function applyServerGameSnapshot(snapshot) {
   );
   radarTorpedoSnapshots = Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes : [];
   depthChargeEvents.consume(snapshot.instanceId, snapshot.depthCharges ?? [], snapshot.t);
+  for (const charge of snapshot.depthCharges ?? []) {
+    if (charge.shipId === playerServerShipId)
+      depthChargeReadyAt = Math.max(depthChargeReadyAt, time + charge.releasedAt + 8 - charge.lane * 1.2 - snapshot.t);
+  }
   syncServerBombs(
     Array.isArray(snapshot.bombs) ? snapshot.bombs : [],
     Array.isArray(snapshot.bombImpacts) ? snapshot.bombImpacts : [],
@@ -9727,6 +9755,15 @@ function installScenarioTestHooks() {
   if (!scenarioTestMode) return;
 
   window.seaBattleScenarioTest = {
+    stationState() { return stationSnapshot(); },
+    depthChargeEffects() {
+      return { activeRacks: activeDepthChargeAnimators.size, effects: torpedoSystem.hitEffects.length,
+        hits: torpedoSystem.hits, shake: ramShake, audio: depthChargeAudio?.state ?? "none", readyAt: depthChargeReadyAt };
+    },
+    torpedoWaterEffect() {
+      createTorpedoShipWaterColumn(torpedoSystem, boat.root.position.add(new Vector3(0, 0, 30)), 0, 1.2);
+      return torpedoSystem.hitEffects.filter(e => e.mesh).every(e => e.mesh.scaling.asArray().every(Number.isFinite));
+    },
     cannonAimDisplay() {
       return { targetYaw: cannonYaw, targetPitch: cannonPitch,
         yaw: boat.bowCannon.mount.rotation.y, pitch: -boat.bowCannon.elevationRoot.rotation.x };
@@ -14195,6 +14232,7 @@ function createTorpedoShipWaterColumn(system, position, heading, scale = 1) {
   if (scale !== 1) {
     for (let i = firstEffect; i < system.hitEffects.length; i++) {
       const effect = system.hitEffects[i];
+      if (effect.light || effect.skyFlash) continue;
       effect.mesh.scaling.scaleInPlace(scale);
       effect.baseScale.scaleInPlace(scale);
       effect.velocity.scaleInPlace(Math.sqrt(scale));

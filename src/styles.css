@@ -1231,7 +1231,7 @@ body[data-player-vehicle="submarine"] .align-weapons-group {
     display: grid;
     position: fixed;
     right: 16px;
-    bottom: 16px;
+    bottom: 58px;
     width: 226px;
     padding: 10px;
     box-sizing: border-box;

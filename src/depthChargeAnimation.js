@@ -35,6 +35,10 @@ export function createDepthChargeAnimator(model, { onLaunch = () => {}, onSplash
     velocity.y += thrower ? 4.5 : 0;
     const origin = projectile.position.clone();
     const flightTime = (velocity.y + Math.sqrt(velocity.y ** 2 + 19.62 * Math.max(0, origin.y))) / 9.81;
+    if (animation.landingPosition && flightTime > 0) {
+      velocity.x = (animation.landingPosition.x - origin.x) / flightTime;
+      velocity.z = (animation.landingPosition.z - origin.z) / flightTime;
+    }
     animation.flight = { mesh: projectile, origin, velocity, flightTime, rotation: projectile.rotationQuaternion.clone() };
     animation.launched = true;
     onLaunch(origin.clone(), direction, thrower);
@@ -61,11 +65,12 @@ export function createDepthChargeAnimator(model, { onLaunch = () => {}, onSplash
     state() {
       return lanes.map(lane => ({ busy: !!lane.animation, remaining: Number(lane.loaded !== null) + Number(lane.reserve !== null) }));
     },
-    fire(index, shipVelocity = Vector3.Zero()) {
+    fire(index, shipVelocity = Vector3.Zero(), landingPosition = null) {
       const lane = lanes[index];
       if (disposed || !lane || lane.animation || lane.loaded === null) return false;
       lane.animation = { age: 0, chargeIndex: lane.loaded, reloadIndex: lane.reserve, shipVelocity: shipVelocity.clone(), launchAt: thrower ? 0 : .45, launched: false, transferStarted: false, seated: false, flight: null };
       lane.loaded = null;
+      lane.animation.landingPosition = landingPosition?.clone() ?? null;
       if (thrower) launch(model.racks[index], lane.animation);
       onChange(controller.state());
       return true;

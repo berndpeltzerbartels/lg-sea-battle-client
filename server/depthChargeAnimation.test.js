@@ -7,6 +7,22 @@ import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { createDepthChargeRacks } from '../src/depthChargeRacks.js';
 import { createDepthChargeAnimator } from '../src/depthChargeAnimation.js';
 
+test('replicated release lands at the authoritative blast position', () => {
+  const engine = new NullEngine();
+  try {
+    const scene = new Scene(engine);
+    const boat = new TransformNode('boat', scene);
+    const model = createDepthChargeRacks(scene, boat, 'boat', () => .52, 'stern');
+    const target = new Vector3(-.675, 0, -13);
+    let landed;
+    const animation = createDepthChargeAnimator(model, { onSplash: p => landed = p });
+    animation.fire(0, new Vector3(0, 0, 5), target);
+    animation.update(1);
+    assert.ok(landed && Vector3.Distance(landed, target) < 1e-8);
+    animation.dispose();
+  } finally { engine.dispose(); }
+});
+
 for (const dt of [1 / 60, .23, 5]) test(`stern preview replenishes its visible reserve repeatedly without adding meshes, dt=${dt}`, () => {
   const engine = new NullEngine();
   try {
