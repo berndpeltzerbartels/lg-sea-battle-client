@@ -10386,7 +10386,7 @@ function installScenarioTestHooks() {
       const position = shot?.position ?? motion.root.position.add(direction.scale(0.2));
       const velocity = direction.scale(flakProjectileSpeed);
       const before = flakSystem.flashes.length;
-      syncServerFlakProjectiles([{
+      const projectile = {
         id: `flak-test-${Math.round(time * 1000)}`,
         shipId: vehicleId,
         x: position.x,
@@ -10396,7 +10396,9 @@ function installScenarioTestHooks() {
         vy: velocity.y,
         vz: velocity.z,
         firedAt: time
-      }], time);
+      };
+      syncServerFlakProjectiles([projectile], time);
+      weaponShotEvents.consume("remote-flak-test", [projectile], playerId, createRemoteMuzzleEffectForProjectile);
       return {
         flashesBefore: before,
         flashesAfter: flakSystem.flashes.length,
