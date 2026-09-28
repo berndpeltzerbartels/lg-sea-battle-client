@@ -5169,3 +5169,26 @@ body.debug-map-expanded .nav-instrument-map {
     --map-canvas-height: max(120px, calc(100dvh - 190px));
   }
 }
+.crew-kill-success {
+  position: fixed;
+  top: 88px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 35;
+  width: max-content;
+  max-width: min(520px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 10px 16px;
+  border: 1px solid rgba(140, 225, 198, .5);
+  border-radius: 4px;
+  background: rgba(12, 37, 34, .92);
+  color: #d6fff0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+.crew-kill-success[hidden] { display: none; }

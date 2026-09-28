@@ -1227,6 +1227,8 @@ let killFeedEventIds = new Set();
 let killFeedEvents = [];
 let killFeedShipLabels = new Map();
 let nextKillFeedNumber = 1;
+let killNotificationsInitialized = false;
+let killSuccessTimer = null;
 let reportedLocalPlaneHitIds = new Set();
 let pendingCriticalFlakShipHitsByTarget = new Map();
 let pendingCannonShipHitsByTarget = new Map();
@@ -5739,6 +5741,7 @@ function updateKillFeedFromSnapshot(snapshot) {
     ...collectKillFeedImpacts(snapshot.ramHits, "ram", "Rammen", () => true)
   ].sort((left, right) => left.t - right.t);
 
+  const crewSuccesses = [];
   candidates.forEach((event) => {
     if (killFeedEventIds.has(event.key)) return;
     killFeedEventIds.add(event.key);
@@ -5746,7 +5749,10 @@ function updateKillFeedFromSnapshot(snapshot) {
     nextKillFeedNumber += 1;
     event.highlight = true;
     killFeedEvents.unshift(event);
+    if (killNotificationsInitialized && event.sourceShipId === playerServerShipId) crewSuccesses.push(event);
   });
+  killNotificationsInitialized = true;
+  if (crewSuccesses.length) showCrewKillSuccess(crewSuccesses);
 
   if (killFeedEvents.length > killFeedLimit) {
     killFeedEvents = killFeedEvents.slice(0, killFeedLimit);
@@ -5755,6 +5761,18 @@ function updateKillFeedFromSnapshot(snapshot) {
     killFeedEventIds = new Set(killFeedEvents.map((event) => event.key));
   }
   renderKillFeed();
+}
+
+function showCrewKillSuccess(events) {
+  const toast = document.getElementById("crewKillSuccess");
+  if (!toast) return;
+  const vehicleNames = { submarine: "U-Boot", "torpedo-boat": "Schiff", "scout-plane": "Flugzeug" };
+  toast.textContent = events.map(event =>
+    `${vehicleNames[event.targetVehicleType] ?? "Ziel"} ${event.targetLabel} zerstört · ${event.weaponLabel}`
+  ).join(" / ");
+  toast.hidden = false;
+  clearTimeout(killSuccessTimer);
+  killSuccessTimer = setTimeout(() => { toast.hidden = true; }, 4500);
 }
 
 function rememberKillFeedShipLabels(ships) {
@@ -5800,6 +5818,7 @@ function collectKillFeedImpacts(impacts, type, weaponLabel, isKill = (impact) =>
       const target = getKillFeedShipInfo(impact.targetShipId, targetShip);
       return {
         key: `${type}:${impact.id}:${impact.targetShipId}:${impact.t}`,
+        sourceShipId: impact.shipId,
         t: Number.isFinite(impact.t) ? impact.t : 0,
         weaponLabel: typeof weaponLabel === "function" ? weaponLabel(impact) : weaponLabel,
         sourceLabel: source.label,
@@ -9803,6 +9822,11 @@ function installScenarioTestHooks() {
   if (!scenarioTestMode) return;
 
   window.seaBattleScenarioTest = {
+    crewKillSnapshot(snapshot, ownShipId) {
+      playerServerShipId = ownShipId;
+      serverShipsById = indexShipsById(snapshot.ships);
+      updateKillFeedFromSnapshot(snapshot);
+    },
     expireZoomIdle() { zoomIdleTimer.touch(performance.now() - 30001); },
     echoContacts(ships) {
       serverShipsById = new Map(ships.map(ship => [ship.id, ship]));
