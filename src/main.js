@@ -6466,7 +6466,10 @@ function syncServerProjectileHitEffects(hits, ownShip = null) {
     const targetMotion = enemyMotions.find((motion) => motion.id === hit.targetShipId);
     const targetShip = serverShipsById.get(hit.targetShipId) ?? (ownShip?.id === hit.targetShipId ? ownShip : null);
     const submarineHit = targetShip?.vehicleType === "submarine" || targetMotion?.vehicleType === "submarine";
-    if ((submarineHit || Number.isFinite(hit.y) && hit.y < 0) && Number.isFinite(hit.x) && Number.isFinite(hit.z)) {
+    const submarineDepth = targetShip?.depthState ?? targetMotion?.depthState;
+    const underwaterSubmarine = submarineHit && (submarineDepth === "periscope" || submarineDepth === "submerged"
+      || (targetMotion?.depthOffset ?? 0) < -0.1);
+    if ((underwaterSubmarine || !submarineHit && Number.isFinite(hit.y) && hit.y < 0) && Number.isFinite(hit.x) && Number.isFinite(hit.z)) {
       // A periscope hit may be above water even though it destroys a submerged hull.
       const surfacePosition = new Vector3(hit.x, 0, hit.z);
       torpedoSystem.hits += 1;
