@@ -1032,8 +1032,7 @@ body[data-lookout-view="active"] .lookout-reticle {
 .lookout-reticle::before { left: 0; top: 11px; width: 24px; height: 2px; }
 .lookout-reticle::after { left: 11px; top: 0; width: 2px; height: 24px; }
 body[data-lookout-view="active"] .ship-controls-panel,
-body[data-lookout-view="active"] .side-view-camera-panel,
-body[data-lookout-view="active"] .align-weapons-group { display: none; }
+body[data-lookout-view="active"] .side-view-camera-panel { display: none; }
 body[data-lookout-view="active"] .nav-instrument-radar,
 body[data-lookout-view="active"] .battle-station-panel { z-index: 4; }
 
@@ -1218,6 +1217,13 @@ body[data-player-vehicle="submarine"] .align-weapons-group {
   text-transform: uppercase;
   cursor: pointer;
 }
+
+.align-weapons-group:has(#depthChargeButton:not([hidden])) {
+  grid-template-columns: 1fr 1fr;
+}
+.align-weapons-group:has(#depthChargeButton:not([hidden])) > span { display: none; }
+#depthChargeButton:not([hidden]) { grid-column: 1 / -1; }
+.align-weapons-button:disabled { opacity: .45; cursor: default; }
 
 .align-weapons-button:hover,
 .align-weapons-button:focus-visible {

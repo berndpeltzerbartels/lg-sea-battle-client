@@ -34,6 +34,7 @@ import "./styles.css";
 import { createSubmarineModel } from "./submarineModel.js";
 import { createDepthChargeRacks, depthChargeLanes, depthChargeExitHalfWidth } from "./depthChargeRacks.js";
 import { createDepthChargeAnimator } from "./depthChargeAnimation.js";
+import { createDepthChargeEvents } from "./depthChargeEvents.js";
 
 const canvas = document.getElementById("renderCanvas");
 prepareGameFocus(canvas);
@@ -48,6 +49,12 @@ document.body.dataset.appStarted = "true";
 const urlParams = new URLSearchParams(location.search);
 const depthChargeLayout = urlParams.get("depthChargeLayout") === "throwers" ? "throwers" : "stern";
 let depthChargePreview = null;
+const depthChargeAnimators = new WeakMap();
+const activeDepthChargeAnimators = new Set();
+const depthChargeEvents = createDepthChargeEvents(animateDepthChargeRelease, explodeDepthCharge);
+let depthChargeReadyAt = 0;
+let depthChargeRequestPending = false;
+let depthChargeAudio = null;
 const scenarioTestMode = urlParams.get("scenarioTest") === "1";
 const directSideViewSandboxRequested = urlParams.get("setup") === "8"
   || urlParams.get("sandbox") === "side-view"
@@ -752,6 +759,11 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     return;
   }
+  if (playerActive && event.code === "KeyW" && !event.repeat && canDropDepthCharges()) {
+    event.preventDefault();
+    dropDepthCharges();
+    return;
+  }
   if (playerActive && isBombBayViewToggleKey(event) && !event.repeat) {
     toggleBombBayView();
     event.preventDefault();
@@ -1251,6 +1263,7 @@ if (lookoutViewButton) lookoutViewButton.hidden = scoutPlaneMode || submarineMod
 setupFlakViewControl(flakViewButton);
 setupCannonViewControl(cannonViewButton);
 setupAlignWeaponsControl(alignWeaponsButton);
+document.getElementById("depthChargeButton")?.addEventListener("click", () => { void dropDepthCharges(); focusGameCanvas(); });
 setupAlignWeaponsControl(alignAirDefenseButton, "air-defense");
 setupTorpedoAidControl(torpedoAidButton);
 setupSubmarineDepthControl(submarineSurfaceButton);
@@ -1366,6 +1379,11 @@ scene.onBeforeRenderObservable.add(() => {
   const rawFrameSeconds = engine.getDeltaTime() / 1000;
   const dt = Math.min(rawFrameSeconds, maxSimulationFrameSeconds);
   if (depthChargePreview?.active) depthChargePreview.update(dt);
+  for (const animator of activeDepthChargeAnimators) {
+    animator.update(dt);
+    if (!animator.active) activeDepthChargeAnimators.delete(animator);
+  }
+  updateDepthChargeButton();
   time += dt;
   recordPerformanceFrame(rawFrameSeconds, dt);
   const playerActive = playerDamageState === "active";
@@ -3122,6 +3140,95 @@ function alignWeaponsForBridge(mode = "flat") {
     mode: airDefense ? "air-defense" : "flat"
   };
   document.body.dataset.weaponAlign = weaponAlignTarget.mode;
+}
+
+function canDropDepthCharges() {
+  return playerVehicleType === "torpedo-boat" && !!crewState
+    && (crewState.station === "bridge" || crewState.station === "lookout");
+}
+
+function updateDepthChargeButton() {
+  const button = document.getElementById("depthChargeButton");
+  if (!button) return;
+  button.hidden = !canDropDepthCharges();
+  const remaining = Math.max(0, Math.ceil(depthChargeReadyAt - time));
+  button.disabled = !playerActive || depthChargeRequestPending || remaining > 0;
+  const label = remaining ? `Wasserbomben (${remaining}s)` : "Wasserbomben";
+  if (button.firstElementChild.textContent !== label) button.firstElementChild.textContent = label;
+}
+
+async function dropDepthCharges() {
+  if (!canDropDepthCharges() || !playerActive || depthChargeRequestPending || time < depthChargeReadyAt) return;
+  // Audio must be unlocked by a user gesture, never by a network event.
+  const Audio = window.AudioContext || window.webkitAudioContext;
+  if (Audio) {
+    depthChargeAudio ??= new Audio();
+    depthChargeAudio.resume().catch(() => {});
+  }
+  depthChargeRequestPending = true;
+  try {
+    const response = await fetch(gameEndpoint("/game/crew/depth-charges"), {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(crewCommand())
+    });
+    if (!response.ok) throw new Error(`Abwurf nicht moeglich (${response.status})`);
+    depthChargeReadyAt = time + 8;
+    applyServerGameSnapshot(await response.json());
+    document.body.dataset.depthChargeStatus = "released";
+  } catch (error) {
+    document.body.dataset.depthChargeStatus = error.message;
+    const button = document.getElementById("depthChargeButton");
+    if (button) button.title = error.message;
+  } finally { depthChargeRequestPending = false; }
+}
+
+function animateDepthChargeRelease(charge) {
+  const own = charge.shipId === playerServerShipId;
+  const motion = own ? null : enemyMotions.find(m => m.id === charge.shipId);
+  const model = own ? boat.depthCharges : motion?.boat?.depthCharges;
+  if (own) depthChargeReadyAt = Math.max(depthChargeReadyAt, time + 8 - charge.lane * 1.2);
+  if (!model || model.root.isDisposed()) return;
+  let animator = depthChargeAnimators.get(model);
+  if (!animator) {
+    animator = createDepthChargeAnimator(model, {
+      replenishMagazine: true,
+      onSplash: (position, direction) => createCannonWaterImpactEffect(cannonSystem, position, direction)
+    });
+    depthChargeAnimators.set(model, animator);
+    model.root.onDisposeObservable.addOnce(() => {
+      animator.dispose(); activeDepthChargeAnimators.delete(animator);
+    });
+  }
+  if (animator.fire(charge.lane, getForwardVector(own ? heading : motion.heading).scale(own ? speed : motion.speed || 0)))
+    activeDepthChargeAnimators.add(animator);
+}
+
+function explodeDepthCharge(charge) {
+  const position = new Vector3(charge.x, 0, charge.z);
+  const distance = Vector3.Distance(boat.root.position, position);
+  if (distance > 1800) return;
+  torpedoSystem.hits += 1;
+  const start = torpedoSystem.hitEffects.length;
+  createTorpedoShipWaterColumn(torpedoSystem, position, charge.heading);
+  // Reuse the bounded water-effect geometry, increasing size instead of particle count.
+  for (const effect of torpedoSystem.hitEffects.slice(start)) {
+    effect.mesh.scaling.scaleInPlace(1.6);
+    effect.baseScale.scaleInPlace(1.6);
+    effect.velocity.scaleInPlace(1.35);
+  }
+  const strength = Math.max(0, 1 - distance / 100);
+  ramShake = Math.max(ramShake, strength * 0.28);
+  if (depthChargeAudio?.state === "running" && strength > 0) {
+    const oscillator = depthChargeAudio.createOscillator();
+    const gain = depthChargeAudio.createGain();
+    const now = depthChargeAudio.currentTime;
+    oscillator.frequency.setValueAtTime(85, now);
+    oscillator.frequency.exponentialRampToValueAtTime(28, now + 0.6);
+    gain.gain.setValueAtTime(strength * 0.25, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+    oscillator.connect(gain); gain.connect(depthChargeAudio.destination);
+    oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+    oscillator.start(); oscillator.stop(now + 0.7);
+  }
 }
 
 async function alignUnoccupiedCrewWeapons(mode) {
@@ -5520,6 +5627,8 @@ function updateKillFeedFromSnapshot(snapshot) {
   const candidates = [
     ...collectKillFeedImpacts(snapshot.torpedoImpacts, "torpedo", "Torpedo"),
     ...collectKillFeedImpacts(snapshot.bombImpacts, "bomb", "Bomben"),
+    ...collectKillFeedImpacts((snapshot.depthCharges ?? []).flatMap(c => c.targetShipIds.map(targetShipId =>
+      ({ ...c, targetShipId, t: c.explodesAt, reason: "ship-hit" }))), "depth-charge", "Wasserbombe"),
     ...collectKillFeedImpacts(snapshot.flakHits, "flak", (impact) => isCannonServerProjectile(impact?.id) ? "Kanone" : "Flak", () => true),
     ...collectKillFeedImpacts(snapshot.ramHits, "ram", "Rammen", () => true)
   ].sort((left, right) => left.t - right.t);
@@ -6148,6 +6257,7 @@ function applyServerGameSnapshot(snapshot) {
     snapshot.t
   );
   radarTorpedoSnapshots = Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes : [];
+  depthChargeEvents.consume(snapshot.instanceId, snapshot.depthCharges ?? [], snapshot.t);
   syncServerBombs(
     Array.isArray(snapshot.bombs) ? snapshot.bombs : [],
     Array.isArray(snapshot.bombImpacts) ? snapshot.bombImpacts : [],
