@@ -161,7 +161,7 @@ body.debug-marker-map {
     radial-gradient(circle at 50% 46%, rgb(255 245 205 / 18%), transparent 28%),
     rgb(0 0 0 / 62%);
   color: #fff4be;
-  padding: 0 24px;
+  padding: 0 24px 0 calc(var(--view-left, 0px) + 24px);
   font-size: clamp(18px, 2.2vw, 34px);
   font-weight: 900;
   letter-spacing: 0;

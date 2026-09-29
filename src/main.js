@@ -6491,6 +6491,13 @@ function applyServerGameSnapshot(snapshot) {
   );
   radarTorpedoSnapshots = Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes : [];
   depthChargeEvents.consume(snapshot.instanceId, snapshot.depthCharges ?? [], snapshot.t);
+  for (const charge of snapshot.depthCharges ?? []) {
+    if (!charge.exploded) continue;
+    for (const targetShipId of charge.targetShipIds ?? []) {
+      notifyOwnWeaponImpact({ ...charge, targetShipId, t: charge.explodesAt },
+        "Wasserbomben", "depth-charge", "torpedo-boat");
+    }
+  }
   const chargeControl = snapshot.depthChargeControls?.[playerServerShipId];
   depthChargeReadyAt = chargeControl ? time + chargeControl.readyAt - snapshot.t : 0;
   depthChargeSalvoActive = chargeControl?.active ?? false;
