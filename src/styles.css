@@ -960,12 +960,13 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
   transform: translateX(-50%);
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  width: min(420px, calc(100vw - var(--instrument-panel-width) - 24px));
+  width: min(560px, calc(100vw - var(--instrument-panel-width) - 24px));
   gap: 8px;
   z-index: 15;
   text-align: center;
 }
 .lookout-hud button {
+  overflow-wrap: anywhere;
   padding: 8px 4px;
   border: 1px solid #89aaa9;
   border-radius: 4px;
@@ -5194,3 +5195,40 @@ body.debug-map-expanded .nav-instrument-map {
 }
 
 .crew-kill-success[hidden] { display: none; }
+.crew-submarine-warning {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  top: auto;
+  bottom: 28%;
+  border-color: #f2cb64;
+  color: #ffe6a1;
+  background: rgba(38, 31, 12, .96);
+}
+.submarine-warning-arrow {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  font-size: 32px;
+  line-height: 1;
+}
+
+.crew-kill-success.is-friendly-fire {
+  border-color: #f2cb64;
+  background: rgba(38, 31, 12, .96);
+  color: #ffe6a1;
+}
+.kill-feed-row.is-friendly-fire { background: rgb(242 203 100 / 10%); }
+.kill-feed-warning {
+  display: block;
+  color: #f2cb64;
+  font-size: 15px;
+  line-height: 18px;
+}
+.kill-feed-friendly-label {
+  color: #f2cb64;
+  font-size: 8px;
+  white-space: normal;
+}

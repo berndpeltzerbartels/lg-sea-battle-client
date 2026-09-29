@@ -1275,6 +1275,9 @@ setupFlakViewControl(flakViewButton);
 setupCannonViewControl(cannonViewButton);
 setupAlignWeaponsControl(alignWeaponsButton);
 document.getElementById("depthChargeButton")?.addEventListener("click", () => { void dropDepthCharges(); focusGameCanvas(); });
+document.getElementById("lookoutDepthChargeButton")?.addEventListener("click", () => { void dropDepthCharges(); focusGameCanvas(); });
+document.getElementById("lookoutWarningButton")?.addEventListener("click", () => { void warnSubmarineFromLookout(); focusGameCanvas(); });
+document.getElementById("lookoutAircraftWarningButton")?.addEventListener("click", () => { void warnSubmarineFromLookout("aircraft"); focusGameCanvas(); });
 window.addEventListener("pointerdown", unlockDepthChargeAudio, { once: true });
 window.addEventListener("keydown", unlockDepthChargeAudio, { once: true });
 const hotkeyLayoutObserver = new ResizeObserver(placeRoleHotkeys);
@@ -1770,6 +1773,7 @@ scene.onBeforeRenderObservable.add(() => {
   document.body.dataset.measuredSpeed = measuredSpeedSample.speed.toFixed(2);
   compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
   if (compassHeading) compassHeading.textContent = `HDG ${formatHeadingDegrees(heading)}`;
+  updateSubmarineWarningDirection();
   updateRudderGauge(rudderIndicator, rudderValue, rudderDegrees);
   updateObservationPeriscopeHeadingDisplay();
   updateTorpedoScopeRudderDisplay();
@@ -2012,6 +2016,59 @@ async function changeCrewStation(station) {
   }
 }
 
+let lastSubmarineWarningId = null;
+let submarineWarningTimer = null;
+let submarineWarningBearing = null;
+async function warnSubmarineFromLookout(kind = "submarine") {
+  if (crewState?.station !== "lookout" || playerDamageState !== "active") return;
+  const button = document.getElementById("lookoutWarningButton");
+  const aircraftButton = document.getElementById("lookoutAircraftWarningButton");
+  if (button.disabled) return;
+  button.disabled = true;
+  aircraftButton.disabled = true;
+  try {
+    const response = await fetch(gameEndpoint(`/game/crew/${kind === "aircraft" ? "aircraft" : "submarine"}-warning`), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...crewCommand(), bearing: (heading + lookoutYaw) * 180 / Math.PI })
+    });
+    if (!response.ok) throw new Error("Warnruf momentan nicht möglich");
+    applyCrewView(await response.json());
+    setTimeout(() => { button.disabled = false; aircraftButton.disabled = false; }, 5000);
+  } catch (error) {
+    lookoutFeedback.textContent = error.message;
+    button.disabled = false;
+    aircraftButton.disabled = false;
+  }
+}
+
+function showSubmarineWarning(warning) {
+  if (!warning || warning.id === lastSubmarineWarningId) return;
+  lastSubmarineWarningId = warning.id;
+  const toast = document.getElementById("crewSubmarineWarning");
+  const arrow = document.createElement("span");
+  arrow.className = "submarine-warning-arrow";
+  arrow.textContent = "↑";
+  arrow.setAttribute("role", "img");
+  const label = document.createElement("span");
+  label.textContent = `${warning.kind === "aircraft" ? "Flugzeug greift an" : "U-Boot gesichtet"} · Ausguck ${warning.sender}`;
+  toast.replaceChildren(arrow, label);
+  submarineWarningBearing = warning.bearing * Math.PI / 180;
+  toast.hidden = false;
+  updateSubmarineWarningDirection();
+  clearTimeout(submarineWarningTimer);
+  submarineWarningTimer = setTimeout(() => { toast.hidden = true; }, 6000);
+}
+
+function updateSubmarineWarningDirection() {
+  const toast = document.getElementById("crewSubmarineWarning");
+  if (!toast || toast.hidden || submarineWarningBearing === null) return;
+  const relative = normalizeAngle(submarineWarningBearing - heading);
+  const arrow = toast.firstElementChild;
+  arrow.style.transform = `rotate(${relative}rad)`;
+  const directions = ["voraus", "Steuerbord voraus", "Steuerbord", "Steuerbord achteraus", "achteraus", "Backbord achteraus", "Backbord", "Backbord voraus"];
+  arrow.setAttribute("aria-label", directions[(Math.round(relative / (Math.PI / 4)) + 8) % 8]);
+}
+
 function applyCrewView(view) {
   if (crewState && view.revision < crewState.revision) return;
   const changed = !crewState || crewState.station !== view.station;
@@ -2020,6 +2077,7 @@ function applyCrewView(view) {
     lookoutPitch = 0;
   }
   crewState = view;
+  showSubmarineWarning(view.submarineWarning);
   if (changed) setBattleStation(view.station, true);
   updateBattleStationButtons();
   updateLookoutAimRequests();
@@ -3193,20 +3251,22 @@ function alignWeaponsForBridge(mode = "flat") {
 
 function canDropDepthCharges() {
   return playerVehicleType === "torpedo-boat" && !!crewState
-    && (crewState.station === "bridge" || crewState.station === "lookout");
+    && ["bridge", "lookout", "flak"].includes(crewState.station);
 }
 
 function updateDepthChargeButton() {
-  const button = document.getElementById("depthChargeButton");
-  if (!button) return;
-  button.hidden = !canDropDepthCharges();
   const remaining = Math.max(0, Math.ceil(depthChargeReadyAt - time));
-  button.disabled = playerDamageState !== "active" || depthChargeRequestPending || depthChargeSalvoQueued;
   const label = depthChargeSalvoQueued ? "Serie vorgemerkt"
     : depthChargeSalvoActive || remaining > 0 ? "Weitere Serie vormerken" : "Wasserbomben";
-  if (button.firstElementChild.textContent !== label) {
-    button.firstElementChild.textContent = label;
-    updateRoleHotkeys();
+  for (const id of ["depthChargeButton", "lookoutDepthChargeButton"]) {
+    const button = document.getElementById(id);
+    if (!button) continue;
+    button.hidden = !canDropDepthCharges();
+    button.disabled = playerDamageState !== "active" || depthChargeRequestPending || depthChargeSalvoQueued;
+    if (button.firstElementChild.textContent !== label) {
+      button.firstElementChild.textContent = label;
+      updateRoleHotkeys();
+    }
   }
 }
 
@@ -5762,8 +5822,9 @@ function showCrewKillSuccess(events) {
   const toast = document.getElementById("crewKillSuccess");
   if (!toast) return;
   const vehicleNames = { submarine: "U-Boot", "torpedo-boat": "Schiff", "scout-plane": "Flugzeug" };
+  toast.classList.toggle("is-friendly-fire", events.some(event => event.friendlyFire));
   toast.textContent = events.map(event =>
-    `${vehicleNames[event.targetVehicleType] ?? "Ziel"} ${event.targetLabel} zerstört · ${event.weaponLabel}`
+    `${event.friendlyFire ? "⚠\uFE0E Eigene Flotte: " : ""}${vehicleNames[event.targetVehicleType] ?? "Ziel"} ${event.targetLabel} zerstört · ${event.weaponLabel}`
   ).join(" / ");
   toast.hidden = false;
   clearTimeout(killSuccessTimer);
@@ -5818,6 +5879,7 @@ function collectKillFeedImpacts(impacts, type, weaponLabel, isKill = (impact) =>
         weaponLabel: typeof weaponLabel === "function" ? weaponLabel(impact) : weaponLabel,
         sourceLabel: source.label,
         sourceTeamId: source.teamId,
+        friendlyFire: !!source.teamId && source.teamId === target.teamId,
         sourceVehicleType: source.vehicleType,
         targetLabel: target.label,
         targetTeamId: target.teamId,
@@ -5883,11 +5945,19 @@ function renderKillFeed() {
 
   killFeedEvents.forEach((event) => {
     const row = document.createElement("div");
-    row.className = `kill-feed-row${event.highlight ? " is-new" : ""}`;
+    row.className = `kill-feed-row${event.highlight ? " is-new" : ""}${event.friendlyFire ? " is-friendly-fire" : ""}`;
+    if (event.friendlyFire) row.title = "Abschuss innerhalb der eigenen Flotte";
 
     const number = document.createElement("span");
     number.className = "kill-feed-number";
     number.textContent = `${event.number ?? ""}`;
+    if (event.friendlyFire) {
+      const warning = document.createElement("span");
+      warning.className = "kill-feed-warning";
+      warning.textContent = "⚠\uFE0E";
+      warning.setAttribute("aria-hidden", "true");
+      number.append(warning);
+    }
 
     const target = document.createElement("strong");
     target.className = "kill-feed-party kill-feed-party-target";
@@ -5914,6 +5984,12 @@ function renderKillFeed() {
     const targetCell = document.createElement("div");
     targetCell.className = "kill-feed-cell kill-feed-cell-target";
     targetCell.append(target);
+    if (event.friendlyFire) {
+      const warningLabel = document.createElement("small");
+      warningLabel.className = "kill-feed-friendly-label";
+      warningLabel.textContent = "Eigene Flotte";
+      targetCell.append(warningLabel);
+    }
 
     const sourceLine = document.createElement("div");
     sourceLine.className = "kill-feed-source-line";
@@ -9027,6 +9103,9 @@ function beginEnemySinking(motion, side, time) {
   motion.sinkRollStart = fromCriticalShipHit ? 0.0 : fromCannonShipHit ? 0.03 : 0.12;
   motion.sinkRollAmount = fromCriticalShipHit ? 1.08 : fromCannonShipHit ? 1.28 : 1.45;
   motion.sinkDuration = fromCriticalShipHit ? 6.6 : fromCannonShipHit ? 4.6 : 5.2;
+  if ((fromCriticalShipHit || fromCannonShipHit) && !motion.submergedSinking) {
+    createGunfireSinkingFoam(torpedoSystem, motion.root.position, motion.heading, motion.sinkDuration);
+  }
   motion.timers.forEach((timer) => window.clearTimeout(timer));
   motion.timers = [];
   if (motion.bowWake) {
@@ -9852,6 +9931,12 @@ function installScenarioTestHooks() {
     setStation(station) {
       setBattleStation(String(station ?? "bridge"));
       return stationSnapshot();
+    },
+    sinkingFoamForTest(start = false) {
+      if (start) createGunfireSinkingFoam(torpedoSystem, boat.root.position, heading, 4.6);
+      return torpedoSystem.hitEffects.filter(effect => effect.sinkingFoam).map(effect => ({
+        y: effect.mesh.position.y, visibility: effect.mesh.visibility, enabled: effect.mesh.isEnabled()
+      }));
     },
     setSubmarineDepthState(depthState) {
       setPlayerSubmarineDepthState(depthState);
@@ -13680,6 +13765,7 @@ function updateTorpedoSystem(system, dt, time, enemyMotions, landZones, playerPo
       effect.mesh.position.x = effect.origin.x + effect.velocity.x * t;
       effect.mesh.position.z = effect.origin.z + effect.velocity.z * t;
       effect.mesh.position.y = effect.origin.y + effect.velocity.y * t - effect.gravity * t * t + Math.sin(time * 9 + effect.seed) * 0.01;
+      if (effect.sinkingFoam) effect.mesh.visibility = 0.7 * Math.min(1, effect.age * 3) * (1 - t * t);
       effect.mesh.scaling.x = effect.baseScale.x * (1 + eased * effect.grow.x);
       effect.mesh.scaling.y = effect.baseScale.y * (1 + eased * effect.grow.y);
       effect.mesh.scaling.z = effect.baseScale.z * (1 + eased * effect.grow.z);
@@ -14108,6 +14194,32 @@ function positionTorpedoWakeSegment(segment, torpedo, startX, startZ, endX, endZ
   );
   segment.rotation.y = torpedo.heading + Math.atan2(dx, dz);
   segment.scaling.z = length / (segment.metadata?.baseDepth ?? 1);
+}
+
+function createGunfireSinkingFoam(system, position, heading, duration) {
+  const forward = getForwardVector(heading);
+  const right = getRightVector(heading);
+  const effectId = system.nextId++;
+  for (let i = 0; i < 12; i += 1) {
+    const angle = i * Math.PI / 6;
+    const side = Math.cos(angle);
+    const along = Math.sin(angle);
+    const patch = createJaggedSurfacePatch(`sinking_foam_${effectId}_${i}`, system.scene,
+      0.5 * torpedoBoatVisualScale, 1.25 * torpedoBoatVisualScale, effectId + i * 17);
+    patch.parent = system.root;
+    patch.material = system.materials.foam;
+    patch.position.copyFrom(new Vector3(position.x, 0.065 + i * 0.002, position.z)
+      .add(right.scale(side * 0.95 * torpedoBoatVisualScale))
+      .add(forward.scale(along * 3.7 * torpedoBoatVisualScale)));
+    patch.rotation.y = heading;
+    system.hitEffects.push({
+      mesh: patch, sinkingFoam: true, age: 0, lifetime: duration + 1.5,
+      origin: patch.position.clone(),
+      velocity: right.scale(side * 0.8 * torpedoBoatVisualScale)
+        .add(forward.scale(along * 0.35 * torpedoBoatVisualScale)),
+      gravity: 0, baseScale: patch.scaling.clone(), grow: new Vector3(1.1, 0, 0.5), seed: i
+    });
+  }
 }
 
 function createRangeSplash(system, position, heading) {

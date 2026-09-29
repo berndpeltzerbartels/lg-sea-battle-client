@@ -19,7 +19,7 @@ export function roleHotkeys({ role, members = [], playerId, depthChargesReady = 
       if (role === 'cannon') keys.push(['Z', 'Vergrößerung']);
     }
   }
-  if (depthChargesReady && ['bridge', 'lookout'].includes(role)) keys.push(['W', 'Wasserbomben']);
+  if (depthChargesReady && ['bridge', 'lookout', 'flak'].includes(role)) keys.push(['W', 'Wasserbomben']);
   if (radarModes) keys.push(['R', 'Radar wechseln']);
   return keys;
 }

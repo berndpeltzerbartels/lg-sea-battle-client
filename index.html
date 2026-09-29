@@ -272,8 +272,12 @@
       <button id="lookoutZoomButton" type="button" aria-pressed="false">Fernglas <kbd>Z</kbd></button>
       <button id="lookoutCannonButton" type="button">Kanone <kbd>C</kbd><small>Ausrichten &amp; übernehmen</small></button>
       <button id="lookoutFlakButton" type="button">Flak <kbd>F</kbd><small>Ausrichten &amp; übernehmen</small></button>
+      <button id="lookoutDepthChargeButton" type="button"><span>Wasserbomben</span><kbd>W</kbd></button>
+      <button id="lookoutWarningButton" type="button">U-Boot warnen</button>
+      <button id="lookoutAircraftWarningButton" type="button">Flugzeug warnen</button>
       <output id="lookoutFeedback" aria-live="polite"></output>
     </section>
+    <output id="crewSubmarineWarning" class="crew-kill-success crew-submarine-warning" role="status" aria-live="polite" hidden></output>
     <section id="lookoutAimRequest" class="lookout-aim-request" aria-label="Ausrichtungsanfrage" hidden>
       <strong>Ausguck</strong>
       <p id="lookoutAimRequestText"></p>
