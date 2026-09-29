@@ -2,6 +2,7 @@ import { Engine } from "@babylonjs/core/Engines/engine";
 import { prepareInstrumentPaths, radarTransform } from "./instrumentMap.js";
 import { mountCrewInbox } from "./crewInbox.js";
 import { WeaponAimDisplay } from "./weaponAimDisplay.js";
+import { advanceSubmarineDepth } from "./submarineDiveMotion.js";
 import { prioritizeMuzzleLight, preserveEnvironmentLight } from "./muzzleLighting.js";
 import { WeaponHeadingHold, WeaponShotEvents } from "./weaponPresentation.js";
 import { drawRadarWeaponLines } from "./radarWeaponLines.js";
@@ -4817,12 +4818,8 @@ function getSubmarineWakeExposureRatio(depthOffset) {
 
 function updatePlayerSubmarineDiveMotion(dt) {
   const targetOffset = submarineDepthOffsets[playerSubmarineDepthState] ?? 0;
-  const step = submarineDepthTransitionSpeed * dt;
-  if (Math.abs(playerSubmarineDepthOffset - targetOffset) <= step) {
-    playerSubmarineDepthOffset = targetOffset;
-  } else {
-    playerSubmarineDepthOffset += Math.sign(targetOffset - playerSubmarineDepthOffset) * step;
-  }
+  playerSubmarineDepthOffset = advanceSubmarineDepth(playerSubmarineDepthOffset, targetOffset, dt,
+    submarineDepthOffsets.periscope, submarineDepthOffsets.submerged, submarineDepthTransitionSpeed);
   const targetLift = getSubmarinePeriscopeLiftTarget(playerSubmarineDepthState, playerSubmarineDepthOffset);
   playerSubmarinePeriscopeLift = moveValueToward(playerSubmarinePeriscopeLift, targetLift, submarinePeriscopeLiftSpeed * dt);
   updatePlayerPeriscopeInkMode();
@@ -8812,12 +8809,8 @@ function getShipDepthState(ship) {
 function updateRemoteSubmarineDiveMotion(motion, dt) {
   if (motion.vehicleType !== "submarine") return;
   const targetOffset = submarineDepthOffsets[motion.depthState] ?? 0;
-  const step = submarineDepthTransitionSpeed * dt;
-  if (Math.abs((motion.depthOffset ?? 0) - targetOffset) <= step) {
-    motion.depthOffset = targetOffset;
-  } else {
-    motion.depthOffset = (motion.depthOffset ?? 0) + Math.sign(targetOffset - (motion.depthOffset ?? 0)) * step;
-  }
+  motion.depthOffset = advanceSubmarineDepth(motion.depthOffset ?? 0, targetOffset, dt,
+    submarineDepthOffsets.periscope, submarineDepthOffsets.submerged, submarineDepthTransitionSpeed);
   const targetLift = getSubmarinePeriscopeLiftTarget(motion.depthState, motion.depthOffset ?? 0);
   motion.periscopeLift = moveValueToward(motion.periscopeLift ?? 0, targetLift, submarinePeriscopeLiftSpeed * dt);
   updateSubmarinePeriscopeExtension(motion.boat, motion.periscopeLift);
