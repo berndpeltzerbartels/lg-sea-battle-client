@@ -891,14 +891,12 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 }
 
 .battle-station.is-active {
-  border-color: rgb(255 107 74 / 82%);
-  background:
-    radial-gradient(circle at 50% 52%, rgb(255 107 74 / 32%), transparent 68%),
-    rgb(36 23 20 / 62%);
+  border-color: #74c9f2;
+  background: rgb(18 66 92 / 90%);
   box-shadow:
-    0 0 0 1px rgb(255 107 74 / 16%),
-    0 0 16px rgb(255 107 74 / 26%);
-  color: #fff7ef;
+    0 0 0 1px rgb(116 201 242 / 16%),
+    0 0 12px rgb(116 201 242 / 20%);
+  color: #eef9ff;
 }
 
 .battle-station:disabled,
@@ -908,9 +906,9 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 }
 
 .battle-station.is-active kbd {
-  border-color: rgb(255 107 74 / 48%);
-  background: rgb(255 107 74 / 18%);
-  color: #ffd7c9;
+  border-color: rgb(116 201 242 / 55%);
+  background: rgb(116 201 242 / 16%);
+  color: #d5f0ff;
 }
 
 .battle-station.is-active::after {
@@ -921,9 +919,28 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
   width: 22px;
   height: 2px;
   border-radius: 999px;
-  background: #ff6b4a;
-  box-shadow: 0 0 10px rgb(255 107 74 / 74%);
+  background: #74c9f2;
+  box-shadow: 0 0 10px rgb(116 201 242 / 60%);
   transform: translateX(-50%);
+}
+
+.battle-station.crew-occupied {
+  opacity: 1;
+  border-color: #df795d;
+  background: rgb(92 35 29 / 94%);
+  color: #ffe4da;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.battle-station.crew-occupied kbd {
+  border-color: rgb(223 121 93 / 55%);
+  background: rgb(223 121 93 / 12%);
+  color: #ffc6b4;
+}
+
+.battle-station.crew-occupied::after {
+  display: none;
 }
 
 .battle-station-cannon {

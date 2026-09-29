@@ -1,6 +1,4 @@
 .crew-occupied {
-  opacity: 0.5;
-  outline: 1px dashed #e8aa72;
   cursor: not-allowed;
 }
 .crew-leave {
