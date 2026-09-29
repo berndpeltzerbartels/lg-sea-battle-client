@@ -1,0 +1,51 @@
+import { test, expect } from '@playwright/test';
+
+test('underwater wall impact creates a visible explosion without sinking a ship', async ({ page }, testInfo) => {
+  await page.goto('/app?vehicle=torpedo-boat&sandbox=side-view&scenarioTest=1');
+  await page.waitForFunction(() => window.seaBattleScenarioTest);
+  await page.evaluate(() => window.seaBattleScenarioTest.underwaterTorpedoForTest());
+  await page.waitForTimeout(250);
+  const before = await page.evaluate(() => window.seaBattleScenarioTest.underwaterChargePixelsForTest());
+  await page.evaluate(() => window.seaBattleScenarioTest.underwaterTorpedoForTest(true, 'land-hit'));
+  await page.waitForTimeout(350);
+  const effect = await page.evaluate(() => window.seaBattleScenarioTest.underwaterChargesForTest());
+  expect(effect.blasts).toHaveLength(1);
+  expect(effect.blasts[0].y).toBeLessThan(-1);
+  expect(await page.evaluate(() => window.seaBattleScenarioTest.serverTorpedoVisuals())).toHaveLength(0);
+  const target = await page.evaluate(() => window.seaBattleScenarioTest.vehicleVisual('deep-target'));
+  expect(target.visualState).not.toBe('sinking');
+  expect(await page.evaluate(() => window.seaBattleScenarioTest.underwaterChargePixelsForTest())).toBeGreaterThan(before + 500);
+  await page.screenshot({ path: testInfo.outputPath('underwater-wall-impact.png') });
+});
+
+for (const width of [1280, 844]) test(`deep torpedo holds depth and detonates underwater at ${width}`, async ({ page }, testInfo) => {
+  await page.setViewportSize({ width, height: width === 1280 ? 800 : 390 });
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/app?vehicle=torpedo-boat&sandbox=side-view&scenarioTest=1');
+  await page.waitForFunction(() => window.seaBattleScenarioTest);
+  await page.evaluate(() => window.seaBattleScenarioTest.underwaterTorpedoForTest());
+  await page.waitForTimeout(250);
+  const first = await page.evaluate(() => window.seaBattleScenarioTest.serverTorpedoVisuals()[0]);
+  await page.waitForTimeout(500);
+  const second = await page.evaluate(() => window.seaBattleScenarioTest.serverTorpedoVisuals()[0]);
+  expect(second.y).toBe(first.y);
+  expect(second.y).toBeLessThan(-1);
+  expect(second.z).toBeGreaterThan(first.z);
+  expect(second.propellerAngle).not.toBe(first.propellerAngle);
+  expect(second.bodyVisible).toBe(true);
+  expect(second.wakeVisible).toBe(false);
+  await page.screenshot({ path: testInfo.outputPath('deep-torpedo.png') });
+  const before = await page.evaluate(() => window.seaBattleScenarioTest.underwaterChargePixelsForTest());
+  await page.evaluate(() => window.seaBattleScenarioTest.underwaterTorpedoForTest(true));
+  await page.waitForTimeout(350);
+  const effect = await page.evaluate(() => window.seaBattleScenarioTest.underwaterChargesForTest());
+  expect(effect.blasts).toHaveLength(1);
+  expect(effect.blasts[0].y).toBe(first.y);
+  const wreck = await page.evaluate(() => window.seaBattleScenarioTest.vehicleVisual('deep-target'));
+  expect(wreck.visualState).toBe('sinking');
+  expect(wreck.y).toBeLessThan(first.y);
+  expect(await page.evaluate(() => window.seaBattleScenarioTest.underwaterChargePixelsForTest())).toBeGreaterThan(before + 500);
+  await page.screenshot({ path: testInfo.outputPath('deep-torpedo-hit.png') });
+  expect(errors).toEqual([]);
+});

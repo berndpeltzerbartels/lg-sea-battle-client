@@ -2190,8 +2190,6 @@ function setSubmarinePeriscopeMode(mode) {
   } else if (nextMode === submarinePeriscopeModes.alignToBearing) {
     if (canUseSubmarineTorpedoScope()) {
       startSubmarineBearingAlignment();
-    } else if (playerSubmarineDepthState === submarineDepthStates.submerged) {
-      queueSubmarineBearingAlignmentAfterAscent();
     }
   } else {
     submarineBearingAlignReturnToStop = false;
@@ -2212,19 +2210,6 @@ function startSubmarineBearingAlignment() {
   if (submarineBearingAlignReturnToStop && submarineEngineAheadOneThirdIndex >= 0) {
     engineOrder = submarineEngineAheadOneThirdIndex;
   }
-  setTorpedoScope(true);
-  nextPlayerStateSendTime = 0;
-  updateSubmarinePeriscopeModeUi();
-}
-
-function queueSubmarineBearingAlignmentAfterAscent() {
-  submarineBearingAlignTarget = getCurrentSubmarinePeriscopeBearing();
-  submarineBearingAlignReturnToStop = Math.abs(speed) <= submarineBearingAlignStopSpeed
-    && engineOrder === submarineEngineStopIndex;
-  submarineBearingAlignPendingAscent = true;
-  submarinePeriscopeMode = submarinePeriscopeModes.alignToBearing;
-  setPlayerSubmarineDepthState(submarineDepthStates.periscope);
-  submarinePeriscopeMode = submarinePeriscopeModes.alignToBearing;
   setTorpedoScope(true);
   nextPlayerStateSendTime = 0;
   updateSubmarinePeriscopeModeUi();
@@ -2308,12 +2293,12 @@ function canShowSubmarineTorpedoScope() {
 }
 
 function canUseSubmarineTorpedoScope() {
-  return !submarineMode || playerSubmarineDepthState === submarineDepthStates.periscope;
+  return !submarineMode || playerSubmarineDepthState === submarineDepthStates.periscope
+    || playerSubmarineDepthState === submarineDepthStates.submerged;
 }
 
 function canFireSubmarineTorpedoAtCurrentDepth() {
-  return !submarineMode
-    || Math.abs(playerSubmarineDepthOffset) <= Math.abs(submarineDepthOffsets.periscope) + 0.06;
+  return true;
 }
 
 function getPlayerSubmarineSpeedFactor() {
@@ -6461,6 +6446,8 @@ function applyServerGameSnapshot(snapshot) {
     }
   });
 
+  depthChargeUnderwater ??= createDepthChargeUnderwater(scene, torpedoBoatVisualScale);
+  depthChargeUnderwater.sync(snapshot.instanceId, snapshot.depthCharges ?? [], snapshot.t);
   syncServerTorpedoes(
     Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes : [],
     Array.isArray(snapshot.torpedoImpacts) ? snapshot.torpedoImpacts : [],
@@ -6468,8 +6455,6 @@ function applyServerGameSnapshot(snapshot) {
     snapshot.t
   );
   radarTorpedoSnapshots = Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes : [];
-  depthChargeUnderwater ??= createDepthChargeUnderwater(scene, torpedoBoatVisualScale);
-  depthChargeUnderwater.sync(snapshot.instanceId, snapshot.depthCharges ?? [], snapshot.t);
   depthChargeEvents.consume(snapshot.instanceId, snapshot.depthCharges ?? [], snapshot.t);
   const chargeControl = snapshot.depthChargeControls?.[playerServerShipId];
   depthChargeReadyAt = chargeControl ? time + chargeControl.readyAt - snapshot.t : 0;
@@ -8163,6 +8148,7 @@ function drawRadarTorpedoes(ctx, centerX, centerY, playerPosition, torpedoes, ra
   for (const torpedo of torpedoes) {
     if (visible >= 16) break;
     if (!torpedo || torpedo.state !== "running") continue;
+    if (torpedo.y < -1 && !(submarineMode && playerSubmarineDepthOffset < submarineDepthOffsets.periscope - .06)) continue;
     if (!Number.isFinite(torpedo.x) || !Number.isFinite(torpedo.z)) continue;
 
     const position = { x: torpedo.x, z: torpedo.z };
@@ -9994,6 +9980,13 @@ function installScenarioTestHooks() {
         y: effect.mesh.position.y, visibility: effect.mesh.visibility, enabled: effect.mesh.isEnabled()
       }));
     },
+    underwaterHitFoamForTest(impacts = []) {
+      renderServerTorpedoImpacts(impacts);
+      return torpedoSystem.hitEffects.filter(effect => effect.underwaterHitFoam).map(effect => ({
+        x: effect.mesh.position.x, y: effect.mesh.position.y, z: effect.mesh.position.z,
+        visibility: effect.mesh.visibility
+      }));
+    },
     setSubmarineDepthState(depthState) {
       setPlayerSubmarineDepthState(depthState);
       return stationSnapshot();
@@ -10393,11 +10386,34 @@ function installScenarioTestHooks() {
         .map((visual) => ({
           id: visual.id,
           launchMode: visual.launchMode,
+          y: visual.root.position.y,
+          z: visual.root.position.z,
+          bodyVisible: visual.body.isEnabled(),
+          propellerAngle: visual.propeller?.rotation.z ?? 0,
+          wakeVisible: visual.wake.some(mesh => mesh.isEnabled()),
           shipId: visual.shipId ?? null,
           startX: Number(visual.launchStart.x.toFixed(3)),
           startY: Number(visual.launchStart.y.toFixed(3)),
           startZ: Number(visual.launchStart.z.toFixed(3))
         }));
+    },
+    underwaterTorpedoForTest(explode = false, reason = 'ship-hit') {
+      const y = -3 * torpedoBoatVisualScale;
+      depthChargeUnderwater ??= createDepthChargeUnderwater(scene, torpedoBoatVisualScale);
+      depthChargeUnderwater.sync('torpedo-preview', [], time);
+      if (!explode) {
+        underwaterChargeTestView = true;
+        window.seaBattleScenarioTest.createRemoteSubmarineForTest({ id: 'deep-target', x: 0, z: 15, y, depthState: 'submerged' });
+        syncServerTorpedoes([{ id: 'deep-test', shipId: 'test-sub', x: 0, z: 5, y,
+          heading: 0, speed: 5, state: 'running', firedAt: time }], [], time, time);
+      } else {
+        const target = enemyMotions.find(motion => motion.id === 'deep-target');
+        if (reason === 'ship-hit') applyServerShipSnapshot(target, { state: 'sunk', x: 0, z: 15, y, heading: 0,
+          vehicleType: 'submarine', depthState: 'submerged' });
+        syncServerTorpedoes([], [{ id: 'deep-test', reason, x: 0, z: 15,
+          y, heading: 0, t: time }], time, time);
+      }
+      return depthChargeUnderwater.state();
     },
     playerTorpedoLaunchPreview(vehicleType = playerVehicleType) {
       const left = shipTorpedoTubeLaunchPoints(boat.root.position, heading, -1, vehicleType);
@@ -12911,12 +12927,20 @@ function renderServerTorpedoImpacts(impacts) {
     );
     const headingValue = Number.isFinite(impact.heading) ? impact.heading : 0;
     torpedoSystem.hits += 1;
+    if (Number.isFinite(impact.y) && impact.y < -1) {
+      if (impact.reason !== "expired") {
+        depthChargeUnderwater ??= createDepthChargeUnderwater(scene, torpedoBoatVisualScale);
+        depthChargeUnderwater.explode({ ...impact, id: `torpedo-${impact.id}`, explodesAt: impact.t, radius: 24 });
+        if (impact.reason === "ship-hit") createUnderwaterHitSurfaceFoam(torpedoSystem, position);
+      }
+      return;
+    }
     if (impact.reason === "expired") {
       createRangeSplash(torpedoSystem, position, headingValue);
     } else if (impact.reason === "ship-hit") {
       createTorpedoShipWaterColumn(torpedoSystem, position, headingValue, 1.2);
     } else if (impact.reason === "land-hit") {
-      createHitChurn(torpedoSystem, position, headingValue, 1.45);
+      createTorpedoShipWaterColumn(torpedoSystem, position, headingValue, 1.2);
     } else {
       createHitChurn(torpedoSystem, position, headingValue);
     }
@@ -12956,6 +12980,27 @@ function createServerTorpedoVisual(system, snapshot, snapshotReceivedAt = time, 
   nose.material = system.materials.funnel;
 
   const speedValue = Number.isFinite(snapshot.speed) ? snapshot.speed : fallbackServerTorpedoSpeed(launch);
+  let propeller = null;
+  if (snapshot.y < -1 && snapshot.state !== "airborne") {
+    if (!system.underwaterTorpedoMaterial) {
+      const steel = new StandardMaterial('underwater_torpedo_steel', system.scene);
+      steel.diffuseColor = new Color3(.38, .46, .45);
+      steel.emissiveColor = new Color3(.035, .065, .065);
+      steel.specularColor = new Color3(.35, .42, .42);
+      system.underwaterTorpedoMaterial = steel;
+    }
+    body.material = nose.material = system.underwaterTorpedoMaterial;
+    propeller = new TransformNode(`${root.name}_propeller`, system.scene);
+    propeller.parent = root;
+    propeller.position.z = -torpedoBodyLength * .5 - .06;
+    for (let i = 0; i < 2; i++) {
+      const blade = MeshBuilder.CreateBox(`${root.name}_blade_${i}`, { width: .38, height: .055, depth: .035 }, system.scene);
+      blade.parent = propeller;
+      blade.rotation.z = i * Math.PI / 2;
+      blade.material = system.underwaterTorpedoMaterial;
+      blade.isPickable = false;
+    }
+  }
   const launchIsBeingReplayed = launch.mode === "local-tube" || launch.mode === "air-drop";
   const initialRunDistance = launchIsBeingReplayed
     ? 0
@@ -12971,6 +13016,7 @@ function createServerTorpedoVisual(system, snapshot, snapshotReceivedAt = time, 
     heading: Number.isFinite(snapshot.heading) ? snapshot.heading : 0,
     forward: getForwardVector(Number.isFinite(snapshot.heading) ? snapshot.heading : 0),
     speed: speedValue,
+    propeller,
     verticalSpeed: Number.isFinite(snapshot.verticalSpeed) ? snapshot.verticalSpeed : 0,
     serverState: snapshot.state ?? "running",
     serverPosition: new Vector3(snapshot.x, Number.isFinite(snapshot.y) ? snapshot.y : 0.05, snapshot.z),
@@ -13026,6 +13072,11 @@ function createServerTorpedoVisual(system, snapshot, snapshotReceivedAt = time, 
 function getServerTorpedoLaunch(system, snapshot, snapshotServerTime = null) {
   const heading = Number.isFinite(snapshot.heading) ? snapshot.heading : 0;
   const serverPosition = new Vector3(snapshot.x, Number.isFinite(snapshot.y) ? snapshot.y : 0.05, snapshot.z);
+  if (snapshot.y < -1 && snapshot.state !== "airborne") {
+    return { mode: "underwater", heading, start: serverPosition, puffPosition: serverPosition,
+      muzzlePosition: serverPosition, tubeSide: snapshot.tubeSide ?? 0, blendUntil: 0,
+      showMuzzleEffect: false, sourceVehicleType: "submarine", sourceSpeed: 0 };
+  }
   const isOwnTorpedo = snapshot.shipId && (snapshot.shipId === playerServerShipId || snapshot.shipId === pendingPlayerServerShip?.id);
   const isPendingOwnTorpedo = snapshot.shipId && snapshot.shipId === pendingPlayerServerShip?.id;
   const shooterShip = snapshot.shipId ? serverShipsById.get(snapshot.shipId) : null;
@@ -13219,6 +13270,18 @@ function updateServerTorpedoVisuals(system, dt, now) {
       : visual.serverPosition.y;
     const step = visual.speed * dt;
 
+    if (visual.serverState === "running" && visual.serverPosition.y < -1) {
+      visual.root.position.x += (projected.x - visual.root.position.x) * Math.min(1, dt * 10);
+      visual.root.position.z += (projected.z - visual.root.position.z) * Math.min(1, dt * 10);
+      visual.root.position.y = visual.serverPosition.y;
+      visual.root.rotationQuaternion = Quaternion.FromEulerAngles(0, visual.heading, 0);
+      visual.body?.setEnabled(true);
+      visual.nose?.setEnabled(true);
+      if (visual.propeller) visual.propeller.rotation.z = now * 45;
+      visual.runDistance += step;
+      updateTorpedoWake(visual, false, now);
+      return;
+    }
     if (visual.serverState === "airborne") {
       visual.body?.setEnabled(true);
       visual.nose?.setEnabled(true);
@@ -13821,6 +13884,7 @@ function updateTorpedoSystem(system, dt, time, enemyMotions, landZones, playerPo
       effect.mesh.position.z = effect.origin.z + effect.velocity.z * t;
       effect.mesh.position.y = effect.origin.y + effect.velocity.y * t - effect.gravity * t * t + Math.sin(time * 9 + effect.seed) * 0.01;
       if (effect.sinkingFoam) effect.mesh.visibility = 0.7 * Math.min(1, effect.age * 3) * (1 - t * t);
+      if (effect.underwaterHitFoam) effect.mesh.visibility = 0.45 * Math.min(1, effect.age * 3) * (1 - t * t);
       effect.mesh.scaling.x = effect.baseScale.x * (1 + eased * effect.grow.x);
       effect.mesh.scaling.y = effect.baseScale.y * (1 + eased * effect.grow.y);
       effect.mesh.scaling.z = effect.baseScale.z * (1 + eased * effect.grow.z);
@@ -14250,6 +14314,28 @@ function positionTorpedoWakeSegment(segment, torpedo, startX, startZ, endX, endZ
   );
   segment.rotation.y = torpedo.heading + Math.atan2(dx, dz);
   segment.scaling.z = length / (segment.metadata?.baseDepth ?? 1);
+}
+
+function createUnderwaterHitSurfaceFoam(system, position) {
+  const effectId = system.nextId++;
+  for (let i = 0; i < 6; i++) {
+    const angle = i * Math.PI / 3;
+    const outward = new Vector3(Math.cos(angle), 0, Math.sin(angle));
+    const patch = createJaggedSurfacePatch(`underwater_hit_foam_${effectId}_${i}`, system.scene,
+      1.3 * torpedoBoatVisualScale, 0.65 * torpedoBoatVisualScale, effectId + i * 17);
+    patch.parent = system.root;
+    patch.material = system.materials.foam;
+    patch.isPickable = false;
+    patch.visibility = 0;
+    patch.position.copyFrom(new Vector3(position.x, 0.065 + i * .002, position.z)
+      .add(outward.scale(.6 * torpedoBoatVisualScale)));
+    patch.rotation.y = -angle;
+    system.hitEffects.push({
+      mesh: patch, underwaterHitFoam: true, age: 0, lifetime: 2.6,
+      origin: patch.position.clone(), velocity: outward.scale(.7 * torpedoBoatVisualScale),
+      gravity: 0, baseScale: patch.scaling.clone(), grow: new Vector3(.9, 0, .7), seed: i
+    });
+  }
 }
 
 function createGunfireSinkingFoam(system, position, heading, duration) {

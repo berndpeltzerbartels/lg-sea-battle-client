@@ -117,7 +117,7 @@ export function createDepthChargeUnderwater(scene, scale) {
       coreMaterial.emissiveColor = new Color3(.65, .92, .86);
       const core = MeshBuilder.CreateSphere(`pressure_flash_${charge.id}`, { diameter: 1, segments: 12 }, scene);
       core.material = coreMaterial; core.isPickable = false;
-      const depth = -.12 - 3 * scale;
+      const depth = Number.isFinite(charge.y) ? charge.y : -.12 - 3 * scale;
       core.position.set(charge.x, depth, charge.z);
       blasts.push({ id: charge.id, age: Math.max(0, now - charge.explodesAt), x: charge.x, z: charge.z,
         depth, radius: Math.min(charge.radius * .42, 12), core, material, coreMaterial,

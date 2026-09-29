@@ -416,13 +416,17 @@ test("submarine periscope depth keeps the observation view above water", async (
   expect(submergedRadar.radarRange).toBeGreaterThan(0);
   expect(submergedRadar.radarRange).toBeLessThan(samples[targetDepthIndex].radarRange);
   expect(submergedRadar.periscopeInk).toBe("light");
-  expect(submergedRadar.submarineTorpedoFireAllowed).toBe(false);
-  await expect(page.locator(".torpedo-scope-line-center")).toBeHidden();
+  expect(submergedRadar.submarineTorpedoFireAllowed).toBe(true);
+  await expect(page.locator(".torpedo-scope-line-center")).toBeVisible();
   await expect(page.locator(".torpedo-scope-line-left")).toBeHidden();
   await expect(page.locator(".torpedo-scope-target-bearing-marker")).toBeHidden();
+  let deepFireRequested = false;
+  await page.route('**/game/fire-torpedo', async route => {
+    deepFireRequested = true;
+    await route.fulfill({ json: {} });
+  });
   await page.keyboard.press("Space");
-  await expect.poll(() => page.evaluate(() => document.body.dataset.fireTorpedoSync)).toBe("blocked");
-  await expect.poll(() => page.evaluate(() => document.body.dataset.fireTorpedoSyncError)).toBe("submarine-submerged");
+  await expect.poll(() => deepFireRequested).toBe(true);
 
   const respawnedFromSubmerged = await page.evaluate(() => window.seaBattleScenarioTest.respawnPlayerForTest("submerged"));
   expect(respawnedFromSubmerged.depthState).toBe("surface");
@@ -434,15 +438,17 @@ test("submarine periscope depth keeps the observation view above water", async (
   await page.evaluate(() => window.seaBattleScenarioTest.setSubmarineDepthState("submerged"));
   await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.radarDepthMode), { timeout: 12_000 }).toBe("submerged");
   await page.keyboard.press("3");
-  await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.depthState)).toBe("periscope");
+  await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.depthState)).toBe("submerged");
+  await page.evaluate(() => window.seaBattleScenarioTest.setSubmarineDepthState("periscope"));
   const ascendingBelowPeriscope = await diveSnapshot(page);
-  expect(ascendingBelowPeriscope.submarineTorpedoFireAllowed).toBe(false);
+  expect(ascendingBelowPeriscope.submarineTorpedoFireAllowed).toBe(true);
+  deepFireRequested = false;
   await page.evaluate(() => {
     document.body.dataset.fireTorpedoSync = "";
     document.body.dataset.fireTorpedoSyncError = "";
   });
   await page.keyboard.press("Space");
-  await expect.poll(() => page.evaluate(() => document.body.dataset.fireTorpedoSync)).toBe("blocked");
+  await expect.poll(() => deepFireRequested).toBe(true);
   await expect.poll(() => diveSnapshot(page).then((snapshot) => Math.abs(snapshot.depthOffset - snapshot.targetDepthOffset)), { timeout: 12_000 }).toBeLessThan(0.05);
   await expect.poll(() => diveSnapshot(page).then((snapshot) => snapshot.submarinePeriscopeMode), { timeout: 14_000 }).toBe("forward-scope");
 
@@ -465,8 +471,8 @@ test("submarine periscope depth keeps the observation view above water", async (
   await page.keyboard.press("2");
   await expect.poll(() => page.evaluate(() => document.body.dataset.observationPeriscope)).toBe("active");
   await expect(page.locator(".observation-scope-reticle-line-vertical")).toBeVisible();
-  await expect(page.locator(".observation-scope-reticle-line-left")).toBeVisible();
-  await expect(page.locator(".observation-scope-reticle-line-right")).toBeVisible();
+  await expect(page.locator(".observation-scope-reticle-line-left")).toBeHidden();
+  await expect(page.locator(".observation-scope-reticle-line-right")).toBeHidden();
   await expect(page.locator(".observation-scope-reticle-range-mid")).toBeHidden();
   const firstObservationHorizon = await page.locator(".observation-periscope-glass").evaluate((element) => getComputedStyle(element).getPropertyValue("--observation-horizon-y").trim());
   const zoomedObservationPeriscope = await diveSnapshot(page);
