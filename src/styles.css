@@ -1257,7 +1257,7 @@ body[data-player-vehicle="submarine"] .align-weapons-group {
 .align-weapons-button:disabled { opacity: .45; cursor: default; }
 
 .role-hotkeys { display: none; }
-@media (min-width: 1400px) and (min-height: 850px) {
+@media (min-width: 1100px) and (min-height: 650px) {
   .role-hotkeys:not([hidden]) {
     display: grid;
     position: fixed;
@@ -3156,6 +3156,7 @@ body[data-player-vehicle="submarine"][data-torpedo-view="active"] .fleet-status 
 }
 
 .player-list {
+  z-index: 4;
   position: absolute;
   top: calc(30px + var(--compass-size));
   right: 18px;

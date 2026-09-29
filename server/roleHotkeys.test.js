@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { roleHotkeys } from '../src/roleHotkeys.js';
+test('submarine hints match depth and available posts', () => {
+  const surface = roleHotkeys({ role: 'bridge', submarine: true });
+  assert.ok(surface.some(([k]) => k === 'F'));
+  assert.ok(surface.some(([k]) => k === '⇧↓'));
+  assert.ok(!surface.some(([k]) => ['O', 'C', 'W', '⇧↑'].includes(k)));
+  const deep = roleHotkeys({ role: 'bridge', submarine: true, depth: 'submerged', periscopeAvailable: true, torpedoScope: true });
+  for (const key of ['1', '2', '3', 'Z', '⇧↑', 'Leertaste']) assert.ok(deep.some(([k]) => k === key));
+  assert.ok(!deep.some(([k]) => ['F', 'C', 'O', 'W', '⇧↓'].includes(k)));
+});
 test('role hints exclude occupied posts and allow depth charges for flak but not cannon', () => {
   const members = [{ playerId: 'gunner', station: 'flak' }, { playerId: 'two', station: 'cannon' }, { playerId: 'three', station: 'lookout' }];
   const bridge = roleHotkeys({ role: 'bridge', playerId: 'captain', members });

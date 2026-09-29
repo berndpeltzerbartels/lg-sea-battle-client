@@ -1,4 +1,20 @@
-export function roleHotkeys({ role, members = [], playerId, depthChargesReady = true, radarModes = false, torpedoScope = false }) {
+export function roleHotkeys({ role, members = [], playerId, depthChargesReady = true, radarModes = false, torpedoScope = false,
+  submarine = false, depth = 'surface', periscopeAvailable = false, observationScope = false }) {
+  if (submarine) {
+    const keys = [];
+    if (role === 'flak') keys.push(['B', 'Brücke'], ['↑ ↓ ← →', 'Zielen'], ['Leertaste', 'Feuern'], ['A', 'Ausrichten'], ['⇧A', 'Flugabwehr']);
+    else {
+      if (depth === 'surface') keys.push(['F', 'Flak']);
+      keys.push(['↑ ↓', 'Fahrt'], ['← →', observationScope ? 'Blickrichtung' : 'Ruder']);
+      if (depth === 'surface' || torpedoScope) keys.push(['Leertaste', 'Torpedo']);
+      if (periscopeAvailable) keys.push(['1', 'Sehrohr voraus'], ['2', '360°-Sehrohr'], ['3', 'Boot auf Peilung']);
+      if (torpedoScope || observationScope) keys.push(['Z', 'Vergrößerung']);
+    }
+    if (depth !== 'surface') keys.push(['⇧↑', 'Auftauchen']);
+    if (depth !== 'submerged') keys.push(['⇧↓', 'Abtauchen']);
+    if (radarModes) keys.push(['R', 'Radar wechseln']);
+    return keys;
+  }
   const free = station => !members.some(m => m.station === station && m.playerId !== playerId);
   const keys = [];
   for (const [station, key, label] of [['bridge', 'B', 'Brücke'], ['lookout', 'O', 'Ausguck'], ['flak', 'F', 'Flak'], ['cannon', 'C', 'Kanone']]) {

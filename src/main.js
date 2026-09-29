@@ -5,7 +5,7 @@ import { WeaponAimDisplay } from "./weaponAimDisplay.js";
 import { prioritizeMuzzleLight, preserveEnvironmentLight } from "./muzzleLighting.js";
 import { WeaponHeadingHold, WeaponShotEvents } from "./weaponPresentation.js";
 import { drawRadarWeaponLines } from "./radarWeaponLines.js";
-import { shipVisibleAtRadarDepth, torpedoVisibleAtRadarDepth } from "./radarDepthVisibility.js";
+import { shipVisibleAtRadarDepth, torpedoVisibleAtRadarDepth, torpedoTargetAtDepth } from "./radarDepthVisibility.js";
 import "./crew.css";
 import { Scene } from "@babylonjs/core/scene";
 import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
@@ -116,7 +116,7 @@ const underwaterClearColor = new Color4(0.03, 0.16, 0.22, 1);
 const underwaterFogColor = new Color3(0.025, 0.14, 0.19);
 const underwaterFogDensity = 0.0048;
 const underwaterLandTopY = -0.1;
-const underwaterSeaFloorY = -16;
+const underwaterSeaFloorY = -32;
 scene.clearColor = surfaceClearColor.clone();
 scene.fogMode = Scene.FOGMODE_EXP2;
 scene.fogColor = surfaceFogColor.clone();
@@ -223,7 +223,7 @@ const submarineDepthLabels = {
 const submarineDepthOffsets = {
   surface: 0,
   periscope: -1.6,
-  submerged: -2.95
+  submerged: -6.16
 };
 const submarineObservationPeriscopeSwitchOffset = 0.92;
 const submarineObservationPeriscopeEyeY = 1.97;
@@ -1291,7 +1291,7 @@ document.getElementById("lookoutAircraftWarningButton")?.addEventListener("click
 window.addEventListener("pointerdown", unlockDepthChargeAudio, { once: true });
 window.addEventListener("keydown", unlockDepthChargeAudio, { once: true });
 const hotkeyLayoutObserver = new ResizeObserver(placeRoleHotkeys);
-for (const element of document.querySelectorAll("#roleHotkeys, .player-list, #lookoutHud")) hotkeyLayoutObserver.observe(element);
+for (const element of document.querySelectorAll("#roleHotkeys, .player-list, #lookoutHud, .weapon-elevation")) hotkeyLayoutObserver.observe(element);
 window.addEventListener("resize", placeRoleHotkeys);
 setupAlignWeaponsControl(alignAirDefenseButton, "air-defense");
 setupTorpedoAidControl(torpedoAidButton);
@@ -3514,12 +3514,15 @@ function updateBattleStationButtons() {
 function updateRoleHotkeys() {
   const panel = document.getElementById("roleHotkeys");
   if (!panel) return;
-  panel.hidden = playerVehicleType !== "torpedo-boat" || sideViewSandboxMode;
+  panel.hidden = !["torpedo-boat", "submarine"].includes(playerVehicleType) || (sideViewSandboxMode && !scenarioTestMode);
   if (panel.hidden) return;
   const role = crewState?.station ?? (lookoutViewActive ? "lookout" : cannonViewActive ? "cannon" : flakViewActive ? "flak" : "bridge");
   const entries = roleHotkeys({ role, members: crewState?.members, playerId,
     depthChargesReady: canDropDepthCharges() && !depthChargeSalvoQueued,
-    radarModes: !singleRadarMode, torpedoScope: torpedoScopeActive });
+    radarModes: !singleRadarMode, torpedoScope: torpedoScopeActive,
+    submarine: submarineMode, depth: playerSubmarineDepthState,
+    periscopeAvailable: submarineMode && canShowSubmarineTorpedoScope(),
+    observationScope: isPlayerSubmarineObservationPeriscopeActive() });
   const signature = JSON.stringify(entries);
   if (signature === hotkeySignature) return;
   hotkeySignature = signature;
@@ -3538,13 +3541,47 @@ function updateRoleHotkeys() {
 function placeRoleHotkeys() {
   const panel = document.getElementById("roleHotkeys");
   if (!panel) return;
-  const box = panel.getBoundingClientRect();
-  const overlaps = [...document.querySelectorAll(".player-list, .crew-leave, #lookoutHud")].some(element => {
-    const other = element.getBoundingClientRect();
-    return other.width > 0 && other.height > 0 && box.left < other.right && box.right > other.left
-      && box.top < other.bottom + 8 && box.bottom > other.top - 8;
+  panel.style.bottom = "58px";
+  panel.style.top = "auto";
+  panel.style.left = "auto";
+  panel.style.right = "16px";
+  const obstacles = [...document.querySelectorAll(".player-list, .crew-leave, #lookoutHud, .weapon-elevation, .nav-instrument, .battle-station-panel, .ship-controls-panel, .compass, .version-panel, .fleet-status")].flatMap(element => {
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) > 0
+      && rect.width > 0 && rect.height > 0 ? [rect] : [];
   });
-  panel.style.visibility = overlaps ? "hidden" : "visible";
+  for (let attempt = 0; attempt <= obstacles.length; attempt++) {
+    const box = panel.getBoundingClientRect();
+    const overlap = obstacles.find(other => box.left < other.right && box.right > other.left
+      && box.top < other.bottom + 8 && box.bottom > other.top - 8);
+    if (!overlap && box.top >= 12) {
+      panel.style.visibility = "visible";
+      return;
+    }
+    if (!overlap || box.top < 12) break;
+    panel.style.bottom = `${window.innerHeight - overlap.top + 8}px`;
+  }
+  // Try free space at the upper left, first in the sidebar, then beside it.
+  const viewLeft = Math.max(0, ...obstacles.filter(rect => rect.left < 40 && rect.right < window.innerWidth / 2).map(rect => rect.right));
+  for (const left of [16, viewLeft + 12]) {
+    panel.style.right = "auto";
+    panel.style.left = `${left}px`;
+    panel.style.bottom = "auto";
+    panel.style.top = "16px";
+    for (let attempt = 0; attempt <= obstacles.length; attempt++) {
+      const box = panel.getBoundingClientRect();
+      if (box.bottom > window.innerHeight - 16 || box.right > window.innerWidth - 16) break;
+      const overlap = obstacles.find(other => box.left < other.right && box.right > other.left
+        && box.top < other.bottom + 8 && box.bottom > other.top - 8);
+      if (!overlap) {
+        panel.style.visibility = "visible";
+        return;
+      }
+      panel.style.top = `${overlap.bottom + 8}px`;
+    }
+  }
+  panel.style.visibility = "hidden";
 }
 
 function cycleCannonSightLevel() {
@@ -7387,7 +7424,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   const visibleContacts = contacts.filter((contact) => !contact.blocked);
   visibleContacts.forEach((contact) => {
     const contactPoint = worldToRadarPoint(contact.position, playerPosition, centerX, centerY, scale, heading);
-    drawRadarContactMarker(ctx, contactPoint.x, contactPoint.y, contact.team, false, contact.heading, heading, monochromeMode ? "" : contact.label, contact.vehicleType, contactMarkerScale, monochromeMode);
+    drawRadarContactMarker(ctx, contactPoint.x, contactPoint.y, contact.team, false, contact.heading, heading, monochromeMode ? "" : contact.label, contact.vehicleType, contactMarkerScale, monochromeMode, contact.depthState);
   });
 
   if (Array.isArray(options.radarTorpedoes) && options.radarTorpedoes.length > 0) {
@@ -7976,7 +8013,7 @@ function mapShipColor(ship) {
   return "#ff6b4a";
 }
 
-function drawRadarContactMarker(ctx, x, y, team, isPlayer = false, contactHeading = null, radarHeading = 0, label = "", vehicleType = "torpedo-boat", markerScale = 1, monochromeMode = false) {
+function drawRadarContactMarker(ctx, x, y, team, isPlayer = false, contactHeading = null, radarHeading = 0, label = "", vehicleType = "torpedo-boat", markerScale = 1, monochromeMode = false, depthState = "surface") {
   const color = monochromeMode ? "#d6f8ff" : (team === "light" ? "#7fd7ff" : "#ff6b4a");
   const ring = monochromeMode ? "rgba(214, 248, 255, 0.34)" : (team === "light" ? "rgba(127, 215, 255, 0.42)" : "rgba(255, 107, 74, 0.48)");
   const scaledMarker = Number.isFinite(markerScale) && markerScale > 0 ? markerScale : 1;
@@ -7988,7 +8025,7 @@ function drawRadarContactMarker(ctx, x, y, team, isPlayer = false, contactHeadin
   }
 
   if (!isPlayer && monochromeMode && Number.isFinite(contactHeading)) {
-    drawRadarUnderwaterHullMarker(ctx, x, y, color, contactHeading - radarHeading, vehicleType, scaledMarker);
+    drawRadarUnderwaterHullMarker(ctx, x, y, color, contactHeading - radarHeading, vehicleType, scaledMarker, depthState);
     return;
   }
 
@@ -8027,16 +8064,17 @@ function drawRadarContactMarker(ctx, x, y, team, isPlayer = false, contactHeadin
   }
 }
 
-function drawRadarUnderwaterHullMarker(ctx, x, y, color, relativeHeading, vehicleType = "torpedo-boat", markerScale = 1) {
+function drawRadarUnderwaterHullMarker(ctx, x, y, color, relativeHeading, vehicleType = "torpedo-boat", markerScale = 1, depthState = "surface") {
   const hullScale = clamp(markerScale * 1.9, 1.2, 2.4);
   const toPoint = createRadarMarkerPointMapper(x, y, relativeHeading, hullScale);
   const submarine = vehicleType === "submarine";
+  const submerged = submarine && (depthState === "periscope" || depthState === "submerged");
   const sections = submarine ? submarineRadarHullSections() : torpedoBoatRadarHullSections();
 
   ctx.save();
   ctx.fillStyle = submarine ? "rgba(214, 248, 255, 0.7)" : "rgba(214, 248, 255, 0.64)";
   ctx.strokeStyle = "rgba(247, 251, 255, 0.82)";
-  ctx.lineWidth = clamp(0.75 * hullScale, 0.9, 1.7);
+  ctx.lineWidth = submerged ? 0.8 : clamp(0.75 * hullScale, 0.9, 1.7);
   ctx.beginPath();
   sections.forEach((section, index) => {
     const draw = index === 0 ? moveToRadarMarkerPoint : lineToRadarMarkerPoint;
@@ -8047,7 +8085,7 @@ function drawRadarUnderwaterHullMarker(ctx, x, y, color, relativeHeading, vehicl
   }
   ctx.closePath();
   ctx.stroke();
-  ctx.fill();
+  if (!submerged) ctx.fill();
 
   ctx.restore();
 }
@@ -8062,11 +8100,11 @@ function torpedoBoatRadarHullSections() {
 function submarineRadarHullSections() {
   return [
     { z: -3.6, halfWidth: 0.1 },
-    { z: -3.15, halfWidth: 0.5 },
-    { z: -2.1, halfWidth: 0.68 },
-    { z: -0.7, halfWidth: 0.75 },
-    { z: 1.15, halfWidth: 0.7 },
-    { z: 2.62, halfWidth: 0.42 },
+    { z: -3.15, halfWidth: 0.4 },
+    { z: -2.1, halfWidth: 0.54 },
+    { z: -0.7, halfWidth: 0.6 },
+    { z: 1.15, halfWidth: 0.56 },
+    { z: 2.62, halfWidth: 0.34 },
     { z: 3.6, halfWidth: 0.08 }
   ];
 }
@@ -8205,11 +8243,13 @@ function drawRadarTargetLine(ctx, centerX, centerY, radius, playerPosition, visi
   ctx.restore();
 }
 
-function findRadarTargetLineObstruction(playerPosition, firingHeading, contacts, radarRange) {
+function findRadarTargetLineObstruction(playerPosition, firingHeading, contacts, radarRange,
+  launchY = submarineMode && boat.root.position.y < -1.87 * submarineVisualScale
+    ? boat.root.position.y + .2 * submarineVisualScale : .05) {
   let best = null;
   const forward = { x: Math.sin(firingHeading), z: Math.cos(firingHeading) };
   for (const contact of contacts) {
-    if (!contact || contact.vehicleType === "scout-plane") continue;
+    if (!torpedoTargetAtDepth(launchY, contact, submarineVisualScale)) continue;
     if (!Number.isFinite(contact.position?.x) || !Number.isFinite(contact.position?.z)) continue;
     const dx = contact.position.x - playerPosition.x;
     const dz = contact.position.z - playerPosition.z;
@@ -9300,6 +9340,8 @@ function getSnapshotRadarContacts() {
       controlledBy: ship.controlledBy ?? "bot",
       label: createRadarContactLabel(ship),
       vehicleType: getShipVehicleType(ship),
+      y: ship.y,
+      depthState: getShipDepthState(ship),
       position: new Vector3(ship.x, 0.28, ship.z),
       heading: Number.isFinite(ship.heading) ? ship.heading : 0,
       speed: Number.isFinite(ship.speed) ? ship.speed : 0,
@@ -9984,6 +10026,17 @@ function installScenarioTestHooks() {
         torpedoes: drawRadarTorpedoes(ctx, 100, 100, { x: 0, z: 0 }, torpedoes, 0, 500, .2)
       };
     },
+    radarContactCanvasForTest(vehicleType, depthState) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext("2d");
+      drawRadarContactMarker(ctx, 32, 32, "light", false, 0, 0, "", vehicleType, 2, true, depthState);
+      return Array.from(ctx.getImageData(0, 0, 64, 64).data);
+    },
+    radarTargetAtDepthForTest(contacts, launchY) {
+      return findRadarTargetLineObstruction({ x: 0, z: 0 }, 0, contacts, 500, launchY)?.contact.id ?? null;
+    },
     underwaterHitFoamForTest(impacts = []) {
       renderServerTorpedoImpacts(impacts);
       return torpedoSystem.hitEffects.filter(effect => effect.underwaterHitFoam).map(effect => ({
@@ -10039,6 +10092,7 @@ function installScenarioTestHooks() {
         submarineWakeExposure: Number(getSubmarineWakeExposureRatio(playerSubmarineDepthOffset).toFixed(3)),
         cameraY: Number(cameraSetup.position.y.toFixed(3)),
         boatY: Number(boat.root.position.y.toFixed(3)),
+        seaFloorY: seaFloor.position.y,
         waterlineY: 0
       };
     },

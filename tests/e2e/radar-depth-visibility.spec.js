@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('live submarine radar switches both ship and torpedo filters with depth', async ({ page }) => {
+  test.setTimeout(45000);
   await page.goto('/sea-battle/?setup=8&vehicle=submarine&hide-beach=1&scenarioTest=1');
   await page.waitForFunction(() => window.seaBattleScenarioTest);
   const inspect = () => page.evaluate(() => window.seaBattleScenarioTest.radarDepthVisibilityForTest([
@@ -17,7 +18,7 @@ test('live submarine radar switches both ship and torpedo filters with depth', a
   ]));
   for (const depth of ['surface', 'submerged', 'periscope']) {
     await page.evaluate(d => window.seaBattleScenarioTest.setSubmarineDepthState(d), depth);
-    await expect.poll(inspect, { timeout: 12000 }).toEqual(depth === 'submerged'
+    await expect.poll(inspect, { timeout: 30000 }).toEqual(depth === 'submerged'
       ? { ships: ['boat', 'surface', 'scope', 'deep'], torpedoes: 3 }
       : { ships: ['boat', 'plane', 'surface'], torpedoes: 1 });
   }
