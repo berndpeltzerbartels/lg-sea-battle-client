@@ -5,6 +5,7 @@ import { WeaponAimDisplay } from "./weaponAimDisplay.js";
 import { prioritizeMuzzleLight, preserveEnvironmentLight } from "./muzzleLighting.js";
 import { WeaponHeadingHold, WeaponShotEvents } from "./weaponPresentation.js";
 import { drawRadarWeaponLines } from "./radarWeaponLines.js";
+import { shipVisibleAtRadarDepth, torpedoVisibleAtRadarDepth } from "./radarDepthVisibility.js";
 import "./crew.css";
 import { Scene } from "@babylonjs/core/scene";
 import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
@@ -8142,13 +8143,13 @@ function drawRadarFlakLookIndicator(ctx, centerX, centerY, radius, flakLookHeadi
 }
 
 function drawRadarTorpedoes(ctx, centerX, centerY, playerPosition, torpedoes, radarHeading, radarRange, scale) {
-  if (!Array.isArray(torpedoes) || torpedoes.length === 0) return;
+  if (!Array.isArray(torpedoes) || torpedoes.length === 0) return 0;
 
   let visible = 0;
+  const underwater = submarineMode && getPlayerEffectiveSubmarineDepthState() === submarineDepthStates.submerged;
   for (const torpedo of torpedoes) {
     if (visible >= 16) break;
-    if (!torpedo || torpedo.state !== "running") continue;
-    if (torpedo.y < -1 && !(submarineMode && playerSubmarineDepthOffset < submarineDepthOffsets.periscope - .06)) continue;
+    if (!torpedoVisibleAtRadarDepth(underwater, torpedo)) continue;
     if (!Number.isFinite(torpedo.x) || !Number.isFinite(torpedo.z)) continue;
 
     const position = { x: torpedo.x, z: torpedo.z };
@@ -8159,6 +8160,7 @@ function drawRadarTorpedoes(ctx, centerX, centerY, playerPosition, torpedoes, ra
     drawRadarTorpedoMarker(ctx, point.x, point.y, Number.isFinite(torpedo.heading) ? torpedo.heading : 0, radarHeading);
     visible += 1;
   }
+  return visible;
 }
 
 function drawRadarTorpedoMarker(ctx, x, y, heading, radarHeading) {
@@ -9312,14 +9314,9 @@ function getSnapshotRadarContacts() {
 function isShipRadarVisibleToPlayer(ship) {
   const effectivePlayerDepthState = getPlayerEffectiveSubmarineDepthState();
   const contactVehicleType = getShipVehicleType(ship);
-  if (submarineMode && effectivePlayerDepthState === submarineDepthStates.submerged) {
-    return contactVehicleType !== "submarine" && contactVehicleType !== "scout-plane";
-  }
-  if (contactVehicleType !== "submarine") return true;
-  const contactDepthState = getShipDepthState(ship);
-  if (contactDepthState === submarineDepthStates.submerged) return false;
-  if (contactDepthState === submarineDepthStates.periscope) return scoutPlaneMode;
-  return true;
+  return shipVisibleAtRadarDepth(
+    submarineMode && effectivePlayerDepthState === submarineDepthStates.submerged,
+    contactVehicleType, getShipDepthState(ship));
 }
 
 function beginPlayerSinking(hitPosition, now, damageMessage = null) {
@@ -9979,6 +9976,13 @@ function installScenarioTestHooks() {
       return torpedoSystem.hitEffects.filter(effect => effect.sinkingFoam).map(effect => ({
         y: effect.mesh.position.y, visibility: effect.mesh.visibility, enabled: effect.mesh.isEnabled()
       }));
+    },
+    radarDepthVisibilityForTest(ships, torpedoes) {
+      const ctx = document.createElement('canvas').getContext('2d');
+      return {
+        ships: ships.filter(ship => isShipRadarVisibleToPlayer(ship)).map(ship => ship.id),
+        torpedoes: drawRadarTorpedoes(ctx, 100, 100, { x: 0, z: 0 }, torpedoes, 0, 500, .2)
+      };
     },
     underwaterHitFoamForTest(impacts = []) {
       renderServerTorpedoImpacts(impacts);
