@@ -91,6 +91,18 @@ test('bridge lookout and flak share replicated releases, explosions, controls an
     await expect(page.locator('.submarine-warning-arrow')).toHaveAttribute('aria-label', 'voraus');
   }
   await pages[1].screenshot({ path: testInfo.outputPath('lookout-aircraft-warning.png') });
+  await pages[1].keyboard.press('z');
+  for (const [width, height] of [[1280, 720], [844, 390]]) {
+    await pages[1].setViewportSize({ width, height });
+    const panel = await pages[1].locator('#lookoutHud').boundingBox();
+    const lens = await pages[1].locator('.lookout-binocular-mask').boundingBox();
+    expect(panel.y).toBeGreaterThanOrEqual(lens.y + lens.height);
+    expect(panel.x).toBeGreaterThanOrEqual(0);
+    expect(panel.x + panel.width).toBeLessThanOrEqual(width);
+    await pages[1].screenshot({ path: testInfo.outputPath(`lookout-compact-${width}.png`) });
+  }
+  await pages[1].keyboard.press('z');
+  await pages[1].setViewportSize({ width: 1600, height: 1000 });
   await pages[1].locator('#lookoutDepthChargeButton').click();
   await expect.poll(() => requests).toBe(1);
   await broadcast();
