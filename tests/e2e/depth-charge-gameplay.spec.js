@@ -64,7 +64,7 @@ test('bridge lookout and flak share replicated releases, explosions, controls an
       window.testStream.onmessage({ data: JSON.stringify(message) }), { type: 'game-stream', state });
   };
   await expect(pages[1].locator('#lookoutHud button')).toHaveCount(6);
-  await pages[1].locator('#lookoutWarningButton').click();
+  await pages[1].keyboard.press('KeyU');
   await expect.poll(() => warning !== null).toBe(true);
   for (const [i, page] of pages.entries()) {
     await page.evaluate(message => window.testStream.onmessage({ data: JSON.stringify(message) }), {
@@ -79,7 +79,7 @@ test('bridge lookout and flak share replicated releases, explosions, controls an
   }
   await pages[1].screenshot({ path: testInfo.outputPath('lookout-warning.png') });
   await expect(pages[1].locator('#lookoutAircraftWarningButton')).toBeEnabled({ timeout: 7000 });
-  await pages[1].locator('#lookoutAircraftWarningButton').click();
+  await pages[1].keyboard.press('KeyL');
   await expect.poll(() => warning.kind).toBe('aircraft');
   for (const [i, page] of pages.entries()) {
     await page.evaluate(message => window.testStream.onmessage({ data: JSON.stringify(message) }), {

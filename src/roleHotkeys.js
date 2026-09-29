@@ -11,7 +11,7 @@ export function roleHotkeys({ role, members = [], playerId, depthChargesReady = 
     if (['flak', 'cannon', 'lookout'].some(free)) keys.push(['A', 'Geschütze ausrichten'], ['⇧A', 'Flugabwehr']);
   } else {
     keys.push(['↑ ↓ ← →', role === 'lookout' ? 'Blickrichtung' : 'Zielen'], ['A', 'Ausrichten']);
-    if (role === 'lookout') keys.push(['Z', 'Fernglas'],
+    if (role === 'lookout') keys.push(['Z', 'Fernglas'], ['U', 'U-Boot warnen'], ['L', 'Flugzeug warnen'],
       ['C', free('cannon') ? 'Kanone ausrichten & übernehmen' : 'Kanone: Zustimmung anfragen'],
       ['F', free('flak') ? 'Flak ausrichten & übernehmen' : 'Flak: Zustimmung anfragen']);
     else {

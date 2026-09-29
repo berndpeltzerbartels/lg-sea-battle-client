@@ -269,7 +269,7 @@ const worldMetersPerUnit = 20;
 const vehicleScale = gameConfig.vehicleScale;
 const torpedoBoatVisualScale = vehicleScale.torpedoBoat;
 const echoHullSections = torpedoBoatHullSections();
-const submarineEchoRadius = (echoHullSections[echoHullSections.length - 1].z - echoHullSections[0].z) * torpedoBoatVisualScale * 3;
+const submarineEchoRadius = (echoHullSections[echoHullSections.length - 1].z - echoHullSections[0].z) * torpedoBoatVisualScale * 4.5;
 const submarineVisualScale = torpedoBoatVisualScale;
 const scoutPlaneVisualScale = vehicleScale.scoutPlane;
 const shipGunVisualScale = vehicleScale.torpedoBoat;
@@ -277,8 +277,8 @@ const torpedoSpeedScale = Math.sqrt(torpedoBoatVisualScale);
 const torpedoVisualScale = 1.0;
 const torpedoThicknessScale = 1.55;
 const torpedoWakeVisualScale = torpedoBoatVisualScale * 0.75;
-const torpedoSternWakeSizeScale = 0.5;
-const torpedoSternWakeLengthScale = 0.5;
+const torpedoSternWakeSizeScale = 0.65;
+const torpedoSternWakeLengthScale = 0.6;
 const torpedoBodyHintWidthScale = 2;
 const torpedoBodyLength = 2.35;
 const torpedoNoseLength = 0.28;
@@ -770,6 +770,12 @@ window.addEventListener("keydown", (event) => {
   if (playerActive && event.code === "KeyW" && !event.repeat && canDropDepthCharges()) {
     event.preventDefault();
     dropDepthCharges();
+    return;
+  }
+  if (playerActive && lookoutViewActive && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey
+      && ["KeyU", "KeyL"].includes(event.code)) {
+    event.preventDefault();
+    void warnSubmarineFromLookout(event.code === "KeyL" ? "aircraft" : "submarine");
     return;
   }
   if (playerActive && isBombBayViewToggleKey(event) && !event.repeat) {
@@ -9672,8 +9678,8 @@ function updateSubmarinePeriscopeWake(wake, depthState, speed, time, dt = 1 / 60
     const pulse = 0.82 + Math.sin(time * 3.1 + index * 0.74) * 0.09;
     segment.setEnabled(activeDirection && visibility > 0.015);
     segment.visibility = activeDirection ? visibility : 0;
-    segment.scaling.x = 0.32 + wakeIntensity * 1.45 + row * 0.035;
-    segment.scaling.z = (0.24 + wakeIntensity * 0.72 + row * 0.028) * pulse;
+    segment.scaling.x = (0.32 + wakeIntensity * 1.45 + row * 0.035) * 1.4;
+    segment.scaling.z = (0.24 + wakeIntensity * 0.72 + row * 0.028) * pulse * 1.15;
     segment.position.x = segment.metadata.baseX + Math.sin(time * 5.2 + index * 1.31) * 0.018 * wakeIntensity;
     segment.position.z = segment.metadata.baseZ + segment.metadata.zSign * wakeIntensity * row * 0.035;
     segment.position.y = (wake.surfaceY ?? enemyBowWakeSurfaceY)
@@ -9689,8 +9695,8 @@ function updateSubmarinePeriscopeWake(wake, depthState, speed, time, dt = 1 / 60
     const pulse = 0.76 + Math.sin(time * 4.3 + index * 1.6) * 0.11;
     patch.setEnabled(activeDirection && visibility > 0.015);
     patch.visibility = activeDirection ? visibility : 0;
-    patch.scaling.x = (0.42 + wakeIntensity * 1.35) * pulse;
-    patch.scaling.z = 0.42 + wakeIntensity * 0.92 + row * 0.035;
+    patch.scaling.x = (0.42 + wakeIntensity * 1.35) * pulse * 1.4;
+    patch.scaling.z = (0.42 + wakeIntensity * 0.92 + row * 0.035) * 1.15;
     patch.position.x = patch.metadata.baseX + Math.sin(time * 5.8 + index * 1.2) * 0.021 * wakeIntensity;
     patch.position.z = patch.metadata.baseZ + patch.metadata.zSign * wakeIntensity * row * 0.028;
     patch.position.y = (wake.surfaceY ?? enemyBowWakeSurfaceY)
@@ -13608,7 +13614,7 @@ function createTorpedoWake(scene, materials, name) {
 
   for (let side = -1; side <= 1; side += 2) {
     const contour = MeshBuilder.CreateBox(`${name}_head_contour_wake_${side}`, {
-      width: 0.036 * torpedoWakeVisualScale,
+      width: 0.054 * torpedoWakeVisualScale,
       height: 0.012,
       depth: 1
     }, scene);
@@ -13618,7 +13624,7 @@ function createTorpedoWake(scene, materials, name) {
     wake.push(contour);
 
     const flare = MeshBuilder.CreateBox(`${name}_head_flare_wake_${side}`, {
-      width: 0.032 * torpedoWakeVisualScale,
+      width: 0.048 * torpedoWakeVisualScale,
       height: 0.012,
       depth: 1
     }, scene);
@@ -13629,11 +13635,10 @@ function createTorpedoWake(scene, materials, name) {
   }
 
   for (let i = 0; i < 5; i += 1) {
-    const segment = MeshBuilder.CreateBox(`${name}_wake_${i}`, {
-      width: (0.08 + i * 0.018) * torpedoWakeVisualScale * torpedoSternWakeSizeScale,
-      height: 0.012,
-      depth: (0.58 + i * 0.08) * torpedoWakeVisualScale * torpedoSternWakeSizeScale * torpedoSternWakeLengthScale
-    }, scene);
+    const segment = createJaggedSurfacePatch(`${name}_wake_${i}`, scene,
+      (0.13 + (i % 3) * 0.018) * torpedoWakeVisualScale * torpedoSternWakeSizeScale,
+      (0.56 + (i % 2) * 0.1) * torpedoWakeVisualScale * torpedoSternWakeSizeScale * torpedoSternWakeLengthScale,
+      71 + i * 23, 8);
     segment.material = materials.foam;
     segment.metadata = { kind: "trail", row: i };
     segment.setEnabled(false);
@@ -14150,8 +14155,8 @@ function updateTorpedoWake(torpedo, visible, time) {
       const side = segment.metadata?.side ?? 1;
       const noseShoulderZ = torpedoBodyLength * 0.5;
       const noseShoulderX = 0.102 * torpedoThicknessScale * torpedoVisualScale;
-      const sideWakeLength = 0.38 * torpedoWakeVisualScale;
-      const sideWakeSpread = 0.018 * torpedoWakeVisualScale;
+      const sideWakeLength = 0.48 * torpedoWakeVisualScale;
+      const sideWakeSpread = 0.027 * torpedoWakeVisualScale;
       positionTorpedoWakeSegment(
         segment,
         torpedo,
@@ -14161,7 +14166,7 @@ function updateTorpedoWake(torpedo, visible, time) {
         noseShoulderZ - sideWakeLength,
         -0.031
       );
-      segment.visibility = 0.55;
+      segment.visibility = 0.75;
       segment.scaling.x = 1 + Math.sin(time * 6.4 + side) * 0.06;
       return;
     }
@@ -14170,10 +14175,11 @@ function updateTorpedoWake(torpedo, visible, time) {
     segment.position.copyFrom(
       torpedo.root.position
         .subtract(torpedo.forward.scale(distanceBehind))
+        .add(getRightVector(torpedo.heading).scale(Math.sin(row * 2.4) * 0.045 * torpedoWakeVisualScale))
         .add(new Vector3(0, -0.035, 0))
     );
-    segment.rotation.y = torpedo.heading + Math.sin(time * 3.2 + row) * 0.035;
-    segment.scaling.x = 1 + row * 0.16;
+    segment.rotation.y = torpedo.heading + Math.sin(row * 1.9) * 0.16 + Math.sin(time * 3.2 + row) * 0.035;
+    segment.scaling.x = 1 + Math.sin(time * 2.2 + row * 1.7) * 0.09;
     segment.scaling.z = 1 + Math.sin(time * 4.5 + row) * 0.08;
   });
 }
@@ -14629,10 +14635,9 @@ function createJaggedHitWall(name, scene, width, height, seed) {
   return createMeshFromData(name, scene, positions, indices);
 }
 
-function createJaggedSurfacePatch(name, scene, width, depth, seed) {
+function createJaggedSurfacePatch(name, scene, width, depth, seed, points = 18) {
   const positions = [0, 0, 0];
   const indices = [];
-  const points = 18;
 
   for (let i = 0; i < points; i += 1) {
     const angle = (i / points) * Math.PI * 2;
