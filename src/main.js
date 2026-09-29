@@ -35,6 +35,7 @@ import { createSubmarineModel } from "./submarineModel.js";
 import { createDepthChargeRacks, depthChargeLanes, depthChargeExitHalfWidth } from "./depthChargeRacks.js";
 import { createDepthChargeAnimator } from "./depthChargeAnimation.js";
 import { createDepthChargeEvents } from "./depthChargeEvents.js";
+import { createDepthChargeUnderwater } from "./depthChargeUnderwater.js";
 import { createZoomIdleTimer, submarineEchoStrength } from "./instrumentHelpers.js";
 import { submarineSeaMotionFactor } from "./submarineSeaMotion.js";
 import { roleHotkeys } from "./roleHotkeys.js";
@@ -60,6 +61,8 @@ let depthChargeSalvoActive = false;
 let depthChargeSalvoQueued = false;
 let depthChargeRequestPending = false;
 let depthChargeAudio = null;
+let depthChargeUnderwater = null;
+let underwaterChargeTestView = false;
 let hotkeySignature = "";
 const zoomIdleTimer = createZoomIdleTimer();
 for (const event of ['keydown', 'keyup', 'pointerdown', 'pointermove', 'wheel', 'input']) {
@@ -1405,6 +1408,7 @@ scene.onBeforeRenderObservable.add(() => {
   const dt = Math.min(rawFrameSeconds, maxSimulationFrameSeconds);
   if (zoomIdleTimer.expired(performance.now())) resetGameZooms();
   if (depthChargePreview?.active) depthChargePreview.update(dt);
+  depthChargeUnderwater?.update(dt);
   for (const animator of activeDepthChargeAnimators) {
     animator.update(dt);
     if (!animator.active) activeDepthChargeAnimators.delete(animator);
@@ -2434,6 +2438,10 @@ function getContinuousHeldWeaponSpeed(startTime, fineSpeed, maxSpeed, rampSecond
 }
 
 function getPlayerCameraSetup(forward) {
+  if (scenarioTestMode && underwaterChargeTestView) {
+    return { position: new Vector3(0, -3 * torpedoBoatVisualScale, -12),
+      target: new Vector3(0, -2.5 * torpedoBoatVisualScale, 15) };
+  }
   if (lookoutViewActive) {
     const roof = getBridgeWindowCameraLocalPosition().roofPosition;
     const position = transformLocalShipPointWithoutTilt(roof, torpedoBoatVisualScale);
@@ -2594,7 +2602,7 @@ function transformLocalShipPointWithoutTilt(localPoint, visualScale = 1) {
 }
 
 function updateCameraWaterAtmosphere() {
-  if (sideViewSandboxMode || scoutPlaneMode) {
+  if (sideViewSandboxMode && !underwaterChargeTestView || scoutPlaneMode) {
     document.body.dataset.underwaterView = "false";
     document.body.style.setProperty("--underwater-view-ratio", "0");
     return;
@@ -3329,6 +3337,7 @@ function explodeDepthCharge(charge) {
   const position = new Vector3(charge.x, 0, charge.z);
   const distance = Vector3.Distance(boat.root.position, position);
   if (distance > 1800) return;
+  depthChargeUnderwater?.explode(charge);
   torpedoSystem.hits += 1;
   const start = torpedoSystem.hitEffects.length;
   if (start < 180) createTorpedoShipWaterColumn(torpedoSystem, position, charge.heading);
@@ -6459,6 +6468,8 @@ function applyServerGameSnapshot(snapshot) {
     snapshot.t
   );
   radarTorpedoSnapshots = Array.isArray(snapshot.torpedoes) ? snapshot.torpedoes : [];
+  depthChargeUnderwater ??= createDepthChargeUnderwater(scene, torpedoBoatVisualScale);
+  depthChargeUnderwater.sync(snapshot.instanceId, snapshot.depthCharges ?? [], snapshot.t);
   depthChargeEvents.consume(snapshot.instanceId, snapshot.depthCharges ?? [], snapshot.t);
   const chargeControl = snapshot.depthChargeControls?.[playerServerShipId];
   depthChargeReadyAt = chargeControl ? time + chargeControl.readyAt - snapshot.t : 0;
@@ -6548,9 +6559,10 @@ function syncServerProjectileHitEffects(hits, ownShip = null) {
     const targetMotion = enemyMotions.find((motion) => motion.id === hit.targetShipId);
     const targetShip = serverShipsById.get(hit.targetShipId) ?? (ownShip?.id === hit.targetShipId ? ownShip : null);
     const submarineHit = targetShip?.vehicleType === "submarine" || targetMotion?.vehicleType === "submarine";
-    const submarineDepth = targetShip?.depthState ?? targetMotion?.depthState;
-    const underwaterSubmarine = submarineHit && (submarineDepth === "periscope" || submarineDepth === "submerged"
-      || (targetMotion?.depthOffset ?? 0) < -0.1);
+    // Use the hull height at impact, not the requested dive mode or an interpolated visual.
+    const targetY = Number.isFinite(hit.targetY) ? hit.targetY
+      : Number.isFinite(targetShip?.y) ? targetShip.y : targetMotion?.root.position.y;
+    const underwaterSubmarine = submarineHit && targetY < submarineWaterlineY - 0.1;
     if ((underwaterSubmarine || !submarineHit && Number.isFinite(hit.y) && hit.y < 0) && Number.isFinite(hit.x) && Number.isFinite(hit.z)) {
       // A periscope hit may be above water even though it destroys a submerged hull.
       const surfacePosition = new Vector3(hit.x, 0, hit.z);
@@ -9123,6 +9135,9 @@ function beginEnemySinking(motion, side, time) {
 function beginEnemyShipCriticalHit(motion, hit, now) {
   if (motion.state !== "active" && motion.state !== "sinking") return;
 
+  if (motion.vehicleType === "submarine" && Number.isFinite(hit.targetY)) {
+    motion.root.position.y = hit.targetY;
+  }
   if (motion.vehicleType === "submarine" && motion.root.position.y < submarineWaterlineY - 0.1) {
     if (motion.state === "active") beginEnemySinking(motion, getStableSinkSide(motion.id), now);
     return;
@@ -9161,6 +9176,14 @@ function beginEnemyShipCriticalHit(motion, hit, now) {
 
 function beginEnemyCannonShipHit(motion, hit, now) {
   if (motion.state !== "active" && motion.state !== "sinking") return;
+
+  if (motion.vehicleType === "submarine" && Number.isFinite(hit.targetY)) {
+    motion.root.position.y = hit.targetY;
+  }
+  if (motion.vehicleType === "submarine" && motion.root.position.y < submarineWaterlineY - 0.1) {
+    if (motion.state === "active") beginEnemySinking(motion, getStableSinkSide(motion.id), now);
+    return;
+  }
 
   const position = getProjectileHitPosition(hit);
   const anchor = createShipDamageAnchor(flakSystem, motion, position, 4.2, {
@@ -9917,6 +9940,33 @@ function installScenarioTestHooks() {
     depthChargeEffects() {
       return { activeRacks: activeDepthChargeAnimators.size, effects: torpedoSystem.hitEffects.length,
         hits: torpedoSystem.hits, shake: ramShake, audio: depthChargeAudio?.state ?? "none", readyAt: depthChargeReadyAt };
+    },
+    underwaterChargesForTest(action) {
+      depthChargeUnderwater ??= createDepthChargeUnderwater(scene, torpedoBoatVisualScale);
+      const charge = { id: 'underwater-preview', lane: 0, x: 0, z: 15, heading: 0,
+        releasedAt: 0, explodesAt: 2.5, radius: 24, exploded: false };
+      if (action === 'sink') {
+        underwaterChargeTestView = true;
+        depthChargeUnderwater.sync('underwater-preview', [charge], .75);
+        camera.position.set(0, -3 * torpedoBoatVisualScale, -12);
+        camera.setTarget(new Vector3(0, -2.5 * torpedoBoatVisualScale, 15));
+        scene.fogColor = underwaterFogColor;
+        scene.clearColor = underwaterClearColor;
+      }
+      if (action === 'explode') {
+        depthChargeUnderwater.sync('underwater-preview', [], 2.5);
+        depthChargeUnderwater.explode(charge);
+      }
+      return depthChargeUnderwater.state();
+    },
+    async underwaterChargePixelsForTest() {
+      scene.render();
+      const pixels = await engine.readPixels(0, 0, engine.getRenderWidth(), engine.getRenderHeight());
+      let bright = 0;
+      for (let i = 0; i < pixels.length; i += 4) {
+        if (pixels[i] > 55 && pixels[i + 1] > 90 && pixels[i + 2] > 85) bright++;
+      }
+      return bright;
     },
     torpedoWaterEffect() {
       createTorpedoShipWaterColumn(torpedoSystem, boat.root.position.add(new Vector3(0, 0, 30)), 0, 1.2);

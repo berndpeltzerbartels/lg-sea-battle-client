@@ -11,7 +11,7 @@ test('lookout stays one world metre above roof and turns through all headings', 
   for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 2, Math.PI * 2]) {
     const camera = new Function('lookoutViewActive', 'getBridgeWindowCameraLocalPosition',
       'transformLocalShipPointWithoutTilt', 'torpedoBoatVisualScale', 'heading', 'lookoutYaw',
-      'lookoutPitch', 'Vector3', `${fn}; return getPlayerCameraSetup();`)(true,
+      'lookoutPitch', 'Vector3', `const scenarioTestMode = false; ${fn}; return getPlayerCameraSetup();`)(true,
       () => ({ roofPosition: new Vector3(0, 2, 1) }), p => p.scale(3), 3, 0, yaw, 0, Vector3);
     assert.equal(camera.position.y, 7);
     assert.ok(Math.abs(camera.target.x - camera.position.x - Math.sin(yaw) * 100) < 1e-10);

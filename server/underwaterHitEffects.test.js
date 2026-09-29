@@ -21,12 +21,12 @@ function fixture(hasTarget, vehicleType = 'submarine', hasSnapshot = false, dept
     explosions++;
   };
   const sync = new Function('flakSystem', 'scoutPlaneMode', 'playerServerShipId', 'pendingPlayerServerShip',
-    'enemyMotions', 'serverShipsById', 'Vector3', 'isScoutPlaneMotion', 'isCannonServerProjectile', 'time',
+    'enemyMotions', 'serverShipsById', 'Vector3', 'isScoutPlaneMotion', 'isCannonServerProjectile', 'time', 'submarineWaterlineY',
     'torpedoSystem', 'createTorpedoShipWaterColumn', 'beginEnemyCannonShipHit',
     'beginEnemyShipCriticalHit', 'createScoutPlaneCriticalHitSequence', 'getProjectileHitPosition',
     `${fn}; return syncServerProjectileHitEffects;`)(system, false, 'own', null,
-    hasTarget ? [target] : [], new Map(hasSnapshot ? [['sub', { id: 'sub', vehicleType, depthState, heading: 0 }]] : []), Vector3, () => false,
-    id => id.startsWith('cannon-'), 0,
+    hasTarget ? [target] : [], new Map(hasSnapshot ? [['sub', { id: 'sub', vehicleType, depthState, y: depthState === 'surface' ? 0 : -5, heading: 0 }]] : []), Vector3, () => false,
+    id => id.startsWith('cannon-'), 0, 0,
     { hits: 0 }, (_, position, heading, scale) => splashes.push({ position, scale }),
     begin, begin, () => {}, hit => new Vector3(hit.x, hit.y, hit.z));
   const snapshot = hit => {
@@ -45,7 +45,7 @@ for (const hasTarget of [true, false]) {
   for (const weapon of ['cannon', 'flak']) {
     test(`${weapon} underwater hits have one surface effect each, target present=${hasTarget}`, () => {
       const { sync, splashes } = fixture(hasTarget);
-      const first = { id: `${weapon}-1`, targetShipId: 'sub', x: 4, y: -5, z: 8 };
+      const first = { id: `${weapon}-1`, targetShipId: 'sub', x: 4, y: -5, z: 8, targetY: -5 };
       sync([first]);
       sync([first]);
       sync([first, { ...first, id: `${weapon}-2` }]);
@@ -79,6 +79,18 @@ test('above-water surface ship hits do not acquire an additional water effect', 
 });
 
 for (const weapon of ['cannon', 'flak']) for (const hasTarget of [true, false]) {
+  test(`${weapon} surface impact stays ordinary despite a dive command and stale submerged visual`, () => {
+    const f = fixture(hasTarget, 'submarine', true, 'submerged');
+    f.sync([{ id: `${weapon}-surface-transition`, targetShipId: 'sub', x: 4, y: -.1, z: 8, targetY: 0 }]);
+    assert.equal(f.splashes.length, 0);
+    if (hasTarget) assert.equal(f.explosions(), 1);
+  });
+  test(`${weapon} submerged impact stays underwater despite a later surface snapshot`, () => {
+    const f = fixture(hasTarget, 'submarine', true, 'surface');
+    f.sync([{ id: `${weapon}-underwater-transition`, targetShipId: 'sub', x: 4, y: .5, z: 8, targetY: -5 }]);
+    assert.equal(f.splashes.length, 1);
+    assert.equal(f.splashes[0].scale, 1.6);
+  });
   test(`${weapon} surfaced submarine uses regular effect without large water column, visual=${hasTarget}`, () => {
     const { sync, splashes } = fixture(hasTarget, 'submarine', true, 'surface');
     sync([{ id: `${weapon}-surface`, targetShipId: 'sub', x: 4, y: -.1, z: 8 }]);

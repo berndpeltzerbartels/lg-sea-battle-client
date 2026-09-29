@@ -41,3 +41,33 @@ test('foam starts once for surface gunfire sinking, not torpedoes or submerged w
   }
   assert.equal(calls, 2);
 });
+
+for (const weapon of ['Cannon', 'Critical']) {
+  test(`${weapon}: surfaced submarine uses normal ship effects and foam; underwater uses neither`, () => {
+    const fnName = weapon === 'Cannon' ? 'beginEnemyCannonShipHit' : 'beginEnemyShipCriticalHit';
+    let explosions = 0, foam = 0;
+    const begin = new Function('submarineWaterlineY', 'createGunfireSinkingFoam', 'torpedoSystem',
+      'updateEnemyBowWake', 'getStableSinkSide', 'getProjectileHitPosition', 'createShipDamageAnchor',
+      'flakSystem', 'Vector3', 'createShipSuperstructureExplosion', 'createShipSuperstructureHitSequence',
+      'createCannonShipHitEffect',
+      `${functionSource('beginEnemySinking')}\n${functionSource(fnName)}; return { hit: ${fnName}, sink: beginEnemySinking };`)(
+      0, () => foam++, {}, () => {}, () => 1, () => Vector3.Zero(), () => ({}), {}, Vector3,
+      () => explosions++, () => {}, () => explosions++);
+    for (const vehicleType of ['torpedo-boat', 'submarine']) {
+      const motion = { vehicleType, state: 'active', root: { position: new Vector3(0, vehicleType === 'submarine' ? -5 : 0, 0) }, timers: [] };
+      begin.hit(motion, { targetY: 0 }, 0);
+      assert.equal(motion.state, weapon === 'Cannon' ? 'ship-cannon-hit' : 'ship-critical-hit');
+      begin.sink(motion, 1, 0);
+      assert.equal(motion.submergedSinking, false);
+    }
+    assert.equal(explosions, 2);
+    assert.equal(foam, 2);
+    const underwater = { vehicleType: 'submarine', state: 'active', root: { position: Vector3.Zero() }, timers: [] };
+    begin.hit(underwater, { targetY: -5 }, 0);
+    assert.equal(underwater.state, 'sinking');
+    assert.equal(underwater.submergedSinking, true);
+    assert.equal(underwater.sinkStartY, -5);
+    assert.equal(explosions, 2);
+    assert.equal(foam, 2);
+  });
+}
