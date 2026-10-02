@@ -16,7 +16,7 @@ test('torpedo alignment highlights a contact but not an empty firing direction',
       lineTo(x, y) { endpoint = [x, y]; }
     };
     draw(ctx, 100, 100, 100, { x: 0, z: 0 }, [], 0, 100, 1, Math.PI / 2, 'torpedo');
-    assert.equal(ctx.lineWidth, obstruction ? 2.5 : 1);
+    assert.equal(ctx.lineWidth, obstruction ? 1.25 : 1);
     assert.ok(Math.abs(endpoint[0] - (obstruction ? 150 : 192)) < 1e-8);
     assert.ok(Math.abs(endpoint[1] - 100) < 1e-8);
     draw(ctx, 100, 100, 100, { x: 0, z: 0 }, [], 0, 100, 1, 0, 'cannon');

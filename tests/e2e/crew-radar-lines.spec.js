@@ -1,5 +1,39 @@
 import { test, expect } from '@playwright/test';
 
+test('submarine hides stowed flak bearing and resets aim on surfacing', async ({ page }) => {
+  await page.goto('/app?vehicle=submarine&sandbox=side-view&scenarioTest=1');
+  await page.waitForFunction(() => window.seaBattleScenarioTest);
+  await page.evaluate(() => {
+    const proto = CanvasRenderingContext2D.prototype;
+    const move = proto.moveTo, line = proto.lineTo, stroke = proto.stroke;
+    window.flakBearings = 0;
+    proto.moveTo = function(x, y) { this.testStart = [x,y]; return move.call(this,x,y); };
+    proto.lineTo = function(x, y) { this.testEnd = [x,y]; return line.call(this,x,y); };
+    proto.stroke = function(...args) {
+      if (this.canvas.id === 'radarCanvas' && this.strokeStyle.includes('155, 229, 223') && this.testStart && this.testEnd) {
+        const length = Math.hypot(this.testEnd[0]-this.testStart[0], this.testEnd[1]-this.testStart[1]);
+        const expected = Math.min(this.canvas.clientWidth, this.canvas.clientHeight)*.46*.74;
+        if (Math.abs(length-expected)<1) window.flakBearings++;
+      }
+      return stroke.apply(this,args);
+    };
+    window.seaBattleScenarioTest.flakShotLineAt({yaw:1, pitch:.5});
+    window.seaBattleScenarioTest.setStation('bridge');
+  });
+  await expect.poll(() => page.evaluate(() => window.flakBearings)).toBeGreaterThan(0);
+  for (const depth of ['periscope', 'submerged']) {
+    await page.evaluate(depth => {
+      window.seaBattleScenarioTest.setSubmarineDepthState(depth);
+      window.flakBearings = 0;
+    }, depth);
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => window.flakBearings)).toBe(0);
+  }
+  await page.evaluate(() => window.seaBattleScenarioTest.setSubmarineDepthState('surface'));
+  await expect(page.locator('body')).toHaveAttribute('data-flak-yaw', '180');
+  await expect(page.locator('body')).toHaveAttribute('data-flak-pitch', '15');
+});
+
 test('both weapon lines remain visible at every station', async ({ page }, testInfo) => {
   await page.goto('/app?vehicle=torpedo-boat&sandbox=side-view&scenarioTest=1');
   await page.waitForFunction(() => window.seaBattleScenarioTest);

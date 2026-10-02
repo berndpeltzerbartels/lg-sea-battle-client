@@ -4732,6 +4732,7 @@ function setPlayerSubmarineDepthState(depthState) {
     && isSubmarinePastBridgePeriscopeSwitchDepth();
   if (playerSubmarineDepthState === submarineDepthStates.surface) {
     submarineBridgeDiveHoldActive = false;
+    cancelWeaponAlignment();
     flakYaw = submarineFlakRestYaw;
     flakPitch = submarineFlakRestPitch;
   }
@@ -7486,7 +7487,9 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   }
 
   if (Number.isFinite(options.bridgeWeaponHeading)) {
-    drawRadarWeaponLines(ctx, centerX, centerY, radius, heading, options.bridgeWeaponHeading, boat.bowCannon ? cannonAimDisplay.yaw : null, boat.sternFlak ? flakAimDisplay.yaw : null);
+    const flakDeployed = !submarineMode || (playerSubmarineDepthState === submarineDepthStates.surface
+      && getPlayerEffectiveSubmarineDepthState() === submarineDepthStates.surface);
+    drawRadarWeaponLines(ctx, centerX, centerY, radius, heading, options.bridgeWeaponHeading, boat.bowCannon ? cannonAimDisplay.yaw : null, boat.sternFlak && flakDeployed ? flakAimDisplay.yaw : null);
   }
   if (Number.isFinite(options.lookoutHeading)) {
     drawRadarFlakLookIndicator(ctx, centerX, centerY, radius, options.lookoutHeading, heading);
@@ -8261,7 +8264,7 @@ function drawRadarTargetLine(ctx, centerX, centerY, radius, playerPosition, visi
 
   ctx.save();
   ctx.strokeStyle = obstruction ? "rgba(255, 239, 164, 0.9)" : "rgba(155, 229, 223, 0.42)";
-  ctx.lineWidth = obstruction ? 2.5 : 1.0;
+  ctx.lineWidth = obstruction ? 1.25 : 1.0;
   ctx.lineCap = "round";
   ctx.beginPath();
   ctx.moveTo(centerX + Math.sin(relative) * inner, centerY - Math.cos(relative) * inner);
