@@ -997,8 +997,15 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
 .crew-warning-controls #lookoutDepthChargeButton { display: none; }
 .lookout-hud.crew-warning-controls {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  width: 240px;
-  bottom: 150px;
+  width: min(280px, calc(100vw - var(--view-left, var(--instrument-panel-width)) - 24px));
+  left: calc(var(--view-left, var(--instrument-panel-width)) + 12px);
+  top: 12px;
+  bottom: auto;
+  transform: none;
+}
+body[data-flak-view="active"] .lookout-hud.crew-warning-controls,
+body[data-cannon-view="active"] .lookout-hud.crew-warning-controls {
+  display: none;
 }
 .lookout-hud button[aria-pressed="true"] { border-color: #f1d79b; color: #f1d79b; }
 .lookout-hud kbd, .lookout-hud small { display: block; font-size: 11px; overflow-wrap: anywhere; }

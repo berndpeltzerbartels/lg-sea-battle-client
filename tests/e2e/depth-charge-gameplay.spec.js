@@ -58,8 +58,10 @@ test('bridge lookout and flak share replicated releases, explosions, controls an
     await page.locator('#renderCanvas').click();
     await expect(page.locator('#depthChargeButton')).toBeVisible();
     await expect(page.locator('#roleHotkeys')).toBeVisible();
-    await expect(page.locator('#lookoutWarningButton')).toBeVisible();
-    await expect(page.locator('#lookoutAircraftWarningButton')).toBeVisible();
+    for (const id of ['lookoutWarningButton', 'lookoutAircraftWarningButton']) {
+      if (member.station === 'flak') await expect(page.locator(`#${id}`)).toBeHidden();
+      else await expect(page.locator(`#${id}`)).toBeVisible();
+    }
     await page.screenshot({ path: testInfo.outputPath(`${member.station}-controls.png`) });
   }
   const broadcast = async () => {
