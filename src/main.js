@@ -1996,6 +1996,7 @@ async function aimFromLookout(weapon) {
       if (weapon === "flak") { flakYaw = yaw; flakPitch = pitch; }
       else { cannonYaw = yaw; cannonPitch = pitch; }
     }
+    cancelWeaponAlignment();
     weaponHeadingHold.align(weapon);
     lookoutFeedback.textContent = `${weapon === "flak" ? "Flak" : "Kanone"} ausgerichtet`;
     if (crewState) await changeCrewStation(weapon);
@@ -10034,6 +10035,23 @@ function installScenarioTestHooks() {
       drawRadarContactMarker(ctx, 32, 32, "light", false, 0, 0, "", vehicleType, 2, true, depthState);
       return Array.from(ctx.getImageData(0, 0, 64, 64).data);
     },
+    lookoutAimDirectionForTest(weapon, yaw, pitch) {
+      const gun = weapon === "flak" ? boat.sternFlak : boat.bowCannon;
+      const result = weapon === "flak" ? flakPitchForWorldPitch(yaw, pitch) : cannonPitchForWorldPitch(yaw, pitch);
+      gun.mount.rotation.y = yaw;
+      gun.elevationRoot.rotation.x = -result;
+      gun.mount.computeWorldMatrix(true);
+      return { requested: pitch, actual: weaponWorldPitch(gun.elevationRoot), result };
+    },
+    async transferLookoutAimForTest(weapon, yaw, pitch) {
+      setBattleStation("bridge");
+      alignWeaponsForBridge("flat");
+      setBattleStation("lookout");
+      lookoutYaw = yaw;
+      lookoutPitch = pitch;
+      await aimFromLookout(weapon);
+      return { yaw, pitch };
+    },
     radarTargetAtDepthForTest(contacts, launchY) {
       return findRadarTargetLineObstruction({ x: 0, z: 0 }, 0, contacts, 500, launchY)?.contact.id ?? null;
     },
@@ -10765,6 +10783,10 @@ function stationSnapshot() {
     binoculars: lookoutBinocularsActive,
     lookoutYaw,
     lookoutPitch,
+    cannonYaw,
+    cannonPitch,
+    flakYaw,
+    flakPitch,
     flak: flakViewActive,
     cannon: cannonViewActive,
     torpedo: torpedoScopeActive,
