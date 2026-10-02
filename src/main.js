@@ -1221,6 +1221,7 @@ let cameraPosition = camera.position.clone();
 let cameraTarget = boat.root.position.clone();
 let time = 0;
 let nextRamHitTime = 0;
+const appliedServerRamStops = new Set();
 let ramShake = 0;
 let playerHits = 0;
 let playerDamageState = "active";
@@ -6403,6 +6404,19 @@ function applyServerGameSnapshot(snapshot) {
 
   const ownShip = snapshot.ships.find((ship) => ship.controlledBy === (crewState?.controller ?? playerId) && ship.teamId === playerTeamId);
   const previousOwnShip = snapshot.ships.find((ship) => ship.id === playerServerShipId);
+  for (const hit of snapshot.ramHits ?? []) {
+    if (!ownShip || ownShip.state !== "active" || hit.shipId !== ownShip.id || appliedServerRamStops.has(hit.id)) continue;
+    appliedServerRamStops.add(hit.id);
+    speed = 0;
+    turnVelocity = 0;
+    engineOrder = 2;
+    rudderDegrees = 0;
+    heldEngineDirection = 0;
+    heldRudderDirection = 0;
+    ramShake = .85;
+  }
+  const visibleRamIds = new Set((snapshot.ramHits ?? []).map(hit => hit.id));
+  for (const id of appliedServerRamStops) if (!visibleRamIds.has(id)) appliedServerRamStops.delete(id);
   const activeIds = new Set(snapshot.ships.map((ship) => ship.id));
   if (ownShip) {
     if (crewState) {
@@ -14207,6 +14221,7 @@ function getPlayerRamHit(playerPosition, playerHeading, playerSpeed, enemyMotion
   ];
 
   for (const enemyMotion of enemyMotions) {
+    if (enemyMotion.isServerControlled) continue;
     if (enemyMotion.teamId === playerTeamId) continue;
     if (isScoutPlaneMotion(enemyMotion)) continue;
     const playerDeep = submarineMode && getPlayerEffectiveSubmarineDepthState() === submarineDepthStates.submerged;
@@ -16365,8 +16380,8 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
     tessellation: 12
   }, scene);
   cradle.parent = mount;
-  cradle.position.y = -0.015 * scale;
-  cradle.position.z = -0.03 * scale;
+  cradle.position.y = 0.03 * scale;
+  cradle.position.z = 0.16 * scale;
   cradle.rotation.z = Math.PI / 2;
   cradle.material = metalMaterial;
 
