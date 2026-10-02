@@ -19,7 +19,7 @@ const deckY = new Function(`${extract('torpedoBoatHullSections')}\n${extract('ge
 const constants = ['playerSternFlakScale', 'flakBarrelLength', 'flakBarrelCenterZ', 'flakSightYOffsetFactor']
   .map(name => source.match(new RegExp(`const ${name} = [^;]+;`))[0]).join('\n');
 const buildFlak = new Function('MeshBuilder', 'TransformNode', 'getTorpedoBoatDeckY', 'createOpenFlakTurretWall',
-  `${constants}\n${extract('createSternFlak')}\nreturn createSternFlak;`)(MeshBuilder, TransformNode, deckY, (name, scene) => new Mesh(name, scene));
+  `${constants}\nconst flakShieldVariant = 'open';\n${extract('createSternFlak')}\nreturn createSternFlak;`)(MeshBuilder, TransformNode, deckY, (name, scene) => new Mesh(name, scene));
 
 for (const layout of ['stern', 'throwers', 'combined']) test(`${layout}: shared geometry, one loaded charge and one accessible reserve per side`, () => {
   const engine = new NullEngine();

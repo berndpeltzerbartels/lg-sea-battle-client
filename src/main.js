@@ -6,6 +6,7 @@ import { advanceSubmarineDepth } from "./submarineDiveMotion.js";
 import { prioritizeMuzzleLight, preserveEnvironmentLight } from "./muzzleLighting.js";
 import { WeaponHeadingHold, WeaponShotEvents } from "./weaponPresentation.js";
 import { drawRadarWeaponLines } from "./radarWeaponLines.js";
+import { createFlakShield } from "./flakShield.js";
 import { shipVisibleAtRadarDepth, torpedoVisibleAtRadarDepth, torpedoTargetAtDepth } from "./radarDepthVisibility.js";
 import "./crew.css";
 import { Scene } from "@babylonjs/core/scene";
@@ -54,6 +55,7 @@ const scene = new Scene(engine);
 document.body.dataset.appStarted = "true";
 const urlParams = new URLSearchParams(location.search);
 const depthChargeLayout = urlParams.get("sandbox") === "side-view" && ["stern", "throwers"].includes(urlParams.get("depthChargeLayout")) ? urlParams.get("depthChargeLayout") : "combined";
+const flakShieldVariant = ["open", "split", "enclosed"].includes(urlParams.get("flakShield")) ? urlParams.get("flakShield") : "enclosed";
 let depthChargePreview = null;
 const depthChargeAnimators = new WeakMap();
 const activeDepthChargeAnimators = new Set();
@@ -2428,7 +2430,7 @@ function getPlayerCameraSetup(forward) {
       Math.sin(lookoutPitch), Math.cos(yaw) * Math.cos(lookoutPitch)).scale(100));
     return { position, target };
   }
-  if (sideViewSandboxMode) {
+  if (sideViewSandboxMode && debugCameraMode !== "gunner") {
     return getDebugOrbitCameraSetup();
   }
 
@@ -2644,7 +2646,9 @@ function getDebugOrbitCameraSetup() {
     return { position, target: position.add(lookDirection.scale(80)) };
   }
 
-  const target = boat.root.position.add(new Vector3(0, debugOrbitTargetY, 0));
+  const target = urlParams.get("viewFocus") === "flak" && boat.sternFlak
+    ? boat.sternFlak.mount.getAbsolutePosition().clone()
+    : boat.root.position.add(new Vector3(0, debugOrbitTargetY, 0));
   const distanceMagnitude = Math.max(Math.abs(debugOrbitRadius), 0.05);
   const distanceDirection = Math.sign(debugOrbitRadius) || 1;
   const horizontalRadius = distanceDirection * distanceMagnitude * Math.cos(debugOrbitPitch);
@@ -3053,6 +3057,11 @@ function setupSideViewCameraTuner() {
   panel.className = "side-view-camera-panel";
   panel.innerHTML = `
     <div class="side-view-camera-title">Kamera Entwurf</div>
+    <div class="side-view-camera-mode" role="group" aria-label="Flak-Kuppel">
+      <button type="button" data-flak-shield="open">Offen</button>
+      <button type="button" data-flak-shield="split">Halbkuppeln</button>
+      <button type="button" data-flak-shield="enclosed">Hinten geschlossen</button>
+    </div>
     ${submarineMode ? "" : `<div class="side-view-camera-mode" role="group" aria-label="Wasserbomben">
       <button type="button" data-depth-charge-layout="stern">Heckgestelle</button>
       <button type="button" data-depth-charge-layout="throwers">Seitenwerfer</button>
@@ -3069,6 +3078,7 @@ function setupSideViewCameraTuner() {
     <div class="side-view-camera-mode" role="group" aria-label="Kameramodus">
       <button type="button" data-camera-mode="orbit">Orbit</button>
       <button type="button" data-camera-mode="ship">An Bord</button>
+      <button type="button" data-camera-mode="gunner">Flak-Sicht</button>
     </div>
     <label>Weite <output data-camera-output="fov"></output><input data-camera-control="fov" type="range" min="0.28" max="1.20" step="0.01"></label>
     <label>Abstand <output data-camera-output="distance"></output><input data-camera-control="distance" type="range" min="-32" max="32" step="0.1"></label>
@@ -3118,6 +3128,15 @@ function setupSideViewCameraTuner() {
   });
 
   const modeButtons = [...panel.querySelectorAll("[data-camera-mode]")];
+  panel.querySelectorAll("[data-flak-shield]").forEach(button => {
+    button.classList.toggle("active", button.dataset.flakShield === flakShieldVariant);
+    button.setAttribute("aria-pressed", String(button.dataset.flakShield === flakShieldVariant));
+    button.addEventListener("click", () => {
+      const next = new URL(location.href);
+      next.searchParams.set("flakShield", button.dataset.flakShield);
+      location.assign(next.href);
+    });
+  });
   const fovInput = panel.querySelector('[data-camera-control="fov"]');
   const distanceInput = panel.querySelector('[data-camera-control="distance"]');
   const heightInput = panel.querySelector('[data-camera-control="height"]');
@@ -3169,7 +3188,8 @@ function setupSideViewCameraTuner() {
 
   modeButtons.forEach((button) => {
     button.addEventListener("click", () => {
-      debugCameraMode = button.dataset.cameraMode === "ship" ? "ship" : "orbit";
+      debugCameraMode = button.dataset.cameraMode;
+      if (debugCameraMode === "gunner") setBattleStation("flak");
       refresh();
       focusGameCanvas();
     });
@@ -16369,18 +16389,22 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   mount.position.z = sternZ;
   mount.rotation.y = Math.PI;
 
-  const turretWall = createOpenFlakTurretWall(`${name}_flak_turret_wall`, scene, scale);
-  turretWall.parent = mount;
-  turretWall.position.y = -turretWallHeight;
-  turretWall.material = shieldMaterial;
+  if (flakShieldVariant === "open") {
+    const turretWall = createOpenFlakTurretWall(`${name}_flak_turret_wall`, scene, scale);
+    turretWall.parent = mount;
+    turretWall.position.y = -turretWallHeight;
+    turretWall.material = shieldMaterial;
+  } else {
+    createFlakShield(scene, mount, name, shieldMaterial, scale, flakShieldVariant);
+  }
 
   const cradle = MeshBuilder.CreateCylinder(`${name}_flak_cradle`, {
     diameter: 0.105 * scale,
-    height: 0.34 * scale,
+    height: 0.20 * scale,
     tessellation: 12
   }, scene);
   cradle.parent = mount;
-  cradle.position.y = 0.03 * scale;
+  cradle.position.y = -0.04 * scale;
   cradle.position.z = 0.16 * scale;
   cradle.rotation.z = Math.PI / 2;
   cradle.material = metalMaterial;
@@ -16390,9 +16414,11 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   elevationRoot.position.y = 0.03 * scale;
   elevationRoot.position.z = 0.16 * scale;
 
-  const barrelLength = flakBarrelLength * scale;
+  // Trim only the breech; muzzle, sight and shot origin remain unchanged.
+  const rearTrim = flakShieldVariant === "enclosed" ? 0.59 * scale : 0;
+  const barrelLength = flakBarrelLength * scale - rearTrim;
   const barrelHalfLength = barrelLength * 0.5;
-  const barrelCenterZ = flakBarrelCenterZ * scale;
+  const barrelCenterZ = flakBarrelCenterZ * scale + rearTrim * 0.5;
   const barrel = MeshBuilder.CreateCylinder(`${name}_flak_barrel`, {
     diameter: 0.038 * scale,
     height: barrelLength,
