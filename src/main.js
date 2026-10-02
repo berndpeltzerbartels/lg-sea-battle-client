@@ -777,7 +777,7 @@ window.addEventListener("keydown", (event) => {
     dropDepthCharges();
     return;
   }
-  if (playerActive && lookoutViewActive && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey
+  if (playerActive && crewState && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey
       && ["KeyU", "KeyL"].includes(event.code)) {
     event.preventDefault();
     void warnSubmarineFromLookout(event.code === "KeyL" ? "aircraft" : "submarine");
@@ -1785,7 +1785,6 @@ scene.onBeforeRenderObservable.add(() => {
   document.body.dataset.measuredSpeed = measuredSpeedSample.speed.toFixed(2);
   compassPointer?.style.setProperty("transform", `translate(-50%, -50%) rotate(${heading}rad)`);
   if (compassHeading) compassHeading.textContent = `HDG ${formatHeadingDegrees(heading)}`;
-  updateSubmarineWarningDirection();
   updateRudderGauge(rudderIndicator, rudderValue, rudderDegrees);
   updateObservationPeriscopeHeadingDisplay();
   updateTorpedoScopeRudderDisplay();
@@ -1918,7 +1917,13 @@ function setBattleStation(station, confirmed = false) {
   lookoutHeldDirections.clear();
   document.body.dataset.lookoutView = lookoutViewActive ? "active" : "inactive";
   document.body.dataset.lookoutBinoculars = "inactive";
-  if (lookoutHud) lookoutHud.hidden = !lookoutViewActive;
+  if (lookoutHud) {
+    lookoutHud.hidden = !lookoutViewActive && (!crewState || scoutPlaneMode);
+    lookoutHud.classList.toggle("crew-warning-controls", !lookoutViewActive);
+    for (const id of ["lookoutZoomButton", "lookoutCannonButton", "lookoutFlakButton", "lookoutDepthChargeButton"]) {
+      document.getElementById(id).hidden = !lookoutViewActive;
+    }
+  }
   if (lookoutFeedback) lookoutFeedback.textContent = "";
   cannonViewActive = station === "cannon";
   if (crewState) cancelWeaponAlignment();
@@ -2031,9 +2036,8 @@ async function changeCrewStation(station) {
 
 let lastSubmarineWarningId = null;
 let submarineWarningTimer = null;
-let submarineWarningBearing = null;
 async function warnSubmarineFromLookout(kind = "submarine") {
-  if (crewState?.station !== "lookout" || playerDamageState !== "active") return;
+  if (!crewState || playerDamageState !== "active") return;
   const button = document.getElementById("lookoutWarningButton");
   const aircraftButton = document.getElementById("lookoutAircraftWarningButton");
   if (button.disabled) return;
@@ -2042,7 +2046,7 @@ async function warnSubmarineFromLookout(kind = "submarine") {
   try {
     const response = await fetch(gameEndpoint(`/game/crew/${kind === "aircraft" ? "aircraft" : "submarine"}-warning`), {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...crewCommand(), bearing: (heading + lookoutYaw) * 180 / Math.PI })
+      body: JSON.stringify(crewCommand())
     });
     if (!response.ok) throw new Error("Warnruf momentan nicht möglich");
     applyCrewView(await response.json());
@@ -2058,28 +2062,12 @@ function showSubmarineWarning(warning) {
   if (!warning || warning.id === lastSubmarineWarningId) return;
   lastSubmarineWarningId = warning.id;
   const toast = document.getElementById("crewSubmarineWarning");
-  const arrow = document.createElement("span");
-  arrow.className = "submarine-warning-arrow";
-  arrow.textContent = "↑";
-  arrow.setAttribute("role", "img");
   const label = document.createElement("span");
-  label.textContent = `${warning.kind === "aircraft" ? "Flugzeug greift an" : "U-Boot gesichtet"} · Ausguck ${warning.sender}`;
-  toast.replaceChildren(arrow, label);
-  submarineWarningBearing = warning.bearing * Math.PI / 180;
+  label.textContent = `${warning.kind === "aircraft" ? "Flugzeug greift an" : "U-Boot gesichtet"} · ${warning.sender}`;
+  toast.replaceChildren(label);
   toast.hidden = false;
-  updateSubmarineWarningDirection();
   clearTimeout(submarineWarningTimer);
   submarineWarningTimer = setTimeout(() => { toast.hidden = true; }, 6000);
-}
-
-function updateSubmarineWarningDirection() {
-  const toast = document.getElementById("crewSubmarineWarning");
-  if (!toast || toast.hidden || submarineWarningBearing === null) return;
-  const relative = normalizeAngle(submarineWarningBearing - heading);
-  const arrow = toast.firstElementChild;
-  arrow.style.transform = `rotate(${relative}rad)`;
-  const directions = ["voraus", "Steuerbord voraus", "Steuerbord", "Steuerbord achteraus", "achteraus", "Backbord achteraus", "Backbord", "Backbord voraus"];
-  arrow.setAttribute("aria-label", directions[(Math.round(relative / (Math.PI / 4)) + 8) % 8]);
 }
 
 function applyCrewView(view) {
@@ -7139,7 +7127,7 @@ function updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, player
     torpedoFiringHeading: heading,
     targetLineMode: radarTargetLineMode === "hidden" ? "torpedo" : radarTargetLineMode,
     radarTorpedoes: radarTorpedoSnapshots,
-    bridgeWeaponHeading: bridgeWeaponsVisible ? heading : null
+    bridgeWeaponHeading: !scoutPlaneMode ? heading : null
   });
   document.body.dataset.radarHeading = String(Math.round(normalizeAngle(radarHeading) * 180 / Math.PI));
 }
@@ -7464,7 +7452,7 @@ function drawRadarInstrument(canvas, statusElement, playerPosition, radarContact
   }
 
   if (Number.isFinite(options.bridgeWeaponHeading)) {
-    drawRadarWeaponLines(ctx, centerX, centerY, radius, heading, options.bridgeWeaponHeading, cannonAimDisplay.yaw, flakAimDisplay.yaw);
+    drawRadarWeaponLines(ctx, centerX, centerY, radius, heading, options.bridgeWeaponHeading, boat.bowCannon ? cannonAimDisplay.yaw : null, boat.sternFlak ? flakAimDisplay.yaw : null);
   }
   if (Number.isFinite(options.lookoutHeading)) {
     drawRadarFlakLookIndicator(ctx, centerX, centerY, radius, options.lookoutHeading, heading);

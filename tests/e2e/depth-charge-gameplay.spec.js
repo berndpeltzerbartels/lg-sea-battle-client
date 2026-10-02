@@ -38,7 +38,8 @@ test('bridge lookout and flak share replicated releases, explosions, controls an
       else if (path.endsWith('/world')) body = { landmasses: [], instrumentMap: { version: 1, layers: [0, 50, 150].map(height => ({ height, contours: [] })) } };
       else if (path.endsWith('/submarine-warning') || path.endsWith('/aircraft-warning')) {
         const kind = path.endsWith('/aircraft-warning') ? 'aircraft' : 'submarine';
-        warning = { id: `warning-${kind}`, kind, sender: 'Lookout', bearing: route.request().postDataJSON().bearing, expiresAt: Date.now() + 10000 };
+        expect(route.request().postDataJSON()).not.toHaveProperty('bearing');
+        warning = { id: `warning-${kind}`, kind, sender: member.name, expiresAt: Date.now() + 10000 };
         body = { ...crew, submarineWarning: warning };
       } else if (path.endsWith('/depth-charges')) {
         requests++;
@@ -57,6 +58,8 @@ test('bridge lookout and flak share replicated releases, explosions, controls an
     await page.locator('#renderCanvas').click();
     await expect(page.locator('#depthChargeButton')).toBeVisible();
     await expect(page.locator('#roleHotkeys')).toBeVisible();
+    await expect(page.locator('#lookoutWarningButton')).toBeVisible();
+    await expect(page.locator('#lookoutAircraftWarningButton')).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath(`${member.station}-controls.png`) });
   }
   const broadcast = async () => {
@@ -74,12 +77,12 @@ test('bridge lookout and flak share replicated releases, explosions, controls an
     });
     await expect(page.locator('#crewSubmarineWarning')).toBeVisible();
     await expect(page.locator('#crewSubmarineWarning')).toContainText('U-Boot gesichtet');
-    await expect(page.locator('.submarine-warning-arrow')).toHaveAttribute('aria-label', 'voraus');
+    await expect(page.locator('.submarine-warning-arrow')).toHaveCount(0);
     await expect(page.locator('#crewSubmarineWarning')).not.toContainText('°');
   }
   await pages[1].screenshot({ path: testInfo.outputPath('lookout-warning.png') });
   await expect(pages[1].locator('#lookoutAircraftWarningButton')).toBeEnabled({ timeout: 7000 });
-  await pages[1].keyboard.press('KeyL');
+  await pages[0].keyboard.press('KeyL');
   await expect.poll(() => warning.kind).toBe('aircraft');
   for (const [i, page] of pages.entries()) {
     await page.evaluate(message => window.testStream.onmessage({ data: JSON.stringify(message) }), {
@@ -88,7 +91,7 @@ test('bridge lookout and flak share replicated releases, explosions, controls an
         revision: members[i].revision, members, aimRequests: [], lookoutReset: 0, submarineWarning: warning }
     });
     await expect(page.locator('#crewSubmarineWarning')).toContainText('Flugzeug greift an');
-    await expect(page.locator('.submarine-warning-arrow')).toHaveAttribute('aria-label', 'voraus');
+    await expect(page.locator('.submarine-warning-arrow')).toHaveCount(0);
   }
   await pages[1].screenshot({ path: testInfo.outputPath('lookout-aircraft-warning.png') });
   await pages[1].keyboard.press('z');

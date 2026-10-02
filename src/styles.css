@@ -993,6 +993,13 @@ body[data-bomb-bay-view="active"] .air-torpedo-sight-overlay {
   cursor: pointer;
 }
 .lookout-hud button:disabled { opacity: .55; cursor: default; }
+.lookout-hud button[hidden] { display: none; }
+.crew-warning-controls #lookoutDepthChargeButton { display: none; }
+.lookout-hud.crew-warning-controls {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 240px;
+  bottom: 150px;
+}
 .lookout-hud button[aria-pressed="true"] { border-color: #f1d79b; color: #f1d79b; }
 .lookout-hud kbd, .lookout-hud small { display: block; font-size: 11px; overflow-wrap: anywhere; }
 .lookout-hud output { grid-column: 1 / -1; min-height: 20px; color: #fff; font: 13px Arial, sans-serif; text-shadow: 0 1px 3px #000; }
@@ -5254,15 +5261,6 @@ body.debug-map-expanded .nav-instrument-map {
   border-color: #f2cb64;
   color: #ffe6a1;
   background: rgba(38, 31, 12, .96);
-}
-.submarine-warning-arrow {
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 36px;
-  width: 36px;
-  height: 36px;
-  font-size: 32px;
-  line-height: 1;
 }
 
 .crew-kill-success.is-friendly-fire {

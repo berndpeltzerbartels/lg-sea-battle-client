@@ -13,6 +13,7 @@ export function roleHotkeys({ role, members = [], playerId, depthChargesReady = 
     if (depth !== 'surface') keys.push(['⇧↑', 'Auftauchen']);
     if (depth !== 'submerged') keys.push(['⇧↓', 'Abtauchen']);
     if (radarModes) keys.push(['R', 'Radar wechseln']);
+    keys.push(['U', 'Warnung: U-Boot'], ['L', 'Warnung: Flugzeug']);
     return keys;
   }
   const free = station => !members.some(m => m.station === station && m.playerId !== playerId);
@@ -27,7 +28,7 @@ export function roleHotkeys({ role, members = [], playerId, depthChargesReady = 
     if (['flak', 'cannon', 'lookout'].some(free)) keys.push(['A', 'Geschütze ausrichten'], ['⇧A', 'Flugabwehr']);
   } else {
     keys.push(['↑ ↓ ← →', role === 'lookout' ? 'Blickrichtung' : 'Zielen'], ['A', 'Ausrichten']);
-    if (role === 'lookout') keys.push(['Z', 'Fernglas'], ['U', 'U-Boot warnen'], ['L', 'Flugzeug warnen'],
+    if (role === 'lookout') keys.push(['Z', 'Fernglas'],
       ['C', free('cannon') ? 'Kanone ausrichten & übernehmen' : 'Kanone: Zustimmung anfragen'],
       ['F', free('flak') ? 'Flak ausrichten & übernehmen' : 'Flak: Zustimmung anfragen']);
     else {
@@ -37,5 +38,6 @@ export function roleHotkeys({ role, members = [], playerId, depthChargesReady = 
   }
   if (depthChargesReady && ['bridge', 'lookout', 'flak'].includes(role)) keys.push(['W', 'Wasserbomben']);
   if (radarModes) keys.push(['R', 'Radar wechseln']);
+  keys.push(['U', 'Warnung: U-Boot'], ['L', 'Warnung: Flugzeug']);
   return keys;
 }
