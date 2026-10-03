@@ -660,6 +660,7 @@ if (scoutPlaneMode) {
 }
 if (submarineMode && !boat.sternFlak && boat.flakMount) {
   boat.sternFlak = createSternFlak(scene, materials, boat.root, "player_submarine", getShipTeamMaterials(materials, playerTeamId), boat.flakMount.z, true, {
+    shieldVariant: "open",
     deckY: boat.flakMount.deckY,
     scale: boat.flakMount.scale,
     platformDiameterScale: 0.34,
@@ -8751,6 +8752,7 @@ function createRemoteVehicleModel(scene, materials, name, ship) {
     if (!submarine.sternFlak && submarine.flakMount) {
       const teamMaterials = getShipTeamMaterials(materials, ship.teamId);
       submarine.sternFlak = createSternFlak(scene, materials, submarine.root, name, teamMaterials, submarine.flakMount.z, false, {
+        shieldVariant: "open",
         deckY: submarine.flakMount.deckY,
         scale: submarine.flakMount.scale,
         platformDiameterScale: 0.34,
@@ -16353,6 +16355,7 @@ function createOpenFlakTurretWall(name, scene, scale) {
 }
 
 function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ = -3.45, isPlayer = false, options = {}) {
+  const shieldVariant = options.shieldVariant ?? flakShieldVariant;
   const deckMaterial = teamMaterials.deck;
   const metalMaterial = teamMaterials.funnel ?? materials.funnel;
   const shieldMaterial = teamMaterials.cabin ?? teamMaterials.hull;
@@ -16392,13 +16395,13 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   mount.position.z = sternZ;
   mount.rotation.y = Math.PI;
 
-  if (flakShieldVariant === "open") {
+  if (shieldVariant === "open") {
     const turretWall = createOpenFlakTurretWall(`${name}_flak_turret_wall`, scene, scale);
     turretWall.parent = mount;
     turretWall.position.y = -turretWallHeight;
     turretWall.material = shieldMaterial;
   } else {
-    createFlakShield(scene, mount, name, shieldMaterial, scale, flakShieldVariant);
+    createFlakShield(scene, mount, name, shieldMaterial, scale, shieldVariant);
   }
 
   const cradle = MeshBuilder.CreateCylinder(`${name}_flak_cradle`, {
@@ -16418,7 +16421,7 @@ function createSternFlak(scene, materials, parent, name, teamMaterials, sternZ =
   elevationRoot.position.z = 0.16 * scale;
 
   // Trim only the breech; muzzle, sight and shot origin remain unchanged.
-  const rearTrim = flakShieldVariant === "enclosed" ? 0.59 * scale : 0;
+  const rearTrim = shieldVariant === "enclosed" ? 0.59 * scale : 0;
   const barrelLength = flakBarrelLength * scale - rearTrim;
   const barrelHalfLength = barrelLength * 0.5;
   const barrelCenterZ = flakBarrelCenterZ * scale + rearTrim * 0.5;

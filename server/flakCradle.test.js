@@ -20,16 +20,18 @@ test('flak cradle stays below the barrel without moving its elevation pivot', ()
   const engine = new NullEngine();
   try {
     const scene = new Scene(engine);
-    for (const variant of ['open', 'split', 'enclosed']) for (const player of [false, true]) {
+    for (const variant of ['open', 'split', 'enclosed']) for (const player of [false, true]) for (const submarine of [false, true]) {
       const build = factory(MeshBuilder, TransformNode, variant);
       const parent = new TransformNode(`boat-${player}`, scene);
-      const gun = build(scene, {}, parent, `gun-${variant}-${player}`, {}, -3.45, player);
-      const cradle = scene.getMeshByName(`gun-${variant}-${player}_flak_cradle`);
+      const name = `gun-${variant}-${player}-${submarine}`;
+      const gun = build(scene, {}, parent, name, {}, -3.45, player, submarine ? {shieldVariant: 'open'} : {});
+      const cradle = scene.getMeshByName(`${name}_flak_cradle`);
+      if (submarine) assert.ok(scene.getTransformNodeByName(`${name}_flak_turret_wall`), 'submarine retains open turret');
       const barrel = gun.elevationRoot.getChildren().find(node => node.name.endsWith('_flak_barrel'));
       const scale = player ? .54 : .75;
       const halfLength = barrel.getBoundingInfo().boundingBox.extendSize.y;
       assert.ok(Math.abs(barrel.position.z + halfLength - 1.03*scale) < 1e-6, 'muzzle stays fixed');
-      assert.ok(Math.abs(barrel.position.z - halfLength - (variant === 'enclosed' ? 0 : -.59)*scale) < 1e-6, 'only enclosed breech is shortened');
+      assert.ok(Math.abs(barrel.position.z - halfLength - (variant === 'enclosed' && !submarine ? 0 : -.59)*scale) < 1e-6, 'only enclosed breech is shortened');
       for (const yaw of [0, Math.PI/2, Math.PI]) for (const pitch of [0, .7, 1.5]) {
         gun.mount.rotation.y = yaw;
         gun.elevationRoot.rotation.x = -pitch;
