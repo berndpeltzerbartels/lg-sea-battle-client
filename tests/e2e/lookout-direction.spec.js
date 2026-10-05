@@ -1,5 +1,20 @@
 import { test, expect } from '@playwright/test';
 
+test('station buttons also transfer lookout aim instead of retaining old gun direction', async ({ page }) => {
+  await page.goto('/app?vehicle=torpedo-boat&sandbox=side-view&scenarioTest=1');
+  await page.waitForFunction(() => window.seaBattleScenarioTest);
+  for (const weapon of ['cannon', 'flak']) {
+    await page.evaluate(w => {
+      window.seaBattleScenarioTest[`${w}ShotLineAt`]({yaw: 1, pitch: .3});
+      window.seaBattleScenarioTest.setStation('lookout');
+    }, weapon);
+    await page.locator(`#${weapon}ViewButton`).click();
+    await page.waitForTimeout(300);
+    const state = await page.evaluate(() => window.seaBattleScenarioTest.stationState());
+    expect(state[`${weapon}Yaw`]).toBeCloseTo(0, 2);
+  }
+});
+
 test('lookout elevation transfers to both weapons in every direction', async ({ page }) => {
   await page.goto('/app?vehicle=torpedo-boat&sandbox=side-view&scenarioTest=1');
   await page.waitForFunction(() => window.seaBattleScenarioTest);

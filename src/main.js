@@ -68,6 +68,7 @@ let depthChargeAudio = null;
 let depthChargeUnderwater = null;
 let underwaterChargeTestView = false;
 let hotkeySignature = "";
+let hotkeysExpanded = false;
 const zoomIdleTimer = createZoomIdleTimer();
 for (const event of ['keydown', 'keyup', 'pointerdown', 'pointermove', 'wheel', 'input']) {
   window.addEventListener(event, () => zoomIdleTimer.touch(performance.now()), { capture: true, passive: true });
@@ -1297,7 +1298,16 @@ window.addEventListener("pointerdown", unlockDepthChargeAudio, { once: true });
 window.addEventListener("keydown", unlockDepthChargeAudio, { once: true });
 const hotkeyLayoutObserver = new ResizeObserver(placeRoleHotkeys);
 for (const element of document.querySelectorAll("#roleHotkeys, .player-list, #lookoutHud, .weapon-elevation")) hotkeyLayoutObserver.observe(element);
-window.addEventListener("resize", placeRoleHotkeys);
+window.addEventListener("resize", () => {
+  updateRoleHotkeys();
+  placeRoleHotkeys();
+});
+document.getElementById("roleHotkeysToggle")?.addEventListener("click", () => {
+  hotkeysExpanded = !hotkeysExpanded;
+  updateRoleHotkeys();
+  placeRoleHotkeys();
+  focusGameCanvas();
+});
 setupAlignWeaponsControl(alignAirDefenseButton, "air-defense");
 setupTorpedoAidControl(torpedoAidButton);
 setupSubmarineDepthControl(submarineSurfaceButton);
@@ -1407,6 +1417,8 @@ if (crewState) {
     if (response.ok) window.location.replace(startPageUrl());
   });
   document.body.append(leave);
+  hotkeyLayoutObserver.observe(leave);
+  placeRoleHotkeys();
 }
 
 scene.onBeforeRenderObservable.add(() => {
@@ -2958,7 +2970,8 @@ function setupFlakViewControl(button) {
   if (!button) return;
   updateBattleStationButtons();
   button.addEventListener("click", (event) => {
-    setBattleStation("flak");
+    if (lookoutViewActive) void aimFromLookout("flak");
+    else setBattleStation("flak");
     button.blur();
     event.stopPropagation();
   });
@@ -2998,7 +3011,8 @@ function setupCannonViewControl(button) {
   if (!button) return;
   updateBattleStationButtons();
   button.addEventListener("click", (event) => {
-    setBattleStation("cannon");
+    if (lookoutViewActive) void aimFromLookout("cannon");
+    else setBattleStation("cannon");
     button.blur();
     event.stopPropagation();
   });
@@ -3526,7 +3540,11 @@ function updateBattleStationButtons() {
 function updateRoleHotkeys() {
   const panel = document.getElementById("roleHotkeys");
   if (!panel) return;
-  panel.hidden = !["torpedo-boat", "submarine"].includes(playerVehicleType) || (sideViewSandboxMode && !scenarioTestMode);
+  const unavailable = !["torpedo-boat", "submarine"].includes(playerVehicleType) || (sideViewSandboxMode && !scenarioTestMode);
+  const toggle = document.getElementById("roleHotkeysToggle");
+  toggle.hidden = unavailable;
+  toggle.setAttribute("aria-expanded", String(hotkeysExpanded));
+  panel.hidden = unavailable || !hotkeysExpanded;
   if (panel.hidden) return;
   const role = crewState?.station ?? (lookoutViewActive ? "lookout" : cannonViewActive ? "cannon" : flakViewActive ? "flak" : "bridge");
   const entries = roleHotkeys({ role, members: crewState?.members, playerId,
@@ -3551,8 +3569,16 @@ function updateRoleHotkeys() {
 }
 
 function placeRoleHotkeys() {
+  const toggle = document.getElementById("roleHotkeysToggle");
+  const leave = document.querySelector(".crew-leave");
+  if (toggle && leave) {
+    const rect = leave.getBoundingClientRect();
+    toggle.style.right = `${window.innerWidth - rect.left + 8}px`;
+    toggle.style.top = `${rect.top}px`;
+    toggle.style.bottom = "auto";
+  }
   const panel = document.getElementById("roleHotkeys");
-  if (!panel) return;
+  if (!panel || panel.hidden) return;
   panel.style.bottom = "58px";
   panel.style.top = "auto";
   panel.style.left = "auto";
@@ -3593,7 +3619,12 @@ function placeRoleHotkeys() {
       panel.style.top = `${overlap.bottom + 8}px`;
     }
   }
-  panel.style.visibility = "hidden";
+  // An explicitly requested list must remain accessible even on a small viewport.
+  panel.style.left = "auto";
+  panel.style.right = "16px";
+  panel.style.top = "auto";
+  panel.style.bottom = "58px";
+  panel.style.visibility = "visible";
 }
 
 function cycleCannonSightLevel() {
@@ -15433,11 +15464,8 @@ function createPlayerBow(scene, materials, name = "player_bow", teamId = "light"
       height: 0.012,
       tessellation: 12
     }, scene);
-    opening.parent = root;
-    opening.position.x = tube.position.x;
-    opening.position.y = tube.position.y;
-    opening.position.z = 2.308;
-    opening.rotation.x = Math.PI / 2;
+    opening.parent = cap;
+    opening.position.y = 0.04 - 0.006 + 0.0002;
     opening.material = materials.tubeOpening;
   }
 
@@ -15860,7 +15888,7 @@ function createBoatBowBulwarkCapMesh(name, scene) {
       const b = a + 4;
       pushOrientedQuad(indices, positions, a, b, b + 1, a + 1, Vector3.Up());
       pushOrientedQuad(indices, positions, a + 1, b + 1, b + 2, a + 2, new Vector3(-side, 0, 0));
-      pushOrientedQuad(indices, positions, a, a + 3, b + 3, b, new Vector3(side, 0, 0));
+      // The raised hull already supplies the outer wall along the bow.
       pushOrientedQuad(indices, positions, a + 2, b + 2, b + 3, a + 3, Vector3.Down());
     }
 
@@ -16545,11 +16573,8 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = 
       height: 0.012,
       tessellation: 10
     }, scene);
-    opening.parent = root;
-    opening.position.x = tube.position.x;
-    opening.position.y = tube.position.y;
-    opening.position.z = 2.308;
-    opening.rotation.x = Math.PI / 2;
+    opening.parent = tube;
+    opening.position.y = 0.88 - 0.006 + 0.0002;
     opening.material = materials.tubeOpening;
   }
 
