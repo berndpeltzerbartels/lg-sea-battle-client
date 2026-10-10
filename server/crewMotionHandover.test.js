@@ -30,7 +30,7 @@ test('rejected bridge motion is corrected, accepted motion and old station repli
   const aligned = [];
   const crew = { station: 'bridge', revision: 2, shipId: 'boat' };
   const reconcile = new Function('alignPlayerBoatToServerShip', 'crewState', `
-    const serverRestartPending = false, playerDamageState = 'active', playerServerShipId = 'boat';
+    const playerLifeRevision = 0, serverRestartPending = false, playerDamageState = 'active', playerServerShipId = 'boat';
     const document = { body: { dataset: {} } };
     let playerServerTarget, playerMotionBlocked = false;
     const blockPlayerMotion = () => { playerMotionBlocked = true; };
@@ -50,7 +50,7 @@ test('position rejection is visible, blocks play and only an accepted reply rele
   const messages = [];
   const run = new Function('showDamageMessage', `
     let playerMotionBlocked = false, playerServerTarget;
-    const serverRestartPending = false, playerDamageState = 'active', playerServerShipId = 'boat';
+    const playerLifeRevision = 0, serverRestartPending = false, playerDamageState = 'active', playerServerShipId = 'boat';
     const crewState = null, time = 1, document = { body: { dataset: {} } };
     const alignPlayerBoatToServerShip = () => {};
     ${fn('blockPlayerMotion')}
@@ -68,7 +68,7 @@ test('destroyed or removed ship enters sinking without a position warning', () =
   for (const ships of [[], [{ id: 'boat', state: 'sunk', x: 0, z: 0 }]]) {
     const snapshots = [], messages = [];
     const reconcile = new Function('applyServerGameSnapshot', 'showDamageMessage', `
-      const playerServerShipId = 'boat', serverRestartPending = false, playerDamageState = 'active';
+      const playerLifeRevision = 0, playerServerShipId = 'boat', serverRestartPending = false, playerDamageState = 'active';
       const crewState = null, time = 0;
       let playerMotionBlocked = false;
       ${fn('blockPlayerMotion')}
@@ -85,7 +85,7 @@ test('late replies and connection errors during sinking do not replace the death
   for (const state of ['sinking', 'active']) {
     const messages = [];
     const run = new Function('playerDamageState', 'showDamageMessage', `
-      const playerServerShipId = 'new-boat', serverRestartPending = false, time = 0;
+      const playerLifeRevision = 0, playerServerShipId = 'new-boat', serverRestartPending = false, time = 0;
       let playerMotionBlocked = false;
       ${fn('blockPlayerMotion')}
       ${fn('reconcilePlayerMotionAcknowledgement')}
@@ -114,4 +114,36 @@ test('torpedo launch never reaches the fire endpoint if position confirmation fa
   await fire();
   await fire();
   assert.equal(confirmations, 2, 'aborted launch releases the in-flight guard');
+});
+
+test('reused active ship ID owned by a bot is a lifecycle change, not a position rejection', () => {
+  const snapshots = [];
+  const reconcile = new Function('applyServerGameSnapshot', `
+    const playerLifeRevision = 1, playerServerShipId = 'boat', playerDamageState = 'active', serverRestartPending = false;
+    const crewState = null;
+    let playerMotionBlocked = false;
+    const blockPlayerMotion = () => { throw new Error('unexpected position warning'); };
+    ${fn('reconcilePlayerMotionAcknowledgement')}
+    return reconcilePlayerMotionAcknowledgement;
+  `)(s => snapshots.push(s));
+  const snapshot = { ships: [{ id: 'boat', controlledBy: 'bot', state: 'active', x: 900, z: 900 }] };
+  assert.equal(reconcile(snapshot, { playerId: 'player-test', x: 0, z: 0 }, null), false);
+  assert.deepEqual(snapshots, [snapshot]);
+});
+
+test('same-ID response from before sinking is ignored after respawn', () => {
+  const run = new Function(`
+    let playerLifeRevision = 0, playerMotionBlocked = true, flakHitAlertUntil = 9;
+    const playerServerShipId = 'boat', playerDamageState = 'active', serverRestartPending = false;
+    ${fn('invalidatePlayerMotionLife')}
+    ${fn('reconcilePlayerMotionAcknowledgement')}
+    return () => {
+      const sentLife = playerLifeRevision;
+      invalidatePlayerMotionLife();
+      invalidatePlayerMotionLife();
+      return { accepted: reconcilePlayerMotionAcknowledgement({ ships: [] }, {}, null, 'boat', sentLife),
+        blocked: playerMotionBlocked, alertUntil: flakHitAlertUntil };
+    };
+  `)();
+  assert.deepEqual(run(), { accepted: false, blocked: false, alertUntil: 0 });
 });

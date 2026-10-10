@@ -1239,6 +1239,7 @@ const appliedServerRamStops = new Set();
 let ramShake = 0;
 let playerHits = 0;
 let playerDamageState = "active";
+let playerLifeRevision = 0;
 let playerSinkStartTime = 0;
 let playerSinkStartY = 0;
 let playerSinkSide = -1;
@@ -6285,6 +6286,7 @@ async function transmitPlayerState() {
   const debugTeleport = debugTeleportPending;
   const sentCrew = crewState;
   const sentShipId = playerServerShipId;
+  const sentLifeRevision = playerLifeRevision;
   const motion = createPlayerStatePayload(debugTeleport);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), playerStateRequestTimeoutSeconds * 1000);
@@ -6295,11 +6297,16 @@ async function transmitPlayerState() {
       body: JSON.stringify(crewState ? crewCommand({ motion }) : motion),
       signal: controller.signal
     });
+    if (sentLifeRevision !== playerLifeRevision) return false;
     if (!response.ok) {
       if ((response.status === 403 || response.status === 409) && await checkServerRestart()) return;
       if (response.status === 409 && sentShipId === playerServerShipId) {
         const stateResponse = await fetch(gameEndpoint("/game/state"), { signal: controller.signal });
-        if (stateResponse.ok) applyServerGameSnapshot(await stateResponse.json());
+        if (stateResponse.ok) {
+          const state = await stateResponse.json();
+          if (sentLifeRevision !== playerLifeRevision) return false;
+          applyServerGameSnapshot(state);
+        }
       }
       if (playerDamageState !== "active" || sentShipId !== playerServerShipId) return false;
       if (response.status === 403) {
@@ -6309,8 +6316,8 @@ async function transmitPlayerState() {
       throw new Error(`Player state request failed with ${response.status}`);
     }
     const snapshot = await response.json();
-    if (playerDamageState !== "active" || sentShipId !== playerServerShipId) return false;
-    if (!debugTeleport && reconcilePlayerMotionAcknowledgement(snapshot, motion, sentCrew, sentShipId) === false) return false;
+    if (playerDamageState !== "active" || sentShipId !== playerServerShipId || sentLifeRevision !== playerLifeRevision) return false;
+    if (!debugTeleport && reconcilePlayerMotionAcknowledgement(snapshot, motion, sentCrew, sentShipId, sentLifeRevision) === false) return false;
     if (debugTeleport) {
       debugTeleportPending = false;
       applyServerGameSnapshot(snapshot);
@@ -6325,7 +6332,7 @@ async function transmitPlayerState() {
   } catch (error) {
     document.body.dataset.playerStateSync = "error";
     document.body.dataset.playerStateSyncError = error.message;
-    if (sentShipId === playerServerShipId) blockPlayerMotion("Keine Positionsbestaetigung vom Server. Steuerung und Waffen pausiert.");
+    if (sentShipId === playerServerShipId && sentLifeRevision === playerLifeRevision) blockPlayerMotion("Keine Positionsbestaetigung vom Server. Steuerung und Waffen pausiert.");
     return false;
   } finally {
     clearTimeout(timeoutId);
@@ -6341,14 +6348,17 @@ function blockPlayerMotion(message) {
   showDamageMessage(message, time, 8);
 }
 
-function reconcilePlayerMotionAcknowledgement(snapshot, motion, sentCrew, sentShipId = playerServerShipId) {
-  if (serverRestartPending || playerDamageState !== "active" || sentShipId !== playerServerShipId) return false;
+function reconcilePlayerMotionAcknowledgement(snapshot, motion, sentCrew, sentShipId = playerServerShipId, sentLifeRevision = playerLifeRevision) {
+  if (serverRestartPending || playerDamageState !== "active" || sentShipId !== playerServerShipId
+      || sentLifeRevision !== playerLifeRevision) return false;
   if (sentCrew && (crewState?.revision !== sentCrew.revision
       || crewState?.shipId !== sentCrew.shipId || crewState?.station !== sentCrew.station)) return false;
   if (!sentCrew && crewState) return;
   const ship = snapshot.ships?.find(candidate => candidate.id === playerServerShipId);
+  const expectedController = sentCrew?.controller ?? motion.playerId;
   // Destruction/removal belongs to the normal sinking flow, not position validation.
-  if (Array.isArray(snapshot.ships) && (!ship || ship.state !== "active")) {
+  if (Array.isArray(snapshot.ships) && (!ship || ship.state !== "active"
+      || (expectedController && ship.controlledBy !== expectedController))) {
     playerMotionBlocked = false;
     applyServerGameSnapshot(snapshot);
     return false;
@@ -9547,6 +9557,7 @@ function isShipRadarVisibleToPlayer(ship) {
 
 function beginPlayerSinking(hitPosition, now, damageMessage = null) {
   if (playerDamageState !== "active") return;
+  invalidatePlayerMotionLife();
 
   sendClientGameEvent("player-sinking-start", {
     damageMessage: damageMessage ?? "",
@@ -9590,6 +9601,7 @@ function updatePlayerSinking(playerBoat, now) {
 
 function beginScoutPlaneFlakHit(hit, now) {
   if (!scoutPlaneMode || playerDamageState !== "active") return;
+  invalidatePlayerMotionLife();
 
   playerDamageState = "air-hit";
   scoutPlaneFlakHitStartTime = now;
@@ -9648,11 +9660,18 @@ function updateScoutPlaneFlakHitSequence(playerPlane, now, dt) {
   }
 }
 
+function invalidatePlayerMotionLife() {
+  playerLifeRevision++;
+  if (playerMotionBlocked) flakHitAlertUntil = 0;
+  playerMotionBlocked = false;
+}
+
 function respawnPlayerBoat(playerBoat) {
   if (serverRestartPending) {
     location.reload();
     return;
   }
+  invalidatePlayerMotionLife();
   if (scoutPlaneMode) {
     respawnPlayerScoutPlane(playerBoat);
     return;
