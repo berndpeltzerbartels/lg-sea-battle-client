@@ -6,7 +6,7 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh.js";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial.js";
 import { PointLight } from "@babylonjs/core/Lights/pointLight.js";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector.js";
-import { prioritizeMuzzleLight, preserveEnvironmentLight } from "../src/muzzleLighting.js";
+import { prioritizeMuzzleLight, preserveEnvironmentLight, flushMuzzleLightPriorities } from "../src/muzzleLighting.js";
 
 test("every muzzle flash keeps a material light slot despite earlier projectiles and flashes", () => {
   const engine = new NullEngine();
@@ -26,6 +26,7 @@ test("every muzzle flash keeps a material light slot despite earlier projectiles
     for (let i = 0; i < 20; i++) {
       const flash = light(`flash-${i}`);
       prioritizeMuzzleLight(flash);
+      flushMuzzleLightPriorities(scene);
       const selected = mesh.lightSources.slice(0, mesh.material.maxSimultaneousLights);
       assert.ok(selected.includes(flash));
       assert.ok(selected.includes(sun));
