@@ -60,8 +60,43 @@ test('position rejection is visible, blocks play and only an accepted reply rele
   const ship = { id: 'boat', state: 'active', x: 0, z: 0 };
   assert.deepEqual(run([ship], { x: 0, z: 80 }), { accepted: false, blocked: true });
   assert.match(messages[0], /80.0 m/);
-  assert.deepEqual(run([], { x: 0, z: 0 }), { accepted: false, blocked: true });
+  assert.deepEqual(run([{ ...ship, x: NaN }], { x: 0, z: 0 }), { accepted: false, blocked: true });
   assert.deepEqual(run([ship], { x: 0, z: 0 }), { accepted: true, blocked: false });
+});
+
+test('destroyed or removed ship enters sinking without a position warning', () => {
+  for (const ships of [[], [{ id: 'boat', state: 'sunk', x: 0, z: 0 }]]) {
+    const snapshots = [], messages = [];
+    const reconcile = new Function('applyServerGameSnapshot', 'showDamageMessage', `
+      const playerServerShipId = 'boat', serverRestartPending = false, playerDamageState = 'active';
+      const crewState = null, time = 0;
+      let playerMotionBlocked = false;
+      ${fn('blockPlayerMotion')}
+      ${fn('reconcilePlayerMotionAcknowledgement')}
+      return reconcilePlayerMotionAcknowledgement;
+    `)(snapshot => snapshots.push(snapshot), message => messages.push(message));
+    assert.equal(reconcile({ ships }, { x: 100, z: 100 }, null), false);
+    assert.equal(snapshots.length, 1);
+    assert.deepEqual(messages, []);
+  }
+});
+
+test('late replies and connection errors during sinking do not replace the death message', () => {
+  for (const state of ['sinking', 'active']) {
+    const messages = [];
+    const run = new Function('playerDamageState', 'showDamageMessage', `
+      const playerServerShipId = 'new-boat', serverRestartPending = false, time = 0;
+      let playerMotionBlocked = false;
+      ${fn('blockPlayerMotion')}
+      ${fn('reconcilePlayerMotionAcknowledgement')}
+      return () => {
+        if (playerDamageState === 'sinking') blockPlayerMotion('connection error');
+        return reconcilePlayerMotionAcknowledgement({ ships: [] }, {}, null, 'old-boat');
+      };
+    `)(state, message => messages.push(message));
+    assert.equal(run(), false);
+    assert.deepEqual(messages, []);
+  }
 });
 
 test('torpedo launch never reaches the fire endpoint if position confirmation fails', async () => {

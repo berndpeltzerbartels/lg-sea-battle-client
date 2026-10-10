@@ -6284,6 +6284,7 @@ async function transmitPlayerState() {
   const requestStartedAt = beginHttpRequest();
   const debugTeleport = debugTeleportPending;
   const sentCrew = crewState;
+  const sentShipId = playerServerShipId;
   const motion = createPlayerStatePayload(debugTeleport);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), playerStateRequestTimeoutSeconds * 1000);
@@ -6296,6 +6297,11 @@ async function transmitPlayerState() {
     });
     if (!response.ok) {
       if ((response.status === 403 || response.status === 409) && await checkServerRestart()) return;
+      if (response.status === 409 && sentShipId === playerServerShipId) {
+        const stateResponse = await fetch(gameEndpoint("/game/state"), { signal: controller.signal });
+        if (stateResponse.ok) applyServerGameSnapshot(await stateResponse.json());
+      }
+      if (playerDamageState !== "active" || sentShipId !== playerServerShipId) return false;
       if (response.status === 403) {
         expireActiveLogin("player-state-403");
         return;
@@ -6303,7 +6309,8 @@ async function transmitPlayerState() {
       throw new Error(`Player state request failed with ${response.status}`);
     }
     const snapshot = await response.json();
-    if (!debugTeleport && reconcilePlayerMotionAcknowledgement(snapshot, motion, sentCrew) === false) return false;
+    if (playerDamageState !== "active" || sentShipId !== playerServerShipId) return false;
+    if (!debugTeleport && reconcilePlayerMotionAcknowledgement(snapshot, motion, sentCrew, sentShipId) === false) return false;
     if (debugTeleport) {
       debugTeleportPending = false;
       applyServerGameSnapshot(snapshot);
@@ -6318,7 +6325,7 @@ async function transmitPlayerState() {
   } catch (error) {
     document.body.dataset.playerStateSync = "error";
     document.body.dataset.playerStateSyncError = error.message;
-    blockPlayerMotion("Keine Positionsbestaetigung vom Server. Steuerung und Waffen pausiert.");
+    if (sentShipId === playerServerShipId) blockPlayerMotion("Keine Positionsbestaetigung vom Server. Steuerung und Waffen pausiert.");
     return false;
   } finally {
     clearTimeout(timeoutId);
@@ -6329,17 +6336,23 @@ async function transmitPlayerState() {
 }
 
 function blockPlayerMotion(message) {
+  if (serverRestartPending || playerDamageState !== "active") return;
   playerMotionBlocked = true;
   showDamageMessage(message, time, 8);
 }
 
-function reconcilePlayerMotionAcknowledgement(snapshot, motion, sentCrew) {
-  if (serverRestartPending || playerDamageState !== "active") return;
+function reconcilePlayerMotionAcknowledgement(snapshot, motion, sentCrew, sentShipId = playerServerShipId) {
+  if (serverRestartPending || playerDamageState !== "active" || sentShipId !== playerServerShipId) return false;
   if (sentCrew && (crewState?.revision !== sentCrew.revision
       || crewState?.shipId !== sentCrew.shipId || crewState?.station !== sentCrew.station)) return false;
   if (!sentCrew && crewState) return;
-  const ship = snapshot.ships?.find(candidate => candidate.id === playerServerShipId
-    && candidate.state === "active");
+  const ship = snapshot.ships?.find(candidate => candidate.id === playerServerShipId);
+  // Destruction/removal belongs to the normal sinking flow, not position validation.
+  if (Array.isArray(snapshot.ships) && (!ship || ship.state !== "active")) {
+    playerMotionBlocked = false;
+    applyServerGameSnapshot(snapshot);
+    return false;
+  }
   if (!ship || !Number.isFinite(ship.x) || !Number.isFinite(ship.z)) {
     blockPlayerMotion("Schiffsposition nicht bestaetigt. Steuerung und Waffen pausiert.");
     return false;
