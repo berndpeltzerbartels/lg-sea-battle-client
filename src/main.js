@@ -1270,6 +1270,8 @@ let playerServerHeadingCorrection = 0;
 let playerServerTurnRateCorrection = 0;
 let nextPlayerStateSendTime = 0;
 let playerStateRequestInFlight = false;
+let playerStateRequestPromise = null;
+let playerMotionBlocked = false;
 let playerStateRequestStartedAt = 0;
 const playerStateRequestTimeoutSeconds = 2.5;
 let remoteCorrectionSamples = 0;
@@ -1545,7 +1547,7 @@ scene.onBeforeRenderObservable.add(() => {
   let forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
   let nextWaterSafety = waterSafety;
 
-  if (playerActive && (!crewState || crewState.station === "bridge")) {
+  if (playerActive && !playerMotionBlocked && (!crewState || crewState.station === "bridge")) {
     if (scoutPlaneMode) {
       engineOrder = 7;
     }
@@ -2065,6 +2067,10 @@ async function changeCrewStation(station) {
   crewSwitchPending = true;
   updateBattleStationButtons();
   try {
+    if (playerStateRequestPromise) await playerStateRequestPromise;
+    if (crewState.station === "bridge" && !await sendPlayerState()) {
+      throw new Error("Position konnte nicht synchronisiert werden");
+    }
     const response = await fetch(gameEndpoint("/game/crew/station"), {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(crewCommand({ station: station === "torpedo" ? "bridge" : station }))
@@ -2072,8 +2078,6 @@ async function changeCrewStation(station) {
     if (response.ok) {
       applyCrewView(await response.json());
       setBattleStation(station, true);
-      const ship = serverShipsById.get(crewState.shipId);
-      if (ship) alignPlayerBoatToServerShip(ship);
     }
   } catch (error) {
     document.body.dataset.crewSwitchError = error.message;
@@ -2128,7 +2132,13 @@ function applyCrewView(view) {
   }
   crewState = view;
   showSubmarineWarning(view.submarineWarning);
-  if (changed) setBattleStation(view.station, true);
+  if (changed) {
+    setBattleStation(view.station, true);
+    if (view.ship?.id === view.shipId && view.ship.state === "active") {
+      alignPlayerBoatToServerShip(view.ship);
+      if (view.station === "bridge") playerServerTarget = null;
+    }
+  }
   updateBattleStationButtons();
   updateLookoutAimRequests();
 }
@@ -3330,6 +3340,7 @@ function updateDepthChargeButton() {
 }
 
 async function dropDepthCharges() {
+  if (playerMotionBlocked) return;
   if (!canDropDepthCharges() || playerDamageState !== "active" || depthChargeRequestPending || depthChargeSalvoQueued) return;
   // Audio must be unlocked by a user gesture, never by a network event.
   unlockDepthChargeAudio();
@@ -6248,7 +6259,7 @@ function getOtherServerShips(ships, ownShipId) {
 }
 
 function syncMultiplayerState(now) {
-  if (sideViewSandboxMode) return;
+  if (sideViewSandboxMode || crewSwitchPending) return;
   if (playerStateRequestInFlight && now - playerStateRequestStartedAt > playerStateRequestTimeoutSeconds) {
     playerStateRequestInFlight = false;
     document.body.dataset.playerStateSync = "timeout";
@@ -6259,20 +6270,28 @@ function syncMultiplayerState(now) {
   }
 }
 
-async function sendPlayerState() {
+function sendPlayerState() {
+  if (playerStateRequestPromise) return playerStateRequestPromise;
+  playerStateRequestPromise = transmitPlayerState().finally(() => { playerStateRequestPromise = null; });
+  return playerStateRequestPromise;
+}
+
+async function transmitPlayerState() {
   if (crewState?.station === "lookout") return;
   if (serverRestartPending) return;
   playerStateRequestInFlight = true;
   playerStateRequestStartedAt = time;
   const requestStartedAt = beginHttpRequest();
   const debugTeleport = debugTeleportPending;
+  const sentCrew = crewState;
+  const motion = createPlayerStatePayload(debugTeleport);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), playerStateRequestTimeoutSeconds * 1000);
   try {
     const response = await fetch(getPlayerStateEndpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(crewState ? crewCommand({ motion: createPlayerStatePayload(debugTeleport) }) : createPlayerStatePayload(debugTeleport)),
+      body: JSON.stringify(crewState ? crewCommand({ motion }) : motion),
       signal: controller.signal
     });
     if (!response.ok) {
@@ -6284,24 +6303,63 @@ async function sendPlayerState() {
       throw new Error(`Player state request failed with ${response.status}`);
     }
     const snapshot = await response.json();
+    if (!debugTeleport && reconcilePlayerMotionAcknowledgement(snapshot, motion, sentCrew) === false) return false;
     if (debugTeleport) {
       debugTeleportPending = false;
       applyServerGameSnapshot(snapshot);
       const confirmedShip = snapshot.ships?.find(ship => ship.id === playerServerShipId && ship.state === "active");
       if (confirmedShip && !serverRestartPending && playerDamageState === "active") {
         alignPlayerBoatToServerShip(confirmedShip);
+        playerMotionBlocked = false;
       }
     }
     document.body.dataset.playerStateSync = "command-ok";
+    return true;
   } catch (error) {
     document.body.dataset.playerStateSync = "error";
     document.body.dataset.playerStateSyncError = error.message;
+    blockPlayerMotion("Keine Positionsbestaetigung vom Server. Steuerung und Waffen pausiert.");
+    return false;
   } finally {
     clearTimeout(timeoutId);
     finishHttpRequest("playerState", requestStartedAt);
     playerStateRequestInFlight = false;
     playerStateRequestStartedAt = 0;
   }
+}
+
+function blockPlayerMotion(message) {
+  playerMotionBlocked = true;
+  showDamageMessage(message, time, 8);
+}
+
+function reconcilePlayerMotionAcknowledgement(snapshot, motion, sentCrew) {
+  if (serverRestartPending || playerDamageState !== "active") return;
+  if (sentCrew && (crewState?.revision !== sentCrew.revision
+      || crewState?.shipId !== sentCrew.shipId || crewState?.station !== sentCrew.station)) return false;
+  if (!sentCrew && crewState) return;
+  const ship = snapshot.ships?.find(candidate => candidate.id === playerServerShipId
+    && candidate.state === "active");
+  if (!ship || !Number.isFinite(ship.x) || !Number.isFinite(ship.z)) {
+    blockPlayerMotion("Schiffsposition nicht bestaetigt. Steuerung und Waffen pausiert.");
+    return false;
+  }
+  if (sentCrew && sentCrew.station !== "bridge") {
+    playerMotionBlocked = false;
+    return true;
+  }
+  const distance = Math.hypot(ship.x - motion.x, ship.z - motion.z);
+  if (distance < 0.01) {
+    playerMotionBlocked = false;
+    return true;
+  }
+  // Accepted motion echoes the submitted position; a different one is a server rejection.
+  alignPlayerBoatToServerShip(ship);
+  playerServerTarget = null;
+  document.body.dataset.playerStateSyncCorrection = "rejected-position";
+  document.body.dataset.playerStateSync = "position-corrected";
+  blockPlayerMotion(`Positionsfehler (${distance.toFixed(1)} m): Serverposition uebernommen. Aktion abgebrochen.`);
+  return false;
 }
 
 function requestPlayerWeaponFire() {
@@ -6324,6 +6382,14 @@ async function requestPlayerTorpedoFire() {
   if (fireTorpedoRequestInFlight || playerDamageState !== "active") return;
 
   fireTorpedoRequestInFlight = true;
+  const firingCrew = crewState;
+  const pendingConfirmed = playerStateRequestPromise ? await playerStateRequestPromise : true;
+  if (pendingConfirmed === false || !await sendPlayerState() || playerMotionBlocked || playerDamageState !== "active"
+      || crewState?.revision !== firingCrew?.revision || crewState?.station !== firingCrew?.station) {
+    fireTorpedoRequestInFlight = false;
+    document.body.dataset.fireTorpedoSync = "position-not-confirmed";
+    return;
+  }
   const requestStartedAt = beginHttpRequest();
   const requestedTubeSide = scoutPlaneMode ? 0 : (torpedoSystem.nextTube === 0 ? -1 : 1);
   torpedoSystem.pendingOwnTubeSide = scoutPlaneMode ? null : requestedTubeSide;
@@ -6419,6 +6485,7 @@ function summarizeShip(ship) {
 }
 
 async function requestPlayerBombDrop() {
+  if (playerMotionBlocked) return;
   if (dropBombRequestInFlight || playerDamageState !== "active") return;
   if (!scoutPlaneMode) return;
 
@@ -9998,6 +10065,7 @@ function createCannonSystem(scene, materials, parent) {
 }
 
 function firePlayerFlak() {
+  if (playerMotionBlocked) return;
   if (crewState && crewState.station !== "flak") return;
   if (!flakViewActive || playerDamageState !== "active" || time < flakSystem.nextFireTime) return;
   if (submarineMode && playerSubmarineDepthState !== submarineDepthStates.surface) {
@@ -10021,6 +10089,7 @@ function firePlayerFlak() {
 }
 
 function firePlayerCannon() {
+  if (playerMotionBlocked) return;
   if (crewState && crewState.station !== "cannon") return;
   if (!cannonViewActive || playerDamageState !== "active") return;
   if (time < nextCannonFireTime) {
