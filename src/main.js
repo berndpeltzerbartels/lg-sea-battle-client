@@ -1,6 +1,7 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { prepareInstrumentPaths, radarTransform } from "./instrumentMap.js";
 import { mountCrewInbox } from "./crewInbox.js";
+import { trackPlayerActivity } from "./playerActivity.js";
 import { WeaponAimDisplay } from "./weaponAimDisplay.js";
 import { advanceSubmarineDepth } from "./submarineDiveMotion.js";
 import { prioritizeMuzzleLight, preserveEnvironmentLight, flushMuzzleLightPriorities } from "./muzzleLighting.js";
@@ -1402,6 +1403,13 @@ const bombSystem = createBombSystem(scene, materials, world);
 const flakSystem = createFlakSystem(scene, materials, world);
 const cannonSystem = createCannonSystem(scene, materials, world);
 connectGameEventStream();
+if (!sideViewSandboxMode) trackPlayerActivity({
+  send: () => fetch(gameEndpoint("/game/crew/activity"), {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId })
+  }),
+  expired: () => expireActiveLogin("inactivity")
+});
 
 const telegraphSteps = createTelegraphSteps(engineOrders, telegraphScale);
 setupTelegraphDragControl(telegraphScale);
@@ -6942,6 +6950,11 @@ function applyGameStreamMessage(data) {
   try {
     const parseStarted = performanceLoggingEnabled ? performance.now() : 0;
     message = JSON.parse(data);
+    if (message.type === "session-expired") {
+      gameEventSource?.close();
+      expireActiveLogin(message.reason ?? "session-expired");
+      return;
+    }
     if (performanceLoggingEnabled) projectilePerformance.record("jsonParseMs", performance.now() - parseStarted);
   } catch (error) {
     document.body.dataset.gameEventSource = "parse-error";
@@ -10144,6 +10157,23 @@ function installScenarioTestHooks() {
     },
     radarTargetAtDepthForTest(contacts, launchY) {
       return findRadarTargetLineObstruction({ x: 0, z: 0 }, 0, contacts, 500, launchY)?.contact.id ?? null;
+    },
+    bombImpactEffectsForTest(impacts = [], predictedIds = []) {
+      predictedIds.forEach(id => bombSystem.serverImpactIds.add(`visual-water:${id}`));
+      renderServerBombImpacts(impacts);
+      return torpedoSystem.hitEffects.filter(effect => effect.mesh).map(effect => {
+        const mesh = effect.mesh;
+        const bounds = mesh.getBoundingInfo().boundingBox;
+        return {
+          name: mesh.name,
+          width: bounds.maximum.x - bounds.minimum.x,
+          height: bounds.maximum.y - bounds.minimum.y,
+          visibility: mesh.visibility * (mesh.material?.alpha ?? 1),
+          enabled: mesh.isEnabled(),
+          age: effect.age,
+          lifetime: effect.lifetime
+        };
+      });
     },
     underwaterHitFoamForTest(impacts = []) {
       renderServerTorpedoImpacts(impacts);
