@@ -46,7 +46,7 @@ test('rejected bridge motion is corrected, accepted motion and old station repli
   assert.deepEqual(aligned, [ship]);
 });
 
-test('position rejection is visible, blocks play and only an accepted reply releases it', () => {
+test('a corrected position restores control, but missing confirmation blocks play', () => {
   const messages = [];
   const run = new Function('showDamageMessage', `
     let playerMotionBlocked = false, playerServerTarget;
@@ -58,8 +58,12 @@ test('position rejection is visible, blocks play and only an accepted reply rele
     return (ships, motion) => ({ accepted: reconcilePlayerMotionAcknowledgement({ ships }, motion, null), blocked: playerMotionBlocked });
   `)(message => messages.push(message));
   const ship = { id: 'boat', state: 'active', x: 0, z: 0 };
-  assert.deepEqual(run([ship], { x: 0, z: 80 }), { accepted: false, blocked: true });
+  assert.deepEqual(run([ship], { x: 0, z: 80 }), { accepted: false, blocked: false });
   assert.match(messages[0], /80.0 m/);
+  for (let i = 0; i < 10; i++) {
+    assert.deepEqual(run([ship], { x: 0, z: .18 }), { accepted: false, blocked: false });
+  }
+  assert.equal(messages.length, 1, 'small corrected offsets do not repeatedly obscure the view');
   assert.deepEqual(run([{ ...ship, x: NaN }], { x: 0, z: 0 }), { accepted: false, blocked: true });
   assert.deepEqual(run([ship], { x: 0, z: 0 }), { accepted: true, blocked: false });
 });
@@ -186,4 +190,22 @@ test('first position reply without an assigned ship is assignment, not a mismatc
   const snapshot = { ships: [{ id: 'new-boat', controlledBy: 'player-test', state: 'active', x: 1500, z: 400 }] };
   assert.equal(reconcile(snapshot, { playerId: 'player-test', x: 0, z: 0 }, null), false);
   assert.deepEqual(snapshots, [snapshot]);
+});
+
+test('blocked reverse motion stops without repeatedly shifting the hull along the coast', () => {
+  const start = source.indexOf('    if (!scoutPlaneMode && movementSafety.isBlocked) {');
+  const end = source.indexOf('\n    if (scoutPlaneMode)', start);
+  assert.ok(start >= 0 && end > start);
+  const run = new Function(`
+    const scoutPlaneMode = false, movementSafety = { isBlocked: true };
+    const previousPosition = { x: 10, z: 20 };
+    const position = { x: 10, z: 19.9, copyFrom(p) { this.x = p.x; this.z = p.z; } };
+    const boat = { root: { position } };
+    let speed = -1, turnVelocity = .1;
+    for (let frame = 0; frame < 60; frame++) {
+      ${source.slice(start, end)}
+    }
+    return { x: position.x, z: position.z, speed };
+  `);
+  assert.deepEqual(run(), { x: 10, z: 20, speed: 0 });
 });

@@ -1582,13 +1582,8 @@ scene.onBeforeRenderObservable.add(() => {
     if (!scoutPlaneMode && movementSafety.isBlocked) {
       boat.root.position.copyFrom(previousPosition);
 
-      // Grounding stops the ship, but a tiny escape nudge prevents numeric edge-locking.
-      const groundedSafety = getShipWaterSafety(boat.root.position, heading, blockedWaters);
-      if (groundedSafety.isBlocked) {
-        boat.root.position.addInPlace(getWaterEscapeVector(groundedSafety.blockedPoint ?? boat.root.position, blockedWaters).scale(0.18));
-      }
-
-      speed = engineOrders[engineOrder].speed < 0 ? Math.min(speed, -1.2) : 0;
+      // Reverse escape is handled by movementSafety; never invent a shoreline displacement.
+      speed = 0;
       turnVelocity *= 0.4;
     }
 
@@ -6344,9 +6339,9 @@ async function transmitPlayerState() {
   }
 }
 
-function blockPlayerMotion(message) {
+function blockPlayerMotion(message, positionRestored = false) {
   if (serverRestartPending || playerDamageState !== "active") return;
-  playerMotionBlocked = true;
+  playerMotionBlocked = !positionRestored;
   showDamageMessage(message, time, 8);
 }
 
@@ -6387,7 +6382,10 @@ function reconcilePlayerMotionAcknowledgement(snapshot, motion, sentCrew, sentSh
   playerServerTarget = null;
   document.body.dataset.playerStateSyncCorrection = "rejected-position";
   document.body.dataset.playerStateSync = "position-corrected";
-  blockPlayerMotion(`Positionsfehler (${distance.toFixed(1)} m): Serverposition uebernommen. Aktion abgebrochen.`);
+  playerMotionBlocked = false;
+  if (distance >= 1) {
+    blockPlayerMotion(`Positionsfehler (${distance.toFixed(1)} m): Serverposition uebernommen. Aktion abgebrochen.`, true);
+  }
   return false;
 }
 
