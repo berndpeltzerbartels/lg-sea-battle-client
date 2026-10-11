@@ -1,6 +1,34 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createMotionSyncHealth } from '../src/motionSyncHealth.js';
+
+globalThis.motionSyncHealth = createMotionSyncHealth({ report: () => {}, warn: () => {} });
+
+test('real acknowledgement path warns only after sustained rejections and recovers on accepted motion', () => {
+  let clock = 0;
+  const warnings = [], reports = [];
+  const health = createMotionSyncHealth({ now: () => clock, warn: value => warnings.push(value), report: (...args) => reports.push(args) });
+  const reconcile = new Function('motionSyncHealth', `
+    const playerLifeRevision = 0, serverRestartPending = false, playerDamageState = 'active', playerServerShipId = 'boat';
+    const crewState = null, document = { body: { dataset: {} } };
+    let playerServerTarget, playerMotionBlocked = false;
+    const alignPlayerBoatToServerShip = () => {};
+    ${fn('reconcilePlayerMotionAcknowledgement')}
+    return reconcilePlayerMotionAcknowledgement;
+  `)(health);
+  const snapshot = { ships: [{ id: 'boat', state: 'active', x: 0, z: 0 }] };
+  for (clock = 0; clock < 3000; clock += 250) {
+    reconcile(snapshot, { x: .2, z: 0 }, null);
+    health.tick();
+  }
+  assert.equal(warnings.length, 0);
+  health.tick();
+  assert.equal(warnings.length, 1);
+  reconcile(snapshot, { x: 0, z: 0 }, null);
+  assert.equal(reports[1][0], 'motion-sync-recovered');
+  assert.equal(reports[0][1].last.distance, .2);
+});
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 function fn(name) {
@@ -59,11 +87,11 @@ test('a corrected position restores control, but missing confirmation blocks pla
   `)(message => messages.push(message));
   const ship = { id: 'boat', state: 'active', x: 0, z: 0 };
   assert.deepEqual(run([ship], { x: 0, z: 80 }), { accepted: false, blocked: false });
-  assert.match(messages[0], /80.0 m/);
+  assert.equal(messages.length, 0, 'successful correction is silent');
   for (let i = 0; i < 10; i++) {
     assert.deepEqual(run([ship], { x: 0, z: .18 }), { accepted: false, blocked: false });
   }
-  assert.equal(messages.length, 1, 'small corrected offsets do not repeatedly obscure the view');
+  assert.equal(messages.length, 0, 'small corrected offsets do not repeatedly obscure the view');
   assert.deepEqual(run([{ ...ship, x: NaN }], { x: 0, z: 0 }), { accepted: false, blocked: true });
   assert.deepEqual(run([ship], { x: 0, z: 0 }), { accepted: true, blocked: false });
 });

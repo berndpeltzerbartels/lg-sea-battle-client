@@ -1,4 +1,5 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
+import { createMotionSyncHealth } from "./motionSyncHealth.js";
 import { prepareInstrumentPaths, radarTransform } from "./instrumentMap.js";
 import { mountCrewInbox } from "./crewInbox.js";
 import { trackPlayerActivity } from "./playerActivity.js";
@@ -1276,6 +1277,18 @@ let playerStateRequestPromise = null;
 let playerMotionBlocked = false;
 let playerStateRequestStartedAt = 0;
 const playerStateRequestTimeoutSeconds = 2.5;
+let motionSyncWarningText = null;
+const motionSyncHealth = createMotionSyncHealth({
+  report: sendClientGameEvent,
+  warn: message => {
+    motionSyncWarningText = message;
+    showDamageMessage(message, time, 8);
+  },
+  recovered: () => {
+    if (flakHitAlert?.textContent === motionSyncWarningText) flakHitAlertUntil = 0;
+    motionSyncWarningText = null;
+  }
+});
 let remoteCorrectionSamples = 0;
 let remoteCorrectionTotal = 0;
 let remoteCorrectionMax = 0;
@@ -1580,6 +1593,7 @@ scene.onBeforeRenderObservable.add(() => {
       ? getShipMovementWaterSafety(boat.root.position, heading, speed, blockedWaters)
       : nextWaterSafety;
     if (!scoutPlaneMode && movementSafety.isBlocked) {
+      motionSyncHealth.grounding({ x: previousPosition.x, z: previousPosition.z, speed });
       boat.root.position.copyFrom(previousPosition);
 
       // Reverse escape is handled by movementSafety; never invent a shoreline displacement.
@@ -4443,6 +4457,7 @@ function round2(value) {
 }
 
 function sendClientGameEvent(event, details = {}) {
+  if (!event.startsWith("motion-sync-")) motionSyncHealth.remember(event, { x: boat.root.position.x, z: boat.root.position.z, life: playerLifeRevision, context: stringifyClientEventDetails(details).slice(0, 240) });
   const report = {
     playerId,
     teamId: playerTeamId,
@@ -4479,7 +4494,8 @@ function sendClientGameEvent(event, details = {}) {
 
 function stringifyClientEventDetails(details) {
   try {
-    return JSON.stringify(details).slice(0, 1200);
+    const json = JSON.stringify(details);
+    return json.length <= 12000 ? json : JSON.stringify({ truncated: true, preview: json.slice(0, 1000) });
   } catch {
     return "{}";
   }
@@ -6256,6 +6272,7 @@ function getOtherServerShips(ships, ownShipId) {
 }
 
 function syncMultiplayerState(now) {
+  motionSyncHealth.tick();
   if (sideViewSandboxMode || crewSwitchPending) return;
   if (playerStateRequestInFlight && now - playerStateRequestStartedAt > playerStateRequestTimeoutSeconds) {
     playerStateRequestInFlight = false;
@@ -6277,6 +6294,7 @@ async function transmitPlayerState() {
   if (crewState && playerAwaitingServerAssignment) return false;
   if (crewState?.station === "lookout") return;
   if (serverRestartPending) return;
+  motionSyncHealth.sample({ x: boat.root.position.x, z: boat.root.position.z, heading, speed, engineOrder, life: playerLifeRevision, ship: playerServerShipId, damage: playerDamageState, station: crewState?.station ?? "bridge" });
   playerStateRequestInFlight = true;
   playerStateRequestStartedAt = time;
   const requestStartedAt = beginHttpRequest();
@@ -6329,7 +6347,7 @@ async function transmitPlayerState() {
   } catch (error) {
     document.body.dataset.playerStateSync = "error";
     document.body.dataset.playerStateSyncError = error.message;
-    if (sentShipId === playerServerShipId && sentLifeRevision === playerLifeRevision) blockPlayerMotion("Keine Positionsbestaetigung vom Server. Steuerung und Waffen pausiert.");
+    if (sentShipId === playerServerShipId && sentLifeRevision === playerLifeRevision) blockPlayerMotion("Keine Positionsbestaetigung vom Server. Steuerung und Waffen pausiert.", false, { error: error.message, requested: { x: motion.x, z: motion.z }, ship: sentShipId, life: sentLifeRevision });
     return false;
   } finally {
     clearTimeout(timeoutId);
@@ -6339,10 +6357,10 @@ async function transmitPlayerState() {
   }
 }
 
-function blockPlayerMotion(message, positionRestored = false) {
+function blockPlayerMotion(message, positionRestored = false, details = {}) {
   if (serverRestartPending || playerDamageState !== "active") return;
   playerMotionBlocked = !positionRestored;
-  showDamageMessage(message, time, 8);
+  motionSyncHealth.fail(message, details);
 }
 
 function reconcilePlayerMotionAcknowledgement(snapshot, motion, sentCrew, sentShipId = playerServerShipId, sentLifeRevision = playerLifeRevision) {
@@ -6369,11 +6387,13 @@ function reconcilePlayerMotionAcknowledgement(snapshot, motion, sentCrew, sentSh
     return false;
   }
   if (sentCrew && sentCrew.station !== "bridge") {
+    motionSyncHealth.success();
     playerMotionBlocked = false;
     return true;
   }
   const distance = Math.hypot(ship.x - motion.x, ship.z - motion.z);
   if (distance < 0.01) {
+    motionSyncHealth.success();
     playerMotionBlocked = false;
     return true;
   }
@@ -6383,9 +6403,9 @@ function reconcilePlayerMotionAcknowledgement(snapshot, motion, sentCrew, sentSh
   document.body.dataset.playerStateSyncCorrection = "rejected-position";
   document.body.dataset.playerStateSync = "position-corrected";
   playerMotionBlocked = false;
-  if (distance >= 1) {
-    blockPlayerMotion(`Positionsfehler (${distance.toFixed(1)} m): Serverposition uebernommen. Aktion abgebrochen.`, true);
-  }
+  motionSyncHealth.remember("position-correction", { requested: { x: motion.x, z: motion.z }, server: { x: ship.x, z: ship.z }, distance });
+  // A single correction is silent; only repeated rejection without an accepted update is unhealthy.
+  motionSyncHealth.fail("Position wird wiederholt korrigiert.", { requested: { x: motion.x, z: motion.z }, server: { x: ship.x, z: ship.z }, distance });
   return false;
 }
 
@@ -9667,6 +9687,7 @@ function updateScoutPlaneFlakHitSequence(playerPlane, now, dt) {
 }
 
 function invalidatePlayerMotionLife() {
+  motionSyncHealth.reset();
   playerLifeRevision++;
   if (playerMotionBlocked) flakHitAlertUntil = 0;
   playerMotionBlocked = false;
