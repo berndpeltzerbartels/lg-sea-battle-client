@@ -147,3 +147,43 @@ test('same-ID response from before sinking is ignored after respawn', () => {
   `)();
   assert.deepEqual(run(), { accepted: false, blocked: false, alertUntil: 0 });
 });
+
+test('respawn before crew assignment waits without sending old-ship motion or reporting an error', async () => {
+  const start = source.indexOf('async function transmitPlayerState(');
+  const end = source.indexOf('\nfunction ', start + 1);
+  const run = new Function(`
+    const serverRestartPending = false, scoutPlaneMode = false, pendingPlayerServerShip = null;
+    const crewState = { shipId: 'destroyed-boat', station: 'bridge' };
+    let playerLifeRevision = 1, playerMotionBlocked = false, playerAwaitingServerAssignment = false;
+    let playerRespawnIndex = 0, heading, speed, turnVelocity, rudderDegrees, engineOrder, ramShake;
+    let playerDamageState = 'sinking', playerServerShipId = 'destroyed-boat';
+    let playerServerTarget = { position: 'old wreck' }, flakHitAlertUntil = 0;
+    const playerRespawnPoints = [{ position: { x: 0, z: 0 }, heading: 0 }];
+    const document = { body: { dataset: {} } }, Quaternion = { FromEulerAngles: () => ({}) };
+    const resetTransientWeaponVisualsAfterRespawn = () => {}, resetPlayerSubmarineDepthAfterRespawn = () => {};
+    const resetWakeAtPosition = () => {}, updateSinkingWaterOverlay = () => {}, sendClientGameEvent = () => {};
+    ${fn('invalidatePlayerMotionLife')}
+    ${fn('respawnPlayerBoat')}
+    ${source.slice(start, end)}
+    return async () => {
+      respawnPlayerBoat({ root: { position: { copyFrom() {} } } });
+      const sent = await transmitPlayerState();
+      return { sent, waiting: playerAwaitingServerAssignment, blocked: playerMotionBlocked,
+        ship: playerServerShipId, target: playerServerTarget };
+    };
+  `)();
+  assert.deepEqual(await run(), { sent: false, waiting: true, blocked: true, ship: null, target: null });
+});
+
+test('first position reply without an assigned ship is assignment, not a mismatch', () => {
+  const snapshots = [];
+  const reconcile = new Function('applyServerGameSnapshot', `
+    const playerLifeRevision = 2, playerServerShipId = null, playerDamageState = 'active';
+    const serverRestartPending = false, crewState = null;
+    ${fn('reconcilePlayerMotionAcknowledgement')}
+    return reconcilePlayerMotionAcknowledgement;
+  `)(snapshot => snapshots.push(snapshot));
+  const snapshot = { ships: [{ id: 'new-boat', controlledBy: 'player-test', state: 'active', x: 1500, z: 400 }] };
+  assert.equal(reconcile(snapshot, { playerId: 'player-test', x: 0, z: 0 }, null), false);
+  assert.deepEqual(snapshots, [snapshot]);
+});

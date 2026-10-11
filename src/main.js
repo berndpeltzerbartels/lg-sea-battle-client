@@ -1240,6 +1240,7 @@ let ramShake = 0;
 let playerHits = 0;
 let playerDamageState = "active";
 let playerLifeRevision = 0;
+let playerAwaitingServerAssignment = false;
 let playerSinkStartTime = 0;
 let playerSinkStartY = 0;
 let playerSinkSide = -1;
@@ -6278,6 +6279,7 @@ function sendPlayerState() {
 }
 
 async function transmitPlayerState() {
+  if (crewState && playerAwaitingServerAssignment) return false;
   if (crewState?.station === "lookout") return;
   if (serverRestartPending) return;
   playerStateRequestInFlight = true;
@@ -6354,6 +6356,10 @@ function reconcilePlayerMotionAcknowledgement(snapshot, motion, sentCrew, sentSh
   if (sentCrew && (crewState?.revision !== sentCrew.revision
       || crewState?.shipId !== sentCrew.shipId || crewState?.station !== sentCrew.station)) return false;
   if (!sentCrew && crewState) return;
+  if (!sentShipId) {
+    applyServerGameSnapshot(snapshot);
+    return false;
+  }
   const ship = snapshot.ships?.find(candidate => candidate.id === playerServerShipId);
   const expectedController = sentCrew?.controller ?? motion.playerId;
   // Destruction/removal belongs to the normal sinking flow, not position validation.
@@ -6625,6 +6631,8 @@ function applyServerGameSnapshot(snapshot) {
           ship: summarizeShip(ownShip)
         });
         alignPlayerBoatToServerShip(ownShip);
+        playerAwaitingServerAssignment = false;
+        playerMotionBlocked = false;
         playerServerSnapshotReceived = true;
       } else if (crewState && crewState.station !== "bridge") {
         updatePlayerServerTarget(ownShip, snapshot.t);
@@ -9685,6 +9693,7 @@ function respawnPlayerBoat(playerBoat) {
     document.body.dataset.playerShipId = playerServerShipId;
     document.body.dataset.pendingPlayerShipId = "";
     alignPlayerBoatToServerShip(nextShip);
+    playerAwaitingServerAssignment = false;
     updatePlayerTorpedoStock(Number.isFinite(nextShip.torpedoesRemaining) ? nextShip.torpedoesRemaining : null);
     playerDamageState = "active";
     resetPlayerSubmarineDepthAfterRespawn(playerBoat);
@@ -9709,6 +9718,9 @@ function respawnPlayerBoat(playerBoat) {
   playerDamageState = "active";
   resetPlayerSubmarineDepthAfterRespawn(playerBoat);
   playerServerShipId = null;
+  playerAwaitingServerAssignment = true;
+  playerMotionBlocked = true;
+  playerServerTarget = null;
   document.body.dataset.playerShipId = "pending";
   playerBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
   resetWakeAtPosition(playerBoat.bowWake, playerBoat.root.position, heading);
