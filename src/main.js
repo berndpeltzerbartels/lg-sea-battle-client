@@ -303,7 +303,8 @@ const torpedoNoseForwardOffset = torpedoBodyLength * 0.5 + torpedoNoseLength;
 const torpedoTailBackwardOffset = torpedoBodyLength * 0.5;
 const torpedoBoatWaterlineY = torpedoBoatModelWaterlineY * torpedoBoatVisualScale;
 const submarineWaterlineY = torpedoBoatWaterlineY - 0.06 * submarineVisualScale;
-const torpedoBoatSinkDepth = torpedoBoatModelSinkDepth * torpedoBoatVisualScale;
+// Leave room for the tilted hull above its origin before retiring the wreck.
+const torpedoBoatSinkDepth = Math.abs(underwaterSeaFloorY) + torpedoBoatModelSinkDepth * torpedoBoatVisualScale;
 const killFeedLimit = 5;
 const torpedoLogLimit = 40;
 const torpedoSpeedAdjustment = 0.8;
@@ -9379,7 +9380,7 @@ function beginEnemySinking(motion, side, time) {
   motion.rollImpulse = motion.sinkSide * (fromCriticalShipHit ? 0.06 : fromCannonShipHit ? 0.12 : 0.5);
   motion.sinkRollStart = fromCriticalShipHit ? 0.0 : fromCannonShipHit ? 0.03 : 0.12;
   motion.sinkRollAmount = fromCriticalShipHit ? 1.08 : fromCannonShipHit ? 1.28 : 1.45;
-  motion.sinkDuration = fromCriticalShipHit ? 6.6 : fromCannonShipHit ? 4.6 : 5.2;
+  motion.sinkDuration = fromCriticalShipHit ? 12.6 : fromCannonShipHit ? 10.6 : 11.2;
   if ((fromCriticalShipHit || fromCannonShipHit) && !motion.submergedSinking) {
     createGunfireSinkingFoam(torpedoSystem, motion.root.position, motion.heading, motion.sinkDuration);
   }
