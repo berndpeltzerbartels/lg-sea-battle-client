@@ -1,5 +1,6 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { createMotionSyncHealth } from "./motionSyncHealth.js";
+import { createMotionPresentationDiagnostics } from "./motionPresentationDiagnostics.js";
 import { prepareInstrumentPaths, radarTransform } from "./instrumentMap.js";
 import { mountCrewInbox } from "./crewInbox.js";
 import { trackPlayerActivity } from "./playerActivity.js";
@@ -1278,6 +1279,7 @@ let playerMotionBlocked = false;
 let playerStateRequestStartedAt = 0;
 const playerStateRequestTimeoutSeconds = 2.5;
 let motionSyncWarningText = null;
+const motionPresentation = createMotionPresentationDiagnostics();
 const motionSyncHealth = createMotionSyncHealth({
   report: sendClientGameEvent,
   warn: message => {
@@ -1848,6 +1850,7 @@ scene.onBeforeRenderObservable.add(() => {
 engine.runRenderLoop(() => {
   const renderStarted = performanceLoggingEnabled ? performance.now() : 0;
   scene.render();
+  motionPresentation.rendered(boat.root, scene.activeCamera);
   if (performanceLoggingEnabled) {
     projectilePerformance.record("renderCpuMs", performance.now() - renderStarted);
     projectilePerformance.frame(renderStarted, {
@@ -4457,6 +4460,12 @@ function round2(value) {
 }
 
 function sendClientGameEvent(event, details = {}) {
+  if (event.startsWith("motion-sync-")) details = {
+    ...details,
+    history: details.history?.slice(-12),
+    failure: details.failure ? { ...details.failure, history: details.failure.history?.slice(-12) } : undefined,
+    presentation: motionPresentation.report()
+  };
   if (!event.startsWith("motion-sync-")) motionSyncHealth.remember(event, { x: boat.root.position.x, z: boat.root.position.z, life: playerLifeRevision, context: stringifyClientEventDetails(details).slice(0, 240) });
   const report = {
     playerId,
@@ -6907,6 +6916,7 @@ function getSnapshotClientTime(snapshot) {
 }
 
 function alignPlayerBoatToServerShip(ship) {
+  motionPresentation.begin(ship, boat.root, scene.activeCamera);
   updatePlayerServerTarget(ship, null, true);
   boat.root.position.x = ship.x;
   boat.root.position.z = ship.z;
@@ -6920,6 +6930,7 @@ function alignPlayerBoatToServerShip(ship) {
   playerServerTurnRateCorrection = 0;
   boat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
   document.body.dataset.playerServerAligned = ship.id;
+  motionPresentation.applied(boat.root, scene.activeCamera);
 }
 
 function updatePlayerServerTarget(ship, serverTime, force = false) {
@@ -17762,7 +17773,7 @@ function getLandZone(land) {
     visualRz: land.rz,
     name: land.name,
     kind: land.kind,
-    coastRoughness: land.coastRoughness ?? 0.09,
+    coastRoughness: land.coastRoughness ?? 0.16,
     heightScale: land.heightScale ?? 1,
     peakBoost: land.peakBoost ?? 0,
     caldera: land.caldera,
@@ -18203,11 +18214,11 @@ function getPeakLift(nx, nz, ring, peakBoost, land) {
 }
 
 function getCoastRadiusFactor(angle, land) {
-  const roughness = (land.coastRoughness ?? 0.16) * 0.72;
+  const roughness = land.coastRoughness ?? 0.16;
   const seed = getNameSeed(land.name) * 0.013;
   const broad = Math.sin(angle * 2 + seed) * 0.62;
   const bays = Math.sin(angle * 4 - seed * 0.7) * 0.42;
-  const small = Math.sin(angle * 7 + seed * 1.4) * 0.07;
+  const small = Math.sin(angle * 7 + seed * 1.4) * 0.2;
   let fjordBite = 0;
 
   (land.fjords ?? []).forEach((fjord) => {

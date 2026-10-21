@@ -141,7 +141,7 @@
           var main = document.createElement("main");
           main.className = "startup-error";
           var heading = document.createElement("h1");
-          heading.textContent = String(title || "Sea Battle JavaScript error");
+          heading.textContent = String(title || "Küstenkrieg JavaScript error");
           var diagnostic = document.createElement("small");
           diagnostic.id = "startupDiagnostic";
           diagnostic.textContent = diagnosticText();
@@ -188,7 +188,7 @@
             onerrorErrorMessage: messageOf(error),
             onerrorErrorStack: stackOf(error)
           });
-          show("Sea Battle JavaScript error", error || message, payload);
+          show("Küstenkrieg JavaScript error", error || message, payload);
           markSeen(payload);
           return false;
         };
@@ -220,7 +220,7 @@
             eventErrorMessage: messageOf(event.error),
             eventErrorStack: stackOf(event.error)
           });
-          show("Sea Battle JavaScript error", detail || message, payload);
+          show("Küstenkrieg JavaScript error", detail || message, payload);
           markSeen(payload);
         });
 
@@ -235,7 +235,7 @@
             reasonMessage: messageOf(event.reason),
             reasonStack: stackOf(event.reason)
           });
-          show("Sea Battle startup failed", event.reason || message, payload);
+          show("Küstenkrieg startup failed", event.reason || message, payload);
           markSeen(payload);
         });
 
@@ -261,7 +261,7 @@
         versionRequest.send();
       })();
     </script>
-    <title>LG Sea Battle</title>
+    <title>Küstenkrieg</title>
   </head>
   <body>
     <output id="crewKillSuccess" class="crew-kill-success" role="status" aria-live="polite" hidden></output>
@@ -289,7 +289,7 @@
     <div id="planeHitFlash" class="plane-hit-flash" aria-hidden="true"></div>
     <div class="mobile-orientation-hint" aria-hidden="true">
       <strong>Rotate device</strong>
-      <span>Sea Battle is built for landscape play.</span>
+      <span>Küstenkrieg is built for landscape play.</span>
     </div>
     <div class="hud">
       <div id="flakHitAlert" class="flak-hit-alert" aria-live="polite">Flak Treffer</div>
