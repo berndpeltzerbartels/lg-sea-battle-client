@@ -1,6 +1,10 @@
 export class WeaponHeadingHold {
   constructor() {
-    this.enabled = { flak: true, cannon: true };
+    this.enabled = { flak: false, cannon: false };
+  }
+
+  occupy(weapon, occupied) {
+    if (!occupied) this.enabled[weapon] = false;
   }
 
   align(weapon) { this.enabled[weapon] = false; }

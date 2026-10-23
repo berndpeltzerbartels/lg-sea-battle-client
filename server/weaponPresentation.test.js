@@ -39,3 +39,22 @@ test("bridge receives every flak flash once even when no projectile remains", ()
   events.consume("session", [shot(2), shot(3)], "captain", emit);
   assert.deepEqual(emitted, ["flak-1", "flak-2", "flak-3"]);
 });
+
+
+test("heading hold starts inactive and requires aiming again after leaving a weapon", () => {
+  const hold = new WeaponHeadingHold();
+  for (const weapon of ["flak", "cannon"]) {
+    assert.equal(hold.follows(weapon), false);
+    hold.occupy(weapon, true);
+    assert.equal(hold.follows(weapon), false);
+    hold.manual(weapon);
+    hold.occupy(weapon, true);
+    assert.equal(hold.follows(weapon), true);
+    hold.occupy(weapon, false);
+    assert.equal(hold.follows(weapon), false);
+    hold.occupy(weapon, true);
+    assert.equal(hold.follows(weapon), false);
+    hold.manual(weapon);
+    assert.equal(hold.follows(weapon), true);
+  }
+});

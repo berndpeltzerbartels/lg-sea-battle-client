@@ -1491,6 +1491,8 @@ scene.onBeforeRenderObservable.add(() => {
       maxRudder
     );
   }
+  weaponHeadingHold.occupy("flak", playerActive && flakViewActive && (!crewState || crewState.station === "flak"));
+  weaponHeadingHold.occupy("cannon", playerActive && cannonViewActive && (!crewState || crewState.station === "cannon"));
   if (playerActive && flakViewActive && heldFlakDirection !== 0) {
     weaponHeadingHold.manual("flak");
     cancelWeaponAlignment();
@@ -1547,11 +1549,6 @@ scene.onBeforeRenderObservable.add(() => {
   }
   updateWeaponAlignment(dt);
   updateSubmarineBearingAlignment(dt);
-  flakAimDisplay.update(playerServerShipId, flakYaw, flakPitch, crewState && crewState.station !== "flak", dt);
-  cannonAimDisplay.update(playerServerShipId, cannonYaw, cannonPitch, crewState && crewState.station !== "cannon", dt);
-  updatePlayerFlakMount();
-  updatePlayerCannonMount();
-  updateCannonBarrelRecoil(boat.bowCannon, time);
 
   if (!scoutPlaneMode && playerActive && heldEngineDirection !== 0 && time >= nextEngineHoldChangeTime) {
     if (!(engineOrder === 2 && heldEngineStopGuardDirection === heldEngineDirection)) {
@@ -1697,6 +1694,13 @@ scene.onBeforeRenderObservable.add(() => {
   } else {
     hideEnemyWake(boat.periscopeWake);
   }
+  // Apply heading compensation and ship motion before presenting weapons. The
+  // camera and barrels must use the same frame's ship and weapon transforms.
+  flakAimDisplay.update(playerServerShipId, flakYaw, flakPitch, crewState && crewState.station !== "flak", dt);
+  cannonAimDisplay.update(playerServerShipId, cannonYaw, cannonPitch, crewState && crewState.station !== "cannon", dt);
+  updatePlayerFlakMount();
+  updatePlayerCannonMount();
+  updateCannonBarrelRecoil(boat.bowCannon, time);
   boat.root.setEnabled(!torpedoScopeActive);
   ocean.position.x = boat.root.position.x;
   ocean.position.z = boat.root.position.z;
@@ -1992,6 +1996,8 @@ function setBattleStation(station, confirmed = false) {
   }
   if (lookoutFeedback) lookoutFeedback.textContent = "";
   cannonViewActive = station === "cannon";
+  weaponHeadingHold.occupy("flak", flakViewActive);
+  weaponHeadingHold.occupy("cannon", cannonViewActive);
   if (crewState) cancelWeaponAlignment();
   if (!cannonViewActive) {
     setCannonSightLevel(0);
@@ -10402,8 +10408,11 @@ function installScenarioTestHooks() {
       if (Number.isInteger(state?.engineOrder)) {
         engineOrder = clamp(state.engineOrder, 0, engineOrders.length - 1);
       }
+      if (Number.isFinite(Number(state?.rudderDegrees))) {
+        rudderDegrees = clamp(Number(state.rudderDegrees), -getPlayerMaxRudderDegrees(), getPlayerMaxRudderDegrees());
+      }
       boat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
-      await sendPlayerState();
+      if (!sideViewSandboxMode) await sendPlayerState();
       return {
         x: boat.root.position.x,
         z: boat.root.position.z,
