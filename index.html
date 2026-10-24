@@ -136,10 +136,13 @@
             window.__seaBattlePendingStartupError = { title: title, detail: message, payload: payload };
             return;
           }
+          // Keep the original failure and all live game DOM nodes. Deleting them
+          // caused subsequent SSE updates to throw and hide the original error.
+          if (body.hasAttribute("data-startup-error")) return;
           body.setAttribute("data-startup-error", message);
-          body.textContent = "";
           var main = document.createElement("main");
           main.className = "startup-error";
+          main.style.cssText = "position:fixed;inset:0;z-index:2147483647;overflow:auto;";
           var heading = document.createElement("h1");
           heading.textContent = String(title || "Küstenkrieg JavaScript error");
           var diagnostic = document.createElement("small");
