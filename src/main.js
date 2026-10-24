@@ -484,7 +484,22 @@ const openSeaFoamHeight = 0.007;
 const openSeaFoamLengthMin = 0.25;
 const openSeaFoamLengthVariance = 0.48;
 const performanceLoggingEnabled = urlParams.get("perf-log") === "1";
-const projectilePerformance = createProjectilePerformance(performanceLoggingEnabled);
+const performanceUploadEnabled = performanceLoggingEnabled && urlParams.get("perf-upload") === "1";
+let readPerformanceProbe = null;
+let performanceUploads = 0;
+if (performanceUploadEnabled) {
+  import('./performanceProbe.js').then(async ({ createPerformanceProbe }) => {
+    readPerformanceProbe = await createPerformanceProbe(scene);
+    traceStartup("remote performance probe ready");
+  }).catch(error => traceStartup("remote performance probe unavailable", error));
+}
+const projectilePerformance = createProjectilePerformance(performanceLoggingEnabled, report => {
+  console.info('[SeaBattle performance]', report);
+  if (performanceUploadEnabled && performanceUploads++ < 12) {
+    window.__seaBattleReportPerformance?.({ ...report, instrumentation: readPerformanceProbe?.() ?? null,
+      case: urlParams.get("profile-case") ?? "baseline" });
+  }
+});
 let lastFrameLogicCpuMs = 0;
 projectilePerformance.setCulling(urlParams.get("projectile-culling") !== "0");
 if (performanceLoggingEnabled) window.seaBattlePerformance = projectilePerformance;

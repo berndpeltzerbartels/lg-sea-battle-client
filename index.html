@@ -293,7 +293,7 @@
           var key = [payload.message, payload.source, payload.line, payload.column, payload.type === "diagnostic-followup" ? "followup" : ""].join("|");
           if (reported[key]) return;
           reported[key] = true;
-          if (!firstFailure && payload.type !== "diagnostic-checkpoint") {
+          if (!firstFailure && payload.type !== "diagnostic-checkpoint" && payload.type !== "client-profile") {
             firstFailure = payload;
             setTimeout(function () {
               var followup = Object.assign({}, firstFailure, { type: "diagnostic-followup" });
@@ -321,6 +321,11 @@
             }));
           } catch (reportError) { console.warn("Client error reporting failed", reportError); }
         }
+
+        window.__seaBattleReportPerformance = function (report) {
+          markSeen(copyBasicContext({ type: "client-profile", message: "profile " + report.case + " " + report.at,
+            stack: JSON.stringify(report) }));
+        };
 
         window.__seaBattleDiagnosticCheckpoint = function (label) {
           trace("diagnostic checkpoint", label);
