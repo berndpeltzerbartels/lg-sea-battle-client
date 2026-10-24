@@ -11,6 +11,11 @@
         var diagnosticLog = [];
         var diagnosticChars = 0;
         var firstFailure = null;
+        var displayedFailure = null;
+        var mainModuleEntered = false;
+        var firstFrameRendered = false;
+        var pendingTvError = null;
+        var pendingTvErrorTimer = null;
 
         // Error/Event properties are often non-enumerable or live on a prototype.
         // Read them explicitly, with bounds and cycle/getter protection.
@@ -56,6 +61,7 @@
         }
 
         function trace(label, detail) {
+          if (label === "main module entered") mainModuleEntered = true;
           var entry = (Math.round(performance.now()) + "ms " + label
             + (detail === undefined ? "" : " " + inspect(detail, 0))).slice(0, 1600);
           diagnosticLog.push(entry);
@@ -210,7 +216,48 @@
           if (serverTarget) serverTarget.textContent = buildLabel(serverBuild);
         }
 
-        function show(title, detail, payload) {
+        function knownEarlyTvError(payload, detail) {
+          var ua = navigator.userAgent;
+          return /NetCast/.test(ua) && /SmartTV\/10\.0/.test(ua)
+            && /Colt\/2\.0/.test(ua) && /Chrome\/120\./.test(ua)
+            && !mainModuleEntered && !firstFrameRendered && performance.now() < 15000
+            && (payload.type === "window.onerror" || payload.type === "error")
+            && typeof detail === "string" && detail === "Script error."
+            && payload.message === "Script error." && !payload.source
+            && !payload.line && !payload.column && !payload.stack
+            && (payload.type === "window.onerror"
+              ? payload.onerrorErrorType === "null" || payload.onerrorErrorType === "undefined"
+              : payload.eventErrorType === "null" || payload.eventErrorType === "undefined");
+        }
+
+        window.__seaBattleConfirmFirstFrame = function () {
+          if (firstFrameRendered) return;
+          firstFrameRendered = true;
+          if (!pendingTvError) return;
+          clearTimeout(pendingTvErrorTimer);
+          pendingTvError = null;
+          document.body.dataset.tvStartupError = "non-blocking";
+          trace("known LG startup error confirmed non-blocking after first frame");
+          markSeen(copyBasicContext({ type: "tv-startup-warning",
+            message: "Known LG browser startup Script error.; first game frame rendered successfully" }));
+        };
+
+        function show(title, detail, payload, force) {
+          if (!force && knownEarlyTvError(payload, detail)) {
+            if (!pendingTvError) {
+              pendingTvError = { title: title, detail: detail, payload: payload };
+              if (document.body) document.body.dataset.tvStartupError = "pending";
+              trace("known LG startup error deferred until first game frame");
+              pendingTvErrorTimer = setTimeout(function () {
+                if (!pendingTvError || firstFrameRendered) return;
+                var pending = pendingTvError;
+                pendingTvError = null;
+                trace("LG startup error fallback: no game frame within 60 seconds");
+                show(pending.title, pending.detail, pending.payload, true);
+              }, 60000);
+            }
+            return;
+          }
           var message = text(detail) || title || "Unknown JavaScript error";
           var body = document.body;
           if (!body) {
@@ -220,6 +267,9 @@
           // Keep the original failure and all live game DOM nodes. Deleting them
           // caused subsequent SSE updates to throw and hide the original error.
           if (body.hasAttribute("data-startup-error")) return;
+          clearTimeout(pendingTvErrorTimer);
+          pendingTvError = null;
+          displayedFailure = payload;
           body.setAttribute("data-startup-error", message);
           var main = document.createElement("main");
           main.className = "startup-error";
@@ -249,7 +299,7 @@
               var followup = Object.assign({}, firstFailure, { type: "diagnostic-followup" });
               markSeen(followup);
               if (document.getElementById("startupErrorDetails")) {
-                document.getElementById("startupErrorDetails").textContent = errorDetails(firstFailure, firstFailure.message);
+                document.getElementById("startupErrorDetails").textContent = errorDetails(displayedFailure || firstFailure, (displayedFailure || firstFailure).message);
               }
             }, 4000);
           }

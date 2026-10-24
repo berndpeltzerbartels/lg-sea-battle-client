@@ -90,3 +90,71 @@ test('nested and cyclic error objects retain stack, bounded logs and later initi
   expect(reports[1].type).toBe('diagnostic-followup');
   expect(reports[1].stack).toContain('world loading continued after global error');
 });
+
+const lgTvAgent = 'Mozilla/5.0 (Linux; NetCast; U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 SmartTV/10.0 Colt/2.0';
+async function errorFixture(page) {
+  const reports = [];
+  const html = (await readFile(new URL('../../index.html', import.meta.url), 'utf8'))
+    .replace(/<script type="module"[^>]*><\/script>/g, '');
+  await page.route('**/game/version', route => route.fulfill({ json: { version: 'test' } }));
+  await page.route('**/game/client-error', route => {
+    reports.push(route.request().postDataJSON());
+    return route.fulfill({ status: 204 });
+  });
+  await page.route('**/error-fixture', route => route.fulfill({ contentType: 'text/html', body: html }));
+  await page.goto('/error-fixture');
+  return reports;
+}
+const opaqueError = () => window.dispatchEvent(new ErrorEvent('error', { message: 'Script error.', error: null }));
+
+test('opaque startup errors on desktop remain visible', async ({ page }) => {
+  await errorFixture(page);
+  await page.evaluate(opaqueError);
+  await expect(page.locator('#startupErrorDetails')).toContainText('Script error.');
+});
+
+test.describe('known LG TV startup event', () => {
+  test.use({ userAgent: lgTvAgent });
+
+  test('defers only the known event and confirms it non-blocking after a rendered frame', async ({ page }) => {
+    const reports = await errorFixture(page);
+    await page.evaluate(opaqueError);
+    await expect(page.locator('.startup-error')).toHaveCount(0);
+    expect(await page.evaluate(() => document.body.dataset.tvStartupError)).toBe('pending');
+    await expect.poll(() => reports.some(r => r.message === 'Script error.')).toBe(true);
+    await page.evaluate(() => window.__seaBattleConfirmFirstFrame());
+    expect(await page.evaluate(() => document.body.dataset.tvStartupError)).toBe('non-blocking');
+    await expect.poll(() => reports.some(r => r.type === 'tv-startup-warning')).toBe(true);
+    await expect(page.locator('.startup-error')).toHaveCount(0);
+  });
+
+  test('a concrete exception supersedes the deferred event immediately and remains displayed', async ({ page }) => {
+    await page.clock.install();
+    await errorFixture(page);
+    await page.evaluate(opaqueError);
+    await page.evaluate(() => window.dispatchEvent(new ErrorEvent('error', {
+      message: 'Real game failure', filename: '/game.js', lineno: 12, error: new TypeError('Real game failure')
+    })));
+    await expect(page.locator('#startupErrorDetails')).toContainText('Real game failure');
+    await page.clock.runFor(4100);
+    await expect(page.locator('#startupErrorDetails')).toContainText('Real game failure');
+    await page.evaluate(() => window.__seaBattleConfirmFirstFrame());
+    await expect(page.locator('.startup-error')).toHaveCount(1);
+  });
+
+  test('opaque errors once the main module has entered remain visible', async ({ page }) => {
+    await errorFixture(page);
+    await page.evaluate(() => window.__seaBattleTrace('main module entered'));
+    await page.evaluate(opaqueError);
+    await expect(page.locator('#startupErrorDetails')).toContainText('Script error.');
+  });
+
+  test('shows deferred error if startup never reaches a frame', async ({ page }) => {
+    await page.clock.install();
+    await errorFixture(page);
+    await page.evaluate(opaqueError);
+    await expect(page.locator('.startup-error')).toHaveCount(0);
+    await page.clock.runFor(60001);
+    await expect(page.locator('#startupErrorDetails')).toContainText('Script error.');
+  });
+});

@@ -1924,7 +1924,11 @@ engine.runRenderLoop(() => {
   const renderStarted = performanceLoggingEnabled ? performance.now() : 0;
   try {
     scene.render();
-    if (!startupFrameLogged) { startupFrameLogged = true; traceStartup("first frame rendered"); }
+    if (!startupFrameLogged) {
+      startupFrameLogged = true;
+      traceStartup("first frame rendered");
+      window.__seaBattleConfirmFirstFrame?.();
+    }
   } catch (error) {
     window.__seaBattleShowStartupError("Fehler bei der Bildberechnung", error);
     throw error;
