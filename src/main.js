@@ -6,7 +6,8 @@ import { mountCrewInbox } from "./crewInbox.js";
 import { trackPlayerActivity } from "./playerActivity.js";
 import { WeaponAimDisplay } from "./weaponAimDisplay.js";
 import { advanceSubmarineDepth } from "./submarineDiveMotion.js";
-import { prioritizeMuzzleLight, preserveEnvironmentLight, flushMuzzleLightPriorities } from "./muzzleLighting.js";
+import { preserveEnvironmentLight, createMuzzleLightRig } from "./muzzleLighting.js";
+import { acquireMuzzleFlash, releaseMuzzleFlash } from "./muzzleFlashPool.js";
 import { acquireWeaponLight, releaseWeaponLight } from "./weaponLightPool.js";
 import { updateProjectileScreenVisibility } from "./projectileScreenVisibility.js";
 import { createProjectilePerformance } from "./projectilePerformance.js";
@@ -60,7 +61,6 @@ const engine = new Engine(canvas, true, {
 });
 
 const scene = new Scene(engine);
-scene.onBeforeRenderObservable.add(() => flushMuzzleLightPriorities(scene));
 document.body.dataset.appStarted = "true";
 const urlParams = new URLSearchParams(location.search);
 const depthChargeLayout = urlParams.get("sandbox") === "side-view" && ["stern", "throwers"].includes(urlParams.get("depthChargeLayout")) ? urlParams.get("depthChargeLayout") : "combined";
@@ -705,6 +705,15 @@ if (sideViewSandboxMode && submarineMode) {
   window.__seaBattleSideView = { scene, boat };
 }
 document.body.dataset.playerModelMeshes = String(boat.meshes?.length ?? 0);
+const muzzleLightingMode = ["crew", "water", "none"].includes(urlParams.get("muzzle-lighting"))
+  ? urlParams.get("muzzle-lighting") : "crew";
+const muzzleLightRig = createMuzzleLightRig(scene, {
+  water: ocean,
+  ownShipMeshes: boat.root.getChildMeshes(false).filter(mesh => !/foam|wake|smoke|fire/i.test(mesh.material?.name ?? "")),
+  observerPosition: boat.root.position,
+  scale: shipGunVisualScale,
+  mode: muzzleLightingMode
+});
 
 // Until SSE arrives, backend ships seed the visual fleet and local motion keeps them inspectable.
 const enemyMotions = createEnemyFleet(
@@ -1729,6 +1738,7 @@ scene.onBeforeRenderObservable.add(() => {
   if (performanceLoggingEnabled) projectilePerformance.record("worldVisualsCpuMs", projectileUpdateStarted - worldVisualsStarted);
   updateFlakSystem(flakSystem, dt, time);
   updateCannonSystem(cannonSystem, dt, time, blockedWaters);
+  muzzleLightRig.update(dt);
   if (performanceLoggingEnabled) projectilePerformance.record("projectileUpdateMs", performance.now() - projectileUpdateStarted);
   updateFlakHitAlert(time);
   updatePlaneHitFlash(time);
@@ -8871,7 +8881,7 @@ function updateScoutPlaneFlakDemo(motions, now) {
   flakSystem.nextDemoFireTime = now + flakDemoFireIntervalSeconds;
   const spreadShot = createSpreadFlakShot(shot, flakSystem.nextId);
   createFlakProjectile(flakSystem, spreadShot.position, spreadShot.velocity, spreadShot.direction);
-  createFlakMuzzleFlash(flakSystem, shot.position, shot.direction);
+  createFlakMuzzleFlash(flakSystem, shot.position, shot.direction, false);
   document.body.dataset.flakDemoFire = "ok";
   document.body.dataset.flakDemoBoats = String(flakMotions.length);
 }
@@ -10240,6 +10250,14 @@ function installScenarioTestHooks() {
       updateSubmarineEcho(boat.root.position);
     },
     stationState() { return stationSnapshot(); },
+    muzzleLightingState() {
+      return { mode: muzzleLightingMode, slots: muzzleLightRig.snapshot(),
+        flakFlashes: flakSystem.flashes.length, cannonFlashes: cannonSystem.flashes.length };
+    },
+    crewMuzzleFlashForTest(weapon = "flak") {
+      createRemoteMuzzleEffectForProjectile({ id: `${weapon}-crew-test`, shipId: playerServerShipId });
+      return this.muzzleLightingState();
+    },
     depthChargeEffects() {
       return { activeRacks: activeDepthChargeAnimators.size, effects: torpedoSystem.hitEffects.length,
         hits: torpedoSystem.hits, shake: ramShake, audio: depthChargeAudio?.state ?? "none", readyAt: depthChargeReadyAt };
@@ -11820,59 +11838,45 @@ function createCannonProjectile(system, position, velocity, direction, options =
   return system.active[system.active.length - 1];
 }
 
-function createFlakMuzzleFlash(system, position, direction) {
-  const flash = MeshBuilder.CreateSphere(`flak_muzzle_flash_${system.nextId}`, {
+function createFlakMuzzleFlash(system, position, direction, ownShip = true) {
+  const flash = acquireMuzzleFlash(system, "flak", () => MeshBuilder.CreateSphere(`flak_muzzle_flash_${system.nextId}`, {
     diameter: 0.24 * shipGunVisualScale,
     segments: 10
-  }, system.scene);
+  }, system.scene));
   flash.parent = system.root;
   flash.material = system.materials.flakFlash;
   flash.position.copyFrom(position.add(direction.scale(0.08 * shipGunVisualScale)));
 
-  const light = acquireWeaponLight(system.scene, "muzzle", flash.position);
-  prioritizeMuzzleLight(light);
-  light.diffuse = new Color3(1.0, 0.76, 0.42);
-  light.specular = new Color3(1.0, 0.78, 0.5);
-  light.intensity = 2.0;
-  light.range = 28 * Math.sqrt(shipGunVisualScale);
+  muzzleLightRig.flash(flash.position, "flak", ownShip);
 
   system.flashes.push({
     mesh: flash,
-    light,
     origin: flash.position.clone(),
     age: 0,
     lifetime: 0.16,
-    lightIntensity: 2.0,
     direction: direction.clone()
   });
 }
 
-function createCannonMuzzleBlast(system, position, direction) {
+function createCannonMuzzleBlast(system, position, direction, ownShip = true) {
   system.muzzleBlasts = (system.muzzleBlasts ?? 0) + 1;
   const flashId = system.nextId;
-  const flash = MeshBuilder.CreateSphere(`cannon_muzzle_flash_${flashId}`, {
+  const flash = acquireMuzzleFlash(system, "cannon", () => MeshBuilder.CreateSphere(`cannon_muzzle_flash_${flashId}`, {
     diameter: 0.82 * shipGunVisualScale,
     segments: 12
-  }, system.scene);
+  }, system.scene));
   flash.parent = system.root;
   flash.material = system.materials.flakFlash;
   flash.position.copyFrom(position.add(direction.scale(0.18 * shipGunVisualScale)));
   flash.isPickable = false;
 
-  const light = acquireWeaponLight(system.scene, "muzzle", flash.position);
-  prioritizeMuzzleLight(light);
-  light.diffuse = new Color3(1.0, 0.84, 0.54);
-  light.specular = new Color3(1.0, 0.92, 0.72);
-  light.intensity = 5.2;
-  light.range = 66 * Math.sqrt(shipGunVisualScale);
+  muzzleLightRig.flash(flash.position, "cannon", ownShip);
 
   system.flashes.push({
     mesh: flash,
-    light,
     origin: flash.position.clone(),
     age: 0,
     lifetime: 0.22,
-    lightIntensity: 5.2,
     direction: direction.clone()
   });
 
@@ -12091,16 +12095,13 @@ function updateFlakSystem(system, dt, now) {
     flash.age += dt;
     const t = flash.age / flash.lifetime;
     if (t >= 1) {
-      releaseWeaponLight(flash.light);
-      flash.mesh.dispose();
+      releaseMuzzleFlash(flash.mesh);
       return false;
     }
     const fade = 1 - t;
     flash.mesh.visibility = fade;
     flash.mesh.scaling.setAll(1 + t * 2.35);
     flash.mesh.position.copyFrom(flash.origin.add(flash.direction.scale(t * 0.7)));
-    flash.light.position.copyFrom(flash.mesh.position);
-    flash.light.intensity = (flash.lightIntensity ?? 0.85) * fade;
     return true;
   });
 
@@ -12165,16 +12166,13 @@ function updateCannonSystem(system, dt, now, landZones) {
     flash.age += dt;
     const t = flash.age / flash.lifetime;
     if (t >= 1) {
-      releaseWeaponLight(flash.light);
-      flash.mesh.dispose();
+      releaseMuzzleFlash(flash.mesh);
       return false;
     }
     const fade = 1 - t;
     flash.mesh.visibility = fade;
     flash.mesh.scaling.setAll(1 + t * 3.05);
     flash.mesh.position.copyFrom(flash.origin.add(flash.direction.scale(t * 1.05)));
-    flash.light.position.copyFrom(flash.mesh.position);
-    flash.light.intensity = (flash.lightIntensity ?? 2.15) * fade;
     return true;
   });
 
@@ -13103,9 +13101,9 @@ function createRemoteMuzzleEffectForProjectile(snapshot) {
   const direction = shot?.direction ?? fallbackDirection;
   if (isCannonProjectile) {
     triggerCannonBarrelRecoil(motion.boat?.bowCannon, time);
-    createCannonMuzzleBlast(cannonSystem, muzzle, direction);
+    createCannonMuzzleBlast(cannonSystem, muzzle, direction, false);
   } else {
-    createFlakMuzzleFlash(flakSystem, muzzle, direction);
+    createFlakMuzzleFlash(flakSystem, muzzle, direction, false);
   }
 }
 
