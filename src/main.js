@@ -736,6 +736,19 @@ scene.activeCamera = camera;
 
 window.addEventListener("keydown", (event) => {
   if (isStartupErrorVisible() || isSystemShortcutEvent(event)) return;
+  if (!isTextEditingElement(event.target)) {
+    const helpToggle = event.code === "KeyH" || event.key?.toLowerCase() === "h";
+    const helpClose = event.key === "Escape" && hotkeysExpanded;
+    if ((helpToggle && !document.getElementById("roleHotkeysToggle")?.hidden) || helpClose) {
+      if (!event.repeat) {
+        hotkeysExpanded = helpClose ? false : !hotkeysExpanded;
+        updateRoleHotkeys();
+        placeRoleHotkeys();
+      }
+      event.preventDefault();
+      return;
+    }
+  }
   const lookoutShortcut = event.code === "KeyO" || (lookoutViewActive &&
     (event.key?.toLowerCase() === "z" || ["KeyF", "KeyC"].includes(event.code)));
   if (isHudControlEvent(event) && !(lookoutShortcut && !isTextEditingElement(event.target))) return;
