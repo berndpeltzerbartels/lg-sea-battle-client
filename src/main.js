@@ -472,6 +472,7 @@ const openSeaFoamLengthMin = 0.25;
 const openSeaFoamLengthVariance = 0.48;
 const performanceLoggingEnabled = urlParams.get("perf-log") === "1";
 const projectilePerformance = createProjectilePerformance(performanceLoggingEnabled);
+let lastFrameLogicCpuMs = 0;
 projectilePerformance.setCulling(urlParams.get("projectile-culling") !== "0");
 if (performanceLoggingEnabled) window.seaBattlePerformance = projectilePerformance;
 const lighthouseVisualScale = 2;
@@ -1459,6 +1460,7 @@ if (crewState) {
 }
 
 scene.onBeforeRenderObservable.add(() => {
+  const frameLogicStarted = performanceLoggingEnabled ? performance.now() : 0;
   const rawFrameSeconds = engine.getDeltaTime() / 1000;
   const dt = Math.min(rawFrameSeconds, maxSimulationFrameSeconds);
   if (zoomIdleTimer.expired(performance.now())) resetGameZooms();
@@ -1557,6 +1559,8 @@ scene.onBeforeRenderObservable.add(() => {
     nextEngineHoldChangeTime = time + engineHoldRepeatSeconds;
   }
 
+  const shipMotionStarted = performanceLoggingEnabled ? performance.now() : 0;
+  if (performanceLoggingEnabled) projectilePerformance.record("controlsCpuMs", shipMotionStarted - frameLogicStarted);
   // Heavy ship feel: the selected telegraph order is a target, and speed eases toward it.
   const waterSafety = getShipWaterSafety(boat.root.position, heading, blockedWaters);
   let forward = new Vector3(Math.sin(heading), 0, Math.cos(heading));
@@ -1701,6 +1705,8 @@ scene.onBeforeRenderObservable.add(() => {
   updatePlayerFlakMount();
   updatePlayerCannonMount();
   updateCannonBarrelRecoil(boat.bowCannon, time);
+  const worldVisualsStarted = performanceLoggingEnabled ? performance.now() : 0;
+  if (performanceLoggingEnabled) projectilePerformance.record("shipMotionCpuMs", worldVisualsStarted - shipMotionStarted);
   boat.root.setEnabled(!torpedoScopeActive);
   ocean.position.x = boat.root.position.x;
   ocean.position.z = boat.root.position.z;
@@ -1720,6 +1726,7 @@ scene.onBeforeRenderObservable.add(() => {
   updateServerBombVisuals(bombSystem, dt, time);
   updateBombSightMarker(bombSystem, forward);
   const projectileUpdateStarted = performanceLoggingEnabled ? performance.now() : 0;
+  if (performanceLoggingEnabled) projectilePerformance.record("worldVisualsCpuMs", projectileUpdateStarted - worldVisualsStarted);
   updateFlakSystem(flakSystem, dt, time);
   updateCannonSystem(cannonSystem, dt, time, blockedWaters);
   if (performanceLoggingEnabled) projectilePerformance.record("projectileUpdateMs", performance.now() - projectileUpdateStarted);
@@ -1845,10 +1852,17 @@ scene.onBeforeRenderObservable.add(() => {
   updateTorpedoScopeRudderDisplay();
   updateWeaponElevationGauge(flakElevationIndicator, flakElevationValue, flakPitch, flakMinPitch, flakMaxPitch);
   updateWeaponElevationGauge(cannonElevationIndicator, cannonElevationValue, cannonPitch, cannonMinPitch, cannonMaxPitch);
+  const instrumentsStarted = performanceLoggingEnabled ? performance.now() : 0;
   const radarContacts = getRadarContacts(enemyMotions);
   updateNavigationInstruments(mapCanvas, radarCanvas, radarStatus, boat.root.position, radarContacts, blockedWaters, heading, heading, {
     flakLookHeading: !scoutPlaneMode ? normalizeAngle(heading + (flakViewActive ? flakYaw : (cannonViewActive ? cannonYaw : 0))) : null
   });
+  if (performanceLoggingEnabled) {
+    const logicEnded = performance.now();
+    projectilePerformance.record("instrumentsCpuMs", logicEnded - instrumentsStarted);
+    lastFrameLogicCpuMs = logicEnded - frameLogicStarted;
+    projectilePerformance.record("frameLogicCpuMs", lastFrameLogicCpuMs);
+  }
   flushPerformanceTelemetry(time);
 });
 
@@ -1857,7 +1871,11 @@ engine.runRenderLoop(() => {
   scene.render();
   motionPresentation.rendered(boat.root, scene.activeCamera);
   if (performanceLoggingEnabled) {
-    projectilePerformance.record("renderCpuMs", performance.now() - renderStarted);
+    const renderCpuMs = performance.now() - renderStarted;
+    projectilePerformance.record("renderCpuMs", renderCpuMs);
+    // scene.render also executes onBeforeRender; subtract that work instead of
+    // counting the game update twice. This is CPU submission time, not GPU time.
+    projectilePerformance.record("sceneDrawCpuMs", Math.max(0, renderCpuMs - lastFrameLogicCpuMs));
     projectilePerformance.frame(renderStarted, {
       flakActive: flakSystem.active.length,
       cannonActive: cannonSystem.active.length,
@@ -6614,9 +6632,11 @@ function applyServerGameSnapshot(snapshot) {
   serverShipsById = indexShipsById(snapshot.ships);
   pendingCriticalFlakShipHitsByTarget = indexCriticalFlakShipHitsByTarget(snapshot.flakHits);
   pendingCannonShipHitsByTarget = indexCannonShipHitsByTarget(snapshot.flakHits);
+  const snapshotHudStarted = performanceLoggingEnabled ? performance.now() : 0;
   updateFleetStatus(snapshot.ships, snapshot.destroyedShipsByTeam);
   updatePlayerList(snapshot.ships, snapshot.killsByPlayer);
   updateKillFeedFromSnapshot(snapshot);
+  if (performanceLoggingEnabled) projectilePerformance.record("snapshotHudCpuMs", performance.now() - snapshotHudStarted);
 
   const ownShip = snapshot.ships.find((ship) => ship.controlledBy === (crewState?.controller ?? playerId) && ship.teamId === playerTeamId);
   const previousOwnShip = snapshot.ships.find((ship) => ship.id === playerServerShipId);
@@ -6728,11 +6748,15 @@ function applyServerGameSnapshot(snapshot) {
     Array.isArray(snapshot.bombImpacts) ? snapshot.bombImpacts : [],
     snapshotClientTime
   );
+  const muzzleEffectsStarted = performanceLoggingEnabled ? performance.now() : 0;
   weaponShotEvents.consume(snapshot.sessionId, snapshot.weaponShots ?? [], playerId, createRemoteMuzzleEffectForProjectile);
+  const projectileSyncStarted = performanceLoggingEnabled ? performance.now() : 0;
+  if (performanceLoggingEnabled) projectilePerformance.record("muzzleEffectsBatchCpuMs", projectileSyncStarted - muzzleEffectsStarted);
   syncServerFlakProjectiles(
     Array.isArray(snapshot.flakProjectiles) ? snapshot.flakProjectiles : [],
     snapshotClientTime
   );
+  if (performanceLoggingEnabled) projectilePerformance.record("projectileSyncCpuMs", performance.now() - projectileSyncStarted);
   syncServerFlakImpacts(Array.isArray(snapshot.flakImpacts) ? snapshot.flakImpacts : []);
   syncServerProjectileHitEffects(Array.isArray(snapshot.flakHits) ? snapshot.flakHits : [], ownShip);
   syncServerOwnFlakHits(Array.isArray(snapshot.flakHits) ? snapshot.flakHits : [], ownShip);
