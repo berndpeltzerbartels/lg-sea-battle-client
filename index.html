@@ -162,6 +162,21 @@
           var key = [payload.message, payload.source, payload.line, payload.column].join("|");
           if (reported[key]) return;
           reported[key] = true;
+          try {
+            var context = "Client: " + payload.clientVersion + "\nServer: " + payload.serverVersion
+              + "\nScripts: " + Array.prototype.map.call(document.scripts, function (script) {
+                return script.src || "inline";
+              }).join(", ") + "\nGame state: " + JSON.stringify(document.body ? document.body.dataset : {});
+            var request = new XMLHttpRequest();
+            request.open("POST", "/game/client-error", true);
+            request.setRequestHeader("Content-Type", "application/json");
+            request.send(JSON.stringify({
+              type: payload.type, message: payload.message, source: payload.source || "",
+              line: payload.line || 0, column: payload.column || 0,
+              stack: (payload.stack || "No browser stack") + "\n" + context,
+              url: payload.url, userAgent: payload.userAgent, screen: payload.screen, viewport: payload.viewport
+            }));
+          } catch (reportError) { console.warn("Client error reporting failed", reportError); }
         }
 
         window.__seaBattleShowStartupError = function (title, detail) {

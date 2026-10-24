@@ -4,6 +4,11 @@ import { readFile } from 'node:fs/promises';
 test('error screen preserves live crew DOM and the original failure', async ({ page }) => {
   const html = (await readFile(new URL('../../index.html', import.meta.url), 'utf8'))
     .replace(/<script type="module"[^>]*><\/script>/g, '');
+  const reports = [];
+  await page.route('**/game/client-error', route => {
+    reports.push(route.request().postDataJSON());
+    return route.fulfill({ status: 204 });
+  });
   await page.route('**/game/version', route => route.fulfill({ json: { version: 'test' } }));
   await page.route('**/error-fixture', route => route.fulfill({ contentType: 'text/html', body: html }));
   await page.goto('/error-fixture');
@@ -23,4 +28,8 @@ test('error screen preserves live crew DOM and the original failure', async ({ p
   await expect(page.locator('#startupErrorDetails')).toContainText('Original TV failure');
   await expect(page.locator('#startupErrorDetails')).not.toContainText('Later failure');
   await expect(page.locator('.startup-error')).toHaveCount(1);
+  await expect.poll(() => reports.length).toBe(2);
+  expect(reports[0].message).toBe('Original TV failure');
+  expect(reports[0].stack).toContain('Scripts:');
+  expect(reports[0].userAgent).toBeTruthy();
 });

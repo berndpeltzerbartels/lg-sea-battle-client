@@ -1891,7 +1891,12 @@ scene.onBeforeRenderObservable.add(() => {
 
 engine.runRenderLoop(() => {
   const renderStarted = performanceLoggingEnabled ? performance.now() : 0;
-  scene.render();
+  try {
+    scene.render();
+  } catch (error) {
+    window.__seaBattleShowStartupError("Fehler bei der Bildberechnung", error);
+    throw error;
+  }
   motionPresentation.rendered(boat.root, scene.activeCamera);
   if (performanceLoggingEnabled) {
     const renderCpuMs = performance.now() - renderStarted;
@@ -7111,7 +7116,12 @@ function connectGameEventStream() {
   };
   gameEventSource.onmessage = (event) => {
     const started = performanceLoggingEnabled ? performance.now() : 0;
-    applyGameStreamMessage(event.data);
+    try {
+      applyGameStreamMessage(event.data);
+    } catch (error) {
+      window.__seaBattleShowStartupError("Fehler beim Verarbeiten einer Spielmeldung", error);
+      throw error;
+    }
     if (performanceLoggingEnabled) {
       projectilePerformance.record("streamMs", performance.now() - started);
       projectilePerformance.record("messageChars", event.data.length);
