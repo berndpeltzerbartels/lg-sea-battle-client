@@ -16,7 +16,7 @@ import { acquireProjectileVisual, releaseProjectileVisual, advanceProjectileSamp
 import { WeaponHeadingHold, WeaponShotEvents } from "./weaponPresentation.js";
 import { drawRadarWeaponLines } from "./radarWeaponLines.js";
 import { createFlakShield } from "./flakShield.js";
-import { shipVisibleAtRadarDepth, torpedoVisibleAtRadarDepth, torpedoTargetAtDepth } from "./radarDepthVisibility.js";
+import { usesUnderwaterRadar, shipVisibleAtRadarDepth, torpedoVisibleAtRadarDepth, torpedoTargetAtDepth } from "./radarDepthVisibility.js";
 import "./crew.css";
 import { Scene } from "@babylonjs/core/scene";
 import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
@@ -3039,8 +3039,7 @@ function updateRadarModeButtons() {
 }
 
 function getSelectedRadarRange() {
-  const effectiveSubmarineDepthState = getPlayerEffectiveSubmarineDepthState();
-  if (submarineMode && effectiveSubmarineDepthState === submarineDepthStates.submerged) {
+  if (usesUnderwaterRadar(submarineMode, playerSubmarineDepthOffset, submarineDepthOffsets.periscope)) {
     document.body.dataset.radarDepthMode = "submerged";
     return clientRadarRange * combatRadarRangeFactor * submarineSubmergedRadarRangeFactor;
   }
@@ -8459,7 +8458,7 @@ function drawRadarTorpedoes(ctx, centerX, centerY, playerPosition, torpedoes, ra
   if (!Array.isArray(torpedoes) || torpedoes.length === 0) return 0;
 
   let visible = 0;
-  const underwater = submarineMode && getPlayerEffectiveSubmarineDepthState() === submarineDepthStates.submerged;
+  const underwater = usesUnderwaterRadar(submarineMode, playerSubmarineDepthOffset, submarineDepthOffsets.periscope);
   for (const torpedo of torpedoes) {
     if (visible >= 16) break;
     if (!torpedoVisibleAtRadarDepth(underwater, torpedo)) continue;
@@ -9626,10 +9625,9 @@ function getSnapshotRadarContacts() {
 }
 
 function isShipRadarVisibleToPlayer(ship) {
-  const effectivePlayerDepthState = getPlayerEffectiveSubmarineDepthState();
   const contactVehicleType = getShipVehicleType(ship);
   return shipVisibleAtRadarDepth(
-    submarineMode && effectivePlayerDepthState === submarineDepthStates.submerged,
+    usesUnderwaterRadar(submarineMode, playerSubmarineDepthOffset, submarineDepthOffsets.periscope),
     contactVehicleType, getShipDepthState(ship));
 }
 

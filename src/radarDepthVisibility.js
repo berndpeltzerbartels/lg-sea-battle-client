@@ -1,3 +1,8 @@
+// Full radar returns only when the boat physically reaches periscope depth.
+export function usesUnderwaterRadar(submarine, depthOffset, periscopeOffset) {
+  return submarine && depthOffset < periscopeOffset - 0.08;
+}
+
 export function shipVisibleAtRadarDepth(underwater, vehicleType, depthState) {
   const submerged = vehicleType === 'submarine' && (depthState === 'periscope' || depthState === 'submerged');
   return underwater ? vehicleType !== 'scout-plane' : !submerged;

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { shipVisibleAtRadarDepth, torpedoVisibleAtRadarDepth, torpedoTargetAtDepth } from '../src/radarDepthVisibility.js';
+import { usesUnderwaterRadar, shipVisibleAtRadarDepth, torpedoVisibleAtRadarDepth, torpedoTargetAtDepth } from '../src/radarDepthVisibility.js';
 
 test('torpedo hit indication follows actual launch and target depth, not radar visibility', () => {
   const scale = 3;
@@ -36,4 +36,14 @@ test('underwater radar sees running torpedoes at both depths; surface radar hide
     }
     assert.equal(torpedoVisibleAtRadarDepth(underwater, null), false);
   }
+});
+
+test('radar remains restricted between deep and periscope depth', () => {
+  for (const actual of [-6.16, -5, -3, -1.7]) {
+    assert.equal(usesUnderwaterRadar(true, actual, -1.6), true);
+  }
+  for (const actual of [-1.67, -1.6, -.5, 0]) {
+    assert.equal(usesUnderwaterRadar(true, actual, -1.6), false);
+  }
+  assert.equal(usesUnderwaterRadar(false, -6.16, -1.6), false);
 });
