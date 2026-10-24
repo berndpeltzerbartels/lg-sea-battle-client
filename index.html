@@ -74,6 +74,25 @@
         document.addEventListener("securitypolicyviolation", function (event) {
           trace("security policy", { directive: event.violatedDirective, blockedURI: event.blockedURI });
         });
+        // Observe loads without intercepting fetch/XHR or changing their behavior.
+        try {
+          var resourceObserver = new PerformanceObserver(function (list) {
+            list.getEntries().forEach(function (entry) {
+              if (!/\.(js|css|wasm)(\?|$)/i.test(entry.name)) return;
+              trace("resource loaded", { url: entry.name, initiator: entry.initiatorType,
+                startMs: Math.round(entry.startTime), durationMs: Math.round(entry.duration),
+                transferBytes: entry.transferSize });
+            });
+          });
+          resourceObserver.observe({ type: "resource", buffered: true });
+        } catch (error) { trace("resource timing unavailable", error); }
+        new MutationObserver(function (records) {
+          records.forEach(function (record) {
+            Array.prototype.forEach.call(record.addedNodes, function (node) {
+              if (node.nodeName === "SCRIPT") trace("script inserted", { src: node.src || "inline", type: node.type });
+            });
+          });
+        }).observe(document.documentElement, { childList: true, subtree: true });
         trace("diagnostics installed");
 
 
@@ -224,7 +243,7 @@
           var key = [payload.message, payload.source, payload.line, payload.column, payload.type === "diagnostic-followup" ? "followup" : ""].join("|");
           if (reported[key]) return;
           reported[key] = true;
-          if (!firstFailure) {
+          if (!firstFailure && payload.type !== "diagnostic-checkpoint") {
             firstFailure = payload;
             setTimeout(function () {
               var followup = Object.assign({}, firstFailure, { type: "diagnostic-followup" });
@@ -252,6 +271,11 @@
             }));
           } catch (reportError) { console.warn("Client error reporting failed", reportError); }
         }
+
+        window.__seaBattleDiagnosticCheckpoint = function (label) {
+          trace("diagnostic checkpoint", label);
+          markSeen(copyBasicContext({ type: "diagnostic-checkpoint", message: label }));
+        };
 
         window.__seaBattleShowStartupError = function (title, detail) {
           var payload = copyBasicContext({
