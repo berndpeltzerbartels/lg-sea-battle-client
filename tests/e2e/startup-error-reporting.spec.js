@@ -68,7 +68,12 @@ test('nested and cyclic error objects retain stack, bounded logs and later initi
   await page.evaluate(() => {
     console.info('OLD ENTRY TO EVICT');
     for (let i = 0; i < 130; i++) console.info('initialization checkpoint', i);
-    const wrapped = { exception: new TypeError('nested TV exception') };
+    const exception = new TypeError('nested TV exception');
+    const peer = new Error('peer cause');
+    exception.cause = peer;
+    peer.cause = exception;
+    const wrapped = { exception };
+    wrapped.cause = wrapped;
     wrapped.self = wrapped;
     Object.defineProperty(wrapped, 'message', { get() { throw new Error('unreadable getter'); } });
     window.onerror(wrapped, '', 0, 0, null);
@@ -80,6 +85,7 @@ test('nested and cyclic error objects retain stack, bounded logs and later initi
   expect(reports[0].stack).toContain('initialization checkpoint');
   expect(reports[0].stack).not.toContain('OLD ENTRY TO EVICT');
   expect(reports[0].stack).toContain('[circular]');
+  expect(reports[0].stack).toContain('peer cause');
   expect(reports[0].stack.length).toBeLessThan(60000);
   expect(reports[1].type).toBe('diagnostic-followup');
   expect(reports[1].stack).toContain('world loading continued after global error');
