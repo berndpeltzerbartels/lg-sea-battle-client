@@ -53,3 +53,34 @@ test('module initialization reports the actual exception to the server', async (
   await expect.poll(() => reports.length).toBe(1);
   expect(reports[0].stack).toContain('TypeError: TV initialization failure');
 });
+
+test('nested and cyclic error objects retain stack, bounded logs and later initialization', async ({ page }) => {
+  const html = (await readFile(new URL('../../index.html', import.meta.url), 'utf8'))
+    .replace(/<script type="module"[^>]*><\/script>/g, '');
+  const reports = [];
+  await page.route('**/game/version', route => route.fulfill({ json: { version: 'test' } }));
+  await page.route('**/game/client-error', route => {
+    reports.push(route.request().postDataJSON());
+    return route.fulfill({ status: 204 });
+  });
+  await page.route('**/error-fixture', route => route.fulfill({ contentType: 'text/html', body: html }));
+  await page.goto('/error-fixture');
+  await page.evaluate(() => {
+    console.info('OLD ENTRY TO EVICT');
+    for (let i = 0; i < 130; i++) console.info('initialization checkpoint', i);
+    const wrapped = { exception: new TypeError('nested TV exception') };
+    wrapped.self = wrapped;
+    Object.defineProperty(wrapped, 'message', { get() { throw new Error('unreadable getter'); } });
+    window.onerror(wrapped, '', 0, 0, null);
+    window.__seaBattleTrace('world loading continued after global error');
+  });
+  await expect.poll(() => reports.length).toBe(2);
+  expect(reports[0].message).toBe('nested TV exception');
+  expect(reports[0].stack).toContain('TypeError: nested TV exception');
+  expect(reports[0].stack).toContain('initialization checkpoint');
+  expect(reports[0].stack).not.toContain('OLD ENTRY TO EVICT');
+  expect(reports[0].stack).toContain('[circular]');
+  expect(reports[0].stack.length).toBeLessThan(60000);
+  expect(reports[1].type).toBe('diagnostic-followup');
+  expect(reports[1].stack).toContain('world loading continued after global error');
+});

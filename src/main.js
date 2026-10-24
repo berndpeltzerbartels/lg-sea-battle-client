@@ -52,15 +52,26 @@ import { createZoomIdleTimer, submarineEchoStrength } from "./instrumentHelpers.
 import { submarineSeaMotionFactor } from "./submarineSeaMotion.js";
 import { roleHotkeys } from "./roleHotkeys.js";
 
+const traceStartup = (step, detail) => window.__seaBattleTrace?.(step, detail);
+traceStartup("main module entered");
 const canvas = document.getElementById("renderCanvas");
+for (const eventName of ["webglcontextcreationerror", "webglcontextlost", "webglcontextrestored"]) {
+  canvas.addEventListener(eventName, event => traceStartup(eventName, { statusMessage: event.statusMessage }));
+}
 prepareGameFocus(canvas);
+traceStartup("Babylon Engine creating");
 const engine = new Engine(canvas, true, {
   preserveDrawingBuffer: false,
   stencil: false,
   antialias: true
 });
 
+traceStartup("Babylon Engine ready", { webGLVersion: engine.webGLVersion,
+  renderWidth: engine.getRenderWidth(), renderHeight: engine.getRenderHeight(),
+  caps: { maxTextureSize: engine.getCaps().maxTextureSize, maxTexturesImageUnits: engine.getCaps().maxTexturesImageUnits } });
+traceStartup("Babylon Scene creating");
 const scene = new Scene(engine);
+traceStartup("Babylon Scene ready");
 document.body.dataset.appStarted = "true";
 const urlParams = new URLSearchParams(location.search);
 const depthChargeLayout = urlParams.get("sandbox") === "side-view" && ["stern", "throwers"].includes(urlParams.get("depthChargeLayout")) ? urlParams.get("depthChargeLayout") : "combined";
@@ -121,7 +132,9 @@ const enemyTorpedoBoatBobAmplitude = 0.025;
 const enemyBowWakeSurfaceY = -torpedoBoatModelWaterlineY + 0.018;
 const enemyBowWakeFullSpeed = 17.5;
 const torpedoBoatModelSinkDepth = 2.35;
+traceStartup("game configuration loading");
 const gameConfig = await loadGameConfig();
+traceStartup("game configuration ready");
 const surfaceClearColor = new Color4(0.38, 0.5, 0.6, 1);
 const surfaceFogColor = new Color3(0.35, 0.46, 0.54);
 const surfaceFogDensity = 0.00135;
@@ -492,15 +505,23 @@ loadServerBuildInfo()
   .then((serverBuildInfo) => updateBuildInfoPanel(clientBuildInfo, serverBuildInfo))
   .catch((error) => updateBuildInfoPanel(clientBuildInfo, { version: "unavailable", commit: error.message }));
 setupResetGameControl(resetGameButton);
+traceStartup("player login loading");
 const playerLogin = await requirePlayerLogin();
+traceStartup("player login ready");
 const playerInitials = playerLogin.initials;
+traceStartup("registered session loading");
 await requireRegisteredGameSession(playerLogin);
+traceStartup("registered session ready");
+traceStartup("world map loading");
 const worldMap = await loadWorldLandmasses();
+traceStartup("world map ready");
 const worldLandmasses = worldMap.landmasses;
 const instrumentPaths = prepareInstrumentPaths(worldMap.instrumentMap);
 document.body.dataset.worldSource = "server";
 document.body.dataset.worldLandmasses = String(worldLandmasses.length);
+traceStartup("game state loading");
 const gameState = await loadGameState();
+traceStartup("game state ready");
 let serverRestartPending = false;
 document.body.dataset.gameStateSource = "server";
 document.body.dataset.serverGameState = gameState.state;
@@ -591,7 +612,9 @@ document.body.dataset.clientCapability = clientCapability.performanceClass;
 document.body.dataset.hardwareScalingLevel = renderQuality.hardwareScalingLevel.toFixed(2);
 document.body.dataset.visualEffects = renderQuality.visualEffects;
 
+traceStartup("materials creating");
 const materials = createMaterials(scene);
+traceStartup("materials ready");
 if (shipContrastDebug) {
   scene.clearColor = new Color4(0.82, 0.84, 0.78, 1);
   materials.water.diffuseTexture.level = 0;
@@ -628,6 +651,7 @@ if (sideViewSandboxMode) {
 const worldLimit = 5000;
 const oceanBaseSize = 2300;
 const oceanVisualSize = worldLimit * 2;
+traceStartup("ocean creating");
 const ocean = MeshBuilder.CreateGround("ocean", { width: oceanVisualSize, height: oceanVisualSize, subdivisions: 160 }, scene);
 ocean.material = materials.water;
 ocean.material.backFaceCulling = false;
@@ -646,11 +670,14 @@ const volcanoPlumes = [];
 const navigationLights = [];
 
 const blockedWaters = worldLandmasses.map(getLandZone);
+traceStartup("terrain creating", { landmasses: worldLandmasses.length });
 createWorldLandmasses(worldLandmasses, scene, materials, world);
+traceStartup("terrain ready", { meshes: scene.meshes.length });
 if (renderQuality.visualEffects !== "low") {
   navigationLights.push(...createNavigationLights(worldLandmasses, scene, materials, world, renderQuality.visualEffects));
 }
 
+traceStartup("player model creating");
 const boat = scoutPlaneMode
   ? createScoutPlane(scene, materials, "player_scout_plane", playerTeamId, true)
   : (submarineMode
@@ -705,6 +732,7 @@ if (sideViewSandboxMode && submarineMode) {
   window.__seaBattleSideView = { scene, boat };
 }
 document.body.dataset.playerModelMeshes = String(boat.meshes?.length ?? 0);
+traceStartup("player model ready", { vehicle: playerVehicleType, meshes: boat.root.getChildMeshes(false).length });
 const muzzleLightingMode = ["crew", "water", "none"].includes(urlParams.get("muzzle-lighting"))
   ? urlParams.get("muzzle-lighting") : "crew";
 const muzzleLightRig = createMuzzleLightRig(scene, {
@@ -716,6 +744,7 @@ const muzzleLightRig = createMuzzleLightRig(scene, {
 });
 
 // Until SSE arrives, backend ships seed the visual fleet and local motion keeps them inspectable.
+traceStartup("remote fleet creating");
 const enemyMotions = createEnemyFleet(
   scene,
   materials,
@@ -1889,10 +1918,13 @@ scene.onBeforeRenderObservable.add(() => {
   flushPerformanceTelemetry(time);
 });
 
+let startupFrameLogged = false;
+traceStartup("render loop starting");
 engine.runRenderLoop(() => {
   const renderStarted = performanceLoggingEnabled ? performance.now() : 0;
   try {
     scene.render();
+    if (!startupFrameLogged) { startupFrameLogged = true; traceStartup("first frame rendered"); }
   } catch (error) {
     window.__seaBattleShowStartupError("Fehler bei der Bildberechnung", error);
     throw error;
@@ -7108,8 +7140,10 @@ function connectGameEventStream() {
   document.body.dataset.gameEventSource = "connecting";
   document.body.dataset.gameEventEndpoint = endpoint;
 
+  traceStartup("game stream connecting");
   gameEventSource = new EventSource(endpoint);
   gameEventSource.onopen = () => {
+    traceStartup("game stream open");
     gameEventSourceReady = true;
     document.body.dataset.gameEventSource = "open";
     void checkServerRestart();

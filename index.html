@@ -8,29 +8,86 @@
       (function () {
         var reported = {};
         var serverBuild = null;
+        var diagnosticLog = [];
+        var diagnosticChars = 0;
+        var firstFailure = null;
+
+        // Error/Event properties are often non-enumerable or live on a prototype.
+        // Read them explicitly, with bounds and cycle/getter protection.
+        function inspect(value, depth, seen, budget) {
+          budget = budget || { remaining: 160 };
+          if (--budget.remaining < 0) return "[size limit]";
+          if (value === null || value === undefined) return String(value);
+          if (typeof value === "string") return value.slice(0, 2000);
+          if (typeof value !== "object" && typeof value !== "function") return String(value);
+          seen = seen || [];
+          if (seen.indexOf(value) >= 0) return "[circular]";
+          if (depth > 4) return "[depth limit]";
+          seen = seen.concat([value]);
+          var keys = ["name", "message", "stack", "error", "exception", "cause", "reason", "detail",
+            "description", "filename", "fileName", "sourceURL", "lineNumber", "columnNumber", "type", "status"];
+          try { keys = keys.concat(Object.getOwnPropertyNames(value).slice(0, 20)); } catch (_) {}
+          var result = {}, used = {};
+          keys.forEach(function (key) {
+            if (used[key]) return;
+            used[key] = true;
+            try {
+              var field = value[key];
+              if (field !== undefined && typeof field !== "function") result[key] = inspect(field, depth + 1, seen, budget);
+            } catch (_) { result[key] = "[unreadable]"; }
+          });
+          try { return JSON.stringify(result); } catch (_) { return "[unserializable]"; }
+        }
+
+        function errorField(value, field, seen) {
+          if (!value || (typeof value !== "object" && typeof value !== "function")) return "";
+          seen = seen || [];
+          if (seen.indexOf(value) >= 0 || seen.length > 5) return "";
+          seen = seen.concat([value]);
+          try { if (typeof value[field] === "string" && value[field]) return value[field]; } catch (_) {}
+          var nested = ["error", "exception", "cause", "reason", "detail"];
+          for (var i = 0; i < nested.length; i++) {
+            try {
+              var found = errorField(value[nested[i]], field, seen);
+              if (found) return found;
+            } catch (_) {}
+          }
+          return "";
+        }
+
+        function trace(label, detail) {
+          var entry = (Math.round(performance.now()) + "ms " + label
+            + (detail === undefined ? "" : " " + inspect(detail, 0))).slice(0, 1600);
+          diagnosticLog.push(entry);
+          diagnosticChars += entry.length;
+          while (diagnosticLog.length > 100 || diagnosticChars > 48000) diagnosticChars -= diagnosticLog.shift().length;
+        }
+        window.__seaBattleTrace = trace;
+        ["debug", "log", "info", "warn", "error"].forEach(function (level) {
+          var original = console[level];
+          if (typeof original !== "function") return;
+          console[level] = function () {
+            trace("console." + level, Array.prototype.map.call(arguments, function (arg) { return inspect(arg, 0); }).join(" "));
+            return original.apply(console, arguments);
+          };
+        });
+        document.addEventListener("securitypolicyviolation", function (event) {
+          trace("security policy", { directive: event.violatedDirective, blockedURI: event.blockedURI });
+        });
+        trace("diagnostics installed");
+
 
         function text(value) {
-          if (!value) return "";
-          if (typeof value === "string") return value;
-          if (value.stack) return String(value.stack);
-          if (value.message) return String(value.message);
-          return String(value);
+          return stackOf(value) || messageOf(value);
         }
 
         function messageOf(value) {
-          if (!value) return "";
           if (typeof value === "string") return value;
-          if (value.message) return String(value.message);
-          return String(value);
+          return errorField(value, "message") || errorField(value, "description") || (value ? inspect(value, 0) : "");
         }
 
-        function stackOf(value) {
-          return value && value.stack ? String(value.stack) : "";
-        }
-
-        function nameOf(value) {
-          return value && value.name ? String(value.name) : "";
-        }
+        function stackOf(value) { return errorField(value, "stack"); }
+        function nameOf(value) { return errorField(value, "name"); }
 
         function typeOf(value) {
           if (value === null) return "null";
@@ -39,6 +96,7 @@
         }
 
         function copyBasicContext(payload) {
+          payload.rawArguments = window.__seaBattleLastErrorArguments || "";
           payload.url = location.href;
           payload.userAgent = navigator.userAgent;
           payload.screen = screen.width + "x" + screen.height;
@@ -111,6 +169,10 @@
           lines.push("reasonStack:");
           lines.push(payload && payload.reasonStack ? payload.reasonStack : "not available");
           lines.push("");
+          lines.push("RAW ERROR ARGUMENTS");
+          lines.push(payload.rawArguments || "not available");
+          lines.push("RECENT LOG");
+          lines.push(diagnosticLog.join("\n"));
           lines.push("CONTEXT");
           lines.push("url: " + location.href);
           lines.push("userAgent: " + navigator.userAgent);
@@ -159,14 +221,26 @@
         }
 
         function markSeen(payload) {
-          var key = [payload.message, payload.source, payload.line, payload.column].join("|");
+          var key = [payload.message, payload.source, payload.line, payload.column, payload.type === "diagnostic-followup" ? "followup" : ""].join("|");
           if (reported[key]) return;
           reported[key] = true;
+          if (!firstFailure) {
+            firstFailure = payload;
+            setTimeout(function () {
+              var followup = Object.assign({}, firstFailure, { type: "diagnostic-followup" });
+              markSeen(followup);
+              if (document.getElementById("startupErrorDetails")) {
+                document.getElementById("startupErrorDetails").textContent = errorDetails(firstFailure, firstFailure.message);
+              }
+            }, 4000);
+          }
           try {
             var context = "Client: " + payload.clientVersion + "\nServer: " + payload.serverVersion
               + "\nScripts: " + Array.prototype.map.call(document.scripts, function (script) {
                 return script.src || "inline";
-              }).join(", ") + "\nGame state: " + JSON.stringify(document.body ? document.body.dataset : {});
+              }).join(", ") + "\nGame state: " + JSON.stringify(document.body ? document.body.dataset : {})
+              + "\nRaw arguments: " + (payload.rawArguments || "")
+              + "\nRecent log:\n" + diagnosticLog.join("\n");
             var request = new XMLHttpRequest();
             request.open("POST", "/game/client-error", true);
             request.setRequestHeader("Content-Type", "application/json");
@@ -190,13 +264,15 @@
         };
 
         window.onerror = function (message, source, line, column, error) {
+          window.__seaBattleLastErrorArguments = inspect(Array.prototype.slice.call(arguments), 0);
+          trace("window.onerror", window.__seaBattleLastErrorArguments);
           var payload = copyBasicContext({
             type: "window.onerror",
-            message: messageOf(message) || messageOf(error) || "window.onerror",
+            message: messageOf(error) || messageOf(message) || "window.onerror",
             source: source || "",
             line: line || 0,
             column: column || 0,
-            stack: stackOf(error),
+            stack: stackOf(error) || stackOf(message),
             onerrorMessage: messageOf(message),
             onerrorSource: source || "",
             onerrorLine: line || 0,
@@ -212,6 +288,8 @@
         };
 
         window.addEventListener("error", function (event) {
+          window.__seaBattleLastErrorArguments = inspect(event, 0);
+          trace("error event", event);
           var detail = event.error || event.message;
           var source = event.filename || "";
           if (!source && event.target && (event.target.src || event.target.href)) {
@@ -243,6 +321,8 @@
         });
 
         window.addEventListener("unhandledrejection", function (event) {
+          window.__seaBattleLastErrorArguments = inspect(event.reason, 0);
+          trace("unhandled rejection", event.reason);
           var message = messageOf(event.reason) || "Unhandled promise rejection";
           var payload = copyBasicContext({
             type: "unhandledrejection",
