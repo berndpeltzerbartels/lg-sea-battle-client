@@ -27,3 +27,18 @@ test('echo uses horizontal proximity of nearest living submarine without identif
   assert.equal(echo([{ ...sub, x: 18, teamId: 'light' }, { ...sub, x: 27, teamId: 'dark' }]), .5);
   assert.equal(echo([]), 0);
 });
+
+
+test('weapon zoom expires after twelve idle seconds without expiring the thirty-second scope timer', () => {
+  const weapon = createZoomIdleTimer(12000);
+  const scope = createZoomIdleTimer();
+  weapon.touch(1000);
+  scope.touch(1000);
+  assert.equal(weapon.expired(12999), false);
+  weapon.touch(12000);
+  scope.touch(12000);
+  assert.equal(weapon.expired(23999), false);
+  assert.equal(weapon.expired(24000), true);
+  assert.equal(scope.expired(24000), false);
+  assert.equal(scope.expired(42000), true);
+});

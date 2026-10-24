@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test('idle resets cannon, binocular, torpedo and map zoom, while echo only measures proximity', async ({ page }, testInfo) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/app?vehicle=torpedo-boat&sandbox=side-view&scenarioTest=1');
+  await page.goto('/sea-battle/index.html?vehicle=torpedo-boat&sandbox=side-view&scenarioTest=1');
   await page.waitForFunction(() => window.seaBattleScenarioTest);
   for (const [station, attribute] of [['cannon', 'data-cannon-sight'], ['torpedo', 'data-torpedo-scope-zoom']]) {
     await page.evaluate(s => window.seaBattleScenarioTest.setStation(s), station);
@@ -24,9 +24,10 @@ test('idle resets cannon, binocular, torpedo and map zoom, while echo only measu
   const setContact = async x => page.evaluate(x => window.seaBattleScenarioTest.echoContacts([
     { id: 'echo-sub', vehicleType: 'submarine', state: 'active', depthState: 'submerged', x, z: 0, y: -20 }
   ]), x);
-  await setContact(100);
+  const echoRange = await page.evaluate(() => window.seaBattleScenarioTest.echoRangeForTest());
+  await setContact(echoRange * 2);
   await expect(echo).toHaveAttribute('aria-valuenow', '0');
-  await setContact(35.46);
+  await setContact(echoRange / 2);
   await expect(echo).toHaveAttribute('aria-valuenow', '50');
   await setContact(0);
   await expect(echo).toHaveAttribute('aria-valuenow', '100');
@@ -41,7 +42,7 @@ test('idle resets cannon, binocular, torpedo and map zoom, while echo only measu
 });
 
 test('idle resets both submarine periscope zooms', async ({ page }) => {
-  await page.goto('/app?vehicle=submarine&sandbox=side-view&scenarioTest=1');
+  await page.goto('/sea-battle/index.html?vehicle=submarine&sandbox=side-view&scenarioTest=1');
   await page.waitForFunction(() => window.seaBattleScenarioTest);
   await page.evaluate(() => window.seaBattleScenarioTest.setSubmarineDepthState('periscope'));
   await expect(page.locator('body')).toHaveAttribute('data-torpedo-view', 'active', { timeout: 20000 });
@@ -54,4 +55,21 @@ test('idle resets both submarine periscope zooms', async ({ page }) => {
     await expect(page.locator('body')).toHaveAttribute('data-torpedo-scope-zoom', 'I');
   }
   await expect(page.locator('#submarineEcho')).toBeHidden();
+});
+
+
+test('weapon idle returns cannon to I while leaving map zoom alone', async ({ page }) => {
+  await page.goto('/sea-battle/index.html?vehicle=torpedo-boat&sandbox=side-view&scenarioTest=1');
+  await page.waitForFunction(() => window.seaBattleScenarioTest);
+  await page.evaluate(() => window.seaBattleScenarioTest.setStation('cannon'));
+  await page.keyboard.press('KeyZ');
+  await expect(page.locator('body')).toHaveAttribute('data-cannon-sight', 'II');
+  await page.evaluate(() => {
+    document.getElementById('mapZoom').value = '5';
+    window.seaBattleScenarioTest.expireWeaponZoomIdle();
+  });
+  await expect(page.locator('body')).toHaveAttribute('data-cannon-sight', 'I');
+  await expect(page.locator('#mapZoom')).toHaveValue('5');
+  await page.keyboard.press('KeyZ');
+  await expect(page.locator('body')).toHaveAttribute('data-cannon-sight', 'II');
 });

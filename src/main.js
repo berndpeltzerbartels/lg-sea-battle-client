@@ -90,8 +90,13 @@ let underwaterChargeTestView = false;
 let hotkeySignature = "";
 let hotkeysExpanded = false;
 const zoomIdleTimer = createZoomIdleTimer();
+const weaponZoomIdleTimer = createZoomIdleTimer(12000);
 for (const event of ['keydown', 'keyup', 'pointerdown', 'pointermove', 'wheel', 'input']) {
-  window.addEventListener(event, () => zoomIdleTimer.touch(performance.now()), { capture: true, passive: true });
+  window.addEventListener(event, () => {
+    const now = performance.now();
+    zoomIdleTimer.touch(now);
+    weaponZoomIdleTimer.touch(now);
+  }, { capture: true, passive: true });
 }
 let nextSubmarineEchoUpdate = 0;
 const scenarioTestMode = urlParams.get("scenarioTest") === "1";
@@ -1529,7 +1534,10 @@ scene.onBeforeRenderObservable.add(() => {
   const frameLogicStarted = performanceLoggingEnabled ? performance.now() : 0;
   const rawFrameSeconds = engine.getDeltaTime() / 1000;
   const dt = Math.min(rawFrameSeconds, maxSimulationFrameSeconds);
-  if (zoomIdleTimer.expired(performance.now())) resetGameZooms();
+  const zoomActivityNow = performance.now();
+  if (cannonViewActive && (heldCannonDirection || heldCannonPitchDirection)) weaponZoomIdleTimer.touch(zoomActivityNow);
+  if (weaponZoomIdleTimer.expired(zoomActivityNow) && cannonSightLevelIndex > 0) resetWeaponZoom();
+  if (zoomIdleTimer.expired(zoomActivityNow)) resetGameZooms();
   if (depthChargePreview?.active) depthChargePreview.update(dt);
   depthChargeUnderwater?.update(dt);
   for (const animator of activeDepthChargeAnimators) {
@@ -2134,9 +2142,13 @@ function toggleLookoutBinoculars() {
   document.getElementById("lookoutZoomButton")?.setAttribute("aria-pressed", String(lookoutBinocularsActive));
 }
 
-function resetGameZooms() {
+function resetWeaponZoom() {
   setCannonSightLevel(0);
   cannonSightCycleDirection = 1;
+}
+
+function resetGameZooms() {
+  resetWeaponZoom();
   submarinePeriscopeZoomLevelIndex = 0;
   submarinePeriscopeZoomCycleDirection = 1;
   torpedoBoatScopeZoomLevelIndex = 0;
@@ -3809,6 +3821,7 @@ function changeCannonSightLevel(direction) {
 
 function setCannonSightLevel(index) {
   cannonSightLevelIndex = clamp(Math.round(index), 0, cannonSightLevels.length - 1);
+  if (cannonSightLevelIndex > 0) weaponZoomIdleTimer.touch(performance.now());
   document.body.dataset.cannonSight = currentCannonSightLevel().label;
   updateBattleStationButtons();
 }
@@ -10318,6 +10331,8 @@ function installScenarioTestHooks() {
       updateKillFeedFromSnapshot(snapshot);
     },
     expireZoomIdle() { zoomIdleTimer.touch(performance.now() - 30001); },
+    expireWeaponZoomIdle() { weaponZoomIdleTimer.touch(performance.now() - 12001); },
+    echoRangeForTest() { return submarineEchoRadius; },
     echoContacts(ships) {
       serverShipsById = new Map(ships.map(ship => [ship.id, ship]));
       nextSubmarineEchoUpdate = 0;
