@@ -13,8 +13,13 @@ test("restart check works without a crew stream and tolerates an offline server"
   const ctx = {
     serverRestartPending: false, gameState: { instanceId: "old" },
     getGameStateEndpoint: () => "/game/state",
+    playerStateRequestTimeoutSeconds: 2.5,
     fetch: async () => { throw new Error("offline"); },
     applyServerGameSnapshot: snapshot => { ctx.serverRestartPending = snapshot.instanceId === "new"; }
+  };
+  ctx.fetchSnapshotWithDeadline = async (url, options) => {
+    const response = await ctx.fetch(url, options);
+    return { response, snapshot: response.ok ? await response.json() : null };
   };
   const check = runInNewContext(source.slice(start, end) + "\ncheckServerRestart", ctx);
   assert.equal(await check(), false);

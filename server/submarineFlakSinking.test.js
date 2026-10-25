@@ -29,7 +29,7 @@ for (const depth of [-5.58, -9.63]) {
     assert.equal(motion.state, 'sinking', 'No surface burning stage');
     assert.equal(motion.sinkStartY, depth);
     let previousY = depth;
-    for (let frame = 1; frame <= 900 && enabled; frame++) {
+    for (let frame = 1; frame <= 1500 && enabled; frame++) {
       api.updateEnemySinking(motion, 1/60, frame/60);
       assert.ok(motion.root.position.y <= previousY, 'Depth must only increase');
       const angles = motion.root.rotationQuaternion.toEulerAngles();

@@ -1,4 +1,5 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
+import { fetchSnapshotWithDeadline } from "./snapshotRequest.js";
 import { createMotionSyncHealth } from "./motionSyncHealth.js";
 import { createMotionPresentationDiagnostics } from "./motionPresentationDiagnostics.js";
 import { prepareInstrumentPaths, radarTransform } from "./instrumentMap.js";
@@ -6429,21 +6430,20 @@ async function transmitPlayerState() {
   const sentLifeRevision = playerLifeRevision;
   const motion = createPlayerStatePayload(debugTeleport);
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), playerStateRequestTimeoutSeconds * 1000);
   try {
-    const response = await fetch(getPlayerStateEndpoint(), {
+    const { response, snapshot } = await fetchSnapshotWithDeadline(getPlayerStateEndpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(crewState ? crewCommand({ motion }) : motion),
       signal: controller.signal
-    });
+    }, playerStateRequestTimeoutSeconds * 1000, controller);
     if (sentLifeRevision !== playerLifeRevision) return false;
     if (!response.ok) {
       if ((response.status === 403 || response.status === 409) && await checkServerRestart()) return;
       if (response.status === 409 && sentShipId === playerServerShipId) {
-        const stateResponse = await fetch(gameEndpoint("/game/state"), { signal: controller.signal });
+        const { response: stateResponse, snapshot: state } = await fetchSnapshotWithDeadline(
+          gameEndpoint("/game/state"), {}, playerStateRequestTimeoutSeconds * 1000);
         if (stateResponse.ok) {
-          const state = await stateResponse.json();
           if (sentLifeRevision !== playerLifeRevision) return false;
           applyServerGameSnapshot(state);
         }
@@ -6455,7 +6455,6 @@ async function transmitPlayerState() {
       }
       throw new Error(`Player state request failed with ${response.status}`);
     }
-    const snapshot = await response.json();
     if (playerDamageState !== "active" || sentShipId !== playerServerShipId || sentLifeRevision !== playerLifeRevision) return false;
     if (!debugTeleport && reconcilePlayerMotionAcknowledgement(snapshot, motion, sentCrew, sentShipId, sentLifeRevision) === false) return false;
     if (debugTeleport) {
@@ -6468,6 +6467,7 @@ async function transmitPlayerState() {
       }
     }
     document.body.dataset.playerStateSync = "command-ok";
+    delete document.body.dataset.playerStateSyncError;
     return true;
   } catch (error) {
     document.body.dataset.playerStateSync = "error";
@@ -6475,7 +6475,6 @@ async function transmitPlayerState() {
     if (sentShipId === playerServerShipId && sentLifeRevision === playerLifeRevision) blockPlayerMotion("Keine Positionsbestaetigung vom Server. Steuerung und Waffen pausiert.", false, { error: error.message, requested: { x: motion.x, z: motion.z }, ship: sentShipId, life: sentLifeRevision });
     return false;
   } finally {
-    clearTimeout(timeoutId);
     finishHttpRequest("playerState", requestStartedAt);
     playerStateRequestInFlight = false;
     playerStateRequestStartedAt = 0;
@@ -6779,6 +6778,13 @@ function applyServerGameSnapshot(snapshot) {
         playerAwaitingServerAssignment = false;
         playerMotionBlocked = false;
         playerServerSnapshotReceived = true;
+      } else if (playerMotionBlocked && ownShip.state === "active"
+          && Number.isFinite(ownShip.x) && Number.isFinite(ownShip.z)) {
+        // An interrupted POST may already have moved the authoritative ship. Retry
+        // from the fresh server position, keeping controls blocked until a POST is confirmed.
+        alignPlayerBoatToServerShip(ownShip);
+        playerServerTarget = null;
+        document.body.dataset.playerStateSync = "resynchronizing";
       } else if (crewState && crewState.station !== "bridge") {
         updatePlayerServerTarget(ownShip, snapshot.t);
       } else {
@@ -6862,9 +6868,9 @@ function applyServerGameSnapshot(snapshot) {
 async function checkServerRestart() {
   if (serverRestartPending) return true;
   try {
-    const response = await fetch(getGameStateEndpoint(), { cache: "no-store" });
+    const { response, snapshot } = await fetchSnapshotWithDeadline(
+      getGameStateEndpoint(), { cache: "no-store" }, playerStateRequestTimeoutSeconds * 1000);
     if (!response.ok) return false;
-    const snapshot = await response.json();
     if (gameState.instanceId && snapshot.instanceId && gameState.instanceId !== snapshot.instanceId) {
       applyServerGameSnapshot(snapshot);
     }
@@ -9508,8 +9514,8 @@ function beginEnemySinking(motion, side, time) {
   motion.rollImpulse = motion.sinkSide * (fromCriticalShipHit ? 0.06 : fromCannonShipHit ? 0.12 : 0.5);
   motion.sinkRollStart = fromCriticalShipHit ? 0.0 : fromCannonShipHit ? 0.03 : 0.12;
   motion.sinkRollAmount = fromCriticalShipHit ? 1.08 : fromCannonShipHit ? 1.28 : 1.45;
-  motion.sinkDuration = fromCriticalShipHit ? 12.6 : fromCannonShipHit ? 10.6 : 11.2;
-  if ((fromCriticalShipHit || fromCannonShipHit) && !motion.submergedSinking) {
+  motion.sinkDuration = fromCriticalShipHit ? 20 : fromCannonShipHit ? 18 : 19;
+  if (!motion.submergedSinking) {
     createGunfireSinkingFoam(torpedoSystem, motion.root.position, motion.heading, motion.sinkDuration);
   }
   motion.timers.forEach((timer) => window.clearTimeout(timer));
@@ -9660,7 +9666,7 @@ function updateEnemySinking(motion, dt, time) {
   const forward = new Vector3(Math.sin(motion.heading), 0, Math.cos(motion.heading));
   motion.root.position.addInPlace(forward.scale(motion.speed * dt));
 
-  const t = clamp(motion.sinkAge / (motion.sinkDuration ?? 5.2), 0, 1);
+  const t = clamp(motion.sinkAge / (motion.sinkDuration ?? 19), 0, 1);
   const ease = easeInOutCubic(t);
   const roll = motion.sinkSide * ((motion.sinkRollStart ?? 0.12) + ease * (motion.sinkRollAmount ?? 1.45)) + motion.rollImpulse;
   const pitch = -ease * 0.28 + Math.sin(time * 1.7) * (1 - t) * 0.025;
@@ -9734,6 +9740,9 @@ function beginPlayerSinking(hitPosition, now, damageMessage = null) {
   playerSinkStartTime = now;
   playerSinkStartY = boat.root.position.y;
   playerSinkSide = getPlayerSinkSide(hitPosition, boat.root.position, heading);
+  if (!submarineMode || playerSinkStartY >= submarineWaterlineY - 0.1) {
+    createGunfireSinkingFoam(torpedoSystem, boat.root.position, heading, 18);
+  }
   engineOrder = 2;
   heldRudderDirection = 0;
   rudderDegrees = 0;
@@ -9747,7 +9756,7 @@ function beginPlayerSinking(hitPosition, now, damageMessage = null) {
 
 function updatePlayerSinking(playerBoat, now) {
   const age = now - playerSinkStartTime;
-  const t = clamp(age / 4.6, 0, 1);
+  const t = clamp(age / 18, 0, 1);
   const ease = easeInOutCubic(t);
   const bob = Math.sin(now * 3.4) * (1 - t) * 0.05;
 
@@ -10397,6 +10406,9 @@ function installScenarioTestHooks() {
     setStation(station) {
       setBattleStation(String(station ?? "bridge"));
       return stationSnapshot();
+    },
+    motionSyncForTest() {
+      return { blocked: playerMotionBlocked, warning: motionSyncWarningText };
     },
     sinkingFoamForTest(start = false) {
       if (start) createGunfireSinkingFoam(torpedoSystem, boat.root.position, heading, 4.6);

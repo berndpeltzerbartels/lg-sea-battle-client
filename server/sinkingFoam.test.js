@@ -25,7 +25,7 @@ test('gunfire sinking foam has a fixed budget and stays at the surface independe
     assert.equal(effect.lifetime, 8.1);
   }
 });
-test('foam starts once for surface gunfire sinking, not torpedoes or submerged wrecks', () => {
+test('foam starts once for surface gunfire sinking, including torpedoes, but not submerged wrecks', () => {
   let calls = 0;
   const begin = new Function('submarineWaterlineY', 'createGunfireSinkingFoam', 'torpedoSystem',
     'updateEnemyBowWake', `${functionSource('beginEnemySinking')}; return beginEnemySinking;`)(
@@ -33,13 +33,14 @@ test('foam starts once for surface gunfire sinking, not torpedoes or submerged w
   for (const state of ['ship-critical-hit', 'ship-cannon-hit']) {
     const motion = { state, root: { position: Vector3.Zero() }, timers: [], heading: 0 };
     begin(motion, 1, 0);
+    assert.ok(motion.sinkDuration >= 18);
     begin(motion, 1, 0);
   }
   assert.equal(calls, 2);
   for (const [state, vehicleType, y] of [['active', 'torpedo-boat', 0], ['ship-cannon-hit', 'submarine', -5]]) {
     begin({ state, vehicleType, root: { position: new Vector3(0, y, 0) }, timers: [] }, 1, 0);
   }
-  assert.equal(calls, 2);
+  assert.equal(calls, 3);
 });
 
 for (const weapon of ['Cannon', 'Critical']) {
@@ -71,3 +72,22 @@ for (const weapon of ['Cannon', 'Critical']) {
     assert.equal(foam, 2);
   });
 }
+
+test('own surface ship creates foam once, deep submarine does not', () => {
+  for (const [submarineMode, y, expected] of [[false, 0, 1], [true, 0, 1], [true, -5, 0]]) {
+    let calls = 0;
+    const begin = new Function('submarineMode', 'createGunfireSinkingFoam', `
+      let playerDamageState = 'active', playerSinkStartTime, playerSinkStartY, playerSinkSide;
+      let engineOrder, heldRudderDirection, rudderDegrees, turnVelocity = 0, speed = 0;
+      const submarineWaterlineY = 0, heading = 0, playerServerShipId = 'own', pendingPlayerServerShip = null;
+      const boat = { root: { position: { x: 0, y: ${y}, z: 0 } } }, torpedoSystem = {};
+      const invalidatePlayerMotionLife = () => {}, sendClientGameEvent = () => {};
+      const getPlayerSinkSide = () => 1, updateSinkingWaterOverlay = () => {};
+      ${functionSource('beginPlayerSinking')}
+      return beginPlayerSinking;
+    `)(submarineMode, (_system, _position, _heading, duration) => { calls++; assert.equal(duration, 18); });
+    begin(null, 0);
+    begin(null, 1);
+    assert.equal(calls, expected);
+  }
+});
