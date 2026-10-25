@@ -76,3 +76,11 @@ test('underwater-only effects cannot be heard above water and mute on surfacing'
     audio.dispose();
   } finally { globalThis.fetch = original; }
 });
+
+test('heavy explosion distance profile is stronger at combat distance without increasing maximum hearing range', () => {
+  const listener = { x: 0, z: 0, heading: 0 };
+  const ordinary = cannonSpatialMix({ x: 500, z: 0 }, listener);
+  const heavy = cannonSpatialMix({ x: 500, z: 0 }, listener, 3);
+  assert.ok(heavy.gain > ordinary.gain * 4);
+  assert.equal(cannonSpatialMix({ x: 1200, z: 0 }, listener, 3).gain, 0);
+});

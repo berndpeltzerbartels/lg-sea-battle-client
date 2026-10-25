@@ -1,9 +1,12 @@
 import { flakSpatialMix } from './flakSound.js';
 
 // Longer hearing range than flak, with the same inexpensive stereo/filter model.
-export function cannonSpatialMix(position, listener) {
-  const mix = flakSpatialMix({ x: listener.x + (position.x - listener.x) / 2,
-    z: listener.z + (position.z - listener.z) / 2 }, listener);
+export function cannonSpatialMix(position, listener, rangeScale = 1) {
+  const mix = flakSpatialMix({ x: listener.x + (position.x - listener.x) / (2 * rangeScale),
+    z: listener.z + (position.z - listener.z) / (2 * rangeScale) }, listener);
+  const distance = Math.hypot(position.x - listener.x, position.z - listener.z);
+  if (distance >= 1200) mix.gain = 0;
+  else if (rangeScale > 1) mix.gain *= Math.min(1, (1200 - distance) / 300);
   return { ...mix, gain: mix.gain * 1.6 };
 }
 
@@ -20,14 +23,14 @@ export function createCannonSound({ context, destination = context.destination, 
     for (const node of [v.source, v.filter, v.gain, v.pan]) node?.disconnect();
   }
   function apply(v) {
-    const mix = cannonSpatialMix(v.own ? listener : v.position, listener);
+    const mix = cannonSpatialMix(v.own ? listener : v.position, listener, v.rangeScale);
     mix.gain *= v.strength;
     if (v.underwaterOnly) {
       mix.gain = listener.underwater ? mix.gain * 5 : 0;
       mix.frequency = 1500;
     }
     v.priority = mix.gain;
-    v.gain.gain.setTargetAtTime(mix.gain / (v.own ? 1 : Math.sqrt(voices.size)), context.currentTime, .015);
+    v.gain.gain.setTargetAtTime(mix.gain / (v.own || v.noDucking ? 1 : Math.sqrt(voices.size)), context.currentTime, .015);
     v.filter.frequency.setTargetAtTime(mix.frequency, context.currentTime, .03);
     v.pan?.pan.setTargetAtTime(mix.pan, context.currentTime, .03);
   }
@@ -46,7 +49,7 @@ export function createCannonSound({ context, destination = context.destination, 
       if (!buffers.length || disposed || context.state !== 'running' || seen.has(id)) return;
       seen.add(id);
       if (seen.size > 128) seen.delete(seen.values().next().value);
-      const mix = cannonSpatialMix(own ? listener : position, listener);
+      const mix = cannonSpatialMix(own ? listener : position, listener, options.rangeScale ?? 1);
       const strength = options.gain ?? 1;
       mix.gain *= strength;
       if (options.underwaterOnly) {
@@ -71,9 +74,9 @@ export function createCannonSound({ context, destination = context.destination, 
       source.connect(filter); filter.connect(gain);
       if (pan) { gain.connect(pan); pan.connect(destination); }
       else gain.connect(destination);
-      const voice = { source, filter, gain, pan, position: { x: position.x, z: position.z }, own, strength, underwaterOnly: !!options.underwaterOnly };
+      const voice = { source, filter, gain, pan, position: { x: position.x, z: position.z }, own, strength, underwaterOnly: !!options.underwaterOnly, rangeScale: options.rangeScale ?? 1, noDucking: !!options.noDucking };
       voices.set(id, voice);
-      gain.gain.value = mix.gain / (own ? 1 : Math.sqrt(voices.size));
+      gain.gain.value = mix.gain / (own || options.noDucking ? 1 : Math.sqrt(voices.size));
       filter.frequency.value = mix.frequency;
       if (pan) pan.pan.value = mix.pan;
       apply(voice);

@@ -154,3 +154,9 @@ pressure thump, water trimmed to 480 ms with fade from 120 ms and delayed
 140 ms. Total 620 ms instead of 3.16 seconds; master gain 0.7 (about -3 dB),
 with quieter thump and splash. Submarine launch and aircraft water-entry
 recording are unchanged.
+
+Torpedo impact correction: both ship and coastline impacts always use the
+heavy sample with a defined attack (not the rumble-only variant), gain 2.4
+instead of 1.1, gentler distance loss (distance scale 3) and no voice-count
+ducking. Maximum hearing range stays 1200 units, eight explosion voices and
+the shared peak compressor remain. Underwater-only audibility is unchanged.

@@ -37,6 +37,8 @@ export function createExplosionEvents(emit) {
           options = { variant: 3 + v, rate: .85, gain: .7 };
         } else if (kind === 'cannon') {
           options = { variant: 6, rate: .9, gain: 1 };
+        } else if (family === 'torpedo') {
+          options = { variant: 6, rate: .72, gain: 2.4, rangeScale: 3, noDucking: true };
         } else {
           options = { variant: v % 2 ? 7 : 6, rate: .72, gain: 1.1 };
         }

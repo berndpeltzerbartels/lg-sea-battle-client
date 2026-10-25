@@ -48,3 +48,19 @@ test('deep submarine hits select underwater-only sound and collision prioritizes
   assert.equal(calls[1][3].variant, 9);
   assert.equal(calls[1][2], true);
 });
+
+test('torpedo ship and coast hits retain a strong attack and reduced distance loss', () => {
+  const calls = [];
+  const events = createExplosionEvents((...args) => calls.push(args));
+  events.consume({ instanceId: 'loud-torpedo', t: 10, torpedoImpacts: [
+    { id: 'ship', reason: 'ship-hit', x: 500, z: 0, t: 10 },
+    { id: 'coast', reason: 'land-hit', x: 500, z: 0, t: 10 }
+  ] }, 'own');
+  assert.equal(calls.length, 2);
+  for (const [, , , options] of calls) {
+    assert.equal(options.variant, 6, 'use explosion attack rather than a rumble-only recording');
+    assert.ok(options.gain > 2);
+    assert.equal(options.rangeScale, 3);
+    assert.equal(options.noDucking, true);
+  }
+});
