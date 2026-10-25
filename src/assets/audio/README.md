@@ -148,3 +148,9 @@ white-noise air release (6 ms attack, 390 ms decay), short 65 Hz pressure thump,
 then the supplied water-entry splash delayed 180 ms. Mix with peak limit 0.75.
 The original submarine launch recording remains unchanged. Local and remote
 launches select their buffer from the firing vessel type; no runtime synthesis.
+
+Torpedo-boat launch shortened after listening: 250 ms air release, 100 ms
+pressure thump, water trimmed to 480 ms with fade from 120 ms and delayed
+140 ms. Total 620 ms instead of 3.16 seconds; master gain 0.7 (about -3 dB),
+with quieter thump and splash. Submarine launch and aircraft water-entry
+recording are unchanged.
