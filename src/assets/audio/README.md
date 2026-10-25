@@ -168,3 +168,11 @@ then align peak to -9.5 dB to preserve the strengthened impact level. Play at
 rate 1 (pitch changes already baked in). Ship/coast torpedo impacts select
 variants 11–13. Native underwater-only variant remains unchanged. One source
 per impact, same eight-voice budget, no extra runtime layers or filters.
+
+Torpedo/depth-charge balance: torpedo gain reduced 2.4 -> 1.45 (about -4.4 dB).
+Depth charges now use three related wet variants (14–16), gain 1.25 instead
+of 1.1, rate 0.88 for a slightly lower pitch, same distance profile as torpedoes.
+Prepared depth-charge variants mix 0.9 of the corresponding torpedo explosion
+with an extra 0.45 water-explosion layer at rate 0.85 delayed 150 ms, peak
+aligned to -9.5 dB. Thus depth charges stay a little quieter than torpedoes,
+with more splash, while keeping one runtime source per event.

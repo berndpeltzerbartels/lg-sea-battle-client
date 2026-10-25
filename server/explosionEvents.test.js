@@ -60,8 +60,22 @@ test('torpedo ship and coast hits retain a strong attack and reduced distance lo
   for (const [, , , options] of calls) {
     assert.ok(options.variant >= 11 && options.variant <= 13, 'use explosion attack with a prepared water layer');
     assert.equal(options.rate, 1, 'pitch and timing are baked into the mixed recording');
-    assert.ok(options.gain > 2);
+    assert.equal(options.gain, 1.45);
     assert.equal(options.rangeScale, 3);
     assert.equal(options.noDucking, true);
   }
+});
+
+test('depth charges share the wet explosion family but are lower and a little quieter than torpedoes', () => {
+  const calls = [];
+  const events = createExplosionEvents((...args) => calls.push(args));
+  events.consume({ instanceId: 'balance', t: 10,
+    torpedoImpacts: [{ id: 'torpedo', reason: 'ship-hit', x: 0, z: 0, t: 10 }],
+    depthCharges: [{ id: 'depth', exploded: true, explodesAt: 10, x: 0, z: 0 }] }, 'own');
+  const torpedo = calls[0][3], depth = calls[1][3];
+  assert.ok(depth.variant >= 14 && depth.variant <= 16);
+  assert.ok(depth.rate < torpedo.rate);
+  assert.ok(depth.gain < torpedo.gain && depth.gain > torpedo.gain * .8);
+  assert.equal(depth.rangeScale, torpedo.rangeScale);
+  assert.equal(depth.noDucking, true);
 });
