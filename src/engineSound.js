@@ -4,20 +4,22 @@ export function engineMix({ depth, power, active = true, muted = false, submarin
   const level = active && !muted && !slow && load > 0 ? 0.25 + 0.55 * Math.sqrt(load) : 0;
   return {
     rate: 0.55 + 0.45 * load,
+    fanRate: 1,
+    fanGain: active && !muted ? immersion * 0.65 : 0,
     gain: level,
     underwaterGain: Math.sin(immersion * Math.PI / 2) * level,
     surfaceGain: Math.cos(immersion * Math.PI / 2) * level
   };
 }
 
-export function createEngineSound({ surfaceUrl, underwaterUrl, context, report = () => {} }) {
+export function createEngineSound({ surfaceUrl, underwaterUrl, fanUrl, context, report = () => {} }) {
   const voices = [];
   let pending, disposed = false, lastUpdate = -Infinity, retryAt = 0;
-  let mix = { rate: 0.55, gain: 0, surfaceGain: 0, underwaterGain: 0 };
+  let mix = { rate: 0.55, gain: 0, surfaceGain: 0, underwaterGain: 0, fanGain: 0 };
   function apply() {
     if (disposed) return;
     for (const voice of voices) {
-      voice.source.playbackRate.setTargetAtTime(mix.rate, context.currentTime, 0.55);
+      voice.source.playbackRate.setTargetAtTime(voice.channel === "fanGain" ? 1 : mix.rate, context.currentTime, 0.55);
       voice.gain.gain.setTargetAtTime(mix[voice.channel], context.currentTime, 0.35);
     }
   }
@@ -28,7 +30,7 @@ export function createEngineSound({ surfaceUrl, underwaterUrl, context, report =
       const resumed = context.state === 'running' ? Promise.resolve() : context.resume();
       if (!pending && context.currentTime >= retryAt) {
         pending = (async () => {
-          const entries = [[surfaceUrl, 'surfaceGain'], [underwaterUrl, 'underwaterGain']].filter(([url]) => url);
+          const entries = [[surfaceUrl, 'surfaceGain'], [underwaterUrl, 'underwaterGain'], [fanUrl, 'fanGain']].filter(([url]) => url);
           const decoded = await Promise.all(entries.map(async ([url, channel]) => {
             const response = await fetch(url);
             if (!response.ok) throw new Error(`Motor-Sample: HTTP ${response.status}`);

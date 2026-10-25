@@ -1,6 +1,5 @@
-import surfaceEngineUrl from "./assets/audio/ship-diesel-loop.wav?url";
 import { createEngineSound } from "./engineSound.js";
-import submarineEngineUrl from "./assets/audio/submarine-underwater-loop.wav?url";
+import submarineFanUrl from "./assets/audio/submarine-fan-loop.wav?url";
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { fetchSnapshotWithDeadline } from "./snapshotRequest.js";
 import { createMotionSyncHealth } from "./motionSyncHealth.js";
@@ -1406,11 +1405,11 @@ document.getElementById("lookoutAircraftWarningButton")?.addEventListener("click
 window.addEventListener("pointerdown", unlockGameAudio);
 window.addEventListener("keydown", unlockGameAudio);
 const engineSoundToggle = document.getElementById("engineSoundToggle");
-if (!scoutPlaneMode && engineSoundToggle) {
+if (submarineMode && engineSoundToggle) {
   document.body.append(engineSoundToggle);
   engineSoundToggle.hidden = false;
   const label = () => {
-    engineSoundToggle.textContent = engineSoundMuted ? "Motor: aus" : "Motor: an";
+    engineSoundToggle.textContent = engineSoundMuted ? "Ton: aus" : "Ton: an";
     engineSoundToggle.setAttribute("aria-pressed", String(!engineSoundMuted));
   };
   label();
@@ -3524,15 +3523,17 @@ function unlockGameAudio() {
   const Audio = window.AudioContext || window.webkitAudioContext;
   if (!Audio) return;
   depthChargeAudio ??= new Audio();
-  if (!scoutPlaneMode) {
+  if (submarineMode) {
     engineSound ??= createEngineSound({
-      surfaceUrl: surfaceEngineUrl, underwaterUrl: submarineMode ? submarineEngineUrl : null, context: depthChargeAudio,
+      fanUrl: submarineFanUrl, context: depthChargeAudio,
       report: error => {
-        console.warn("[sea-battle] Motorton", error);
+        console.warn("[sea-battle] U-Boot-Ton", error);
         sendClientGameEvent("engine-audio-error", { message: error.message });
       }
     });
     void engineSound.unlock().catch(error => console.warn("[sea-battle] Audiofreigabe", error));
+  } else if (depthChargeAudio.state !== "running") {
+    depthChargeAudio.resume().catch(() => {});
   }
 }
 

@@ -26,7 +26,7 @@ test('one decoded buffer and one looping source survive repeated gestures and sp
     createBufferSource: () => { sources++; return source; } };
   try {
     globalThis.fetch = async () => { loads++; return { ok: true, arrayBuffer: async () => new ArrayBuffer(2) }; };
-    const sound = createEngineSound({ underwaterUrl: '/motor.wav', context });
+    const sound = createEngineSound({ fanUrl: '/fan.wav', context });
     sound.update({ depth: 6, power: 1 });
     await Promise.all([sound.unlock(), sound.unlock()]);
     for (let i = 0; i < 100; i++) sound.update({ depth: 6, power: i / 100 });
@@ -35,6 +35,7 @@ test('one decoded buffer and one looping source survive repeated gestures and sp
     assert.equal(sources, 1);
     assert.equal(source.loop, true);
     assert.equal(source.loopEnd, 11);
+    assert.equal(ramps[0][0], 1, "fan playback keeps original pitch");
     assert.ok(ramps.length <= 4, 'automation is throttled rather than scheduled every frame');
     sound.update({ depth: 6, power: 1, muted: true }, true);
     assert.equal(ramps.at(-1)[0], 0);
@@ -57,4 +58,16 @@ test('surface diesel and submerged engine crossfade by actual depth with constan
   const boat = engineMix({ depth: 6, power: 1, submarine: false });
   assert.equal(boat.underwaterGain, 0);
   assert.equal(boat.surfaceGain, .8);
+});
+
+test('fan is independent of propulsion and uses actual immersion, not commanded depth', () => {
+  for (const power of [0, .05, .5, 1, -1]) {
+    const mix = engineMix({ depth: 6, power, slow: true });
+    assert.equal(mix.fanRate, 1);
+    assert.equal(mix.fanGain, .65);
+  }
+  for (const state of [{ depth: 0 }, { depth: 6, submarine: false },
+    { depth: 6, active: false }, { depth: 6, muted: true }]) {
+    assert.equal(engineMix({ power: 0, ...state }).fanGain, 0);
+  }
 });
