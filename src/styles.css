@@ -5306,3 +5306,18 @@ body.debug-map-expanded .nav-instrument-map {
   font-size: 8px;
   white-space: normal;
 }
+
+.engine-sound-toggle:not([hidden]) {
+  pointer-events: auto;
+  position: fixed;
+  right: 165px;
+  bottom: 12px;
+  z-index: 36;
+  padding: 7px 10px;
+  border: 1px solid #749491;
+  border-radius: 4px;
+  background: #102a30;
+  color: #dce9e5;
+  font: 12px system-ui, sans-serif;
+  cursor: pointer;
+}

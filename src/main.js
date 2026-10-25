@@ -1,3 +1,6 @@
+import surfaceEngineUrl from "./assets/audio/ship-diesel-loop.wav?url";
+import { createEngineSound } from "./engineSound.js";
+import submarineEngineUrl from "./assets/audio/submarine-underwater-loop.wav?url";
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { fetchSnapshotWithDeadline } from "./snapshotRequest.js";
 import { createMotionSyncHealth } from "./motionSyncHealth.js";
@@ -86,6 +89,9 @@ let depthChargeSalvoActive = false;
 let depthChargeSalvoQueued = false;
 let depthChargeRequestPending = false;
 let depthChargeAudio = null;
+let engineSound = null;
+let engineSoundMuted = false;
+try { engineSoundMuted = localStorage.getItem("engineSoundMuted") === "true"; } catch {}
 let depthChargeUnderwater = null;
 let underwaterChargeTestView = false;
 let hotkeySignature = "";
@@ -1397,8 +1403,31 @@ document.getElementById("depthChargeButton")?.addEventListener("click", () => { 
 document.getElementById("lookoutDepthChargeButton")?.addEventListener("click", () => { void dropDepthCharges(); focusGameCanvas(); });
 document.getElementById("lookoutWarningButton")?.addEventListener("click", () => { void warnSubmarineFromLookout(); focusGameCanvas(); });
 document.getElementById("lookoutAircraftWarningButton")?.addEventListener("click", () => { void warnSubmarineFromLookout("aircraft"); focusGameCanvas(); });
-window.addEventListener("pointerdown", unlockDepthChargeAudio, { once: true });
-window.addEventListener("keydown", unlockDepthChargeAudio, { once: true });
+window.addEventListener("pointerdown", unlockGameAudio);
+window.addEventListener("keydown", unlockGameAudio);
+const engineSoundToggle = document.getElementById("engineSoundToggle");
+if (!scoutPlaneMode && engineSoundToggle) {
+  document.body.append(engineSoundToggle);
+  engineSoundToggle.hidden = false;
+  const label = () => {
+    engineSoundToggle.textContent = engineSoundMuted ? "Motor: aus" : "Motor: an";
+    engineSoundToggle.setAttribute("aria-pressed", String(!engineSoundMuted));
+  };
+  label();
+  engineSoundToggle.addEventListener("click", () => {
+    engineSoundMuted = !engineSoundMuted;
+    try { localStorage.setItem("engineSoundMuted", String(engineSoundMuted)); } catch {}
+    unlockGameAudio();
+    updateEngineAudio(true);
+    label();
+    focusGameCanvas();
+  });
+}
+document.addEventListener("visibilitychange", () => updateEngineAudio(true));
+window.addEventListener("pagehide", () => {
+  engineSound?.dispose();
+  engineSound = null;
+});
 const hotkeyLayoutObserver = new ResizeObserver(placeRoleHotkeys);
 for (const element of document.querySelectorAll("#roleHotkeys, .player-list, #lookoutHud, .weapon-elevation")) hotkeyLayoutObserver.observe(element);
 window.addEventListener("resize", () => {
@@ -1535,6 +1564,7 @@ scene.onBeforeRenderObservable.add(() => {
   const frameLogicStarted = performanceLoggingEnabled ? performance.now() : 0;
   const rawFrameSeconds = engine.getDeltaTime() / 1000;
   const dt = Math.min(rawFrameSeconds, maxSimulationFrameSeconds);
+  updateEngineAudio();
   const zoomActivityNow = performance.now();
   if (cannonViewActive && (heldCannonDirection || heldCannonPitchDirection)) weaponZoomIdleTimer.touch(zoomActivityNow);
   if (weaponZoomIdleTimer.expired(zoomActivityNow) && cannonSightLevelIndex > 0) resetWeaponZoom();
@@ -3473,7 +3503,7 @@ async function dropDepthCharges() {
   if (playerMotionBlocked) return;
   if (!canDropDepthCharges() || playerDamageState !== "active" || depthChargeRequestPending || depthChargeSalvoQueued) return;
   // Audio must be unlocked by a user gesture, never by a network event.
-  unlockDepthChargeAudio();
+  unlockGameAudio();
   depthChargeRequestPending = true;
   try {
     const response = await fetch(gameEndpoint("/game/crew/depth-charges"), {
@@ -3489,13 +3519,35 @@ async function dropDepthCharges() {
   } finally { depthChargeRequestPending = false; }
 }
 
-function unlockDepthChargeAudio() {
-  if (playerVehicleType !== "torpedo-boat") return;
+function unlockGameAudio() {
+  if (playerVehicleType !== "torpedo-boat" && !submarineMode) return;
   const Audio = window.AudioContext || window.webkitAudioContext;
-  if (Audio) {
-    depthChargeAudio ??= new Audio();
-    depthChargeAudio.resume().catch(() => {});
+  if (!Audio) return;
+  depthChargeAudio ??= new Audio();
+  if (!scoutPlaneMode) {
+    engineSound ??= createEngineSound({
+      surfaceUrl: surfaceEngineUrl, underwaterUrl: submarineMode ? submarineEngineUrl : null, context: depthChargeAudio,
+      report: error => {
+        console.warn("[sea-battle] Motorton", error);
+        sendClientGameEvent("engine-audio-error", { message: error.message });
+      }
+    });
+    void engineSound.unlock().catch(error => console.warn("[sea-battle] Audiofreigabe", error));
   }
+}
+
+function updateEngineAudio(force = false) {
+  if (!engineSound) return;
+  const orderSpeed = engineOrders[engineOrder].speed;
+  const maximum = orderSpeed < 0 ? Math.abs(engineOrders[0].speed) : (submarineMode ? maxSubmarineForwardSpeed : engineOrders.at(-1).speed);
+  engineSound.update({
+    depth: Math.abs(playerSubmarineDepthOffset),
+    submarine: submarineMode,
+    slow: engineOrder === 3,
+    power: maximum > 0 ? Math.abs(orderSpeed) / maximum : 0,
+    active: playerDamageState === "active" && !document.hidden && !serverRestartPending,
+    muted: engineSoundMuted
+  }, force);
 }
 
 function animateDepthChargeRelease(charge) {
@@ -10406,6 +10458,9 @@ function installScenarioTestHooks() {
     setStation(station) {
       setBattleStation(String(station ?? "bridge"));
       return stationSnapshot();
+    },
+    engineAudioForTest() {
+      return engineSound?.state() ?? null;
     },
     motionSyncForTest() {
       return { blocked: playerMotionBlocked, warning: motionSyncWarningText };
