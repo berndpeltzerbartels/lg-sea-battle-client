@@ -1,26 +1,27 @@
-export function engineMix({ depth, power, active = true, muted = false, submarine = true, slow = false }) {
+export function engineMix({ depth, power, active = true, muted = false, submarine = true, slow = false, deepSubmerged = false, surfacePower = Math.abs(power), surfaceGainScale = 1, interiorFanGain = 0 }) {
   const load = Math.min(1, Math.max(0, Math.abs(power)));
   const immersion = submarine ? Math.min(1, Math.max(0, (depth - 0.1) / 0.7)) : 0;
   const level = active && !muted && !slow && load > 0 ? 0.25 + 0.55 * Math.sqrt(load) : 0;
   return {
     rate: 0.55 + 0.45 * load,
+    surfaceRate: 0.55 + 0.45 * Math.min(2, Math.max(0, surfacePower)),
     fanRate: 1,
-    fanGain: active && !muted ? immersion * 0.65 : 0,
+    fanGain: active && !muted ? (submarine ? immersion * 0.65 : interiorFanGain) : 0,
     gain: level,
-    underwaterGain: Math.sin(immersion * Math.PI / 2) * level,
-    surfaceGain: Math.cos(immersion * Math.PI / 2) * level
+    underwaterGain: deepSubmerged ? 0 : Math.sin(immersion * Math.PI / 2) * level,
+    surfaceGain: active && !muted ? Math.cos(immersion * Math.PI / 2) * (0.25 + 0.55 * Math.sqrt(load)) * surfaceGainScale : 0
   };
 }
 
-export function createEngineSound({ surfaceUrl, underwaterUrl, fanUrl, context, report = () => {} }) {
+export function createEngineSound({ surfaceUrl, underwaterUrl, fanUrl, context, destination = context.destination, report = () => {} }) {
   const voices = [];
   let pending, disposed = false, lastUpdate = -Infinity, retryAt = 0;
-  let mix = { rate: 0.55, gain: 0, surfaceGain: 0, underwaterGain: 0, fanGain: 0 };
+  let mix = { rate: 0.55, gain: 0, surfaceGain: 0, underwaterGain: 0, fanGain: 0, surfaceRate: 0.55 };
   function apply() {
     if (disposed) return;
     for (const voice of voices) {
-      voice.source.playbackRate.setTargetAtTime(voice.channel === "fanGain" ? 1 : mix.rate, context.currentTime, 0.55);
-      voice.gain.gain.setTargetAtTime(mix[voice.channel], context.currentTime, 0.35);
+      voice.source.playbackRate.setTargetAtTime(voice.channel === "fanGain" ? 1 : voice.channel === "surfaceGain" ? mix.surfaceRate : mix.rate, context.currentTime, 0.55);
+      voice.gain.gain.setTargetAtTime(mix[voice.channel] * 0.2, context.currentTime, 0.35);
     }
   }
   return {
@@ -46,7 +47,7 @@ export function createEngineSound({ surfaceUrl, underwaterUrl, fanUrl, context, 
             source.loopStart = 0;
             source.loopEnd = buffer.duration;
             source.connect(gain);
-            gain.connect(context.destination);
+            gain.connect(destination);
             source.start();
             voices.push({ source, gain, channel });
           }

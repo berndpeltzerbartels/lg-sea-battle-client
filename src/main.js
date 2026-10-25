@@ -1,3 +1,26 @@
+import torpedoBoatLaunchUrl from "./assets/audio/torpedo-boat-launch.wav?url";
+import underwaterExplosionUrl from "./assets/audio/explosion-underwater.wav?url";
+import collisionSoundUrl from "./assets/audio/ship-collision.wav?url";
+import waterEntrySoundUrl from "./assets/audio/torpedo-water-entry.wav?url";
+import { createTorpedoSound } from "./torpedoSound.js";
+import torpedoLaunchUrl from "./assets/audio/torpedo-launch.wav?url";
+import torpedoEngineUrl from "./assets/audio/torpedo-engine-loop.wav?url";
+import { createAircraftSound } from "./aircraftSound.js";
+import aircraftEngineUrl from "./assets/audio/aircraft-engine-loop.wav?url";
+import { createExplosionEvents } from "./explosionEvents.js";
+import explosionUrl0 from "./assets/audio/explosion-impact-1.wav?url";
+import explosionUrl1 from "./assets/audio/explosion-impact-2.wav?url";
+import explosionUrl2 from "./assets/audio/explosion-impact-3.wav?url";
+import explosionUrl3 from "./assets/audio/explosion-water-1.wav?url";
+import explosionUrl4 from "./assets/audio/explosion-water-2.wav?url";
+import explosionUrl5 from "./assets/audio/explosion-water-3.wav?url";
+import explosionUrl6 from "./assets/audio/explosion-heavy-1.wav?url";
+import explosionUrl7 from "./assets/audio/explosion-rumble-1.wav?url";
+import { createCannonSound } from "./cannonSound.js";
+import cannonSoundUrl from "./assets/audio/cannon-shot.wav?url";
+import { createFlakSound } from "./flakSound.js";
+import flakSoundUrl from "./assets/audio/flak-burst-loop.wav?url";
+import surfaceDieselUrl from "./assets/audio/surface-diesel-loop.wav?url";
 import submarineMotorUrl from "./assets/audio/submarine-electric-motor-loop.wav?url";
 import { createEngineSound } from "./engineSound.js";
 import submarineFanUrl from "./assets/audio/submarine-fan-loop.wav?url";
@@ -89,7 +112,14 @@ let depthChargeSalvoActive = false;
 let depthChargeSalvoQueued = false;
 let depthChargeRequestPending = false;
 let depthChargeAudio = null;
+let gameAudioOutput = null;
 let engineSound = null;
+let flakSound = null;
+let cannonSound = null;
+let explosionSound = null;
+let aircraftSound = null;
+let torpedoSound = null;
+const explosionEvents = createExplosionEvents((...args) => explosionSound?.shot(...args));
 let engineSoundMuted = false;
 try { engineSoundMuted = localStorage.getItem("engineSoundMuted") === "true"; } catch {}
 let depthChargeUnderwater = null;
@@ -1406,7 +1436,7 @@ document.getElementById("lookoutAircraftWarningButton")?.addEventListener("click
 window.addEventListener("pointerdown", unlockGameAudio);
 window.addEventListener("keydown", unlockGameAudio);
 const engineSoundToggle = document.getElementById("engineSoundToggle");
-if (submarineMode && engineSoundToggle) {
+if (engineSoundToggle) {
   document.body.append(engineSoundToggle);
   engineSoundToggle.hidden = false;
   const label = () => {
@@ -1426,7 +1456,19 @@ if (submarineMode && engineSoundToggle) {
 document.addEventListener("visibilitychange", () => updateEngineAudio(true));
 window.addEventListener("pagehide", () => {
   engineSound?.dispose();
+  flakSound?.dispose();
+  cannonSound?.dispose();
+  explosionSound?.dispose();
+  aircraftSound?.dispose();
+  torpedoSound?.dispose();
   engineSound = null;
+  flakSound = null;
+  cannonSound = null;
+  explosionSound = null;
+  aircraftSound = null;
+  torpedoSound = null;
+  gameAudioOutput?.disconnect();
+  gameAudioOutput = null;
 });
 const hotkeyLayoutObserver = new ResizeObserver(placeRoleHotkeys);
 for (const element of document.querySelectorAll("#roleHotkeys, .player-list, #lookoutHud, .weapon-elevation")) hotkeyLayoutObserver.observe(element);
@@ -3520,15 +3562,63 @@ async function dropDepthCharges() {
 }
 
 function unlockGameAudio() {
-  if (playerVehicleType !== "torpedo-boat" && !submarineMode) return;
   const Audio = window.AudioContext || window.webkitAudioContext;
   if (!Audio) return;
   depthChargeAudio ??= new Audio();
-  if (submarineMode) {
+  if (!gameAudioOutput) {
+    // A single shared limiter prevents simultaneous nearby impacts from clipping.
+    gameAudioOutput = depthChargeAudio.createDynamicsCompressor();
+    gameAudioOutput.threshold.value = -4;
+    gameAudioOutput.knee.value = 0;
+    gameAudioOutput.ratio.value = 20;
+    gameAudioOutput.attack.value = 0.002;
+    gameAudioOutput.release.value = 0.1;
+    gameAudioOutput.connect(depthChargeAudio.destination);
+  }
+  flakSound ??= createFlakSound({ context: depthChargeAudio, destination: gameAudioOutput, url: flakSoundUrl, baseRate: .88,
+    report: error => {
+      console.warn("[sea-battle] Flakton", error);
+      sendClientGameEvent("flak-audio-error", { message: error.message });
+    }
+  });
+  void flakSound.unlock();
+  cannonSound ??= createCannonSound({ context: depthChargeAudio, destination: gameAudioOutput, url: cannonSoundUrl,
+    report: error => {
+      console.warn("[sea-battle] Kanonenton", error);
+      sendClientGameEvent("cannon-audio-error", { message: error.message });
+    }
+  });
+  void cannonSound.unlock();
+  explosionSound ??= createCannonSound({ context: depthChargeAudio, destination: gameAudioOutput, maxVoices: 8,
+    urls: [explosionUrl0, explosionUrl1, explosionUrl2, explosionUrl3, explosionUrl4, explosionUrl5, explosionUrl6, explosionUrl7, underwaterExplosionUrl, collisionSoundUrl, waterEntrySoundUrl],
+    report: error => {
+      console.warn("[sea-battle] Explosionston", error);
+      sendClientGameEvent("explosion-audio-error", { message: error.message });
+    }
+  });
+  void explosionSound.unlock();
+  aircraftSound ??= createAircraftSound({ context: depthChargeAudio, destination: gameAudioOutput, url: aircraftEngineUrl,
+    report: error => {
+      console.warn("[sea-battle] Flugzeugton", error);
+      sendClientGameEvent("aircraft-audio-error", { message: error.message });
+    }
+  });
+  void aircraftSound.unlock();
+  torpedoSound ??= createTorpedoSound({ context: depthChargeAudio, destination: gameAudioOutput,
+    launchUrl: torpedoLaunchUrl, boatLaunchUrl: torpedoBoatLaunchUrl, engineUrl: torpedoEngineUrl,
+    report: error => {
+      console.warn("[sea-battle] Torpedoton", error);
+      sendClientGameEvent("torpedo-audio-error", { message: error.message });
+    }
+  });
+  void torpedoSound.unlock();
+  if (!scoutPlaneMode) {
     engineSound ??= createEngineSound({
-      fanUrl: submarineFanUrl, underwaterUrl: submarineMotorUrl, context: depthChargeAudio,
+      surfaceUrl: surfaceDieselUrl,
+      fanUrl: submarineFanUrl,
+      underwaterUrl: submarineMode ? submarineMotorUrl : null, context: depthChargeAudio, destination: gameAudioOutput,
       report: error => {
-        console.warn("[sea-battle] U-Boot-Ton", error);
+        console.warn("[sea-battle] Schiffston", error);
         sendClientGameEvent("engine-audio-error", { message: error.message });
       }
     });
@@ -3539,12 +3629,46 @@ function unlockGameAudio() {
 }
 
 function updateEngineAudio(force = false) {
+  const listener = {
+    x: boat.root.position.x, y: boat.root.position.y, z: boat.root.position.z,
+    vx: Math.sin(heading) * speed, vz: Math.cos(heading) * speed, vy: scoutPlaneMode ? scoutPlaneVerticalSpeed : 0,
+    heading: heading + (flakViewActive ? flakYaw : cannonViewActive ? cannonYaw : 0),
+    underwater: submarineMode && Math.abs(playerSubmarineDepthOffset) > 0.8,
+    muted: engineSoundMuted || document.hidden
+  };
+  flakSound?.update(listener, force);
+  cannonSound?.update(listener, force);
+  explosionSound?.update(listener, force);
+  if (aircraftSound) {
+    const aircraft = enemyMotions.filter(m => isScoutPlaneMotion(m) && m.id !== playerServerShipId && m.state === "active")
+      .map(m => ({ id: m.id, x: m.root.position.x, y: m.root.position.y, z: m.root.position.z,
+        vx: Math.sin(m.heading) * m.speed, vz: Math.cos(m.heading) * m.speed, vy: m.verticalSpeed ?? 0, speed: m.speed }));
+    if (scoutPlaneMode && playerDamageState === "active") aircraft.push({ id: "own-aircraft", own: true,
+      x: listener.x, y: listener.y, z: listener.z, speed: scoutPlaneTargetSpeed });
+    aircraftSound.update(listener, aircraft, force);
+  }
+  if (torpedoSound) {
+    const torpedoes = [...torpedoSystem.active, ...torpedoSystem.serverVisuals.values()]
+      .filter(t => !t.hit && t.root && !t.root.isDisposed()
+        && (t.launchMode !== "air-drop" || t.airDropSurfaced))
+      .map(t => ({ id: t.id, x: t.root.position.x, y: t.root.position.y, z: t.root.position.z, vy: t.verticalSpeed ?? 0,
+        vx: Math.sin(t.heading) * t.speed, vz: Math.cos(t.heading) * t.speed }));
+    torpedoSound.update(listener, torpedoes, force);
+  }
   if (!engineSound) return;
   const orderSpeed = engineOrders[engineOrder].speed;
   const maximum = orderSpeed < 0 ? Math.abs(engineOrders[0].speed) : (submarineMode ? maxSubmarineForwardSpeed : engineOrders.at(-1).speed);
+  const torpedoInterior = playerVehicleType === "torpedo-boat" && !flakViewActive && !lookoutViewActive;
   engineSound.update({
+    surfaceGainScale: torpedoInterior ? (cannonViewActive ? 0.5 : 0.4) : 1,
+    interiorFanGain: torpedoInterior ? 0.3 : 0,
     depth: Math.abs(playerSubmarineDepthOffset),
     submarine: submarineMode,
+    deepSubmerged: submarineMode && Math.abs(playerSubmarineDepthOffset) > Math.abs(submarineDepthOffsets.periscope) + 0.05,
+    surfacePower: orderSpeed < 0
+      ? Math.abs(orderSpeed) / maximum
+      : Math.min(orderSpeed, submarineMode ? maxSubmarineForwardSpeed : Infinity)
+        / (submarineMode ? maxSubmarineForwardSpeed : engineOrders[7].speed),
     power: maximum > 0 ? Math.abs(orderSpeed) / maximum : 0,
     active: playerDamageState === "active" && !document.hidden && !serverRestartPending,
     muted: engineSoundMuted
@@ -3590,18 +3714,7 @@ function explodeDepthCharge(charge) {
   }
   const strength = Math.max(0, 1 - distance / 100);
   ramShake = Math.max(ramShake, strength * 0.28);
-  if (depthChargeAudio?.state === "running" && strength > 0) {
-    const oscillator = depthChargeAudio.createOscillator();
-    const gain = depthChargeAudio.createGain();
-    const now = depthChargeAudio.currentTime;
-    oscillator.frequency.setValueAtTime(85, now);
-    oscillator.frequency.exponentialRampToValueAtTime(28, now + 0.6);
-    gain.gain.setValueAtTime(strength * 0.25, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
-    oscillator.connect(gain); gain.connect(depthChargeAudio.destination);
-    oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
-    oscillator.start(); oscillator.stop(now + 0.7);
-  }
+
 }
 
 async function alignUnoccupiedCrewWeapons(mode) {
@@ -6783,6 +6896,7 @@ function applyServerGameSnapshot(snapshot) {
 
   const ownShip = snapshot.ships.find((ship) => ship.controlledBy === (crewState?.controller ?? playerId) && ship.teamId === playerTeamId);
   const previousOwnShip = snapshot.ships.find((ship) => ship.id === playerServerShipId);
+  explosionEvents.consume(snapshot, playerServerShipId ?? ownShip?.id);
   for (const hit of snapshot.ramHits ?? []) {
     if (!ownShip || ownShip.state !== "active" || hit.shipId !== ownShip.id || appliedServerRamStops.has(hit.id)) continue;
     appliedServerRamStops.add(hit.id);
@@ -10347,6 +10461,7 @@ function firePlayerFlak() {
   const spreadShot = createSpreadFlakShot(shot, flakSystem.nextId);
   createFlakProjectile(flakSystem, spreadShot.position, spreadShot.velocity, spreadShot.direction);
   createFlakMuzzleFlash(flakSystem, shot.muzzle, shot.direction);
+  flakSound?.shot(playerServerShipId ?? "own", shot.muzzle, true);
   reportPlayerFlakShot(spreadShot);
   document.body.dataset.flakFire = "ok";
   document.body.dataset.flakShots = String(flakSystem.nextId - 1);
@@ -10376,6 +10491,7 @@ function firePlayerCannon() {
     renderTerrainImpact: !playerServerShipId
   });
   createCannonMuzzleBlast(cannonSystem, shot.muzzle, shot.direction);
+  cannonSound?.shot(`local-${cannonSystem.nextId}-${time}`, shot.muzzle, true);
   reportPlayerCannonShot(shot);
   document.body.dataset.cannonFire = "ok";
   document.body.dataset.cannonShots = String(cannonSystem.nextId - 1);
@@ -10459,6 +10575,24 @@ function installScenarioTestHooks() {
     setStation(station) {
       setBattleStation(String(station ?? "bridge"));
       return stationSnapshot();
+    },
+    torpedoAudioForTest(listener, torpedoes, launch) {
+      if (listener) torpedoSound?.update(listener, torpedoes ?? [], true);
+      if (launch) torpedoSound?.launch(launch.id, launch, !!launch.own, launch.vehicleType);
+      return torpedoSound?.state() ?? null;
+    },
+    aircraftAudioForTest() { return aircraftSound?.state() ?? null; },
+    explosionAudioForTest(snapshot, ownShipId) {
+      if (snapshot) explosionEvents.consume(snapshot, ownShipId);
+      return explosionSound?.state() ?? null;
+    },
+    cannonAudioForTest(id, x, z, own = false) {
+      if (id) cannonSound?.shot(id, { x, z }, own);
+      return cannonSound?.state() ?? null;
+    },
+    flakAudioForTest(shipId, x, z, own = false) {
+      if (shipId) flakSound?.shot(shipId, { x, z }, own);
+      return flakSound?.state() ?? null;
     },
     engineAudioForTest() {
       return engineSound?.state() ?? null;
@@ -13216,6 +13350,19 @@ function emphasizeServerCannonProjectile(visual, materials) {
 }
 
 function createRemoteMuzzleEffectForProjectile(snapshot) {
+  if ((!Number.isFinite(snapshot?.firedAt)
+      || !Number.isFinite(lastServerSnapshotTime) || lastServerSnapshotTime - snapshot.firedAt < 0.6)) {
+    const ship = serverShipsById.get(snapshot?.shipId);
+    const x = Number.isFinite(snapshot?.x) ? snapshot.x : ship?.x;
+    const z = Number.isFinite(snapshot?.z) ? snapshot.z : ship?.z;
+    if (Number.isFinite(x) && Number.isFinite(z)) {
+      if (isCannonServerProjectile(snapshot.id)) {
+        cannonSound?.shot(`${snapshot.id}@${snapshot.firedAt}`, { x, z }, snapshot.shipId === playerServerShipId);
+      } else {
+        flakSound?.shot(snapshot.shipId, { x, z }, snapshot.shipId === playerServerShipId);
+      }
+    }
+  }
   if (snapshot?.shipId === playerServerShipId) {
     const cannon = isCannonServerProjectile(snapshot.id);
     // Resolve the muzzle from authoritative aim, not the observer's delayed pose.
@@ -13621,10 +13768,19 @@ function createServerTorpedoVisual(system, snapshot, snapshotReceivedAt = time, 
     });
   }
 
+  // A submerged tube launch has no surface muzzle flash, but still makes sound.
+  if (getServerTorpedoAge(snapshot, snapshotServerTime) < .7 && launch.sourceVehicleType !== "scout-plane") {
+    const ownLaunch = snapshot.shipId === playerServerShipId || snapshot.shipId === pendingPlayerServerShip?.id;
+    const type = launch.sourceVehicleType ?? serverShipsById.get(snapshot.shipId)?.vehicleType
+      ?? (ownLaunch ? playerVehicleType : "torpedo-boat");
+    torpedoSound?.launch(snapshot.id, launch.muzzlePosition ?? root.position, ownLaunch, type);
+  }
   if (launch.showMuzzleEffect) {
     createLaunchPuff(system, launch.puffPosition, launch.heading, launch.tubeSide);
     createMuzzleEffect(system, launch.muzzlePosition, launch.heading, launch.tubeSide, launch.sourceSpeed, {
       torpedoId: snapshot.id,
+      own: snapshot.shipId === playerServerShipId,
+      vehicleType: launch.sourceVehicleType,
       mode: launch.mode
     });
   }
@@ -13901,6 +14057,7 @@ function updateServerTorpedoVisuals(system, dt, now) {
         visual.body?.setEnabled(false);
         visual.nose?.setEnabled(false);
         createAirDroppedTorpedoSplash(system, splashPosition, visual.heading);
+        explosionSound?.shot(`water-entry:${visual.id}`, splashPosition, false, { variant: 10, gain: .8 });
       }
       visual.root.position.addInPlace(forward.scale(step));
       if (visual.launchMode !== "air-drop") {
@@ -14353,6 +14510,7 @@ function createLaunchPuff(system, position, heading, tubeSide) {
 }
 
 function createMuzzleEffect(system, position, heading, tubeSide, sourceSpeed = 0, options = {}) {
+  torpedoSound?.launch(options.torpedoId ?? `local-${system.nextId}`, position, options.own ?? true, options.vehicleType ?? playerVehicleType);
   const forward = getForwardVector(heading);
   const right = getRightVector(heading);
   const side = tubeSide < 0 ? -1 : 1;

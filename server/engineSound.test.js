@@ -36,6 +36,7 @@ test('one decoded buffer and one looping source survive repeated gestures and sp
     assert.equal(source.loop, true);
     assert.equal(source.loopEnd, 11);
     assert.equal(ramps[0][0], 1, "fan playback keeps original pitch");
+    assert.ok(ramps[1][0] < .2, "continuous background must stay well below full-level effects");
     assert.ok(ramps.length <= 4, 'automation is throttled rather than scheduled every frame');
     sound.update({ depth: 6, power: 1, muted: true }, true);
     assert.equal(ramps.at(-1)[0], 0);
@@ -69,5 +70,29 @@ test('fan is independent of propulsion and uses actual immersion, not commanded 
   for (const state of [{ depth: 0 }, { depth: 6, submarine: false },
     { depth: 6, active: false }, { depth: 6, muted: true }]) {
     assert.equal(engineMix({ power: 0, ...state }).fanGain, 0);
+  }
+});
+
+test('deep diving leaves only the constant fan at every engine order', () => {
+  for (const power of [0, .05, .5, 1, -1]) {
+    const mix = engineMix({ depth: 6, power, deepSubmerged: true });
+    assert.equal(mix.underwaterGain, 0);
+    assert.ok(mix.surfaceGain < 1e-9);
+    assert.equal(mix.fanGain, .65);
+    assert.equal(mix.fanRate, 1);
+  }
+  assert.ok(engineMix({ depth: 1.6, power: 1, deepSubmerged: false }).underwaterGain > 0);
+});
+
+test('torpedo boat interior quiets diesel and adds fixed ventilation, exterior retains its mix', () => {
+  for (const power of [0, .3, 1]) {
+    const outside = engineMix({ depth: 0, submarine: false, power });
+    for (const scale of [.4, .5]) {
+      const inside = engineMix({ depth: 0, submarine: false, power, surfaceGainScale: scale, interiorFanGain: .3 });
+      assert.equal(inside.surfaceGain, outside.surfaceGain * scale);
+      assert.equal(inside.fanGain, .3);
+      assert.equal(inside.fanRate, 1);
+    }
+    assert.equal(outside.fanGain, 0);
   }
 });

@@ -25,3 +25,126 @@ fades out at Stop. Full ahead/reverse uses the original pitch.
 to 0.5–8.5 seconds, circular equal-power crossfade for 0.75 seconds, as for the
 fan. Apply +10.5 dB to match the fan's approximate RMS level; both voices retain
 mixing headroom. Actual depth controls audibility, not the selected dive order.
+
+# New surface diesel
+
+`Diesel.m4a` supplied 2026-10-25 replaces the earlier mis-exported surface clip.
+`surface-diesel-loop.wav`: 8.25 seconds mono 48 kHz PCM, source trimmed to
+0.5–9.5 seconds with 0.75-second circular equal-power crossfade and -3.5 dB gain.
+Own surfaced submarine and torpedo boat only. Original pitch corresponds to
+submarine Ahead Full and torpedo-boat Ahead 3/4; higher boat orders raise pitch.
+Fan/electric motor remain separate submerged-only channels. At Stop the surface
+diesel runs at a quiet, low-pitched idle; underwater only the fan remains.
+
+# Flak
+
+`Flak.m4a` contains silence followed by a burst. Trim 2.69–4.08 seconds,
+mono 48 kHz PCM; make a circular 40 ms equal-power crossfade as above.
+`flak-burst-loop.wav` is 1.35 seconds. Sustained fire refreshes a single loop per
+ship, then fades/releases it; maximum eight concurrent sources, own ship first.
+Distant fire uses cheap stereo panning and a low-pass filter, without HRTF,
+reverb or geometry queries. Maximum range 600 world units. Only newly observed
+shots trigger sound, independently of visible remote models; own shots play
+locally and server echoes are deduplicated by the existing shot-event consumer.
+Motor recordings remain own-ship-only. All audio edits stay local for now.
+
+# Cannon
+
+`Kanone.m4a`: remove leading/trailing silence; retain 2.70–6.65 seconds, mono
+48 kHz PCM, fade final 200 ms. `cannon-shot.wav` is a 3.95-second one-shot with
+its natural decay, never looped. Original level retained (peak approximately
+-6 dB). Maximum six overlapping cannon shots, own gun prioritized; duplicate
+events ignored. Double the flak hearing range, stereo and distance filtering.
+Server echo of the local player's shot stays excluded by WeaponShotEvents.
+
+Deep-dive adjustment: below actual periscope depth (+0.05 units tolerance),
+fade the electric motor out regardless of engine order; only the constant fan
+remains. Electric drive still applies at periscope depth. Surface diesel is
+unchanged. This audio adjustment is local only.
+
+Cannon loudness correction: retain more attack and decay, raise cannon gain
+by factor 1.6 (about 4 dB). Own shot is not ducked by the remote voice count.
+Initialize the low-pass cutoff before source.start, avoiding the Web Audio
+350 Hz default muffling the initial blast while the filter ramps up.
+
+# Explosion variants
+
+Eight one-shot PCM samples, peak aligned to approximately -8 dB (maximum boost
+8 dB). `3Explosionen`: split at 3.04–7.50, 7.98–12.80, 13.29–18.00 seconds.
+`3ExplosionenWasser`: 4.06–8.90, 9.42–14.50, 14.99–20.00 seconds. Final fade
+300 ms. `Explosion1`: 3.01–10.00 seconds, final fade 300 ms. `Explosion2` is a
+continuous rumble: retain 3.28–10.28 seconds with a 1.2-second ending fade.
+
+Light ship/flak hits select impact variants, water hits select water variants.
+Cannon hits use the heavy explosion at 0.9 rate, torpedo and depth-charge hits
+use heavy/rumble at 0.72 rate. Own impacts take priority; automatic-weapon hits
+coalesce within 150 ms. Expired projectiles are silent. Eight voices maximum
+across all explosion samples. Deduplicate hit/impact snapshots by projectile ID
+and reset on session change; old retained events do not play on login.
+
+# Deeper cannon firing variant
+
+Current cannon-shot.wav combines the original Kanone 2.70–6.65 seconds played
+at 0.78 rate (gain 0.8), with Explosion1 3.01–6.00 seconds at 0.9 rate, low-pass
+500 Hz, gain 0.7, fade from 2.4 over 0.9 seconds. Mix without normalization,
+limit peaks to 0.9, fade ending at 4.8 for 0.26 seconds. This gives a heavier
+body without allocating an additional runtime source per shot.
+
+Flak sustain correction: use only original 2.80–3.70 seconds, circular 80 ms
+crossfade, resulting 0.82-second loop. The original ending after 3.70 seconds
+was already a release tail and caused a recurring pause during sustained fire.
+
+Torpedo-boat station mix: lookout/flak retain full exterior diesel. Cannon
+uses 0.5 diesel gain, bridge 0.4; both add fixed fan gain 0.3. Exterior stations
+have no fan. Source buffers remain shared; station transitions are smoothed.
+
+Engine/background rebalance: apply master gain 0.2 (approximately -14 dB) to
+all engine and fan channels after station/depth mixing. Weapon and explosion
+levels are unchanged.
+
+Aircraft source `Flugzeug.m4a`: select steady post-pass section 15.2–17.8 seconds,
+mono 48 kHz PCM, 250 ms circular equal-power crossfade (2.35-second loop),
++10 dB preparation gain. Low playback rate 0.70–0.78 gives a deep base engine.
+Own cockpit has no Doppler; remote aircraft use bounded radial relative
+velocity including listener motion and altitude. This is a stylized game-world
+Doppler, not a claim of physically scaled sound propagation. Spatial attenuation
+includes altitude. Maximum four loops; update at 10 Hz, smooth rate changes.
+
+Aircraft level raised from gain 0.16 to 0.65 (about +12 dB) after listening test.
+
+Torpedo launch: Torpesostart.m4a includes several launches. Select clean third
+launch 11.02–14.25 seconds, retain original level, final 250 ms fade.
+Torpedo propulsion: Torpeso-Vorbei.m4a 7.05–7.85 seconds, circular 100 ms
+crossfade yields a 0.7-second engine loop. Actual torpedo position, depth and
+relative velocity control distance, pan and Doppler; no canned pass envelope.
+Max four nearby torpedo engines and four overlapping launches. Propulsion is
+more audible underwater than through the water surface. All changes local.
+
+Further local listening adjustments: remote aircraft gain 2.0 (about +10 dB
+from 0.65), cockpit remains 0.65; distance law unchanged. Flak base playback
+rate 0.88 gives a slightly deeper gunfire sound without changing fire cadence.
+
+Water entry: FälltInsWasser.m4a, 2.12–5.10 seconds, last 300 ms faded. Trigger
+once at actual air-dropped torpedo water-entry transition, not on plane release.
+
+Collision: Kollision.m4a, 3.64–7.10 seconds at rate 0.68, low-pass 1500 Hz,
++5 dB bass at 110 Hz, ending fade, limit to 0.75 peak. Ram events prioritize
+both the own attacker and own target and use the existing explosion budget.
+
+Underwater explosion: Explosion1 3.01–8.50 at rate 0.7 low-pass 650 Hz gain
+0.8, plus 3ExplosionenWasser 4.06–8.00 low-pass 1400 Hz gain 0.3; limit 0.75,
+fade ending. Deep torpedo hits use this variant. It is silent above water,
+also if the listener surfaces during the decay. Native underwater audio does
+not receive the extra surface-to-underwater gain loss used for exterior shots.
+
+Final approved balance: remote aircraft gain 3.5 (another approximately +5 dB);
+cockpit unchanged. Flak gets subtle short early reflections at 47/83/131 ms,
+gains 0.10/0.065/0.035 with dry gain 0.92. Reverb is baked into the loop offline:
+repeat the 0.82-second loop three times, process reflections, keep the middle
+period. This preserves a continuous boundary and adds no runtime audio nodes.
+
+Torpedo-boat launch is a separate prepared one-shot: deterministic filtered
+white-noise air release (6 ms attack, 390 ms decay), short 65 Hz pressure thump,
+then the supplied water-entry splash delayed 180 ms. Mix with peak limit 0.75.
+The original submarine launch recording remains unchanged. Local and remote
+launches select their buffer from the firing vessel type; no runtime synthesis.
