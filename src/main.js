@@ -3640,6 +3640,7 @@ function updateEngineAudio(force = false) {
     vx: Math.sin(heading) * speed, vz: Math.cos(heading) * speed, vy: scoutPlaneMode ? scoutPlaneVerticalSpeed : 0,
     heading: heading + (flakViewActive ? flakYaw : cannonViewActive ? cannonYaw : 0),
     underwater: submarineMode && Math.abs(playerSubmarineDepthOffset) > 0.8,
+    deepSubmerged: submarineMode && Math.abs(playerSubmarineDepthOffset) > Math.abs(submarineDepthOffsets.periscope) + 0.05,
     muted: engineSoundMuted || document.hidden
   };
   flakSound?.update(listener, force);

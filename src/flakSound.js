@@ -4,7 +4,7 @@ export function flakSpatialMix(position, listener) {
   const gain = listener.muted || distance >= 600 ? 0
     : 0.65 * (1 - distance / 600) ** 2 / (1 + distance / 80);
   return {
-    gain: gain * (listener.underwater ? 0.2 : 1),
+    gain: gain * (listener.underwater ? 0 : 1),
     pan: distance > 1 ? Math.max(-1, Math.min(1,
       (dx * Math.cos(listener.heading) - dz * Math.sin(listener.heading)) / distance)) : 0,
     frequency: listener.underwater ? 500 : 6500 / (1 + distance / 100)

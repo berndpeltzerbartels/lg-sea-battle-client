@@ -13,7 +13,7 @@ test('distant flak is quieter and duller, stereo follows heading, underwater is 
   assert.equal(flakSpatialMix({ x: 600, z: 0 }, listener).gain, 0);
   assert.equal(flakSpatialMix({ x: 10, z: 0 }, { ...listener, muted: true }).gain, 0);
   const deep = flakSpatialMix({ x: 10, z: 0 }, { ...listener, underwater: true });
-  assert.ok(deep.gain < near.gain && deep.frequency < near.frequency);
+  assert.equal(deep.gain, 0);
 });
 
 test('sustained fire reuses one source per ship with a strict voice cap and own-ship priority', async () => {

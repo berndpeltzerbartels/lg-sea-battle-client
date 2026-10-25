@@ -8,7 +8,12 @@ test('cannon is audible further away and is muffled underwater', () => {
   assert.equal(cannonSpatialMix({ x: 1200, z: 0 }, listener).gain, 0);
   const normal = cannonSpatialMix({ x: 80, z: 0 }, listener);
   const deep = cannonSpatialMix({ x: 80, z: 0 }, { ...listener, underwater: true });
-  assert.ok(deep.gain < normal.gain && deep.frequency < normal.frequency);
+  assert.equal(deep.gain, 0);
+  const wet = cannonSpatialMix({ x: 80, z: 0 }, { ...listener, underwater: true }, 1, { waterExplosion: true });
+  const deeper = cannonSpatialMix({ x: 80, z: 0 }, { ...listener, underwater: true, deepSubmerged: true }, 1, { waterExplosion: true });
+  assert.equal(wet.gain, normal.gain);
+  assert.equal(deeper.gain, normal.gain);
+  assert.ok(wet.frequency < normal.frequency && deeper.frequency < wet.frequency);
 });
 
 test('cannon plays once per event, preserves shot decay and releases bounded sources', async () => {

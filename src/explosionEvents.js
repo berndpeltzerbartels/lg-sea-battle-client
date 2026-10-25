@@ -1,6 +1,7 @@
 // Sound events are independent of visual effects and remote-model visibility.
 export function createExplosionEvents(emit) {
   let session;
+  const shipStates = new Map();
   const seen = new Set(), bursts = new Map();
   function variant(id) {
     let hash = 0;
@@ -10,7 +11,7 @@ export function createExplosionEvents(emit) {
   return {
     consume(snapshot, ownShipId) {
       const nextSession = `${snapshot.instanceId}:${snapshot.sessionId}`;
-      if (nextSession !== session) { seen.clear(); bursts.clear(); session = nextSession; }
+      if (nextSession !== session) { seen.clear(); bursts.clear(); shipStates.clear(); session = nextSession; }
       function play(family, hit, kind, target = hit.targetShipId) {
         if (!hit?.id || !Number.isFinite(hit.x) || !Number.isFinite(hit.z)) return;
         const key = `${family}:${hit.id}`;
@@ -25,29 +26,36 @@ export function createExplosionEvents(emit) {
           options = { variant: 8, rate: 1, gain: 1, underwaterOnly: true };
         } else if (kind === 'collision') {
           options = { variant: 9, rate: 1, gain: .9 };
-        } else if (kind === 'flak' || kind === 'flak-water') {
+        } else if (kind === 'flak' || kind === 'flak-water' || kind === 'submerged-hit') {
           // Automatic weapons can hit on every projectile; coalesce short bursts.
           const group = `${kind}:${target ?? hit.shipId}`;
           const at = hit.t ?? snapshot.t;
           if (at - (bursts.get(group) ?? -Infinity) < .15) return;
           bursts.set(group, at);
           if (bursts.size > 256) bursts.delete(bursts.keys().next().value);
-          options = { variant: (kind === 'flak-water' ? 3 : 0) + v, rate: 1.1, gain: kind === 'flak-water' ? .25 : .5 };
+          options = kind === 'submerged-hit' ? { variant: 14 + v, rate: .88, gain: .5 } : { variant: (kind === 'flak-water' ? 3 : 0) + v, rate: 1.1, gain: kind === 'flak-water' ? .25 : .5 };
         } else if (kind === 'water') {
           options = { variant: 3 + v, rate: .85, gain: .7 };
         } else if (kind === 'cannon') {
           options = { variant: 6, rate: .9, gain: 1 };
         } else if (family === 'torpedo') {
           options = { variant: 11 + v, rate: 1, gain: 1.45, rangeScale: 3, noDucking: true };
-        } else if (family === 'depth-charge') {
+        } else if (family === 'depth-charge' || kind === 'submarine-destruction') {
           options = { variant: 14 + v, rate: .88, gain: 1.25, rangeScale: 3, noDucking: true };
         } else {
           options = { variant: v % 2 ? 7 : 6, rate: .72, gain: 1.1 };
         }
+        options.waterExplosion = kind === 'water' || kind === 'flak-water' || kind === 'underwater'
+          || kind === 'submarine-destruction' || family === 'torpedo' || family === 'depth-charge'
+          || kind === 'submerged-hit';
         emit(`${session}:${key}`, { x: hit.x, z: hit.z }, own, options);
       }
       // Hit reports carry the target identity; process them before impact duplicates.
-      for (const hit of snapshot.flakHits ?? []) play('projectile', hit, String(hit.id).startsWith('cannon') ? 'cannon' : 'flak');
+      for (const hit of snapshot.flakHits ?? []) {
+        const target = snapshot.ships?.find(ship => ship.id === hit.targetShipId);
+        const submerged = (hit.targetY ?? target?.y ?? hit.y ?? 0) < -.8;
+        play('projectile', hit, submerged ? 'submerged-hit' : String(hit.id).startsWith('cannon') ? 'cannon' : 'flak');
+      }
       for (const hit of snapshot.flakImpacts ?? []) {
         if (hit.reason === 'expired') continue;
         const cannon = String(hit.id).startsWith('cannon');
@@ -58,6 +66,13 @@ export function createExplosionEvents(emit) {
         const target = snapshot.ships?.find(ship => ship.id === hit.targetShipId);
         const underwater = hit.y < -1.2 || target?.vehicleType === 'submarine' && target.y < -1.2;
         play('torpedo', hit, underwater ? 'underwater' : 'heavy');
+      }
+      for (const ship of snapshot.ships ?? []) {
+        if (ship.vehicleType === 'submarine' && ship.state === 'sunk' && shipStates.get(ship.id) === 'active') {
+          play('sinking', { id: `${ship.id}:${snapshot.t}`, x: ship.x, z: ship.z, t: snapshot.t },
+            'submarine-destruction', ship.id);
+        }
+        shipStates.set(ship.id, ship.state);
       }
       for (const hit of snapshot.ramHits ?? []) play('ram', hit, 'collision', hit.shipId === ownShipId ? ownShipId : hit.targetShipId);
       for (const hit of snapshot.bombImpacts ?? []) play('bomb', hit, hit.reason === 'sea-hit' ? 'water' : 'heavy');

@@ -20,7 +20,7 @@ export function createTorpedoSound({ context, destination, launchUrl, boatLaunch
   return {
     unlock: () => Promise.all([start.unlock(), engine.unlock()]),
     launch(id, position, own, vehicleType = "submarine") {
-      start.shot(`launch:${id}`, position, own, { gain: .8, variant: vehicleType === "torpedo-boat" ? 1 : 0 });
+      start.shot(`launch:${id}`, position, own, { gain: .8, waterExplosion: own && vehicleType === "submarine", variant: vehicleType === "torpedo-boat" ? 1 : 0 });
     },
     update(listener, torpedoes, force = false) {
       start.update(listener, force);

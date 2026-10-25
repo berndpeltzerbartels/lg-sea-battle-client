@@ -79,3 +79,24 @@ test('depth charges share the wet explosion family but are lower and a little qu
   assert.equal(depth.rangeScale, torpedo.rangeScale);
   assert.equal(depth.noDucking, true);
 });
+
+
+test('submerged flak hits and a newly sunk submarine produce wet explosions without replaying sunk snapshots', () => {
+  const calls = [];
+  const events = createExplosionEvents((...args) => calls.push(args));
+  const ship = { id: 'sub', vehicleType: 'submarine', state: 'active', x: 1, y: -10, z: 2 };
+  events.consume({ t: 10, ships: [ship] });
+  const snapshot = { t: 11, ships: [{ ...ship, state: 'sunk' }],
+    flakHits: [{ id: 'flak-sub', targetShipId: 'sub', targetY: -10, x: 1, z: 2, t: 11 }] };
+  events.consume(snapshot);
+  events.consume({ ...snapshot, t: 12 });
+  assert.equal(calls.length, 2);
+  for (const call of calls) {
+    assert.ok(call[3].variant >= 14 && call[3].variant <= 16);
+    assert.equal(call[3].waterExplosion, true);
+    assert.equal(call[3].underwaterOnly, undefined, 'the shooter above water also hears the destruction');
+  }
+  const initial = [];
+  createExplosionEvents((...args) => initial.push(args)).consume(snapshot);
+  assert.equal(initial.length, 1, 'joining must not replay an existing wreck explosion');
+});

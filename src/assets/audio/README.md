@@ -176,3 +176,5 @@ Prepared depth-charge variants mix 0.9 of the corresponding torpedo explosion
 with an extra 0.45 water-explosion layer at rate 0.85 delayed 150 ms, peak
 aligned to -9.5 dB. Thus depth charges stay a little quieter than torpedoes,
 with more splash, while keeping one runtime source per event.
+
+Underwater listening: water explosions retain their distance gain and use a 1400 Hz low-pass at actual periscope depth, 450 Hz below it. Gunfire and aircraft are silent underwater. Submerged projectile hits use the depth-charge sample family; an active-to-sunk submarine transition adds a distinct wet destruction explosion, including for the shooter above water. Existing wrecks do not replay this effect on joining.
