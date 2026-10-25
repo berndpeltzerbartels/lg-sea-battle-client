@@ -21,7 +21,7 @@ test('all impact families sound once, duplicate hit/impact reports preserve own-
   assert.equal(calls[1][3].variant, 6);
   assert.ok(calls[2][3].variant >= 3 && calls[2][3].variant < 6);
   assert.equal(calls[4][2], true);
-  assert.ok(calls[4][3].rate < calls[1][3].rate);
+  assert.ok(calls[4][3].variant >= 11 && calls[4][3].variant <= 13);
   assert.equal(calls[6][2], true);
 });
 
@@ -58,7 +58,8 @@ test('torpedo ship and coast hits retain a strong attack and reduced distance lo
   ] }, 'own');
   assert.equal(calls.length, 2);
   for (const [, , , options] of calls) {
-    assert.equal(options.variant, 6, 'use explosion attack rather than a rumble-only recording');
+    assert.ok(options.variant >= 11 && options.variant <= 13, 'use explosion attack with a prepared water layer');
+    assert.equal(options.rate, 1, 'pitch and timing are baked into the mixed recording');
     assert.ok(options.gain > 2);
     assert.equal(options.rangeScale, 3);
     assert.equal(options.noDucking, true);

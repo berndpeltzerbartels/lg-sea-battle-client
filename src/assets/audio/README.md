@@ -160,3 +160,11 @@ heavy sample with a defined attack (not the rumble-only variant), gain 2.4
 instead of 1.1, gentler distance loss (distance scale 3) and no voice-count
 ducking. Maximum hearing range stays 1200 units, eight explosion voices and
 the shared peak compressor remain. Underwater-only audibility is unchanged.
+
+Water-rich torpedo impacts: three prepared variants combine heavy explosion
+at rate 0.72, low-pass 1800 Hz, gain 0.65 with the corresponding supplied
+water-explosion sample at rate 0.85, delayed 80 ms, gain 1.0. Limit the mix
+then align peak to -9.5 dB to preserve the strengthened impact level. Play at
+rate 1 (pitch changes already baked in). Ship/coast torpedo impacts select
+variants 11–13. Native underwater-only variant remains unchanged. One source
+per impact, same eight-voice budget, no extra runtime layers or filters.

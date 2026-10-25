@@ -37,7 +37,7 @@ test('submerged fan runs at fixed pitch even at Stop and Slow, and can be muted'
   expect((await sound()).underwaterGain).toBe(0);
   expect((await sound()).surfaceGain).toBeGreaterThan(.7);
   expect((await sound()).surfaceRate).toBe(1);
-  expect(downloads).toHaveLength(20);
+  expect(downloads).toHaveLength(23);
   expect(downloads.some(url => url.includes('submarine-fan-loop'))).toBe(true);
   expect(downloads.some(url => url.includes('submarine-electric-motor-loop'))).toBe(true);
   expect(errors).toEqual([]);
@@ -73,6 +73,6 @@ test('torpedo boat keeps exterior diesel and mixes quieter ventilated interior s
   await page.evaluate(() => window.seaBattleScenarioTest.setStation('bridge'));
   await expect.poll(async () => (await sound()).surfaceGain).toBeCloseTo(exteriorLevel * .4);
   expect((await sound()).fanGain).toBe(.3);
-  expect(downloads).toHaveLength(19);
+  expect(downloads).toHaveLength(22);
   expect(downloads.some(url => url.includes('surface-diesel-loop'))).toBe(true);
 });
