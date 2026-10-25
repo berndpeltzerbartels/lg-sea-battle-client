@@ -9,6 +9,7 @@ export function cannonSpatialMix(position, listener, rangeScale = 1, options = {
   else if (rangeScale > 1) mix.gain *= Math.min(1, (1200 - distance) / 300);
   if (options.underwaterOnly && !listener.underwater
       || listener.underwater && !options.waterExplosion && !options.underwaterOnly) mix.gain = 0;
+  if (listener.underwater) mix.gain *= options.underwaterGain ?? 1;
   mix.frequency = Math.min(mix.frequency, options.lowpassHz ?? Infinity);
   if (listener.underwater) mix.frequency = Math.min(mix.frequency, listener.deepSubmerged ? 450 : 1400);
   return { ...mix, gain: mix.gain * 1.6 };
@@ -70,7 +71,7 @@ export function createCannonSound({ context, destination = context.destination, 
       source.connect(filter); filter.connect(gain);
       if (pan) { gain.connect(pan); pan.connect(destination); }
       else gain.connect(destination);
-      const voice = { source, filter, gain, pan, position: { x: position.x, z: position.z }, own, strength, lowpassHz: options.lowpassHz, waterExplosion: !!options.waterExplosion, underwaterOnly: !!options.underwaterOnly, rangeScale: options.rangeScale ?? 1, noDucking: !!options.noDucking };
+      const voice = { source, filter, gain, pan, position: { x: position.x, z: position.z }, own, strength, underwaterGain: options.underwaterGain, lowpassHz: options.lowpassHz, waterExplosion: !!options.waterExplosion, underwaterOnly: !!options.underwaterOnly, rangeScale: options.rangeScale ?? 1, noDucking: !!options.noDucking };
       voices.set(id, voice);
       gain.gain.value = mix.gain / (own || options.noDucking ? 1 : Math.sqrt(voices.size));
       filter.frequency.value = mix.frequency;

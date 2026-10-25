@@ -103,3 +103,16 @@ test('darker torpedo filtering retains gain and respects stronger deep-water fil
   assert.equal(deep.frequency, 450);
   assert.equal(deep.gain, dark.gain);
 });
+
+
+test('depth charge underwater boost preserves surface gain, deep filtering and mute', () => {
+  const position = { x: 30, z: 0 }, listener = { x: 0, z: 0, heading: 0 };
+  const options = { waterExplosion: true, underwaterGain: 2 };
+  const surface = cannonSpatialMix(position, listener, 3, options);
+  assert.equal(surface.gain, cannonSpatialMix(position, listener, 3).gain);
+  const submerged = { ...listener, underwater: true, deepSubmerged: true };
+  assert.equal(cannonSpatialMix(position, submerged, 3, options).gain, surface.gain * 2);
+  assert.equal(cannonSpatialMix(position, submerged, 3, { ...options, underwaterGain: 3 }).gain, surface.gain * 3);
+  assert.equal(cannonSpatialMix(position, submerged, 3, options).frequency, 450);
+  assert.equal(cannonSpatialMix(position, { ...submerged, muted: true }, 3, options).gain, 0);
+});

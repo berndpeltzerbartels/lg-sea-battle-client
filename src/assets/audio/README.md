@@ -180,3 +180,5 @@ with more splash, while keeping one runtime source per event.
 Underwater listening: water explosions retain their distance gain and use a 1400 Hz low-pass at actual periscope depth, 450 Hz below it. Gunfire and aircraft are silent underwater. Submerged projectile hits use the depth-charge sample family; an active-to-sunk submarine transition adds a distinct wet destruction explosion, including for the shooter above water. Existing wrecks do not replay this effect on joining.
 
 Torpedo explosions additionally cap the existing low-pass filter at 1000 Hz to soften the sharp, gunshot-like high end. Playback rate and gain stay unchanged; deep-water filtering can lower the cutoff further. Applies to surface and submerged torpedo impacts, without changing depth charges or adding audio nodes.
+
+Depth charges now gain +6 dB (2x amplitude) for underwater listeners, +9.5 dB (3x) when the server reports damage to the own ship. Surface gain, distance falloff and depth filtering stay unchanged. Boost is applied at playback and on listener updates; mute still wins and the shared output limiter remains active.

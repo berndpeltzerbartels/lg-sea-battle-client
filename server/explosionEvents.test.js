@@ -101,3 +101,16 @@ test('submerged flak hits and a newly sunk submarine produce wet explosions with
   createExplosionEvents((...args) => initial.push(args)).consume(snapshot);
   assert.equal(initial.length, 1, 'joining must not replay an existing wreck explosion');
 });
+
+
+test('depth charges boost underwater listening especially when hitting the own submarine', () => {
+  const calls = [];
+  createExplosionEvents((...args) => calls.push(args)).consume({ t: 10, depthCharges: [
+    { id: 'near', x: 30, z: 0, exploded: true, explodesAt: 10, targetShipIds: [] },
+    { id: 'hit', x: 0, z: 0, exploded: true, explodesAt: 10, targetShipIds: ['own'] }
+  ] }, 'own');
+  assert.equal(calls[0][3].underwaterGain, 2);
+  assert.equal(calls[1][3].underwaterGain, 3);
+  assert.equal(calls[1][2], true);
+  assert.equal(calls[1][3].noDucking, true);
+});
