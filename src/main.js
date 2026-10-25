@@ -1,3 +1,4 @@
+import submarineMotorUrl from "./assets/audio/submarine-electric-motor-loop.wav?url";
 import { createEngineSound } from "./engineSound.js";
 import submarineFanUrl from "./assets/audio/submarine-fan-loop.wav?url";
 import { Engine } from "@babylonjs/core/Engines/engine";
@@ -3525,7 +3526,7 @@ function unlockGameAudio() {
   depthChargeAudio ??= new Audio();
   if (submarineMode) {
     engineSound ??= createEngineSound({
-      fanUrl: submarineFanUrl, context: depthChargeAudio,
+      fanUrl: submarineFanUrl, underwaterUrl: submarineMotorUrl, context: depthChargeAudio,
       report: error => {
         console.warn("[sea-battle] U-Boot-Ton", error);
         sendClientGameEvent("engine-audio-error", { message: error.message });
@@ -3544,7 +3545,6 @@ function updateEngineAudio(force = false) {
   engineSound.update({
     depth: Math.abs(playerSubmarineDepthOffset),
     submarine: submarineMode,
-    slow: engineOrder === 3,
     power: maximum > 0 ? Math.abs(orderSpeed) / maximum : 0,
     active: playerDamageState === "active" && !document.hidden && !serverRestartPending,
     muted: engineSoundMuted
