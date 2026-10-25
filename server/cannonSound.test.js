@@ -89,3 +89,17 @@ test('heavy explosion distance profile is stronger at combat distance without in
   assert.ok(heavy.gain > ordinary.gain * 4);
   assert.equal(cannonSpatialMix({ x: 1200, z: 0 }, listener, 3).gain, 0);
 });
+
+
+test('darker torpedo filtering retains gain and respects stronger deep-water filtering', () => {
+  const listener = { x: 0, z: 0, heading: 0 };
+  const position = { x: 50, z: 0 };
+  const options = { waterExplosion: true, lowpassHz: 1000 };
+  const normal = cannonSpatialMix(position, listener, 3);
+  const dark = cannonSpatialMix(position, listener, 3, options);
+  assert.equal(dark.gain, normal.gain);
+  assert.equal(dark.frequency, 1000);
+  const deep = cannonSpatialMix(position, { ...listener, underwater: true, deepSubmerged: true }, 3, options);
+  assert.equal(deep.frequency, 450);
+  assert.equal(deep.gain, dark.gain);
+});

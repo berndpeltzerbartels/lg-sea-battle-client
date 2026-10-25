@@ -45,6 +45,7 @@ export function createExplosionEvents(emit) {
         } else {
           options = { variant: v % 2 ? 7 : 6, rate: .72, gain: 1.1 };
         }
+        if (family === 'torpedo') options.lowpassHz = 1000;
         options.waterExplosion = kind === 'water' || kind === 'flak-water' || kind === 'underwater'
           || kind === 'submarine-destruction' || family === 'torpedo' || family === 'depth-charge'
           || kind === 'submerged-hit';

@@ -61,6 +61,7 @@ test('torpedo ship and coast hits retain a strong attack and reduced distance lo
     assert.ok(options.variant >= 11 && options.variant <= 13, 'use explosion attack with a prepared water layer');
     assert.equal(options.rate, 1, 'pitch and timing are baked into the mixed recording');
     assert.equal(options.gain, 1.45);
+    assert.equal(options.lowpassHz, 1000);
     assert.equal(options.rangeScale, 3);
     assert.equal(options.noDucking, true);
   }
