@@ -26,10 +26,10 @@
   "periscope-water-trace": {
     "pixelRatio": 1
   },
-  "underwater-combat": {
+  "sonar-close-surface-ship": {
     "pixelRatio": 1
   },
-  "sonar-close-surface-ship": {
+  "depth-charge-underwater": {
     "pixelRatio": 1
   }
 }

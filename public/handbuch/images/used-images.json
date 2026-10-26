@@ -11,6 +11,7 @@
   "boat-stations.png",
   "depth-charge-plume.png",
   "depth-charge-salvo.png",
+  "depth-charge-underwater.png",
   "lookout-aim-request.png",
   "map-players.png",
   "periscope-from-bridge.png",
@@ -22,6 +23,5 @@
   "sub-forward.png",
   "sub-help.png",
   "sub-observation.png",
-  "sub-sonar.png",
-  "underwater-combat.png"
+  "sub-sonar.png"
 ]
