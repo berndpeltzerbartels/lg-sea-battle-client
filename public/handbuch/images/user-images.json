@@ -34,5 +34,11 @@
   },
   "submarine-torpedo-duel": {
     "pixelRatio": 1
+  },
+  "torpedo-boat-echo-location": {
+    "pixelRatio": 1
+  },
+  "torpedo-boat-echo-panel": {
+    "pixelRatio": 1
   }
 }
