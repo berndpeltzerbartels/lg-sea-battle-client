@@ -1,3 +1,4 @@
+import { createSternFoam } from './sternFoam.js';
 import depthChargeExplosionUrl1 from "./assets/audio/depth-charge-explosion-1.wav?url";
 import depthChargeExplosionUrl2 from "./assets/audio/depth-charge-explosion-2.wav?url";
 import depthChargeExplosionUrl3 from "./assets/audio/depth-charge-explosion-3.wav?url";
@@ -7442,6 +7443,7 @@ function updateOrCreateRemoteShip(ship) {
 function disposeRemoteMotion(motion) {
   motion.timers?.forEach((timer) => window.clearTimeout(timer));
   hideEnemyWake(motion.bowWake);
+  motion.bowWake?.sternFoam?.dispose();
   hideEnemyWake(motion.periscopeWake);
   motion.bowWake?.root?.getChildMeshes?.().forEach((mesh) => mesh.dispose());
   motion.bowWake?.root?.dispose?.();
@@ -10167,6 +10169,7 @@ function updateEnemyBowWake(wake, speed, time, dt = 1 / 60, sourcePosition = nul
   wake.strength += (targetStrength - wake.strength) * Math.min(1, dt * response);
   const wakeIntensity = wake.strength;
   const wakeLift = wakeIntensity * 0.018;
+  if (sourcePosition) wake.sternFoam?.update(sourcePosition, sourceHeading, forwardSpeed, wakeIntensity, dt);
   wake.root.setEnabled(forwardSpeed > 0.02 || wakeIntensity > 0.025);
   if (sourcePosition) {
     wake.root.position.x = sourcePosition.x;
@@ -10326,6 +10329,7 @@ function resetWakeAtPosition(wake, sourcePosition, sourceHeading = 0) {
 function hideEnemyWake(wake) {
   if (!wake) return;
   wake.strength = 0;
+  wake.sternFoam?.reset();
   wake.root?.setEnabled?.(false);
   wake.segments?.forEach((segment) => {
     segment.setEnabled(false);
@@ -10607,6 +10611,39 @@ function installScenarioTestHooks() {
     },
     engineAudioForTest() {
       return engineSound?.state() ?? null;
+    },
+    previewSternFoamForTest(speedValue = 17.5, duration = 5) {
+      const foam = boat.bowWake?.sternFoam;
+      if (!foam) return null;
+      foam.reset();
+      const strength = clamp(speedValue / enemyBowWakeFullSpeed, 0, 1);
+      const origin = boat.root.position;
+      const steps = Math.ceil(duration * 30);
+      for (let i = 0; i <= steps; i++) {
+        const behind = speedValue * (duration - i / 30);
+        foam.update({ x: origin.x - Math.sin(heading) * behind, z: origin.z - Math.cos(heading) * behind },
+          heading, speedValue, strength, 1 / 30);
+      }
+      return foam.snapshot();
+    },
+    benchmarkSternFoamForTest(count = 40, frames = 360) {
+      count = clamp(count, 1, 40);
+      const before = scene.meshes.length;
+      const trails = Array.from({ length: count }, (_, i) => createSternFoam(scene, `benchmark_${i}`, torpedoBoatVisualScale));
+      let worst = 0;
+      const start = performance.now();
+      for (let frame = 0; frame < frames; frame++) {
+        const tick = performance.now();
+        trails.forEach((trail, i) => trail.update({ x: i * 35, z: frame * 17.5 / 60 }, 0, 17.5, 1, 1 / 60));
+        worst = Math.max(worst, performance.now() - tick);
+      }
+      const elapsed = performance.now() - start;
+      const active = trails.reduce((n, trail) => n + trail.snapshot().active, 0);
+      trails.forEach(trail => trail.dispose());
+      return { boats: count, activePatches: active, averageCpuMs: elapsed / frames, worstCpuMs: worst, meshDelta: scene.meshes.length - before };
+    },
+    sternFoamForTest() {
+      return boat.bowWake?.sternFoam?.snapshot() ?? null;
     },
     motionSyncForTest() {
       return { blocked: playerMotionBlocked, warning: motionSyncWarningText };
@@ -17213,7 +17250,7 @@ function createEnemyBowWake(scene, materials, parent, name, options = {}) {
   }
 
   for (let side = -1; side <= 1; side += 2) {
-    const sternRows = isSubmarineWake ? 3 : 7;
+    const sternRows = isSubmarineWake ? 3 : 0;
     for (let i = 0; i < sternRows; i += 1) {
       const startX = side * (isSubmarineWake ? 0.03 + i * 0.012 : 0.64 + i * 0.018) * widthScale;
       const startZ = (isSubmarineWake ? -4.52 - i * 0.03 : -3.98 - i * 0.02) * lengthScale;
@@ -17241,7 +17278,7 @@ function createEnemyBowWake(scene, materials, parent, name, options = {}) {
     churn.push(patch);
   }
 
-  const sternChurnRows = isSubmarineWake ? 4 : 9;
+  const sternChurnRows = isSubmarineWake ? 4 : 0;
   for (let i = 0; i < sternChurnRows; i += 1) {
     const patch = isSubmarineWake
       ? MeshBuilder.CreateBox(`${name}_stern_churn_${i}`, {
@@ -17266,7 +17303,8 @@ function createEnemyBowWake(scene, materials, parent, name, options = {}) {
   }
 
   root.setEnabled(false);
-  return { root, segments, churn, strength: 0, waterlineY, surfaceY, vehicleType };
+  return { root, segments, churn, strength: 0, waterlineY, surfaceY, vehicleType,
+    sternFoam: isSubmarineWake ? null : createSternFoam(scene, name, root.scaling.x) };
 }
 
 function createSubmarinePeriscopeWake(scene, materials, parent, name, options = {}) {
