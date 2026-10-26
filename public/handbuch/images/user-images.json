@@ -28,5 +28,8 @@
   },
   "underwater-combat": {
     "pixelRatio": 1
+  },
+  "sonar-close-surface-ship": {
+    "pixelRatio": 1
   }
 }
