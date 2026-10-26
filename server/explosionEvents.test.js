@@ -49,7 +49,7 @@ test('deep submarine hits select underwater-only sound and collision prioritizes
   assert.equal(calls[1][2], true);
 });
 
-test('torpedo ship and coast hits retain a strong attack and reduced distance loss', () => {
+test('torpedo ship and coast hits use distinct wet and dry attacks with reduced distance loss', () => {
   const calls = [];
   const events = createExplosionEvents((...args) => calls.push(args));
   events.consume({ instanceId: 'loud-torpedo', t: 10, torpedoImpacts: [
@@ -58,13 +58,15 @@ test('torpedo ship and coast hits retain a strong attack and reduced distance lo
   ] }, 'own');
   assert.equal(calls.length, 2);
   for (const [, , , options] of calls) {
-    assert.ok(options.variant >= 11 && options.variant <= 13, 'use explosion attack with a prepared water layer');
-    assert.equal(options.rate, 1, 'pitch and timing are baked into the mixed recording');
-    assert.equal(options.gain, 1.45);
-    assert.equal(options.lowpassHz, 1000);
+    assert.equal(options.waterExplosion, true, 'coastal blasts also propagate through water');
     assert.equal(options.rangeScale, 3);
     assert.equal(options.noDucking, true);
   }
+  assert.ok(calls[0][3].variant >= 11 && calls[0][3].variant <= 13);
+  assert.equal(calls[0][3].lowpassHz, 1000);
+  assert.equal(calls[1][3].variant, 6);
+  assert.equal(calls[1][3].lowpassHz, 1800);
+  assert.ok(calls[1][3].gain < calls[0][3].gain);
 });
 
 test('depth charges share the wet explosion family but are lower and a little quieter than torpedoes', () => {

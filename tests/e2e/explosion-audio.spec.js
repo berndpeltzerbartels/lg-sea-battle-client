@@ -27,3 +27,15 @@ test('impact families play once, prioritize own hits, and remain within the voic
   await expect.poll(async () => (await state()).voices, { timeout: 13000 }).toBe(0);
   expect(errors).toEqual([]);
 });
+
+
+test('the delayed aircraft explosion starts its sound with the visual effect', async ({ page }) => {
+  await page.goto('/sea-battle/index.html?vehicle=torpedo-boat&sandbox=side-view&scenarioTest=1');
+  await page.waitForFunction(() => window.seaBattleScenarioTest);
+  await page.locator('canvas').first().click({ position: { x: 20, y: 20 } });
+  const state = () => page.evaluate(() => window.seaBattleScenarioTest.explosionAudioForTest());
+  await expect.poll(async () => (await state())?.loaded).toBe(true);
+  await page.evaluate(() => window.seaBattleScenarioTest.scoutPlaneExplosionSequenceForTest());
+  expect((await state()).voices).toBe(0);
+  await expect.poll(async () => (await state()).voices).toBe(1);
+});

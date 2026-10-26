@@ -10590,6 +10590,9 @@ function installScenarioTestHooks() {
       return torpedoSound?.state() ?? null;
     },
     aircraftAudioForTest() { return aircraftSound?.state() ?? null; },
+    scoutPlaneExplosionSequenceForTest() {
+      createScoutPlaneCriticalHitSequence(flakSystem, boat.root.position.add(new Vector3(0, 5, 0)));
+    },
     explosionAudioForTest(snapshot, ownShipId) {
       if (snapshot) explosionEvents.consume(snapshot, ownShipId);
       return explosionSound?.state() ?? null;
@@ -13109,6 +13112,9 @@ function createDamageSmokePuff(system, position, parent = null) {
 }
 
 function createScoutPlaneAirExplosion(system, position) {
+  system.airExplosionSoundId = (system.airExplosionSoundId ?? 0) + 1;
+  explosionSound?.shot(`plane-air-explosion:${system.airExplosionSoundId}`, position, false,
+    { variant: 6, rate: .95, gain: 1.2, rangeScale: 2, noDucking: true });
   const center = position.add(new Vector3(0, 0.15, 0));
   createAirExplosionCore(system, center);
   createAirExplosionLight(system, center);

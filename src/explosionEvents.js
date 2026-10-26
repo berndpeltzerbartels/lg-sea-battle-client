@@ -38,6 +38,8 @@ export function createExplosionEvents(emit) {
           options = { variant: 3 + v, rate: .85, gain: .7 };
         } else if (kind === 'cannon') {
           options = { variant: 6, rate: .9, gain: 1 };
+        } else if (family === 'torpedo' && hit.reason === 'land-hit') {
+          options = { variant: 6, rate: .8, gain: 1.1, rangeScale: 3, noDucking: true };
         } else if (family === 'torpedo') {
           options = { variant: 11 + v, rate: 1, gain: 1.45, rangeScale: 3, noDucking: true };
         } else if (family === 'depth-charge' || kind === 'submarine-destruction') {
@@ -46,7 +48,7 @@ export function createExplosionEvents(emit) {
           options = { variant: v % 2 ? 7 : 6, rate: .72, gain: 1.1 };
         }
         if (family === 'depth-charge') options.underwaterGain = own ? 3 : 2;
-        if (family === 'torpedo') options.lowpassHz = 1000;
+        if (family === 'torpedo') options.lowpassHz = hit.reason === 'land-hit' ? 1800 : 1000;
         options.waterExplosion = kind === 'water' || kind === 'flak-water' || kind === 'underwater'
           || kind === 'submarine-destruction' || family === 'torpedo' || family === 'depth-charge'
           || kind === 'submerged-hit';

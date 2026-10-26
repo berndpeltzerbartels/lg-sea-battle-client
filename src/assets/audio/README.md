@@ -186,3 +186,5 @@ Depth charges now gain +6 dB (2x amplitude) for underwater listeners, +9.5 dB (3
 Torpedo-boat bridge engine raised from 0.4 to 0.7 of exterior gain; bridge fan from 0.3 to 0.5. Cannon, lookout, flak and submarine mixes remain unchanged.
 
 All torpedo-boat stations: diesel and interior fan gains multiplied by 1.4 (about +3 dB) relative to the latest bridge adjustment. Station proportions, pitch, weapons, explosions and submarine audio remain unchanged.
+
+Aircraft air-explosion visuals now trigger a matching heavy explosion one-shot at the exact animation callback (both delayed hit explosion and final disintegration). Initial projectile impacts retain their short hit sound. Torpedo ship impacts keep the wet, 1000 Hz filtered family; coastal impacts use the drier heavy explosion at rate 0.8, gain 1.1, cutoff 1800 Hz. Coast blasts still propagate underwater. Existing actual-depth filters remain 1400 Hz at periscope depth and 450 Hz deeper, without added reverb.
