@@ -1,0 +1,38 @@
+{
+  ".nav-instrument-map": {
+    "x": 14,
+    "y": 14,
+    "width": 356,
+    "height": 348
+  },
+  ".nav-instrument-radar": {
+    "x": 14,
+    "y": 360,
+    "width": 356,
+    "height": 389
+  },
+  ".battle-station-panel": {
+    "x": 14,
+    "y": 816,
+    "width": 356,
+    "height": 72
+  },
+  ".player-list": {
+    "x": 1338,
+    "y": 12,
+    "width": 250,
+    "height": 105
+  },
+  ".ship-controls-panel": {
+    "x": 384,
+    "y": 0,
+    "width": 1216,
+    "height": 1000
+  },
+  "#roleHotkeys": {
+    "x": 1358,
+    "y": 706.71875,
+    "width": 226,
+    "height": 235.28125
+  }
+}

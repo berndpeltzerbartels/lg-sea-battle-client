@@ -1,0 +1,32 @@
+{
+  ".nav-instrument-map": {
+    "x": 14,
+    "y": 14,
+    "width": 356,
+    "height": 348
+  },
+  ".nav-instrument-radar": {
+    "x": 14,
+    "y": 360,
+    "width": 356,
+    "height": 406
+  },
+  ".battle-station-panel": {
+    "x": 14,
+    "y": 763,
+    "width": 356,
+    "height": 132
+  },
+  ".player-list": {
+    "x": 1374,
+    "y": 158,
+    "width": 208,
+    "height": 112
+  },
+  ".ship-controls-panel": {
+    "x": 777,
+    "y": 900,
+    "width": 430,
+    "height": 86
+  }
+}
