@@ -184,3 +184,5 @@ Torpedo explosions additionally cap the existing low-pass filter at 1000 Hz to s
 Depth charges now gain +6 dB (2x amplitude) for underwater listeners, +9.5 dB (3x) when the server reports damage to the own ship. Surface gain, distance falloff and depth filtering stay unchanged. Boost is applied at playback and on listener updates; mute still wins and the shared output limiter remains active.
 
 Torpedo-boat bridge engine raised from 0.4 to 0.7 of exterior gain; bridge fan from 0.3 to 0.5. Cannon, lookout, flak and submarine mixes remain unchanged.
+
+All torpedo-boat stations: diesel and interior fan gains multiplied by 1.4 (about +3 dB) relative to the latest bridge adjustment. Station proportions, pitch, weapons, explosions and submarine audio remain unchanged.
