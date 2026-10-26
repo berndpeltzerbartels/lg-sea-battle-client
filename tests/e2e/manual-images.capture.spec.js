@@ -8,10 +8,12 @@ import path from 'node:path';
 // Then: python3 scripts/illustrate-handbook.py
 // Fixtures use fictional people and never send messages or alter a live round.
 const output = process.env.SEA_BATTLE_MANUAL_CAPTURE_DIR;
+test.use({ deviceScaleFactor: 2 });
 test.skip(!output, 'Manual image capture is opt-in');
 test('capture reproducible handbook views', async ({ page }) => {
-  test.setTimeout(240000);
+  test.setTimeout(360000);
   await mkdir(output, { recursive: true });
+  await writeFile(path.join(output,'capture-info.json'),JSON.stringify({deviceScaleFactor:2,viewport:{width:1600,height:1000}}));
   page.on('pageerror', e=>console.log('PAGE ERROR',e.message));
   page.on('console', m=>{if(m.type()==='error')console.log('CONSOLE ERROR',m.text());});
   await page.setViewportSize({ width: 1600, height: 1000 });
@@ -40,26 +42,33 @@ test('capture reproducible handbook views', async ({ page }) => {
     state.torpedoes = [{id:'demo-torpedo',shipId:'dark-S1',teamId:'dark',x:700,z:-500,y:.05,heading:Math.PI,
       state:'running',speed:25,firedAt:0,maxRange:1200,tubeSide:0}];
   };
+  await page.exposeFunction('__manualSnapshot',()=>({type:'game-stream',state,crew:type==='torpedo-boat'?crew:null}));
   await page.addInitScript(() => {
     localStorage.setItem('accountId','handbook');
-    window.EventSource = class { close() {} };
+    window.EventSource = class {
+      constructor() { if(new URLSearchParams(location.search).has('sandbox'))return; this.timer=setInterval(async()=>{const message=await window.__manualSnapshot();this.onopen?.({});this.onmessage?.({data:JSON.stringify(message)});},200); }
+      close() { clearInterval(this.timer); }
+    };
   });
   await page.route('**/crew-inbox.html', route => route.fulfill({body:''}));
   await page.route('**/game/**', async route => {
     const url = new URL(route.request().url()), p=url.pathname;
     if(p.endsWith('/world')&&!scenic)return route.fulfill({json:{landmasses:[],instrumentMap:{version:1,layers:[0,50,150].map(height=>({height,contours:[]}))}}});
     if (p.endsWith('/world') || p.endsWith('/config') || p.includes('/debug/')) return route.fulfill({response:await route.fetch({url:url.origin+p.replace(/^\/sea-battle/,'')})});
-    if(p.endsWith('/player-state') && route.request().method()==='POST') Object.assign(state.ships[0],route.request().postDataJSON().motion ?? route.request().postDataJSON());
+    if(/\/(player-state|motion|aim)$/.test(p) && route.request().method()==='POST') Object.assign(state.ships[0],route.request().postDataJSON().motion ?? route.request().postDataJSON());
     let body = state;
     if(p.includes('/session/')) body={playerId,initials:'LEA',teamId:'light'};
     else if(p.endsWith('/station')) {crew.station=route.request().postDataJSON().station;crew.members[0].station=crew.station;crew.revision++;body=crew;}
-    else if(p.includes('/crew/')) body=crew;
+    else if(p.includes('/crew/')&&!/\/(player-state|motion|aim)$/.test(p)) body=crew;
     await route.fulfill({json:body});
   });
   const save = async (name, selector) => {
     await page.waitForTimeout(350);
     const target=selector ? page.locator(selector) : page;
     console.log('saving',name);
+    await expect(page.locator('body')).not.toContainText(/Schiffsposition nicht best(?:ätigt|aetigt)|Steuerung und Waffen pausiert|Spielstart fehlgeschlagen/i);
+    const health=await page.evaluate(()=>window.seaBattleScenarioTest.motionSyncForTest());
+    expect(health.blocked,JSON.stringify(health)).toBe(false);
     const boxes={};
     for(const selector of ['.nav-instrument-map','.nav-instrument-radar','.battle-station-panel','.player-list','.ship-controls-panel','#roleHotkeys']){const el=page.locator(selector);if(await el.count()&&await el.isVisible())boxes[selector]=await el.boundingBox();}
     if(['map-players','boat-help','boat-lookout-help','sub-help'].includes(name))await writeFile(path.join(output,name+'-layout.json'),JSON.stringify(boxes,null,2));
@@ -73,6 +82,7 @@ test('capture reproducible handbook views', async ({ page }) => {
     await page.addStyleTag({content:'.version-panel{visibility:hidden!important}'});
     console.log('ready',vehicle);
     await page.waitForTimeout(1600);
+    await page.waitForFunction(()=>!window.seaBattleScenarioTest.motionSyncForTest().blocked,null,{timeout:10000});
   };
   const station = async name => {
     await open('torpedo-boat',name);
@@ -90,13 +100,14 @@ test('capture reproducible handbook views', async ({ page }) => {
   await page.unroute('**/game/**');
   await page.goto('/sea-battle/index.html?vehicle=torpedo-boat&sandbox=side-view&scenarioTest=1&viewMode=orbit&viewDistance=32&viewHeight=1.7&viewYaw=95');
   await page.waitForFunction(()=>window.seaBattleScenarioTest);await page.waitForTimeout(800);
+  await expect(page.locator('body')).not.toHaveAttribute('data-lookout-view','active');
   await page.evaluate(()=>{const c=document.querySelector('#renderCanvas');for(const el of document.querySelectorAll('body *'))if(el!==c&&!el.contains(c))el.style.visibility='hidden';c.style.visibility='visible';});
   await save('boat-side-canvas','#renderCanvas');
   // Reinstall the read-only scene fixture after leaving the isolated side view.
   await page.route('**/game/**', async route => {
     const p=new URL(route.request().url()).pathname;
     if(p.endsWith('/world')||p.endsWith('/config')||p.includes('/debug/'))return route.fulfill({response:await route.fetch({url:new URL(route.request().url()).origin+p.replace(/^\/sea-battle/,'')})});
-    if(p.endsWith('/player-state') && route.request().method()==='POST') Object.assign(state.ships[0],route.request().postDataJSON().motion ?? route.request().postDataJSON());
+    if(/\/(player-state|motion|aim)$/.test(p) && route.request().method()==='POST') Object.assign(state.ships[0],route.request().postDataJSON().motion ?? route.request().postDataJSON());
     await route.fulfill({json:p.includes('/session/')?{playerId,initials:'LEA',teamId:'light'}:state});
   });
   scenic=true;
