@@ -5,3 +5,5 @@
 
 .shot-explanation{margin:0;padding:17px 20px;font-size:13px;line-height:1.65}
 .handbook-home{max-width:1120px;margin:0 auto;padding:45px 38px 65px}.handbook-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;margin-bottom:35px}.handbook-choice{display:block;padding:28px;background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--accent);text-decoration:none}.handbook-choice:hover{border-color:var(--accent)}.handbook-choice h2{font-size:30px;margin-top:15px}.handbook-choice strong{color:var(--accent)}.submarine-choice{border-top-color:var(--mint)}.submarine-choice strong{color:var(--mint)}@media(max-width:650px){.handbook-home{padding:28px 20px}.handbook-choices{grid-template-columns:1fr}.handbook-choice{padding:22px}}
+
+.back-to-entry{font-size:13px;white-space:nowrap;margin-left:18px}

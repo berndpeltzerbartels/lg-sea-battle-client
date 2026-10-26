@@ -27,7 +27,7 @@ def shot(name,alt,crop=None,marks='',maxwidth=None):
     image_style=f'width:{w/cw*100:.5f}%;left:{-x/cw*100:.5f}%;top:{-y/ch*100:.5f}%;'
     style=f'aspect-ratio:{cw}/{ch};'+(f'max-width:{maxwidth}px;' if maxwidth else '')
     svg=f'<svg class="shot-marks" viewBox="0 0 {cw} {ch}" aria-hidden="true">{marks}</svg>' if marks else ''
-    return f'<a class="shot-link" href="../images/{name}.png" target="_blank" rel="noopener" title="Spielaufnahme in Originalgröße öffnen"><div class="shot-frame" style="{style}"><img src="../images/{name}.png" alt="{escape(alt,quote=True)}" loading="lazy" decoding="async" width="{w}" height="{h}" style="{image_style}">{svg}</div></a>'
+    return f'<a class="shot-link" href="../images/{name}.png" title="Spielaufnahme in Originalgröße öffnen"><div class="shot-frame" style="{style}"><img src="../images/{name}.png" alt="{escape(alt,quote=True)}" loading="lazy" decoding="async" width="{w}" height="{h}" style="{image_style}">{svg}</div></a>'
 def legend(items):
     return '<ol class="image-legend">'+''.join(f'<li><span>{i}</span>{text}</li>' for i,text in enumerate(items,1))+'</ol>'
 def label(text): return f'<p class="shot-label">{text}</p>'
