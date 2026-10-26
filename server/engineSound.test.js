@@ -96,3 +96,23 @@ test('torpedo boat interior quiets diesel and adds fixed ventilation, exterior r
     assert.equal(outside.fanGain, 0);
   }
 });
+
+
+test('surface diesels idle at Stop and crossfade without changing submerged propulsion', () => {
+  for (const submarine of [false, true]) {
+    const stop = engineMix({ depth: 0, power: 0, submarine });
+    assert.equal(stop.idleGain, .55);
+    assert.equal(stop.surfaceGain, 0);
+    const slow = engineMix({ depth: 0, power: .1, submarine });
+    assert.ok(slow.idleGain > 0 && slow.surfaceGain > 0);
+    assert.equal(engineMix({ depth: 0, power: .2, submarine }).idleGain, 0);
+    assert.equal(engineMix({ depth: 0, power: 1, submarine }).surfaceGain, .8);
+    for (const state of [{ muted: true }, { active: false }]) {
+      assert.equal(engineMix({ depth: 0, power: 0, submarine, ...state }).idleGain, 0);
+    }
+  }
+  const deep = engineMix({ depth: 6, power: 0, deepSubmerged: true });
+  assert.ok(deep.idleGain < 1e-9);
+  assert.equal(deep.underwaterGain, 0);
+  assert.equal(deep.fanGain, .65);
+});
