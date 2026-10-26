@@ -4,5 +4,14 @@
   },
   "depth-charge-plume": {
     "pixelRatio": 1
+  },
+  "boarding-tab": {
+    "pixelRatio": 1
+  },
+  "boarding-name": {
+    "pixelRatio": 1
+  },
+  "boarding-ship": {
+    "pixelRatio": 1
   }
 }
