@@ -13,5 +13,8 @@
   },
   "boarding-ship": {
     "pixelRatio": 1
+  },
+  "boarding-request": {
+    "pixelRatio": 1
   }
 }
