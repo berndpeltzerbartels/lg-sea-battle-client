@@ -8,9 +8,10 @@ import json, re, struct, math
 ROOT = Path(__file__).resolve().parents[1] / 'public' / 'handbuch'
 IMAGES = ROOT / 'images'
 USED = set()
+USER_IMAGES = json.loads((IMAGES/'user-images.json').read_text())
 DPR = json.loads((IMAGES/'capture-info.json').read_text())['deviceScaleFactor']
 def size(name):
-    return tuple(int(v/DPR) for v in struct.unpack('>II', (IMAGES / (name+'.png')).read_bytes()[16:24]))
+    return tuple(int(v/USER_IMAGES.get(name,{}).get('pixelRatio',DPR)) for v in struct.unpack('>II', (IMAGES / (name+'.png')).read_bytes()[16:24]))
 def badge(n,x,y,tx=None,ty=None,r=20,color='#e7b36c'):
     line = ''
     if tx is not None:
@@ -51,6 +52,8 @@ figures['04']=fig('04',shot('boat-stations','Schiffsübersicht: Brücke aktiv, F
 figures['05']=fig('05',shot('boat-lookout','Ein Torpedoboot im Fernglas; darunter die Knöpfe zum Übernehmen einer freien Kanone und zum Anfragen der besetzten Flak.',crop=(480,145,960,855)), 'Im Ausguck mit eingeschaltetem Fernglas. Unten ist die Kanone frei: C richtet sie auf den Blick aus und übernimmt sie. Die Flak ist von Finn besetzt; F fragt dort nach Zustimmung. Diese Aufnahme zeigt eine nachgestellte Zielsituation.')
 profile_marks=box(425,20,230,150,'#9ddbd3')+box(38,178,880,48)+badge(1,690,55,655,70,r=16,color='#9ddbd3')+badge(2,930,242,865,207,r=16)
 figures['06']=fig('06',shot('boat-side-canvas','Seitenansicht des echten Torpedoboot-Modells mit markierten Aufbauten und Rumpf.',crop=(80,330,1000,300),marks=profile_marks)+legend(['Flak: auf die Aufbauten zielen. Die Markierung zeigt den Bereich oberhalb des Decks.','Kanone: auch Treffer am Rumpf sind wirksam. Die Einschränkung der Flak gilt für sie nicht.']), 'Zwei unterschiedliche Trefferregeln, am Spielmodell eingezeichnet. Merke dir für die Flak den Bereich oberhalb des Decks.')
+figures['07']=fig('07',shot('depth-charge-salvo','Torpedoboot zwischen zwei hohen Wassersäulen einer Wasserbombenserie.',maxwidth=638), 'Eine Wasserbombenserie aus der Außenansicht: Mehrere Wassersäulen begleiten die Explosionen unter Wasser. Fahre über die vermutete U-Boot-Position und wirf rechtzeitig ab – die Ladungen explodieren verzögert. Die Fontänen zeigen die Explosionen, bestätigen aber noch keinen Treffer.')
+figures['U06']=fig('U06',shot('depth-charge-plume','Torpedoboot neben der Wassersäule einer explodierten Wasserbombe, von der Oberfläche aus gesehen.',maxwidth=572), 'Ein Wasserbombenangriff, von der Oberfläche aus gesehen. Für dein getauchtes U-Boot liegt die Gefahr unter der Wassersäule: Dort wirkt die Explosion im Wasser. Weiche dem überlaufenden Torpedoboot frühzeitig aus; warte nicht erst auf die Fontäne oder den Knall. Das Bild zeigt weder die genaue Wirkungstiefe noch einen garantierten sicheren Abstand.')
 figures['10']=fig('10','<div class="figure-grid"><div>'+label('Auf der Brücke')+shot('boat-help','Geöffnete H-Tastenhilfe auf der Brücke.',crop=layout('boat-help','#roleHotkeys'))+'</div><div>'+label('Im Ausguck')+shot('boat-lookout-help','Geöffnete H-Tastenhilfe im Ausguck.',crop=layout('boat-lookout-help','#roleHotkeys'))+'</div></div>', 'Die echte Tastenhilfe passt sich an die Position an. Mit H oder Esc schließt du sie wieder.')
 figures['U02']=fig('U02','<div class="figure-grid"><div>'+label('Oberflächenradar')+shot('radar-surface','Farbiges Radar mit Teamfarben.')+'</div><div>'+label('Unterwasseranzeige')+shot('sub-sonar','Einfarbige Unterwasseranzeige mit Konturen und Torpedostrich.')+'</div></div>', 'Über Wasser und auf Sehrohrtiefe helfen die Teamfarben. Tiefer getaucht sind die Kontakte einfarbig; helle Konturen sind dort keine Freundfarbe. Reichweite und Ausschnitt der Anzeigen unterscheiden sich.')
 obs_marks=box(686,250,110,44)+badge(1,841,272,796,272)+badge(2,1440,800,1490,849)+badge(3,1113,745,1045,745)
