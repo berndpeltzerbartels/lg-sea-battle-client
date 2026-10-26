@@ -26,7 +26,6 @@ import { createCannonSound } from "./cannonSound.js";
 import cannonSoundUrl from "./assets/audio/cannon-shot.wav?url";
 import { createFlakSound } from "./flakSound.js";
 import flakSoundUrl from "./assets/audio/flak-burst-loop.wav?url";
-import surfaceDieselIdleUrl from "./assets/audio/surface-diesel-idle-loop.wav?url";
 import surfaceDieselUrl from "./assets/audio/surface-diesel-loop.wav?url";
 import submarineMotorUrl from "./assets/audio/submarine-electric-motor-loop.wav?url";
 import { createEngineSound } from "./engineSound.js";
@@ -3622,7 +3621,6 @@ function unlockGameAudio() {
   if (!scoutPlaneMode) {
     engineSound ??= createEngineSound({
       surfaceUrl: surfaceDieselUrl,
-      idleUrl: surfaceDieselIdleUrl,
       fanUrl: submarineFanUrl,
       underwaterUrl: submarineMode ? submarineMotorUrl : null, context: depthChargeAudio, destination: gameAudioOutput,
       report: error => {

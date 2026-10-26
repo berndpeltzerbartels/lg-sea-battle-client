@@ -98,34 +98,25 @@ test('torpedo boat interior quiets diesel and adds fixed ventilation, exterior r
 });
 
 
-test('surface diesels idle at Stop and crossfade without changing submerged propulsion', () => {
+test('one continuous diesel loop idles at the former one-third pitch and rises with load', () => {
   for (const submarine of [false, true]) {
+    let previous = 0;
+    for (const power of [0, .05, .2, .5, 1]) {
+      const mix = engineMix({ depth: 0, power, submarine });
+      assert.ok(mix.surfaceRate > previous);
+      previous = mix.surfaceRate;
+      assert.ok(mix.surfaceGain > 0);
+    }
     const stop = engineMix({ depth: 0, power: 0, submarine });
-    assert.equal(stop.idleGain, .55);
-    assert.equal(stop.surfaceGain, 0);
-    const slow = engineMix({ depth: 0, power: .1, submarine });
-    assert.ok(slow.idleGain > 0 && slow.surfaceGain > 0);
-    assert.equal(engineMix({ depth: 0, power: .2, submarine }).idleGain, 0);
-    assert.equal(engineMix({ depth: 0, power: 1, submarine }).surfaceGain, .8);
+    assert.equal(stop.surfaceRate, .66);
+    assert.equal(stop.surfaceGain, .48);
+    assert.equal(engineMix({ depth: 0, power: 1, submarine }).surfaceRate, 1);
     for (const state of [{ muted: true }, { active: false }]) {
-      assert.equal(engineMix({ depth: 0, power: 0, submarine, ...state }).idleGain, 0);
+      assert.equal(engineMix({ depth: 0, power: 0, submarine, ...state }).surfaceGain, 0);
     }
   }
   const deep = engineMix({ depth: 6, power: 0, deepSubmerged: true });
-  assert.ok(deep.idleGain < 1e-9);
+  assert.ok(deep.surfaceGain < 1e-9);
   assert.equal(deep.underwaterGain, 0);
   assert.equal(deep.fanGain, .65);
-});
-
-
-test('diesel transition gently accelerates idle and fades it completely by cruising load', () => {
-  let previousRate = 0;
-  for (let i = 0; i <= 20; i++) {
-    const mix = engineMix({ depth: 0, power: i / 100 });
-    assert.ok(mix.idleRate >= previousRate);
-    previousRate = mix.idleRate;
-    assert.ok(Number.isFinite(mix.surfaceGain) && Number.isFinite(mix.idleGain));
-  }
-  assert.equal(engineMix({ depth: 0, power: 0 }).idleRate, 1);
-  assert.equal(engineMix({ depth: 0, power: .2 }).idleGain, 0);
 });
