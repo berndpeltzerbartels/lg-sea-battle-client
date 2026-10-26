@@ -19,5 +19,11 @@
   },
   "lookout-aim-request": {
     "pixelRatio": 1
+  },
+  "periscope-from-bridge": {
+    "pixelRatio": 1
+  },
+  "periscope-water-trace": {
+    "pixelRatio": 1
   }
 }
