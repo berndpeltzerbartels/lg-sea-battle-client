@@ -19,7 +19,7 @@ export function createSternFoamState(scale, capacity = 144) {
       p.z = z - sin * localX + cos * localZ;
       p.heading = heading + lane * .12;
       p.born = now;
-      p.life = 2.2 + strength * 3.2 + variation * .4;
+      p.life = (2.2 + strength * 3.2 + variation * .4) * (lane === 0 ? .3 : .5);
       p.width = scale * (lane === 0 ? .31 : .21) * (.5 + strength * .5);
       p.length = scale * (.48 + variation * .22);
       p.strength = strength;
