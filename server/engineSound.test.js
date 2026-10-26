@@ -120,3 +120,17 @@ test('one continuous diesel loop idles at the former one-third pitch and rises w
   assert.equal(deep.underwaterGain, 0);
   assert.equal(deep.fanGain, .65);
 });
+
+test('grounded diesel strains only while propulsion is commanded at the surface', () => {
+  const normal=engineMix({depth:0,power:1,submarine:false});
+  const strained=engineMix({depth:0,power:1,submarine:false,grounded:true,audioTime:1});
+  assert.equal(strained.strained,true);
+  assert.ok(strained.surfaceRate<normal.surfaceRate);
+  assert.ok(strained.surfaceRate>.66,'strained full power should not sound like idle');
+  assert.ok(strained.surfaceCutoff<2000);
+  assert.notEqual(strained.surfaceGain,engineMix({depth:0,power:1,submarine:false,grounded:true,audioTime:1.2}).surfaceGain);
+  assert.deepEqual(engineMix({depth:0,power:0,submarine:false,grounded:true}),engineMix({depth:0,power:0,submarine:false}));
+  for(const extra of [{depth:6,deepSubmerged:true},{muted:true},{active:false}]) {
+    assert.equal(engineMix({depth:0,power:1,grounded:true,...extra}).strained,false);
+  }
+});

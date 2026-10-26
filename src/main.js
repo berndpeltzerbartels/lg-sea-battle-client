@@ -1251,6 +1251,7 @@ const submarinePeriscopeWakeFullSpeed = maxSubmarinePeriscopeForwardSpeed;
 let speed = scoutPlaneMode ? scoutPlaneCruiseSpeed : 0;
 let scoutPlaneTargetSpeed = scoutPlaneCruiseSpeed;
 let engineOrder = scoutPlaneMode ? 7 : 2;
+let engineGroundedUntil = -Infinity;
 let turnVelocity = 0;
 let rudderDegrees = 0;
 let heldEngineDirection = 0;
@@ -1751,6 +1752,7 @@ scene.onBeforeRenderObservable.add(() => {
       ? getShipMovementWaterSafety(boat.root.position, heading, speed, blockedWaters)
       : nextWaterSafety;
     if (!scoutPlaneMode && movementSafety.isBlocked) {
+      engineGroundedUntil = time + .35;
       motionSyncHealth.grounding({ x: previousPosition.x, z: previousPosition.z, speed });
       boat.root.position.copyFrom(previousPosition);
 
@@ -3668,7 +3670,15 @@ function updateEngineAudio(force = false) {
   const maximum = orderSpeed < 0 ? Math.abs(engineOrders[0].speed) : (submarineMode ? maxSubmarineForwardSpeed : engineOrders.at(-1).speed);
   const torpedoInterior = playerVehicleType === "torpedo-boat" && !flakViewActive && !lookoutViewActive;
   const stationSoundGain = playerVehicleType === "torpedo-boat" ? 1.4 : 1;
+  let grounded = !scoutPlaneMode && time < engineGroundedUntil && Math.abs(orderSpeed) > .01;
+  if (!grounded && crewState && crewState.station !== "bridge" && !scoutPlaneMode && Math.abs(speed) < .35 && Math.abs(orderSpeed) > .01) {
+    const step = Math.sign(orderSpeed) * .4;
+    const probe = boat.root.position.add(new Vector3(Math.sin(heading) * step, 0, Math.cos(heading) * step));
+    grounded = getShipMovementWaterSafety(probe, heading, orderSpeed, blockedWaters).isBlocked;
+  }
+  document.body.dataset.engineGrounded = String(grounded);
   engineSound.update({
+    grounded,
     surfaceGainScale: (torpedoInterior ? (cannonViewActive ? 0.5 : 0.7) : 1) * stationSoundGain,
     interiorFanGain: (torpedoInterior ? (cannonViewActive ? 0.3 : 0.5) : 0) * stationSoundGain,
     depth: Math.abs(playerSubmarineDepthOffset),
@@ -10609,7 +10619,8 @@ function installScenarioTestHooks() {
       if (shipId) flakSound?.shot(shipId, { x, z }, own);
       return flakSound?.state() ?? null;
     },
-    engineAudioForTest() {
+    engineAudioForTest(state) {
+      if (state) engineSound?.update(state, true);
       return engineSound?.state() ?? null;
     },
     previewSternFoamForTest(speedValue = 17.5, duration = 5) {
