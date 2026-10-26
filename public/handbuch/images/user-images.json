@@ -31,5 +31,8 @@
   },
   "depth-charge-underwater": {
     "pixelRatio": 1
+  },
+  "submarine-torpedo-duel": {
+    "pixelRatio": 1
   }
 }
