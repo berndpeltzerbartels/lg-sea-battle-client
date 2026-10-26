@@ -16,5 +16,8 @@
   },
   "boarding-request": {
     "pixelRatio": 1
+  },
+  "lookout-aim-request": {
+    "pixelRatio": 1
   }
 }
