@@ -3667,8 +3667,8 @@ function updateEngineAudio(force = false) {
   const maximum = orderSpeed < 0 ? Math.abs(engineOrders[0].speed) : (submarineMode ? maxSubmarineForwardSpeed : engineOrders.at(-1).speed);
   const torpedoInterior = playerVehicleType === "torpedo-boat" && !flakViewActive && !lookoutViewActive;
   engineSound.update({
-    surfaceGainScale: torpedoInterior ? (cannonViewActive ? 0.5 : 0.4) : 1,
-    interiorFanGain: torpedoInterior ? 0.3 : 0,
+    surfaceGainScale: torpedoInterior ? (cannonViewActive ? 0.5 : 0.7) : 1,
+    interiorFanGain: torpedoInterior ? (cannonViewActive ? 0.3 : 0.5) : 0,
     depth: Math.abs(playerSubmarineDepthOffset),
     submarine: submarineMode,
     deepSubmerged: submarineMode && Math.abs(playerSubmarineDepthOffset) > Math.abs(submarineDepthOffsets.periscope) + 0.05,

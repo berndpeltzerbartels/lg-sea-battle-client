@@ -182,3 +182,5 @@ Underwater listening: water explosions retain their distance gain and use a 1400
 Torpedo explosions additionally cap the existing low-pass filter at 1000 Hz to soften the sharp, gunshot-like high end. Playback rate and gain stay unchanged; deep-water filtering can lower the cutoff further. Applies to surface and submerged torpedo impacts, without changing depth charges or adding audio nodes.
 
 Depth charges now gain +6 dB (2x amplitude) for underwater listeners, +9.5 dB (3x) when the server reports damage to the own ship. Surface gain, distance falloff and depth filtering stay unchanged. Boost is applied at playback and on listener updates; mute still wins and the shared output limiter remains active.
+
+Torpedo-boat bridge engine raised from 0.4 to 0.7 of exterior gain; bridge fan from 0.3 to 0.5. Cannon, lookout, flak and submarine mixes remain unchanged.

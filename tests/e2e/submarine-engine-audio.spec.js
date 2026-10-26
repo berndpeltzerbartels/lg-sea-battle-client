@@ -52,7 +52,7 @@ test('torpedo boat keeps exterior diesel and mixes quieter ventilated interior s
   const sound = () => page.evaluate(() => window.seaBattleScenarioTest.engineAudioForTest());
   await expect.poll(async () => (await sound())?.loaded).toBe(true);
   expect((await sound()).voices).toBe(2);
-  expect((await sound()).fanGain).toBe(.3);
+  expect((await sound()).fanGain).toBe(.5);
   expect((await sound()).underwaterGain).toBe(0);
   for (const [order, comparison] of [[7, 'equal'], [8, 'higher'], [4, 'lower']]) {
     await page.evaluate(engineOrder => window.seaBattleScenarioTest.setPlayerNavigationState({ engineOrder }), order);
@@ -71,8 +71,8 @@ test('torpedo boat keeps exterior diesel and mixes quieter ventilated interior s
   await expect.poll(async () => (await sound()).surfaceGain).toBeCloseTo(exteriorLevel * .5);
   expect((await sound()).fanGain).toBe(.3);
   await page.evaluate(() => window.seaBattleScenarioTest.setStation('bridge'));
-  await expect.poll(async () => (await sound()).surfaceGain).toBeCloseTo(exteriorLevel * .4);
-  expect((await sound()).fanGain).toBe(.3);
+  await expect.poll(async () => (await sound()).surfaceGain).toBeCloseTo(exteriorLevel * .7);
+  expect((await sound()).fanGain).toBe(.5);
   expect(downloads).toHaveLength(25);
   expect(downloads.some(url => url.includes('surface-diesel-loop'))).toBe(true);
 });
