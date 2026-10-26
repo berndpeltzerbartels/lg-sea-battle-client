@@ -116,3 +116,16 @@ test('surface diesels idle at Stop and crossfade without changing submerged prop
   assert.equal(deep.underwaterGain, 0);
   assert.equal(deep.fanGain, .65);
 });
+
+
+test('diesel transition gently accelerates idle and fades it completely by cruising load', () => {
+  let previousRate = 0;
+  for (let i = 0; i <= 20; i++) {
+    const mix = engineMix({ depth: 0, power: i / 100 });
+    assert.ok(mix.idleRate >= previousRate);
+    previousRate = mix.idleRate;
+    assert.ok(Number.isFinite(mix.surfaceGain) && Number.isFinite(mix.idleGain));
+  }
+  assert.equal(engineMix({ depth: 0, power: 0 }).idleRate, 1);
+  assert.equal(engineMix({ depth: 0, power: .2 }).idleGain, 0);
+});
