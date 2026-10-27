@@ -2292,15 +2292,19 @@ async function changeCrewStation(station) {
   }
 }
 
-let lastSubmarineWarningId = null;
+let lastCrewWarningIds = { submarine: null, aircraft: null };
 let submarineWarningTimer = null;
-function showSubmarineWarning(warning) {
-  if (!warning || warning.id === lastSubmarineWarningId) return;
-  lastSubmarineWarningId = warning.id;
+function showCrewWarnings(submarine, aircraft) {
+  const newSubmarine = submarine && submarine.id !== lastCrewWarningIds.submarine;
+  const newAircraft = aircraft && aircraft.id !== lastCrewWarningIds.aircraft;
+  if (!newSubmarine && !newAircraft) return;
+  if (submarine) lastCrewWarningIds.submarine = submarine.id;
+  if (aircraft) lastCrewWarningIds.aircraft = aircraft.id;
+  const messages = [];
+  if (aircraft) messages.push(`Flugzeug greift an · ${aircraft.direction}`);
+  if (submarine) messages.push(`${submarine.count > 1 ? `${submarine.count} Sehrohre gesichtet` : "Sehrohr gesichtet"} · ${submarine.direction}`);
   const toast = document.getElementById("crewSubmarineWarning");
-  const label = document.createElement("span");
-  label.textContent = `${warning.count > 1 ? `${warning.count} Sehrohre gesichtet` : "Sehrohr gesichtet"} · ${warning.direction}`;
-  toast.replaceChildren(label);
+  toast.textContent = messages.join("  •  ");
   toast.hidden = false;
   clearTimeout(submarineWarningTimer);
   submarineWarningTimer = setTimeout(() => { toast.hidden = true; }, 6000);
@@ -6876,7 +6880,7 @@ function applyServerGameSnapshot(snapshot) {
   const snapshotClientTime = getSnapshotClientTime(snapshot);
   serverShipsById = indexShipsById(snapshot.ships);
   if (playerServerShipId && playerDamageState === "active") {
-    showSubmarineWarning(snapshot.periscopeWarnings?.[playerServerShipId]);
+    showCrewWarnings(snapshot.periscopeWarnings?.[playerServerShipId], snapshot.aircraftWarnings?.[playerServerShipId]);
   }
   pendingCriticalFlakShipHitsByTarget = indexCriticalFlakShipHitsByTarget(snapshot.flakHits);
   pendingCannonShipHitsByTarget = indexCannonShipHitsByTarget(snapshot.flakHits);

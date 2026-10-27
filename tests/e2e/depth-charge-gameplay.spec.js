@@ -68,6 +68,13 @@ test('bridge lookout and flak share replicated releases, explosions, controls an
     await expect(page.locator('#crewSubmarineWarning')).toContainText('Sehrohr gesichtet · Steuerbord voraus');
   }
   await pages[1].screenshot({ path: testInfo.outputPath('automatic-periscope-warning.png') });
+  state.aircraftWarnings = { boat: { id: 'automatic-aircraft-attack', direction: 'Backbord voraus', count: 1, expiresAt: 6 } };
+  await broadcast();
+  for (const page of pages) {
+    await expect(page.locator('#crewSubmarineWarning')).toContainText('Flugzeug greift an · Backbord voraus');
+    await expect(page.locator('#crewSubmarineWarning')).toContainText('Sehrohr gesichtet');
+  }
+
   await pages[1].keyboard.press('z');
   for (const [width, height] of [[1280, 720], [844, 390]]) {
     await pages[1].setViewportSize({ width, height });
