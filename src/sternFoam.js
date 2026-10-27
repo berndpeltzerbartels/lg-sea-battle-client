@@ -5,7 +5,7 @@ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { createSternFoamState } from './sternFoamState.js';
 
-// One draw call per visible boat; soft vertex alpha avoids a particle texture and sorting.
+// One draw call per visible boat; flat polygon opacity matches the coarse game geometry.
 export function createSternFoam(scene, name, scale) {
   const state = createSternFoamState(scale);
   const mesh = new Mesh(name + '_deposited_stern_foam', scene);
@@ -24,7 +24,8 @@ export function createSternFoam(scene, name, scale) {
     material.disableDepthWrite = true;
   }
   mesh.material = material;
-  const verticesPerPatch = 9;
+  const corners = 6;
+  const verticesPerPatch = corners + 1;
   const positions = new Float32Array(state.patches.length * verticesPerPatch * 3);
   const colors = new Float32Array(state.patches.length * verticesPerPatch * 4);
   const normals = new Float32Array(positions.length);
@@ -35,7 +36,7 @@ export function createSternFoam(scene, name, scale) {
       normals[(base + k) * 3 + 1] = 1;
       colors.set([1, 1, 1, 0], (base + k) * 4);
     }
-    for (let k = 0; k < 8; k++) indices.push(base, base + 1 + k, base + 1 + (k + 1) % 8);
+    for (let k = 0; k < corners; k++) indices.push(base, base + 1 + k, base + 1 + (k + 1) % corners);
   }
   const data = new VertexData();
   Object.assign(data, { positions, colors, normals, indices });
@@ -53,7 +54,8 @@ export function createSternFoam(scene, name, scale) {
       const age = state.now - p.born;
       const alive = age >= 0 && age < p.life;
       const base = i * verticesPerPatch;
-      colors[base * 4 + 3] = alive ? Math.min(1, age / .15) * Math.pow(1 - age / p.life, 1.25) * (.6 + p.strength * .4) : 0;
+      const opacity = alive ? Math.min(1, age / .1) * Math.pow(1 - age / p.life, 1.25) * (.6 + p.strength * .4) : 0;
+      for (let k = 0; k < verticesPerPatch; k++) colors[(base + k) * 4 + 3] = opacity;
       if (!alive) {
         // Collapse expired geometry into the live trail so its bounds stay local.
         if (anchor) for (let k = 0; k < verticesPerPatch; k++) {
@@ -67,8 +69,8 @@ export function createSternFoam(scene, name, scale) {
       const grow = 1 + age * .1;
       const sin = Math.sin(p.heading), cos = Math.cos(p.heading);
       for (let k = 0; k < verticesPerPatch; k++) {
-        const angle = (k - 1) * Math.PI / 4;
-        const uneven = .88 + .12 * Math.sin(k * 2.7 + p.seed * 11);
+        const angle = (k - 1) * Math.PI * 2 / corners;
+        const uneven = .78 + .22 * Math.sin(k * 2.7 + p.seed * 11);
         const x = k === 0 ? 0 : Math.cos(angle) * p.width * grow * uneven;
         const z = k === 0 ? 0 : Math.sin(angle) * p.length * grow * uneven;
         positions[(base + k) * 3] = p.x + cos * x + sin * z;
