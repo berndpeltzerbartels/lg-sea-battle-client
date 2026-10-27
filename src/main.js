@@ -1,3 +1,5 @@
+import { periscopeLiftAtDepth, periscopeMastTop, periscopeFoamStrength } from "./periscopeGeometry.js";
+import { createPeriscopeFoamState } from "./periscopeFoamState.js";
 import { createSternFoam } from './sternFoam.js';
 import depthChargeExplosionUrl1 from "./assets/audio/depth-charge-explosion-1.wav?url";
 import depthChargeExplosionUrl2 from "./assets/audio/depth-charge-explosion-2.wav?url";
@@ -1237,7 +1239,7 @@ const submarineBearingAlignMinRudder = 2;
 const submarineBearingAlignStopSpeed = 0.28;
 const submarineEngineStopIndex = engineOrders.findIndex((order) => order.speed === 0);
 const submarineEngineAheadOneThirdIndex = engineOrders.findIndex((order) => order.shortLabel === "1/3");
-const submarinePeriscopeWakeQuietSpeed = engineOrders[submarineEngineAheadOneThirdIndex]?.speed ?? 2.93;
+const submarinePeriscopeWakeQuietSpeed = engineOrders[3]?.speed ?? .9;
 const submarinePeriscopeWakeFullSpeed = maxSubmarinePeriscopeForwardSpeed;
 
 // Keep propulsion as discrete ship orders, not held-key throttle.
@@ -5318,7 +5320,7 @@ function compassBearingRatio(headingValue) {
 }
 
 function getSubmarinePeriscopeLiftTarget(depthState, depthOffset) {
-  return 0;
+  return periscopeLiftAtDepth(depthOffset);
 }
 
 function updateSubmarinePeriscopeExtension(submarine, periscopeLift) {
@@ -7426,6 +7428,7 @@ function disposeRemoteMotion(motion) {
   hideEnemyWake(motion.bowWake);
   motion.bowWake?.sternFoam?.dispose();
   hideEnemyWake(motion.periscopeWake);
+  motion.periscopeWake?.surfaceFoam?.dispose();
   motion.bowWake?.root?.getChildMeshes?.().forEach((mesh) => mesh.dispose());
   motion.bowWake?.root?.dispose?.();
   motion.periscopeWake?.root?.getChildMeshes?.().forEach((mesh) => mesh.dispose());
@@ -10241,58 +10244,14 @@ function updateSubmarinePeriscopeWake(wake, depthState, speed, time, dt = 1 / 60
   if (!wake) return;
 
   const periscopeSpeed = Math.abs(Number.isFinite(speed) ? speed : 0);
-  if (depthState !== submarineDepthStates.periscope || periscopeSpeed <= submarinePeriscopeWakeQuietSpeed) {
-    hideEnemyWake(wake);
-    return;
-  }
-  const speedRatio = smoothstep(submarinePeriscopeWakeQuietSpeed, submarinePeriscopeWakeFullSpeed, periscopeSpeed);
-  const targetStrength = clamp(0.12 + speedRatio * 0.88, 0, 1);
-  const response = targetStrength > wake.strength ? 5.4 : 1.15;
-  wake.strength += (targetStrength - wake.strength) * Math.min(1, dt * response);
-  const wakeIntensity = wake.strength;
-  const wakeDirection = speed >= 0 ? "forward" : "reverse";
+  const visibleMast = sourcePosition && sourcePosition.y + (periscopeMastTop + periscopeLiftAtDepth(
+    (sourcePosition.y - submarineWaterlineY) / submarineVisualScale)) * submarineVisualScale > 0;
+  const emitting = depthState === submarineDepthStates.periscope && visibleMast
+    && periscopeSpeed > submarinePeriscopeWakeQuietSpeed;
+  wake.strength = emitting ? periscopeFoamStrength(speed, submarinePeriscopeWakeQuietSpeed, submarinePeriscopeWakeFullSpeed) : 0;
+  if (sourcePosition) wake.surfaceFoam.update(sourcePosition, sourceHeading, speed, wake.strength, dt);
+  wake.root.setEnabled(wake.surfaceFoam.snapshot().active > 0);
 
-  wake.root.setEnabled(wakeIntensity > 0.018);
-  if (sourcePosition) {
-    wake.root.position.x = sourcePosition.x;
-    wake.root.position.y = wake.waterlineY;
-    wake.root.position.z = sourcePosition.z;
-  }
-  wake.root.rotationQuaternion = Quaternion.FromEulerAngles(0, sourceHeading, 0);
-
-  wake.segments.forEach((segment, index) => {
-    const row = segment.metadata?.row ?? 1;
-    const activeDirection = segment.metadata?.direction === wakeDirection;
-    const visibility = wakeRowVisibility(wakeIntensity, row);
-    const pulse = 0.82 + Math.sin(time * 3.1 + index * 0.74) * 0.09;
-    segment.setEnabled(activeDirection && visibility > 0.015);
-    segment.visibility = activeDirection ? visibility : 0;
-    segment.scaling.x = (0.32 + wakeIntensity * 1.45 + row * 0.035) * 1.4;
-    segment.scaling.z = (0.24 + wakeIntensity * 0.72 + row * 0.028) * pulse * 1.15;
-    segment.position.x = segment.metadata.baseX + Math.sin(time * 5.2 + index * 1.31) * 0.018 * wakeIntensity;
-    segment.position.z = segment.metadata.baseZ + segment.metadata.zSign * wakeIntensity * row * 0.035;
-    segment.position.y = (wake.surfaceY ?? enemyBowWakeSurfaceY)
-      + wakeIntensity * 0.018
-      + Math.sin(time * 2.6 + index) * 0.0035;
-    segment.rotation.y = segment.metadata.baseRotationY + Math.sin(time * 4.4 + index) * 0.045 * wakeIntensity;
-  });
-
-  wake.churn.forEach((patch, index) => {
-    const row = patch.metadata?.row ?? 1;
-    const activeDirection = patch.metadata?.direction === wakeDirection;
-    const visibility = wakeRowVisibility(wakeIntensity, row);
-    const pulse = 0.76 + Math.sin(time * 4.3 + index * 1.6) * 0.11;
-    patch.setEnabled(activeDirection && visibility > 0.015);
-    patch.visibility = activeDirection ? visibility : 0;
-    patch.scaling.x = (0.42 + wakeIntensity * 1.35) * pulse * 1.4;
-    patch.scaling.z = (0.42 + wakeIntensity * 0.92 + row * 0.035) * 1.15;
-    patch.position.x = patch.metadata.baseX + Math.sin(time * 5.8 + index * 1.2) * 0.021 * wakeIntensity;
-    patch.position.z = patch.metadata.baseZ + patch.metadata.zSign * wakeIntensity * row * 0.028;
-    patch.position.y = (wake.surfaceY ?? enemyBowWakeSurfaceY)
-      + wakeIntensity * 0.02
-      + Math.sin(time * 3.2 + index) * 0.004;
-    patch.rotation.y = patch.metadata.baseRotationY + Math.sin(time * 4.9 + index) * 0.12 * wakeIntensity;
-  });
 }
 
 function resetWakeAtPosition(wake, sourcePosition, sourceHeading = 0) {
@@ -10311,6 +10270,7 @@ function hideEnemyWake(wake) {
   if (!wake) return;
   wake.strength = 0;
   wake.sternFoam?.reset();
+  wake.surfaceFoam?.reset();
   wake.root?.setEnabled?.(false);
   wake.segments?.forEach((segment) => {
     segment.setEnabled(false);
@@ -11399,7 +11359,12 @@ function enemyPeriscopeWakeSnapshot(shipId) {
     churnVisibility: averageWakeVisibility(churn),
     forwardParts: segments.concat(churn).filter((part) => part.kind?.includes("periscope") && part.direction === "forward" && part.enabled).length,
     reverseParts: segments.concat(churn).filter((part) => part.kind?.includes("periscope") && part.direction === "reverse" && part.enabled).length,
-    enabledParts: segments.concat(churn).filter((part) => part.enabled).length
+    depositedFoam: wake.surfaceFoam?.snapshot() ?? null,
+    mastTops: (motion.boat?.periscopeMasts ?? []).map(mast => {
+      mast.mesh.computeWorldMatrix(true);
+      return Vector3.TransformCoordinates(new Vector3(0, mast.height / 2, 0), mast.mesh.getWorldMatrix()).y;
+    }),
+    enabledParts: wake.surfaceFoam?.snapshot().active ?? segments.concat(churn).filter((part) => part.enabled).length
   };
 }
 
@@ -17296,63 +17261,12 @@ function createSubmarinePeriscopeWake(scene, materials, parent, name, options = 
   const waterlineY = Number.isFinite(options.waterlineY) ? options.waterlineY : submarineWaterlineY;
   const surfaceY = -waterlineY / Math.max(0.001, root.scaling.y) + 0.026;
   const periscopeZ = Number.isFinite(options.periscopeZ) ? options.periscopeZ : 0.11;
-  const segments = [];
-  const churn = [];
-
-  const createDirectionalWake = (direction, zSign) => {
-    for (let side = -1; side <= 1; side += 2) {
-      for (let row = 0; row < 8; row += 1) {
-        const startX = side * (0.014 + row * 0.008);
-        const startZ = periscopeZ + zSign * (0.018 + row * 0.02);
-        const endX = side * (0.055 + row * 0.045);
-        const endZ = periscopeZ + zSign * (0.24 + row * 0.19);
-        const segment = createWakeRibbon(`${name}_periscope_${direction}_wake_${side}_${row}`, scene, materials.foam, root, startX, startZ, endX, endZ, surfaceY);
-        segment.metadata = {
-          kind: "periscopeTrail",
-          direction,
-          zSign,
-          row: row + 1,
-          side,
-          baseX: segment.position.x,
-          baseZ: segment.position.z,
-          baseRotationY: segment.rotation.y
-        };
-        segments.push(segment);
-      }
-    }
-
-    for (let row = 0; row < 9; row += 1) {
-      const patch = createJaggedSurfacePatch(
-        `${name}_periscope_${direction}_churn_${row}`,
-        scene,
-        0.055 + (row % 3) * 0.018,
-        0.11 + row * 0.018,
-        stableHashString(`${name}:${direction}:${row}`)
-      );
-      patch.parent = root;
-      patch.material = materials.foam;
-      patch.position.x = (row - 4) * 0.014;
-      patch.position.y = surfaceY;
-      patch.position.z = periscopeZ + zSign * (0.07 + row * 0.095);
-      patch.rotation.y = zSign < 0 ? (-0.1 + row * 0.03) : (Math.PI + 0.1 - row * 0.03);
-      patch.metadata = {
-        kind: "periscopeChurn",
-        direction,
-        zSign,
-        row: row + 1,
-        baseX: patch.position.x,
-        baseZ: patch.position.z,
-        baseRotationY: patch.rotation.y
-      };
-      churn.push(patch);
-    }
-  };
-
-  createDirectionalWake("forward", -1);
-  createDirectionalWake("reverse", 1);
-
+  const surfaceFoam = createSternFoam(scene, `${name}_periscope`, submarineVisualScale,
+    { state: createPeriscopeFoamState(submarineVisualScale) });
   root.setEnabled(false);
-  return { root, segments, churn, strength: 0, waterlineY, surfaceY, periscopeZ, vehicleType: "submarine-periscope" };
+  return { root, segments: [], churn: [], surfaceFoam, strength: 0, waterlineY, surfaceY, periscopeZ,
+    vehicleType: "submarine-periscope" };
+
 }
 
 function createWakeRibbon(name, scene, material, parent, startX, startZ, endX, endZ, surfaceY = enemyBowWakeSurfaceY) {

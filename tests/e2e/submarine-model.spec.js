@@ -218,7 +218,7 @@ test("remote submarine keeps its real flak visible and stows it while diving", a
 });
 
 test("periscope depth submarine shows speed dependent periscope wake", async ({ page }) => {
-  await page.goto("/sea-battle/?setup=8&vehicle=submarine&hide-beach=1&scenarioTest=1");
+  await page.goto("/app?vehicle=submarine&sandbox=side-view&scenarioTest=1");
   await page.waitForFunction(() => (
     window.seaBattleScenarioTest
     && document.body.dataset.scenarioTest === "ready"
@@ -234,8 +234,9 @@ test("periscope depth submarine shows speed dependent periscope wake", async ({ 
   await page.waitForTimeout(700);
   const quietWake = await page.evaluate(() => window.seaBattleScenarioTest.enemyPeriscopeWakeSnapshot("test-U-wake"));
   expect(quietWake).toBeTruthy();
-  expect(quietWake.wakeEnabled).toBe(false);
-  expect(quietWake.strength).toBe(0);
+  expect(quietWake.wakeEnabled).toBe(true);
+  expect(quietWake.strength).toBeGreaterThan(0);
+  expect(quietWake.strength).toBeLessThan(.3);
 
   await page.evaluate(() => window.seaBattleScenarioTest.createRemoteSubmarineForTest({
     id: "test-U-wake",
@@ -249,9 +250,8 @@ test("periscope depth submarine shows speed dependent periscope wake", async ({ 
   expect(fastWake.wakeEnabled).toBe(true);
   expect(fastWake.strength).toBeGreaterThan(0.55);
   expect(fastWake.enabledParts).toBeGreaterThan(6);
-  expect(fastWake.trailVisibility).toBeGreaterThan(0.35);
-  expect(fastWake.forwardParts).toBeGreaterThan(6);
-  expect(fastWake.reverseParts).toBe(0);
+  expect(fastWake.depositedFoam.active).toBeGreaterThan(6);
+  expect(fastWake.depositedFoam.capacity).toBe(164);
 
   await page.evaluate(() => window.seaBattleScenarioTest.createRemoteSubmarineForTest({
     id: "test-U-reverse-wake",
@@ -264,8 +264,7 @@ test("periscope depth submarine shows speed dependent periscope wake", async ({ 
   const reverseWake = await page.evaluate(() => window.seaBattleScenarioTest.enemyPeriscopeWakeSnapshot("test-U-reverse-wake"));
   expect(reverseWake.wakeEnabled).toBe(true);
   expect(reverseWake.strength).toBeGreaterThan(0.45);
-  expect(reverseWake.reverseParts).toBeGreaterThan(6);
-  expect(reverseWake.forwardParts).toBe(0);
+  expect(reverseWake.depositedFoam.active).toBeGreaterThan(6);
 
   await page.evaluate(() => window.seaBattleScenarioTest.createRemoteSubmarineForTest({
     id: "test-U-wake",
@@ -274,7 +273,7 @@ test("periscope depth submarine shows speed dependent periscope wake", async ({ 
     engineOrder: 7,
     heading: 0
   }));
-  await page.waitForTimeout(900);
+  await page.waitForTimeout(2400);
   const surfacedWake = await page.evaluate(() => window.seaBattleScenarioTest.enemyPeriscopeWakeSnapshot("test-U-wake"));
   expect(surfacedWake.wakeEnabled).toBe(false);
   expect(surfacedWake.strength).toBeLessThan(0.25);
@@ -329,8 +328,9 @@ test("submarine periscope depth keeps the observation view above water", async (
   expect(samples[targetDepthIndex].torpedoView).toBe("active");
   expect(samples[targetDepthIndex].submarinePeriscopeMode).toBe("forward-scope");
   expect(samples[targetDepthIndex].cameraY).toBeGreaterThan(0.03);
-  expect(samples[targetDepthIndex].cameraY).toBeLessThan(0.55);
-  expect(samples[targetDepthIndex].periscopeLift).toBe(0);
+  expect(samples[targetDepthIndex].cameraY).toBeLessThan(0.75);
+  expect(samples[targetDepthIndex].periscopeLift).toBeGreaterThan(.045);
+  expect(samples[targetDepthIndex].periscopeLift).toBeLessThan(.051);
   expect(samples[targetDepthIndex].radarDepthMode).toBe("normal");
   expect(samples[targetDepthIndex].radarRange).toBe(initial.radarRange);
   expect(samples[targetDepthIndex].submarineWakeExposure).toBe(0);

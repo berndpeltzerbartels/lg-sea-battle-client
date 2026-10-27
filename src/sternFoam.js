@@ -6,8 +6,8 @@ import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { createSternFoamState } from './sternFoamState.js';
 
 // One draw call per visible boat; flat polygon opacity matches the coarse game geometry.
-export function createSternFoam(scene, name, scale) {
-  const state = createSternFoamState(scale);
+export function createSternFoam(scene, name, scale, options = {}) {
+  const state = options.state ?? createSternFoamState(scale);
   const mesh = new Mesh(name + '_deposited_stern_foam', scene);
   mesh.isPickable = false;
   mesh.hasVertexAlpha = true;
@@ -54,7 +54,10 @@ export function createSternFoam(scene, name, scale) {
       const age = state.now - p.born;
       const alive = age >= 0 && age < p.life;
       const base = i * verticesPerPatch;
-      const opacity = alive ? Math.min(1, age / .1) * Math.pow(1 - age / p.life, 1.25) * (.6 + p.strength * .4) : 0;
+      // Keep only the fresh periscope churn bright; the outer trail still ends at the same age.
+      const fadeAge = Math.max(0, age - (p.coreSeconds ?? 0));
+      const fadeLife = p.life - (p.coreSeconds ?? 0);
+      const opacity = alive ? Math.min(1, age / .1) * Math.pow(1 - fadeAge / fadeLife, p.head ? .12 : 1.25) * (p.opacity ?? (.6 + p.strength * .4)) : 0;
       for (let k = 0; k < verticesPerPatch; k++) colors[(base + k) * 4 + 3] = opacity;
       if (!alive) {
         // Collapse expired geometry into the live trail so its bounds stay local.
