@@ -12,7 +12,7 @@ export function flakSpatialMix(position, listener) {
 }
 
 // One continuous burst per firing ship, never one source per projectile.
-export function createFlakSound({ context, destination = context.destination, url, report = () => {}, maxVoices = 8, baseRate = 1, spatialMix = flakSpatialMix }) {
+export function createFlakSound({ context, destination = context.destination, url, report = () => {}, maxVoices = 8, baseRate = 1, spatialMix = flakSpatialMix, sustainSeconds = .18, gainSmoothing = .025 }) {
   let buffer, pending, disposed = false, lastUpdate = -Infinity;
   let listener = { x: 0, z: 0, heading: 0, muted: false };
   const voices = new Map();
@@ -64,7 +64,7 @@ export function createFlakSound({ context, destination = context.destination, ur
       v.position = { x: position.x, y: position.y, z: position.z };
       v.lastShot = context.currentTime;
       v.priority = mix.gain;
-      v.gain.gain.setTargetAtTime(mix.gain / Math.sqrt(voices.size), context.currentTime, 0.01);
+      v.gain.gain.setTargetAtTime(mix.gain / Math.sqrt(voices.size), context.currentTime, Math.max(.01, gainSmoothing - .015));
       v.filter.frequency.setTargetAtTime(mix.frequency, context.currentTime, 0.03);
       v.pan?.pan.setTargetAtTime(mix.pan, context.currentTime, 0.03);
     },
@@ -75,12 +75,12 @@ export function createFlakSound({ context, destination = context.destination, ur
       lastUpdate = now;
       for (const [id, v] of voices) {
         const age = now - v.lastShot;
-        if (age > 0.5) { remove(id); continue; }
+        if (age > Math.max(.5, sustainSeconds + .32)) { remove(id); continue; }
         const mix = spatialMix(v.own ? listener : v.position, listener);
         mix.gain *= v.strength;
         v.priority = mix.gain;
-        const tail = Math.max(0, Math.min(1, (0.32 - age) / 0.14));
-        v.gain.gain.setTargetAtTime(mix.gain * tail / Math.sqrt(voices.size), now, 0.025);
+        const tail = Math.max(0, Math.min(1, (sustainSeconds + .14 - age) / .14));
+        v.gain.gain.setTargetAtTime(mix.gain * tail / Math.sqrt(voices.size), now, gainSmoothing);
         v.filter.frequency.setTargetAtTime(mix.frequency, now, 0.05);
         v.pan?.pan.setTargetAtTime(mix.pan, now, 0.05);
       }

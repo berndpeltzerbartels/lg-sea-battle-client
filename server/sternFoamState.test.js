@@ -28,3 +28,21 @@ test('teleports clear previous foam and do not draw a trail across the map', () 
   state.update({x:1000,z:1000},0,17,1,.1);
   assert.ok(state.patches.every(p=>p.born===-Infinity));
 });
+
+test('submarine uses anchored narrow stern foam with the same brightness and faster centre decay', () => {
+  const sub = createSternFoamState(3, 144, { submarine: true });
+  const boat = createSternFoamState(3);
+  for (const state of [sub, boat]) {
+    state.update({ x: 0, z: 0 }, 0, 9, 1, .1);
+    state.update({ x: 0, z: 3 }, 0, 9, 1, .1);
+  }
+  assert.equal(sub.patches.length, 144);
+  assert.ok(sub.patches[0].width < boat.patches[0].width);
+  assert.equal(sub.patches[0].strength, boat.patches[0].strength);
+  assert.equal(sub.patches[0].life, boat.patches[0].life);
+  assert.ok(sub.patches[1].life < sub.patches[0].life);
+  const first = { ...sub.patches[0] };
+  assert.ok(first.z < -10, 'Foam starts at the submarine stern');
+  sub.update({ x: 3, z: 3 }, Math.PI / 2, 9, 1, .1);
+  assert.deepEqual(sub.patches[0], first);
+});

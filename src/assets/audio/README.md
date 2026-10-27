@@ -194,3 +194,53 @@ Surface diesel idle: “Large Ship Engine Idle” by Suhuy, https://freesound.or
 Replacement idle (2026-10-26): “Marine diesel engine” by AugustSandberg, https://freesound.org/people/AugustSandberg/sounds/264864/ (CC0 1.0), publisher HQ preview https://cdn.freesound.org/previews/264/264864_1934171-hq.mp3. Volvo Penta MD22 recorded in engine compartment. Replaces Suhuy recording above. Crop 20–30 s; mono, baked playback 0.65x, resample 48 kHz, high-pass 30 Hz, low-pass 1400 Hz, circular 1 s crossfade, +2 dB. Runtime idle accelerates only 1–1.25x as it fades out. Smoothstep equal-power fade across 0–20% load; matching 0.9 s gain/rate smoothing for both diesel layers avoids their previous differing ramps. Underwater motor/fan smoothing unchanged.
 
 Final surface idle choice: use only the original user-supplied Diesel.m4a / surface-diesel-loop.wav at rate 0.66 (approximately the former one-third engine order). Higher rates follow 0.66 + 0.34 * surfacePower, preserving original pitch at submarine full / boat three-quarter speed. Gain 0.48 + 0.32 * sqrt(load), station multipliers retained. Separate downloaded idle recording removed; no sample switching or crossfade, one smoothly retuned looping diesel source. Submerged motor and fan unchanged.
+
+Underwater passing ships (2026-10-27): underwater-propeller-loop.wav uses
+“underwater ship propeller 3.45 PM 220920_0532.wav” by klankbeeld,
+https://freesound.org/people/klankbeeld/sounds/680037/ , CC BY 4.0
+https://creativecommons.org/licenses/by/4.0/ . Real hydrophone recording of a
+river boat's propeller, NOT a recording inside a submarine and NOT film audio.
+Publisher HQ preview https://cdn.freesound.org/previews/680/680037_1648170-hq.mp3 .
+Crop 70–80 s, mono 22050 Hz PCM16, 35 Hz high-pass / 1800 Hz low-pass;
+one-second equal-power circular overlap yields a nine-second loop, RMS
+normalised toward 0.15 with peak bounded at 0.9. Used for nearby OTHER ships
+heard underwater, four continuous sources maximum, 5 Hz selection, speed-based
+pitch and level, spatial stereo and distance attenuation. No own-propeller
+layer: the existing own submerged fan/motor rules remain intact.
+
+sonar-ping.wav: “Submarine Sonar” by Breviceps,
+https://freesound.org/people/Breviceps/sounds/493162/ , CC0 1.0
+https://creativecommons.org/publicdomain/zero/1.0/ . Publisher HQ preview
+https://cdn.freesound.org/previews/493/493162_9159316-hq.mp3 . First 2.7 seconds
+(single ping, not three repeated pings), mono 22050 Hz PCM16, gain +6 dB,
+5 ms attack fade / final 400 ms fade. At most one ping every eight seconds,
+only while underwater with a torpedo boat inside its existing six-length
+submarine echo range (141.84 world units); both fleets, no new detection range
+or server-side scanning. Sound credits are linked from both handbook covers.
+
+Replacement propeller loop (2026-10-27): use the user-supplied
+Schraubengerauusche.m4a instead of the klankbeeld hydrophone recording above.
+Decode to mono 22050 Hz PCM16, remove 60 ms at each edge, 250 ms equal-power
+circular overlap, normalise toward RMS 0.15 with peak bounded to 0.9. No baked
+pass-by pitch/gain envelope: the real relative radial velocity produces a
+bounded Doppler shift (0.85–1.18) at runtime, including reverse and listener
+motion. Existing distance/power attenuation and stereo remain, with 120 ms
+gain smoothing and a 400 ms sustain window to avoid flutter at 5 Hz updates.
+The previous downloaded propeller sound is no longer shipped or used.
+
+Gap removal / earlier audibility (2026-10-27): source includes about 2.4 s
+of silence before the actual screw sound and silence after 3.66 s. Rebuilt
+from the steady passage rather than the whole file. See the crop below;
+60 ms waveform-correlated, constant-sum smoothstep circular crossfade
+preserves shaft pulses without an equal-power gain bump. No silence or
+fade-to-zero at the loop boundary. Hearing range increased 300 -> 600 world
+units with a gentler distance curve (180 instead of 80 falloff denominator).
+Four-source cap, update frequency, Doppler and nearby sonar range unchanged.
+Crop 2.44000–3.52290s; 60 ms correlated smoothstep crossfade, correlation 0.723; loop 1.02290s; 40ms minimum RMS -24.6 dBFS; seam delta 247 PCM16 units.
+
+Echolot distance (2026-10-27): the ping now uses a separate 141.84-unit
+quadratic distance curve with additional 45-unit attenuation, instead of
+inheriting the long-range cannon mix. Near-only gain 0.35; a boat at 70 units
+is over five times quieter than at 10, at 120 another five times quieter;
+zero at the echo range boundary. Uses actual source/listener position,
+stereo direction and mute/underwater state, without additional sources.

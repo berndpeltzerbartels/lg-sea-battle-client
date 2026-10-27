@@ -1,7 +1,11 @@
+import { createUnderwaterShipSound } from "./underwaterShipSound.js";
+import underwaterPropellerUrl from "./assets/audio/underwater-propeller-loop.wav?url";
+import sonarPingUrl from "./assets/audio/sonar-ping.wav?url";
 import { listenerWaterState } from "./listenerWaterState.js";
 import { createSinkingWaterSound } from "./sinkingWaterSound.js";
 import { periscopeLiftAtDepth, periscopeMastTop, periscopeFoamStrength } from "./periscopeGeometry.js";
 import { createPeriscopeFoamState } from "./periscopeFoamState.js";
+import { createSternFoamState } from './sternFoamState.js';
 import { createSternFoam } from './sternFoam.js';
 import depthChargeExplosionUrl1 from "./assets/audio/depth-charge-explosion-1.wav?url";
 import depthChargeExplosionUrl2 from "./assets/audio/depth-charge-explosion-2.wav?url";
@@ -125,6 +129,7 @@ let depthChargeRequestPending = false;
 let depthChargeAudio = null;
 let gameAudioOutput = null;
 let sinkingWaterSound = null;
+let underwaterShipSound = null;
 let currentListenerWaterState = { underwater: false, deepSubmerged: false };
 let engineSound = null;
 let flakSound = null;
@@ -1461,6 +1466,8 @@ if (engineSoundToggle) {
 }
 document.addEventListener("visibilitychange", () => updateEngineAudio(true));
 window.addEventListener("pagehide", () => {
+  underwaterShipSound?.dispose();
+  underwaterShipSound = null;
   sinkingWaterSound?.dispose();
   sinkingWaterSound = null;
   engineSound?.dispose();
@@ -3603,6 +3610,14 @@ function unlockGameAudio() {
   });
   void torpedoSound.unlock();
   if (!scoutPlaneMode) {
+    underwaterShipSound ??= createUnderwaterShipSound({ context: depthChargeAudio, destination: gameAudioOutput,
+      propellerUrl: underwaterPropellerUrl, sonarUrl: sonarPingUrl,
+      report: error => {
+        console.warn("[sea-battle] Unterwasser-Schiffston", error);
+        sendClientGameEvent("underwater-ship-audio-error", { message: error.message });
+      }
+    });
+    if (submarineMode) void underwaterShipSound.unlock();
     engineSound ??= createEngineSound({
       surfaceUrl: surfaceDieselUrl,
       fanUrl: submarineFanUrl,
@@ -3630,6 +3645,10 @@ function updateEngineAudio(force = false) {
     ...currentListenerWaterState,
     muted: engineSoundMuted || document.hidden
   };
+  if (underwaterShipSound) {
+    // Reuse authoritative ship positions: no visibility search or new server work.
+    underwaterShipSound.update(listener, serverShipsById.values(), force, playerServerShipId);
+  }
   flakSound?.update(listener, force);
   cannonSound?.update(listener, force);
   explosionSound?.update(listener, force);
@@ -10564,6 +10583,7 @@ function installScenarioTestHooks() {
       if (shipId) flakSound?.shot(shipId, { x, z }, own);
       return flakSound?.state() ?? null;
     },
+    underwaterShipAudioForTest() { return underwaterShipSound?.state() ?? null; },
     engineAudioForTest(state) {
       if (state) engineSound?.update(state, true);
       return engineSound?.state() ?? null;
@@ -11336,6 +11356,7 @@ function enemyWakeSnapshot(shipId) {
     engineOrder: motion.engineOrder,
     wakeEnabled: wake.root.isEnabled(),
     strength: Number(wake.strength.toFixed(3)),
+    depositedFoam: wake.sternFoam?.snapshot() ?? null,
     bowVisibility: averageWakeVisibility(segments.filter((segment) => segment.kind === "bow")),
     sternEdgeVisibility: averageWakeVisibility(segments.filter((segment) => segment.kind === "sternEdge")),
     sternChurnVisibility: averageWakeVisibility(churn.filter((patch) => patch.kind === "sternChurn")),
@@ -17218,19 +17239,6 @@ function createEnemyBowWake(scene, materials, parent, name, options = {}) {
     }
   }
 
-  for (let side = -1; side <= 1; side += 2) {
-    const sternRows = isSubmarineWake ? 3 : 0;
-    for (let i = 0; i < sternRows; i += 1) {
-      const startX = side * (isSubmarineWake ? 0.03 + i * 0.012 : 0.64 + i * 0.018) * widthScale;
-      const startZ = (isSubmarineWake ? -4.52 - i * 0.03 : -3.98 - i * 0.02) * lengthScale;
-      const endX = side * (isSubmarineWake ? 0.08 + i * 0.025 : 0.76 + i * 0.03) * widthScale;
-      const endZ = (isSubmarineWake ? -4.78 - i * 0.18 : -4.24 - i * 0.12) * lengthScale;
-      const segment = createWakeRibbon(`${name}_stern_edge_wake_${side}_${i}`, scene, materials.foam, root, startX, startZ, endX, endZ, surfaceY);
-      segment.metadata = { kind: "sternEdge", row: i + 1, baseX: segment.position.x, baseZ: segment.position.z, baseRotationY: segment.rotation.y };
-      segments.push(segment);
-    }
-  }
-
   for (let i = 0; i < 4; i += 1) {
     const patch = MeshBuilder.CreateBox(`${name}_bow_churn_${i}`, {
       width: (isSubmarineWake ? 0.18 + (i % 2) * 0.08 : 0.32 + (i % 2) * 0.14) * widthScale,
@@ -17247,33 +17255,10 @@ function createEnemyBowWake(scene, materials, parent, name, options = {}) {
     churn.push(patch);
   }
 
-  const sternChurnRows = isSubmarineWake ? 4 : 0;
-  for (let i = 0; i < sternChurnRows; i += 1) {
-    const patch = isSubmarineWake
-      ? MeshBuilder.CreateBox(`${name}_stern_churn_${i}`, {
-          width: (0.13 + (i % 2) * 0.055) * widthScale,
-          height: 0.014,
-          depth: (0.16 + i * 0.045) * lengthScale
-        }, scene)
-      : MeshBuilder.CreateCylinder(`${name}_stern_churn_${i}`, {
-          diameter: 0.22 + (i % 3) * 0.026,
-          height: 0.014,
-          tessellation: 8
-        }, scene);
-    patch.parent = root;
-    patch.material = materials.foam;
-    const sternChurnOffset = isSubmarineWake ? 0 : ((i % 2) - 0.5) * 0.018;
-    patch.position.x = ((i - (sternChurnRows - 1) * 0.5) * (isSubmarineWake ? 0.028 : 0.032) + sternChurnOffset) * widthScale;
-    patch.position.y = surfaceY;
-    patch.position.z = (isSubmarineWake ? -4.62 - i * 0.11 : -4.05 - i * 0.06 - (i % 3) * 0.012) * lengthScale;
-    patch.rotation.y = -0.16 + i * 0.07 + (isSubmarineWake ? 0 : (i % 2) * 0.09);
-    patch.metadata = { kind: "sternChurn", row: i + 1, baseX: patch.position.x, baseZ: patch.position.z, baseRotationY: patch.rotation.y };
-    churn.push(patch);
-  }
-
   root.setEnabled(false);
   return { root, segments, churn, strength: 0, waterlineY, surfaceY, vehicleType,
-    sternFoam: isSubmarineWake ? null : createSternFoam(scene, name, root.scaling.x) };
+    sternFoam: createSternFoam(scene, name, root.scaling.x,
+      { state: createSternFoamState(root.scaling.x, 144, { submarine: isSubmarineWake }) }) };
 }
 
 function createSubmarinePeriscopeWake(scene, materials, parent, name, options = {}) {
