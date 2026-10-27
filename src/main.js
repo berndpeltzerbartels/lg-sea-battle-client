@@ -1,3 +1,5 @@
+import { listenerWaterState } from "./listenerWaterState.js";
+import { createSinkingWaterSound } from "./sinkingWaterSound.js";
 import { periscopeLiftAtDepth, periscopeMastTop, periscopeFoamStrength } from "./periscopeGeometry.js";
 import { createPeriscopeFoamState } from "./periscopeFoamState.js";
 import { createSternFoam } from './sternFoam.js';
@@ -122,6 +124,8 @@ let depthChargeSalvoQueued = false;
 let depthChargeRequestPending = false;
 let depthChargeAudio = null;
 let gameAudioOutput = null;
+let sinkingWaterSound = null;
+let currentListenerWaterState = { underwater: false, deepSubmerged: false };
 let engineSound = null;
 let flakSound = null;
 let cannonSound = null;
@@ -1457,6 +1461,8 @@ if (engineSoundToggle) {
 }
 document.addEventListener("visibilitychange", () => updateEngineAudio(true));
 window.addEventListener("pagehide", () => {
+  sinkingWaterSound?.dispose();
+  sinkingWaterSound = null;
   engineSound?.dispose();
   flakSound?.dispose();
   cannonSound?.dispose();
@@ -3558,6 +3564,7 @@ function unlockGameAudio() {
     gameAudioOutput.release.value = 0.1;
     gameAudioOutput.connect(depthChargeAudio.destination);
   }
+  sinkingWaterSound ??= createSinkingWaterSound({ context: depthChargeAudio, destination: gameAudioOutput });
   flakSound ??= createFlakSound({ context: depthChargeAudio, destination: gameAudioOutput, url: flakSoundUrl, baseRate: .88,
     report: error => {
       console.warn("[sea-battle] Flakton", error);
@@ -3612,12 +3619,15 @@ function unlockGameAudio() {
 }
 
 function updateEngineAudio(force = false) {
+  const sinking = playerDamageState === "sinking" || playerDamageState === "air-hit";
+  currentListenerWaterState = listenerWaterState({ submarine: submarineMode, depthOffset: playerSubmarineDepthOffset,
+    periscopeOffset: submarineDepthOffsets.periscope, sinking, cameraY: camera.position.y });
+  sinkingWaterSound?.update({ sinking, ...currentListenerWaterState, muted: engineSoundMuted || document.hidden });
   const listener = {
-    x: boat.root.position.x, y: boat.root.position.y, z: boat.root.position.z,
+    x: sinking ? camera.position.x : boat.root.position.x, y: sinking ? camera.position.y : boat.root.position.y, z: sinking ? camera.position.z : boat.root.position.z,
     vx: Math.sin(heading) * speed, vz: Math.cos(heading) * speed, vy: scoutPlaneMode ? scoutPlaneVerticalSpeed : 0,
     heading: heading + (flakViewActive ? flakYaw : cannonViewActive ? cannonYaw : 0),
-    underwater: submarineMode && Math.abs(playerSubmarineDepthOffset) > 0.8,
-    deepSubmerged: submarineMode && Math.abs(playerSubmarineDepthOffset) > Math.abs(submarineDepthOffsets.periscope) + 0.05,
+    ...currentListenerWaterState,
     muted: engineSoundMuted || document.hidden
   };
   flakSound?.update(listener, force);
@@ -10590,6 +10600,14 @@ function installScenarioTestHooks() {
     },
     sternFoamForTest() {
       return boat.bowWake?.sternFoam?.snapshot() ?? null;
+    },
+    sinkingAudioForTest(age) {
+      if (Number.isFinite(age)) {
+        if (playerDamageState !== "sinking") beginPlayerSinking(null, time);
+        playerSinkStartTime = time - age;
+      }
+      return { ...currentListenerWaterState, cameraY: camera.position.y, damage: playerDamageState,
+        waterSound: sinkingWaterSound?.state() ?? null };
     },
     motionSyncForTest() {
       return { blocked: playerMotionBlocked, warning: motionSyncWarningText };
