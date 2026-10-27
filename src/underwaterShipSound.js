@@ -35,7 +35,7 @@ export function sonarSpatialMix(position, listener) {
   const range = 141.84;
   return {
     gain: !listener.underwater || !listener.deepSubmerged || listener.muted || distance >= range ? 0
-      : .7 * (1 - distance / range) ** 2 / (1 + distance / 45),
+      : .7 * (1 - distance / range) ** 1.5 / (1 + distance / 90),
     pan: distance > 1 ? Math.max(-1, Math.min(1,
       (dx * Math.cos(listener.heading) - dz * Math.sin(listener.heading)) / distance)) : 0,
     frequency: 1800

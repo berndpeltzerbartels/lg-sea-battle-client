@@ -64,10 +64,13 @@ test('propeller Doppler follows approach, recession, listener motion and reverse
 });
 
 
-test('sonar is strong only close by and fades steeply to silence at echo range', () => {
+test('sonar carries farther within six ship lengths while retaining distance attenuation', () => {
   const listener = { x: 0, z: 0, heading: 0, underwater: true, deepSubmerged: true };
   const level = distance => sonarSpatialMix({ x: distance, z: 0 }, listener).gain;
-  assert.ok(level(10) > level(70) * 5);
+  assert.equal(level(0), .7);
+  const previousMidrangeLevel = .7 * (1 - 70 / 141.84) ** 2 / (1 + 70 / 45);
+  assert.ok(level(70) > previousMidrangeLevel * 2);
+  assert.ok(level(10) > level(70) * 3);
   assert.ok(level(70) > level(120) * 5);
   assert.equal(level(141.84), 0);
   assert.equal(level(300), 0);
