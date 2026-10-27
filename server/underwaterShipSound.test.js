@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createUnderwaterShipSound, propellerSpatialMix, propellerDoppler, sonarSpatialMix } from '../src/underwaterShipSound.js';
 
 test('hydrophone listening is underwater only, directional and distance dependent', () => {
-  const listener = { x: 0, y: -10, z: 0, heading: 0, underwater: true };
+  const listener = { x: 0, y: -10, z: 0, heading: 0, underwater: true, deepSubmerged: true };
   const near = propellerSpatialMix({ x: 10, y: 0, z: 0 }, listener);
   assert.ok(near.gain > propellerSpatialMix({ x: 200, z: 0 }, listener).gain);
   assert.ok(near.pan > 0);
@@ -28,7 +28,7 @@ test('uses at most four screws and one intermittent ping, excluding own, stopped
     globalThis.fetch = async () => { loads++; return { ok: true, arrayBuffer: async () => new ArrayBuffer(2) }; };
     const sound = createUnderwaterShipSound({ context, propellerUrl: '/screws.wav', sonarUrl: '/ping.wav' });
     await sound.unlock();
-    const listener = { x: 0, y: -6, z: 0, heading: 0, underwater: true };
+    const listener = { x: 0, y: -6, z: 0, heading: 0, underwater: true, deepSubmerged: true };
     const ships = Array.from({ length: 20 }, (_, i) => ({ id: `ship-${i}`, state: 'active',
       vehicleType: 'torpedo-boat', speed: 10, x: i + 10, z: 0 }));
     ships.unshift({ ...ships[0], id: 'own', x: 0 }, { ...ships[0], id: 'stop', speed: 0 },
@@ -65,7 +65,7 @@ test('propeller Doppler follows approach, recession, listener motion and reverse
 
 
 test('sonar is strong only close by and fades steeply to silence at echo range', () => {
-  const listener = { x: 0, z: 0, heading: 0, underwater: true };
+  const listener = { x: 0, z: 0, heading: 0, underwater: true, deepSubmerged: true };
   const level = distance => sonarSpatialMix({ x: distance, z: 0 }, listener).gain;
   assert.ok(level(10) > level(70) * 5);
   assert.ok(level(70) > level(120) * 5);
@@ -73,4 +73,11 @@ test('sonar is strong only close by and fades steeply to silence at echo range',
   assert.equal(level(300), 0);
   assert.equal(sonarSpatialMix({ x: 10, z: 0 }, { ...listener, muted: true }).gain, 0);
   assert.equal(sonarSpatialMix({ x: 10, z: 0 }, { ...listener, underwater: false }).gain, 0);
+});
+
+
+test('periscope depth silences both propellers and sonar, including already playing sounds', () => {
+  const listener = { x: 0, z: 0, heading: 0, underwater: true, deepSubmerged: false };
+  assert.equal(propellerSpatialMix({ x: 5, z: 0 }, listener).gain, 0);
+  assert.equal(sonarSpatialMix({ x: 5, z: 0 }, listener).gain, 0);
 });

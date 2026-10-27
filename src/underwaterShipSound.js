@@ -20,7 +20,7 @@ export function propellerSpatialMix(position, listener) {
   const dx = position.x - listener.x, dz = position.z - listener.z;
   const distance = Math.hypot(dx, (position.y ?? 0) - (listener.y ?? 0), dz);
   return {
-    gain: !listener.underwater || listener.muted || distance >= PROPELLER_HEARING_RANGE ? 0
+    gain: !listener.underwater || !listener.deepSubmerged || listener.muted || distance >= PROPELLER_HEARING_RANGE ? 0
       : .8 * (1 - distance / PROPELLER_HEARING_RANGE) ** 2 / (1 + distance / 180),
     pan: distance > 1 ? Math.max(-1, Math.min(1,
       (dx * Math.cos(listener.heading) - dz * Math.sin(listener.heading)) / distance)) : 0,
@@ -34,7 +34,7 @@ export function sonarSpatialMix(position, listener) {
   const distance = Math.hypot(dx, (position.y ?? 0) - (listener.y ?? 0), dz);
   const range = 141.84;
   return {
-    gain: !listener.underwater || listener.muted || distance >= range ? 0
+    gain: !listener.underwater || !listener.deepSubmerged || listener.muted || distance >= range ? 0
       : .7 * (1 - distance / range) ** 2 / (1 + distance / 45),
     pan: distance > 1 ? Math.max(-1, Math.min(1,
       (dx * Math.cos(listener.heading) - dz * Math.sin(listener.heading)) / distance)) : 0,
@@ -54,11 +54,11 @@ export function createUnderwaterShipSound({ context, destination, propellerUrl, 
     update(listener, ships, force = false, ownShipId = null) {
       screws.update(listener, force);
       // A hydrophone ping retains its recognisable tone at depth.
-      sonar.update({ ...listener, deepSubmerged: false }, force);
+      sonar.update(listener, force);
       const now = context.currentTime;
       if (!force && now - lastUpdate < .2) return;
       lastUpdate = now;
-      if (!listener.underwater || listener.muted || context.state !== 'running') {
+      if (!listener.underwater || !listener.deepSubmerged || listener.muted || context.state !== 'running') {
         nextPing = now + 2;
         return;
       }

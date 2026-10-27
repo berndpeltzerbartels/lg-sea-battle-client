@@ -3647,7 +3647,10 @@ function updateEngineAudio(force = false) {
   };
   if (underwaterShipSound) {
     // Reuse authoritative ship positions: no visibility search or new server work.
-    underwaterShipSound.update(listener, serverShipsById.values(), force, playerServerShipId);
+    underwaterShipSound.update({ ...listener,
+      deepSubmerged: submarineMode && playerDamageState === "active"
+        && getPlayerEffectiveSubmarineDepthState() === submarineDepthStates.submerged
+    }, serverShipsById.values(), force, playerServerShipId);
   }
   flakSound?.update(listener, force);
   cannonSound?.update(listener, force);

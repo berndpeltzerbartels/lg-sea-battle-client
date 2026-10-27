@@ -46,8 +46,15 @@ test('underwater listener hears actual nearby ship tracks and can mute them', as
   expect((await audio()).propellers.voices).toBe(0);
   await page.evaluate(state => window.testStream.onmessage({ data: JSON.stringify({ type: 'game-stream', state }) }), state);
   await page.evaluate(() => window.seaBattleScenarioTest.setSubmarineDepthState('periscope'));
-  await expect.poll(async () => (await audio()).propellers.voices, { timeout: 15000 }).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.seaBattleScenarioTest.submarineDiveSequenceSnapshot().depthOffset),
+    { timeout: 10000 }).toBeCloseTo(-1.6, 2);
+  expect((await audio()).propellers.voices).toBe(0);
+  expect((await audio()).sonar.voices).toBe(0);
+  await page.evaluate(() => window.seaBattleScenarioTest.setSubmarineDepthState('submerged'));
+  await expect.poll(async () => (await audio()).propellers.voices, { timeout: 20000 }).toBe(1);
   await expect.poll(async () => (await audio()).sonar.voices, { timeout: 10000 }).toBe(1);
+  await page.evaluate(() => window.seaBattleScenarioTest.setSubmarineDepthState('periscope'));
+  await expect.poll(async () => (await audio()).propellers.voices).toBe(0);
   await page.locator('#engineSoundToggle').click();
   await expect.poll(async () => (await audio()).propellers.voices).toBe(0);
   expect(errors).toEqual([]);

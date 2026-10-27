@@ -244,3 +244,9 @@ inheriting the long-range cannon mix. Near-only gain 0.35; a boat at 70 units
 is over five times quieter than at 10, at 120 another five times quieter;
 zero at the echo range boundary. Uses actual source/listener position,
 stereo direction and mute/underwater state, without additional sources.
+
+Depth restriction (2026-10-27): propellers and echolot are audible exclusively
+for an active human submarine at actual deep-submerged depth. Surface,
+periscope depth, descent before reaching deep depth, ascent out of deep depth,
+and sinking surface vessels remain silent for these two layers. Existing
+explosion acoustics and own fan/motor are unchanged.
