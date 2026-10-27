@@ -16,7 +16,6 @@ test('bridge lookout and flak share replicated releases, explosions, controls an
     flakHits: [], flakImpacts: [], ramHits: [], depthCharges: [], depthChargeControls: {}, killsByPlayer: {}, destroyedShipsByTeam: {} };
   const pages = [];
   let requests = 0;
-  let warning = null;
   for (const member of members) {
     const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
     const page = await context.newPage();
@@ -36,18 +35,14 @@ test('bridge lookout and flak share replicated releases, explosions, controls an
       let body = {};
       if (path.includes('/session/')) body = { playerId: member.playerId, initials: member.playerId.split('-')[1], teamId: 'light' };
       else if (path.endsWith('/world')) body = { landmasses: [], instrumentMap: { version: 1, layers: [0, 50, 150].map(height => ({ height, contours: [] })) } };
-      else if (path.endsWith('/submarine-warning') || path.endsWith('/aircraft-warning')) {
-        const kind = path.endsWith('/aircraft-warning') ? 'aircraft' : 'submarine';
-        expect(route.request().postDataJSON()).not.toHaveProperty('bearing');
-        warning = { id: `warning-${kind}`, kind, sender: member.name, expiresAt: Date.now() + 10000 };
-        body = { ...crew, submarineWarning: warning };
-      } else if (path.endsWith('/depth-charges')) {
+      else if (path.endsWith('/depth-charges')) {
         requests++;
         if (requests === 1) state.depthCharges = [{ id: 'charge-0', shipId: 'boat', playerId: member.playerId, lane: 0, releasedAt: 0,
           explodesAt: 2.5, x: -.675, z: -13, heading: 0, radius: 24, readyAt: 4.8, exploded: false, targetShipIds: [] }];
         state.depthChargeControls = { boat: { active: true, queued: requests > 1, readyAt: 4.8 } };
         body = state;
-      } else if (path.includes('/crew/')) body = crew;
+      } else if (path.endsWith('/crew/motion') || path.endsWith('/crew/aim')) body = state;
+      else if (path.includes('/crew/')) body = crew;
       else if (path.endsWith('/state')) body = state;
       await route.fulfill({ json: body });
     });
@@ -57,45 +52,22 @@ test('bridge lookout and flak share replicated releases, explosions, controls an
       .toEqual({ errors: [], ready: true });
     await page.locator('#renderCanvas').click();
     await expect(page.locator('#depthChargeButton')).toBeVisible();
+    await page.keyboard.press('h');
     await expect(page.locator('#roleHotkeys')).toBeVisible();
-    for (const id of ['lookoutWarningButton', 'lookoutAircraftWarningButton']) {
-      if (member.station === 'flak') await expect(page.locator(`#${id}`)).toBeHidden();
-      else await expect(page.locator(`#${id}`)).toBeVisible();
-    }
+    await expect(page.locator('#lookoutWarningButton, #lookoutAircraftWarningButton')).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath(`${member.station}-controls.png`) });
   }
   const broadcast = async () => {
     for (let i = 0; i < pages.length; i++) await pages[i].evaluate(message =>
       window.testStream.onmessage({ data: JSON.stringify(message) }), { type: 'game-stream', state });
   };
-  await expect(pages[1].locator('#lookoutHud button')).toHaveCount(6);
-  await pages[1].keyboard.press('KeyU');
-  await expect.poll(() => warning !== null).toBe(true);
-  for (const [i, page] of pages.entries()) {
-    await page.evaluate(message => window.testStream.onmessage({ data: JSON.stringify(message) }), {
-      type: 'game-stream', state,
-      crew: { id: 'crew', shipId: 'boat', controller: members[0].playerId, station: members[i].station,
-        revision: members[i].revision, members, aimRequests: [], lookoutReset: 0, submarineWarning: warning }
-    });
-    await expect(page.locator('#crewSubmarineWarning')).toBeVisible();
-    await expect(page.locator('#crewSubmarineWarning')).toContainText('U-Boot gesichtet');
-    await expect(page.locator('.submarine-warning-arrow')).toHaveCount(0);
-    await expect(page.locator('#crewSubmarineWarning')).not.toContainText('°');
+  await expect(pages[1].locator('#lookoutHud button')).toHaveCount(4);
+  state.periscopeWarnings = { boat: { id: 'automatic-sighting', direction: 'Steuerbord voraus', count: 1, expiresAt: 6 } };
+  await broadcast();
+  for (const page of pages) {
+    await expect(page.locator('#crewSubmarineWarning')).toContainText('Sehrohr gesichtet · Steuerbord voraus');
   }
-  await pages[1].screenshot({ path: testInfo.outputPath('lookout-warning.png') });
-  await expect(pages[1].locator('#lookoutAircraftWarningButton')).toBeEnabled({ timeout: 7000 });
-  await pages[0].keyboard.press('KeyL');
-  await expect.poll(() => warning.kind).toBe('aircraft');
-  for (const [i, page] of pages.entries()) {
-    await page.evaluate(message => window.testStream.onmessage({ data: JSON.stringify(message) }), {
-      type: 'game-stream', state,
-      crew: { id: 'crew', shipId: 'boat', controller: members[0].playerId, station: members[i].station,
-        revision: members[i].revision, members, aimRequests: [], lookoutReset: 0, submarineWarning: warning }
-    });
-    await expect(page.locator('#crewSubmarineWarning')).toContainText('Flugzeug greift an');
-    await expect(page.locator('.submarine-warning-arrow')).toHaveCount(0);
-  }
-  await pages[1].screenshot({ path: testInfo.outputPath('lookout-aircraft-warning.png') });
+  await pages[1].screenshot({ path: testInfo.outputPath('automatic-periscope-warning.png') });
   await pages[1].keyboard.press('z');
   for (const [width, height] of [[1280, 720], [844, 390]]) {
     await pages[1].setViewportSize({ width, height });
@@ -116,13 +88,13 @@ test('bridge lookout and flak share replicated releases, explosions, controls an
     await expect(page.locator('#depthChargeButton')).toContainText('Weitere Serie vormerken');
     expect(await page.evaluate(() => window.seaBattleScenarioTest.depthChargeEffects().activeRacks)).toBe(1);
   }
-  await pages[2].keyboard.press('KeyW');
+  await pages[2].keyboard.press('w');
   await expect.poll(() => requests).toBe(2);
   await broadcast();
   for (const page of pages) {
     await expect(page.locator('#depthChargeButton')).toBeDisabled();
     await expect(page.locator('#depthChargeButton')).toContainText('Serie vorgemerkt');
-    await page.keyboard.press('KeyW');
+    await page.keyboard.press('w');
   }
   expect(requests).toBe(2);
   await expect(pages[1].locator('#lookoutDepthChargeButton')).toBeDisabled();
@@ -155,7 +127,7 @@ test('bridge lookout and flak share replicated releases, explosions, controls an
   await pages[1].waitForTimeout(500);
   await pages[1].keyboard.up('ArrowRight');
   expect(Math.abs(await pages[1].evaluate(() => window.seaBattleScenarioTest.stationState().lookoutYaw))).toBeGreaterThan(.01);
-  await pages[1].keyboard.press('KeyA');
+  await pages[1].keyboard.press('a');
   await expect.poll(() => pages[1].evaluate(() => Math.abs(window.seaBattleScenarioTest.stationState().lookoutYaw))).toBeLessThan(.002);
   const occupiedCrew = { id: 'crew', shipId: 'boat', controller: members[0].playerId, station: 'bridge', revision: 1,
     members: [...members, { playerId: 'gunner2', station: 'cannon' }], aimRequests: [], lookoutReset: 0 };
@@ -164,6 +136,7 @@ test('bridge lookout and flak share replicated releases, explosions, controls an
   await expect(pages[0].locator('#alignWeaponsButton')).toBeDisabled();
   await expect(pages[0].locator('#alignAirDefenseButton')).toBeDisabled();
   for (const page of pages) {
+    await page.keyboard.press('Escape');
     await page.setViewportSize({ width: 844, height: 390 });
     await expect(page.locator('#roleHotkeys')).toBeHidden();
     const box = await page.locator('#depthChargeButton').boundingBox();

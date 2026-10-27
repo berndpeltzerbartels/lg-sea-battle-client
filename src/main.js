@@ -910,12 +910,6 @@ window.addEventListener("keydown", (event) => {
     dropDepthCharges();
     return;
   }
-  if (playerActive && crewState && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey
-      && ["KeyU", "KeyL"].includes(event.code)) {
-    event.preventDefault();
-    void warnSubmarineFromLookout(event.code === "KeyL" ? "aircraft" : "submarine");
-    return;
-  }
   if (playerActive && isBombBayViewToggleKey(event) && !event.repeat) {
     toggleBombBayView();
     event.preventDefault();
@@ -1439,8 +1433,6 @@ setupCannonViewControl(cannonViewButton);
 setupAlignWeaponsControl(alignWeaponsButton);
 document.getElementById("depthChargeButton")?.addEventListener("click", () => { void dropDepthCharges(); focusGameCanvas(); });
 document.getElementById("lookoutDepthChargeButton")?.addEventListener("click", () => { void dropDepthCharges(); focusGameCanvas(); });
-document.getElementById("lookoutWarningButton")?.addEventListener("click", () => { void warnSubmarineFromLookout(); focusGameCanvas(); });
-document.getElementById("lookoutAircraftWarningButton")?.addEventListener("click", () => { void warnSubmarineFromLookout("aircraft"); focusGameCanvas(); });
 window.addEventListener("pointerdown", unlockGameAudio);
 window.addEventListener("keydown", unlockGameAudio);
 const engineSoundToggle = document.getElementById("engineSoundToggle");
@@ -2175,8 +2167,7 @@ function setBattleStation(station, confirmed = false) {
   document.body.dataset.lookoutView = lookoutViewActive ? "active" : "inactive";
   document.body.dataset.lookoutBinoculars = "inactive";
   if (lookoutHud) {
-    lookoutHud.hidden = !lookoutViewActive && (!crewState || scoutPlaneMode);
-    lookoutHud.classList.toggle("crew-warning-controls", !lookoutViewActive);
+    lookoutHud.hidden = !lookoutViewActive;
     for (const id of ["lookoutZoomButton", "lookoutCannonButton", "lookoutFlakButton", "lookoutDepthChargeButton"]) {
       document.getElementById(id).hidden = !lookoutViewActive;
     }
@@ -2301,34 +2292,12 @@ async function changeCrewStation(station) {
 
 let lastSubmarineWarningId = null;
 let submarineWarningTimer = null;
-async function warnSubmarineFromLookout(kind = "submarine") {
-  if (!crewState || playerDamageState !== "active") return;
-  const button = document.getElementById("lookoutWarningButton");
-  const aircraftButton = document.getElementById("lookoutAircraftWarningButton");
-  if (button.disabled) return;
-  button.disabled = true;
-  aircraftButton.disabled = true;
-  try {
-    const response = await fetch(gameEndpoint(`/game/crew/${kind === "aircraft" ? "aircraft" : "submarine"}-warning`), {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(crewCommand())
-    });
-    if (!response.ok) throw new Error("Warnruf momentan nicht möglich");
-    applyCrewView(await response.json());
-    setTimeout(() => { button.disabled = false; aircraftButton.disabled = false; }, 5000);
-  } catch (error) {
-    lookoutFeedback.textContent = error.message;
-    button.disabled = false;
-    aircraftButton.disabled = false;
-  }
-}
-
 function showSubmarineWarning(warning) {
   if (!warning || warning.id === lastSubmarineWarningId) return;
   lastSubmarineWarningId = warning.id;
   const toast = document.getElementById("crewSubmarineWarning");
   const label = document.createElement("span");
-  label.textContent = `${warning.kind === "aircraft" ? "Flugzeug greift an" : "U-Boot gesichtet"} · ${warning.sender}`;
+  label.textContent = `${warning.count > 1 ? `${warning.count} Sehrohre gesichtet` : "Sehrohr gesichtet"} · ${warning.direction}`;
   toast.replaceChildren(label);
   toast.hidden = false;
   clearTimeout(submarineWarningTimer);
@@ -2343,7 +2312,6 @@ function applyCrewView(view) {
     lookoutPitch = 0;
   }
   crewState = view;
-  showSubmarineWarning(view.submarineWarning);
   if (changed) {
     setBattleStation(view.station, true);
     if (view.ship?.id === view.shipId && view.ship.state === "active") {
@@ -6905,6 +6873,9 @@ function applyServerGameSnapshot(snapshot) {
   }
   const snapshotClientTime = getSnapshotClientTime(snapshot);
   serverShipsById = indexShipsById(snapshot.ships);
+  if (playerServerShipId && playerDamageState === "active") {
+    showSubmarineWarning(snapshot.periscopeWarnings?.[playerServerShipId]);
+  }
   pendingCriticalFlakShipHitsByTarget = indexCriticalFlakShipHitsByTarget(snapshot.flakHits);
   pendingCannonShipHitsByTarget = indexCannonShipHitsByTarget(snapshot.flakHits);
   const snapshotHudStarted = performanceLoggingEnabled ? performance.now() : 0;

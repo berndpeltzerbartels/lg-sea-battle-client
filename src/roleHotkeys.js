@@ -13,7 +13,6 @@ export function roleHotkeys({ role, members = [], playerId, depthChargesReady = 
     if (depth !== 'surface') keys.push(['⇧↑', 'Auftauchen']);
     if (depth !== 'submerged') keys.push(['⇧↓', 'Abtauchen']);
     if (radarModes) keys.push(['R', 'Radar wechseln']);
-    keys.push(['U', 'Warnung: U-Boot'], ['L', 'Warnung: Flugzeug']);
     return keys;
   }
   const free = station => !members.some(m => m.station === station && m.playerId !== playerId);
@@ -38,6 +37,5 @@ export function roleHotkeys({ role, members = [], playerId, depthChargesReady = 
   }
   if (depthChargesReady && ['bridge', 'lookout', 'flak'].includes(role)) keys.push(['W', 'Wasserbomben']);
   if (radarModes) keys.push(['R', 'Radar wechseln']);
-  keys.push(['U', 'Warnung: U-Boot'], ['L', 'Warnung: Flugzeug']);
   return keys;
 }

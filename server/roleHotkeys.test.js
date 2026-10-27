@@ -21,12 +21,10 @@ test('role hints exclude occupied posts and allow depth charges for flak but not
   assert.ok(flak.some(([k]) => k === 'A'));
   const lookout = roleHotkeys({ role: 'lookout', depthChargesReady: false });
   assert.ok(lookout.some(([k]) => k === 'Z'));
-  assert.ok(lookout.some(([k, label]) => k === 'U' && label === 'Warnung: U-Boot'));
-  assert.ok(lookout.some(([k, label]) => k === 'L' && label === 'Warnung: Flugzeug'));
   for (const role of ['bridge', 'flak', 'cannon', 'lookout']) {
     for (const submarine of [false, true]) {
       const keys = roleHotkeys({ role, submarine });
-      for (const key of ['U', 'L']) assert.equal(keys.filter(([k]) => k === key).length, 1);
+      for (const key of ['U', 'L']) assert.equal(keys.filter(([k]) => k === key).length, 0);
     }
   }
   assert.ok(!lookout.some(([k]) => k === 'W'));
