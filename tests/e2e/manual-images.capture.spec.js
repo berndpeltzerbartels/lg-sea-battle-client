@@ -88,6 +88,19 @@ test('capture reproducible handbook views', async ({ page }) => {
     await open('torpedo-boat',name);
     await expect(page.locator('body')).toHaveAttribute(name==='lookout'?'data-lookout-view':'data-crew-station',name==='lookout'?'active':name);
   };
+  if (process.env.SEA_BATTLE_MANUAL_DEEP_ONLY === '1') {
+    scenic = false;
+    await open('submarine');
+    state.ships[2].x = -40; state.ships[2].z = 100;
+    state.ships[4].x = 0; state.ships[4].z = 110; state.ships[4].heading = Math.PI / 2;
+    await page.evaluate(()=>window.seaBattleScenarioTest.setSubmarineDepthState('submerged'));
+    await page.waitForFunction(()=>{
+      const s=window.seaBattleScenarioTest.submarineDiveSequenceSnapshot();
+      return s.depthState==='submerged' && Math.abs(s.depthOffset-s.targetDepthOffset)<.03;
+    },null,{timeout:40000});
+    await save('sub-deep');
+    return;
+  }
   await open('torpedo-boat');
   await save('boat-bridge');
   await save('radar-surface','.nav-instrument-radar');
