@@ -3649,7 +3649,7 @@ function updateEngineAudio(force = false) {
     // Reuse authoritative ship positions: no visibility search or new server work.
     underwaterShipSound.update({ ...listener,
       deepSubmerged: submarineMode && playerDamageState === "active"
-        && getPlayerEffectiveSubmarineDepthState() === submarineDepthStates.submerged
+        && currentListenerWaterState.deepSubmerged
     }, serverShipsById.values(), force, playerServerShipId);
   }
   flakSound?.update(listener, force);

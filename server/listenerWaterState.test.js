@@ -11,3 +11,13 @@ test('normal U-boat acoustics retain their depth thresholds', () => {
   assert.deepEqual(listenerWaterState({submarine:true,depthOffset:-1.6}),{underwater:true,deepSubmerged:false});
   assert.deepEqual(listenerWaterState({submarine:true,depthOffset:-6.16}),{underwater:true,deepSubmerged:true});
 });
+test('hydrophone depth remains deep throughout ascent until periscope depth is reached', () => {
+  for (const depthOffset of [-6.16, -6, -5, -3, -2, -1.66]) {
+    const state = listenerWaterState({ submarine: true, depthOffset });
+    assert.equal(state.underwater, true);
+    assert.equal(state.deepSubmerged, true, `still below periscope depth at ${depthOffset}`);
+  }
+  for (const depthOffset of [-1.65, -1.6, -.8, 0]) {
+    assert.equal(listenerWaterState({ submarine: true, depthOffset }).deepSubmerged, false);
+  }
+});
