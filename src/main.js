@@ -3688,6 +3688,8 @@ function updateEngineAudio(force = false) {
     surfaceGainScale: (torpedoInterior ? (cannonViewActive ? 0.5 : 0.7) : 1) * stationSoundGain,
     interiorFanGain: (torpedoInterior ? (cannonViewActive ? 0.3 : 0.5) : 0) * stationSoundGain,
     depth: Math.abs(playerSubmarineDepthOffset),
+    underwaterGainScale: submarineMode && Math.abs(playerSubmarineDepthOffset) >= 1.52
+      && Math.abs(playerSubmarineDepthOffset) <= Math.abs(submarineDepthOffsets.periscope) + .05 ? 1.25 : 1,
     submarine: submarineMode,
     deepSubmerged: submarineMode && Math.abs(playerSubmarineDepthOffset) > Math.abs(submarineDepthOffsets.periscope) + 0.05,
     surfacePower: orderSpeed < 0

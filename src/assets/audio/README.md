@@ -250,3 +250,8 @@ for an active human submarine at actual deep-submerged depth. Surface,
 periscope depth, descent before reaching deep depth, ascent out of deep depth,
 and sinking surface vessels remain silent for these two layers. Existing
 explosion acoustics and own fan/motor are unchanged.
+
+Periscope interior level (2026-10-27): own submarine fan and electric motor
+both gain 1.25x (about +1.9 dB) at actual periscope depth 1.52–1.65 model units.
+Existing gain smoothing applies. Surface diesel, deep fan, screw/sonar,
+weapons and explosions retain their prior levels.

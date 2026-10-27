@@ -1,4 +1,4 @@
-export function engineMix({ depth, power, active = true, muted = false, submarine = true, slow = false, deepSubmerged = false, surfacePower = Math.abs(power), surfaceGainScale = 1, interiorFanGain = 0, grounded = false, audioTime = 0 }) {
+export function engineMix({ depth, power, active = true, muted = false, submarine = true, slow = false, deepSubmerged = false, surfacePower = Math.abs(power), surfaceGainScale = 1, interiorFanGain = 0, grounded = false, audioTime = 0, underwaterGainScale = 1 }) {
   const load = Math.min(1, Math.max(0, Math.abs(power)));
   const immersion = submarine ? Math.min(1, Math.max(0, (depth - 0.1) / 0.7)) : 0;
   const surfaceLevel = active && !muted ? Math.cos(immersion * Math.PI / 2) * surfaceGainScale : 0;
@@ -11,9 +11,9 @@ export function engineMix({ depth, power, active = true, muted = false, submarin
     rate: 0.55 + 0.45 * load,
     surfaceRate: strained ? (.72 + .1 * Math.sqrt(load)) * (1 + uneven * .25) : 0.66 + 0.34 * Math.min(2, Math.max(0, surfacePower)),
     fanRate: 1,
-    fanGain: active && !muted ? (submarine ? immersion * 0.65 : interiorFanGain) : 0,
+    fanGain: active && !muted ? (submarine ? immersion * 0.65 * underwaterGainScale : interiorFanGain) : 0,
     gain: level,
-    underwaterGain: deepSubmerged ? 0 : Math.sin(immersion * Math.PI / 2) * level,
+    underwaterGain: deepSubmerged ? 0 : Math.sin(immersion * Math.PI / 2) * level * underwaterGainScale,
     surfaceGain: surfaceLevel * (0.48 + 0.32 * Math.sqrt(load)) * (strained ? 1.08 + uneven : 1)
   };
 }
