@@ -24,6 +24,13 @@ test('DualSense stick aims diagonally, R2 fires, and releasing or disconnecting 
   await expect(page.locator('body')).toHaveAttribute('data-gamepad', 'connected');
   await page.evaluate(() => window.seaBattleScenarioTest.setStation('cannon'));
   await neutral(page);
+  await button(page, 9);
+  await expect(page.locator('#roleHotkeys')).toBeVisible();
+  await expect(page.locator('#roleHotkeys')).toContainText('R2');
+  await expect(page.locator('#roleHotkeys')).toContainText('L2');
+  await expect(page.locator('#roleHotkeys')).not.toContainText('□');
+  await expect(page.locator('#roleHotkeys')).not.toContainText('Fahrt');
+  await neutral(page); await button(page, 9); await neutral(page);
   const before = await page.evaluate(() => window.seaBattleScenarioTest.cannonAimDisplay());
   await page.evaluate(() => { window.testPad.axes = [-.8, -.8, 0, 0]; });
   await expect.poll(() => page.evaluate(before => {

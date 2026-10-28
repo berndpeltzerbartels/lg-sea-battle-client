@@ -4,9 +4,10 @@ export function roleHotkeys({ role, members = [], playerId, depthChargesReady = 
     const keys = [];
     if (role === 'flak') keys.push(['B', 'Brücke'], ['↑ ↓ ← →', 'Zielen'], ['Leertaste', 'Feuern'], ['A', 'Ausrichten'], ['⇧A', 'Flugabwehr']);
     else {
-      if (depth === 'surface') keys.push(['F', 'Flak']);
+      if (depth === 'surface') keys.push(['F', 'Flak'], ['A', 'Flak ausrichten'], ['⇧A', 'Flugabwehr']);
       keys.push(['↑ ↓', 'Fahrt'], ['← →', observationScope ? 'Blickrichtung' : 'Ruder']);
-      if (depth === 'surface' || torpedoScope) keys.push(['Leertaste', 'Torpedo']);
+      if (depth === 'surface' || depth === 'submerged' || torpedoScope)
+        keys.push(['Leertaste', observationScope ? 'Torpedo voraus' : 'Torpedo']);
       if (periscopeAvailable) keys.push(['1', 'Sehrohr voraus'], ['2', '360°-Sehrohr'], ['3', 'Boot auf Peilung']);
       if (torpedoScope || observationScope) keys.push(['Z', 'Vergrößerung']);
     }
@@ -38,4 +39,17 @@ export function roleHotkeys({ role, members = [], playerId, depthChargesReady = 
   if (depthChargesReady && ['bridge', 'lookout', 'flak'].includes(role)) keys.push(['W', 'Wasserbomben']);
   if (radarModes) keys.push(['R', 'Radar wechseln']);
   return keys;
+}
+
+// Derive controller hints from the same position/depth/occupancy rules as keyboard hints.
+export function gamepadHotkeys(keys) {
+  const hints = [['L1 / R1', 'Freie Position wechseln'], ['Options', 'Hilfe']];
+  for (const [key, label] of keys) {
+    if (key === 'A' && keys.some(([key]) => key === '3')) continue;
+    const mapped = { '↑ ↓': 'Stick ↑ / ↓', '← →': 'Stick ← / →', '↑ ↓ ← →': 'Linker Stick · auch diagonal',
+      Leertaste: 'R2', Z: 'L2', W: '□', A: '△', '⇧↑': 'Steuerkreuz ↑', '⇧↓': 'Steuerkreuz ↓',
+      '1': 'Steuerkreuz ←', '2': 'Steuerkreuz →', '3': '△' }[key];
+    if (mapped) hints.push([mapped, label]);
+  }
+  return hints;
 }

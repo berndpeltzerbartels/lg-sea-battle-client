@@ -1,6 +1,37 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { roleHotkeys } from '../src/roleHotkeys.js';
+import { roleHotkeys, gamepadHotkeys } from '../src/roleHotkeys.js';
+
+test('controller help follows all four torpedo boat positions and excludes unavailable controls', () => {
+  for (const role of ['bridge', 'lookout', 'flak', 'cannon']) {
+    const keys = gamepadHotkeys(roleHotkeys({ role }));
+    assert.equal(keys.some(([key]) => key === '□'), role !== 'cannon');
+    assert.equal(keys.some(([key]) => key === 'R2'), role !== 'lookout');
+    assert.equal(keys.some(([key]) => key === 'L2'), role === 'lookout' || role === 'cannon');
+    assert.ok(keys.some(([key]) => key === '△'));
+    if (role === 'lookout') assert.ok(keys.some(([key, label]) => key.startsWith('Linker Stick') && label === 'Blickrichtung'));
+  }
+  assert.equal(gamepadHotkeys(roleHotkeys({ role: 'bridge', depthChargesReady: false })).some(([key]) => key === '□'), false);
+});
+
+test('both submarine positions and depths have their own accurate controller help', () => {
+  for (const role of ['bridge', 'flak']) for (const depth of ['surface', 'periscope', 'submerged']) {
+    const hints = gamepadHotkeys(roleHotkeys({ role, submarine: true, depth,
+      periscopeAvailable: depth !== 'surface', torpedoScope: role === 'bridge' && depth !== 'surface' }));
+    assert.equal(hints.some(([key]) => key === '□'), false);
+    assert.equal(hints.some(([key]) => key === 'Steuerkreuz ↑'), depth !== 'surface');
+    assert.equal(hints.some(([key]) => key === 'Steuerkreuz ↓'), depth !== 'submerged');
+    assert.equal(hints.some(([key]) => key === 'L2'), role === 'bridge' && depth !== 'surface');
+    if (role === 'flak') assert.equal(hints.some(([, label]) => label.includes('Peilung')), false);
+  }
+  const hints = gamepadHotkeys(roleHotkeys({ role: 'bridge', submarine: true, depth: 'periscope',
+    periscopeAvailable: true, observationScope: true }));
+  assert.ok(hints.some(([key, label]) => key === 'Stick ← / →' && label === 'Blickrichtung'));
+  assert.equal(hints.some(([key]) => key === 'R2'), false);
+  const deep = gamepadHotkeys(roleHotkeys({ role: 'bridge', submarine: true, depth: 'submerged',
+    periscopeAvailable: true, observationScope: true }));
+  assert.ok(deep.some(([key, label]) => key === 'R2' && label === 'Torpedo voraus'));
+});
 test('submarine hints match depth and available posts', () => {
   const surface = roleHotkeys({ role: 'bridge', submarine: true });
   assert.ok(surface.some(([k]) => k === 'F'));

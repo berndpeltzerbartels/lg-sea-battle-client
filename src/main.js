@@ -95,7 +95,7 @@ import { createDepthChargeEvents } from "./depthChargeEvents.js";
 import { createDepthChargeUnderwater } from "./depthChargeUnderwater.js";
 import { createZoomIdleTimer, submarineEchoStrength } from "./instrumentHelpers.js";
 import { submarineSeaMotionFactor } from "./submarineSeaMotion.js";
-import { roleHotkeys } from "./roleHotkeys.js";
+import { roleHotkeys, gamepadHotkeys } from "./roleHotkeys.js";
 
 const traceStartup = (step, detail) => window.__seaBattleTrace?.(step, detail);
 traceStartup("main module entered");
@@ -3989,15 +3989,7 @@ function updateRoleHotkeys() {
     periscopeAvailable: submarineMode && canShowSubmarineTorpedoScope(),
     observationScope: isPlayerSubmarineObservationPeriscopeActive() });
   if (gamepadName) {
-    entries.unshift(["Linker Stick", "Wie Pfeiltasten · auch diagonal"], ["L1 / R1", "Freie Position wechseln"],
-      ["Options", "Hilfe"]);
-    if (entries.some(([key]) => key === "Leertaste")) entries.unshift(["R2", "Feuern"]);
-    if (entries.some(([key]) => key === "Z")) entries.unshift(["L2", "Zoom"]);
-    if (submarineMode) {
-      entries.push(["Steuerkreuz ↑ / ↓", "Auftauchen / Abtauchen"]);
-      if (canShowSubmarineTorpedoScope()) entries.push(["Steuerkreuz ← / →", "Sehrohr voraus / 360°"], ["△", "Boot auf Peilung"]);
-      else entries.push(["△", "Flak ausrichten"]);
-    } else entries.push(["□", "Wasserbomben"], ["△", "Geschütze ausrichten"]);
+    entries.unshift(...gamepadHotkeys(entries));
   }
   const signature = JSON.stringify(entries);
   if (signature === hotkeySignature) return;
