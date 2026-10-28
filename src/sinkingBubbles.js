@@ -44,7 +44,7 @@ export function createSinkingBubbles(scene, capacity = 192) {
         x: motion.root.position.x + cos * x + sin * z,
         y: motion.root.position.y + (i === 1 ? 1.15 : .52) * scale,
         z: motion.root.position.z - sin * x + cos * z,
-        diameter: scale * (.07 + variation * .055) * (1 - progress * .35),
+        diameter: scale * (.022 + variation * .018) * (1 - progress * .35),
         rise: scale * (.7 + variation * .4), phase: variation * Math.PI * 2 });
     }
   }
@@ -62,7 +62,7 @@ export function createSinkingBubbles(scene, capacity = 192) {
       const y = bubble.y + age * bubble.rise;
       if (age >= 0 && age < bubble.life && y < -.1) {
         const fade = Math.min(1, (bubble.life - age) / 1.2);
-        const diameter = bubble.diameter * (1 + age * .12) * fade;
+        const diameter = bubble.diameter * (1 + Math.min(age * .04, .2)) * fade;
         position.set(bubble.x + Math.sin(age * 2 + bubble.phase) * age * .07,
           y, bubble.z + Math.cos(age * 1.7 + bubble.phase) * age * .07);
         size.set(diameter, diameter * 1.15, diameter);
