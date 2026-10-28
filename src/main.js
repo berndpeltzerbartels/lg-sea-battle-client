@@ -1234,9 +1234,9 @@ const engineOrders = engineOrderLabels.map((order, index) => ({
   ...order,
   speed: Number.isFinite(Number(engineSpeeds[index])) ? Number(engineSpeeds[index]) : defaultEngineSpeeds[index]
 }));
-const maxSubmarineForwardSpeed = 12.5;
-const maxSubmarinePeriscopeForwardSpeed = 9;
-const maxSubmarineSubmergedForwardSpeed = 6;
+const maxSubmarineForwardSpeed = 13.5;
+const maxSubmarinePeriscopeForwardSpeed = 10;
+const maxSubmarineSubmergedForwardSpeed = 7;
 const submarinePeriscopeModes = {
   forwardScope: "forward-scope",
   alignToBearing: "align-to-bearing",
