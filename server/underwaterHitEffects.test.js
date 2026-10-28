@@ -21,12 +21,12 @@ function fixture(hasTarget, vehicleType = 'submarine', hasSnapshot = false, dept
     explosions++;
   };
   const sync = new Function('flakSystem', 'scoutPlaneMode', 'playerServerShipId', 'pendingPlayerServerShip',
-    'enemyMotions', 'serverShipsById', 'Vector3', 'isScoutPlaneMotion', 'isCannonServerProjectile', 'time', 'submarineWaterlineY',
+    'enemyMotions', 'serverShipsById', 'Vector3', 'isScoutPlaneMotion', 'isCannonServerProjectile', 'time', 'submarineWaterlineY', 'wreckVisuals',
     'torpedoSystem', 'createTorpedoShipWaterColumn', 'beginEnemyCannonShipHit',
     'beginEnemyShipCriticalHit', 'createScoutPlaneCriticalHitSequence', 'getProjectileHitPosition',
     `${fn}; return syncServerProjectileHitEffects;`)(system, false, 'own', null,
     hasTarget ? [target] : [], new Map(hasSnapshot ? [['sub', { id: 'sub', vehicleType, depthState, y: depthState === 'surface' ? 0 : -5, heading: 0 }]] : []), Vector3, () => false,
-    id => id.startsWith('cannon-'), 0, 0,
+    id => id.startsWith('cannon-'), 0, 0, { target: () => null },
     { hits: 0 }, (_, position, heading, scale) => splashes.push({ position, scale }),
     begin, begin, () => {}, hit => new Vector3(hit.x, hit.y, hit.z));
   const snapshot = hit => {

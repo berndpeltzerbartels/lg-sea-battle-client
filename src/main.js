@@ -7,6 +7,7 @@ import { periscopeLiftAtDepth, periscopeMastTop, periscopeFoamStrength } from ".
 import { createPeriscopeFoamState } from "./periscopeFoamState.js";
 import { createSternFoamState } from './sternFoamState.js';
 import { createSternFoam } from './sternFoam.js';
+import { createWreckVisuals } from './wreckVisuals.js';
 import depthChargeExplosionUrl1 from "./assets/audio/depth-charge-explosion-1.wav?url";
 import depthChargeExplosionUrl2 from "./assets/audio/depth-charge-explosion-2.wav?url";
 import depthChargeExplosionUrl3 from "./assets/audio/depth-charge-explosion-3.wav?url";
@@ -1381,6 +1382,11 @@ let killSuccessTimer = null;
 let reportedLocalPlaneHitIds = new Set();
 let pendingCriticalFlakShipHitsByTarget = new Map();
 let pendingCannonShipHitsByTarget = new Map();
+const wreckVisuals = createWreckVisuals({
+  create: createWreckMotion,
+  update: (motion, dt, now) => updateEnemyMotion(motion, dt, now, boat.root.position, blockedWaters),
+  dispose: disposeRemoteMotion
+});
 let radarTorpedoSnapshots = Array.isArray(gameState.torpedoes) ? gameState.torpedoes : [];
 let scoutPlaneFlakHitStartTime = 0;
 let scoutPlaneFlakHitExploded = false;
@@ -1466,6 +1472,7 @@ if (engineSoundToggle) {
 }
 document.addEventListener("visibilitychange", () => updateEngineAudio(true));
 window.addEventListener("pagehide", () => {
+  wreckVisuals.clear();
   underwaterShipSound?.dispose();
   underwaterShipSound = null;
   sinkingWaterSound?.dispose();
@@ -1882,6 +1889,7 @@ scene.onBeforeRenderObservable.add(() => {
   updateVolcanoPlumes(volcanoPlumes, time);
   updateNavigationLights(navigationLights, time, boat.root.position);
   enemyMotions.forEach((enemyMotion) => updateEnemyMotion(enemyMotion, dt, time, boat.root.position, blockedWaters));
+  wreckVisuals.tick(dt, time);
   enemyMotions.forEach((enemyMotion) => updateCannonBarrelRecoil(enemyMotion.boat?.bowCannon, time));
   updateScoutPlaneFlakDemo(enemyMotions.concat(flakDemoMotions), time);
   updateEnemyFireControl(torpedoSystem, enemyMotions, boat.root.position, blockedWaters, time);
@@ -6918,6 +6926,7 @@ function applyServerGameSnapshot(snapshot) {
   }
   pendingCriticalFlakShipHitsByTarget = indexCriticalFlakShipHitsByTarget(snapshot.flakHits);
   pendingCannonShipHitsByTarget = indexCannonShipHitsByTarget(snapshot.flakHits);
+  wreckVisuals.sync(snapshot, crewState?.controller ?? playerId);
   const snapshotHudStarted = performanceLoggingEnabled ? performance.now() : 0;
   updateFleetStatus(snapshot.ships, snapshot.destroyedShipsByTeam);
   updatePlayerList(snapshot.ships, snapshot.killsByPlayer);
@@ -6940,7 +6949,9 @@ function applyServerGameSnapshot(snapshot) {
   }
   const visibleRamIds = new Set((snapshot.ramHits ?? []).map(hit => hit.id));
   for (const id of appliedServerRamStops) if (!visibleRamIds.has(id)) appliedServerRamStops.delete(id);
-  const activeIds = new Set(snapshot.ships.map((ship) => ship.id));
+  const activeIds = new Set(snapshot.ships
+    .filter(ship => !Array.isArray(snapshot.wrecks) || ship.state === "active")
+    .map((ship) => ship.id));
   if (ownShip) {
     if (crewState) {
       if (crewState.station !== "flak") { flakYaw = ownShip.flakYaw; flakPitch = ownShip.flakPitch; }
@@ -7007,6 +7018,7 @@ function applyServerGameSnapshot(snapshot) {
   snapshot.ships
     .filter((ship) => ship.id !== playerServerShipId)
     .filter((ship) => ship.id !== pendingPlayerServerShip?.id)
+    .filter((ship) => !Array.isArray(snapshot.wrecks) || ship.state === "active")
     .forEach((ship) => updateOrCreateRemoteShip(ship));
 
   enemyMotions.forEach((motion) => {
@@ -7122,8 +7134,9 @@ function syncServerProjectileHitEffects(hits, ownShip = null) {
     if (flakSystem.hitEffectIds.size > 80) {
       flakSystem.hitEffectIds = new Set(Array.from(flakSystem.hitEffectIds).slice(-48));
     }
-    const targetMotion = enemyMotions.find((motion) => motion.id === hit.targetShipId);
-    const targetShip = serverShipsById.get(hit.targetShipId) ?? (ownShip?.id === hit.targetShipId ? ownShip : null);
+    const targetMotion = wreckVisuals.target(hit) ?? enemyMotions.find((motion) => motion.id === hit.targetShipId);
+    const targetShip = targetMotion?.originalShipId ? null
+      : serverShipsById.get(hit.targetShipId) ?? (ownShip?.id === hit.targetShipId ? ownShip : null);
     const submarineHit = targetShip?.vehicleType === "submarine" || targetMotion?.vehicleType === "submarine";
     // Use the hull height at impact, not the requested dive mode or an interpolated visual.
     const targetY = Number.isFinite(hit.targetY) ? hit.targetY
@@ -7432,10 +7445,49 @@ function applyGameStreamMessage(data) {
   document.body.dataset.gameEventTime = String(message.state?.t ?? "");
 }
 
+function createWreckMotion(wreck, age) {
+  const ship = wreck.ship;
+  const existing = enemyMotions.find(motion => motion.id === ship.id
+    && motion.vehicleType === getShipVehicleType(ship) && motion.lifeId === (ship.lifeId ?? 0));
+  let motion = existing;
+  if (existing) {
+    enemyMotions.splice(enemyMotions.indexOf(existing), 1);
+  } else {
+    const model = createRemoteVehicleModel(scene, materials, `wreck_${wreck.id}`, ship);
+    model.root.position = new Vector3(ship.x, remoteVehicleY(ship), ship.z);
+    model.root.rotationQuaternion = Quaternion.FromEulerAngles(0, ship.heading, 0);
+    motion = createEnemyMotion(model, ship.heading, 2, 0, ship);
+    applyRemoteWeaponAim(motion, ship);
+  }
+  motion.id = wreck.id;
+  motion.originalShipId = ship.id;
+  motion.sunkAt = wreck.sunkAt;
+  motion.isServerControlled = false;
+  motion.root.metadata = { ...motion.root.metadata, serverShipId: null, wreckId: wreck.id };
+  motion.root.getChildMeshes().forEach(mesh => { mesh.isPickable = false; });
+  if (["active", "sunk", "hidden-own-ship"].includes(motion.state)) {
+    motion.state = "active";
+    motion.root.setEnabled(true);
+    const candidateHit = pendingCannonShipHitsByTarget.get(ship.id) ?? pendingCriticalFlakShipHitsByTarget.get(ship.id);
+    const hit = candidateHit && Math.abs(candidateHit.t - wreck.sunkAt) < .2 ? candidateHit : null;
+    if (isScoutPlaneMotion(motion)) {
+      beginEnemyScoutPlaneAirHit(motion, hit ?? { x: ship.x, y: ship.y, z: ship.z }, time);
+      motion.airHitStartTime = time - age;
+    } else if (hit && age < 2) {
+      if (isCannonServerProjectile(hit.id)) beginEnemyCannonShipHit(motion, hit, time);
+      else beginEnemyShipCriticalHit(motion, hit, time);
+    } else {
+      beginEnemySinking(motion, getStableSinkSide(ship.id), time);
+      motion.sinkAge = age;
+    }
+  }
+  return motion;
+}
+
 function updateOrCreateRemoteShip(ship) {
   const existing = enemyMotions.find((motion) => motion.id === ship.id);
   if (existing) {
-    if (existing.vehicleType === getShipVehicleType(ship)) {
+    if (existing.vehicleType === getShipVehicleType(ship) && existing.lifeId === (ship.lifeId ?? 0)) {
       applyServerShipSnapshot(existing, ship);
       updateRemoteVehicleObserverVisibility(existing);
       return existing;
@@ -9411,6 +9463,7 @@ function createEnemyMotion(vehicle, heading, engineOrder, index = 0, serverShip 
   const root = vehicle.root;
   return {
     id: serverShip?.id ?? `local-${index + 1}`,
+    lifeId: serverShip?.lifeId ?? 0,
     numericIndex: index + 1,
     teamId: serverShip?.teamId ?? "unknown",
     controlledBy: serverShip?.controlledBy ?? "local",
@@ -10594,6 +10647,15 @@ function installScenarioTestHooks() {
       return flakSound?.state() ?? null;
     },
     underwaterShipAudioForTest() { return underwaterShipSound?.state() ?? null; },
+    wrecksForTest() {
+      return [...wreckVisuals.motions.values()].map(motion => ({ id: motion.id,
+        originalShipId: motion.originalShipId, state: motion.state,
+        position: summarizeVector(motion.root.position) }));
+    },
+    remoteShipsForTest() {
+      return enemyMotions.map(motion => ({ id: motion.id, state: motion.state,
+        lifeId: motion.lifeId, visible: motion.root.isEnabled(), position: summarizeVector(motion.root.position) }));
+    },
     engineAudioForTest(state) {
       if (state) engineSound?.update(state, true);
       return engineSound?.state() ?? null;

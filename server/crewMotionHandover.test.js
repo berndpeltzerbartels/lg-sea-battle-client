@@ -229,7 +229,8 @@ test('blocked reverse motion stops without repeatedly shifting the hull along th
     const previousPosition = { x: 10, z: 20 };
     const position = { x: 10, z: 19.9, copyFrom(p) { this.x = p.x; this.z = p.z; } };
     const boat = { root: { position } };
-    let speed = -1, turnVelocity = .1;
+    let speed = -1, turnVelocity = .1, engineGroundedUntil = 0;
+    const time = 0;
     for (let frame = 0; frame < 60; frame++) {
       ${source.slice(start, end)}
     }

@@ -77,11 +77,16 @@ export function createExplosionEvents(emit) {
         play('torpedo', hit, underwater ? 'underwater' : 'heavy');
       }
       for (const ship of snapshot.ships ?? []) {
-        if (ship.vehicleType === 'submarine' && ship.state === 'sunk' && shipStates.get(ship.id) === 'active') {
+        if (!Array.isArray(snapshot.wrecks) && ship.vehicleType === 'submarine' && ship.state === 'sunk' && shipStates.get(ship.id) === 'active') {
           play('sinking', { id: `${ship.id}:${snapshot.t}`, x: ship.x, z: ship.z, t: snapshot.t },
             'submarine-destruction', ship.id);
         }
         shipStates.set(ship.id, ship.state);
+      }
+      for (const wreck of snapshot.wrecks ?? []) {
+        const ship = wreck.ship;
+        if (ship.vehicleType === 'submarine') play('sinking',
+          { id: wreck.id, x: ship.x, z: ship.z, t: wreck.sunkAt }, 'submarine-destruction', ship.id);
       }
       for (const hit of snapshot.ramHits ?? []) play('ram', hit, 'collision', hit.shipId === ownShipId ? ownShipId : hit.targetShipId);
       for (const hit of snapshot.bombImpacts ?? []) play('bomb', hit, hit.reason === 'sea-hit' ? 'water' : 'heavy');

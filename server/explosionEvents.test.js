@@ -2,6 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createExplosionEvents } from '../src/explosionEvents.js';
 
+test('submarine destruction remains audible when the next snapshot already contains an active replacement', () => {
+  const calls = [];
+  const events = createExplosionEvents((...args) => calls.push(args));
+  const snapshot = { instanceId: 'server', sessionId: 'game', t: 10,
+    ships: [{ id: 'sub', vehicleType: 'submarine', state: 'active', x: 1000, z: 0 }],
+    wrecks: [{ id: 'death-1', sunkAt: 10, ship: { id: 'sub', vehicleType: 'submarine', x: 0, z: 2 } }] };
+  events.consume(snapshot, 'own');
+  events.consume(snapshot, 'own');
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0][1], { x: 0, z: 2 });
+  assert.equal(calls[0][3].waterExplosion, true);
+  assert.ok(calls[0][3].variant >= 14 && calls[0][3].variant <= 16);
+});
+
 test('all impact families sound once, duplicate hit/impact reports preserve own-ship priority', () => {
   const calls = [];
   const events = createExplosionEvents((...args) => calls.push(args));
