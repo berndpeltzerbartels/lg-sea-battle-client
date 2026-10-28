@@ -55,10 +55,10 @@ test('wreck collision gets its own kill-feed type', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('a late-joined wreck coasts and sinks at the server-defined pose', async ({page})=>{
+test('a late-joined wreck stays at the impact position while sinking', async ({page})=>{
  const own={id:'own',teamId:'light',controlledBy:'player-CAP-test',vehicleType:'torpedo-boat',state:'active',x:0,y:0,z:0,heading:0,speed:0,engineOrder:2,rudderDegrees:0,turnVelocity:0,torpedoesRemaining:12,depthState:'surface',flakYaw:0,flakPitch:0,cannonYaw:0,cannonPitch:0,lifeId:0};
  const dead={...own,id:'enemy',teamId:'dark',controlledBy:'bot',z:35,speed:17.5};
- const state={instanceId:'wreck-pose',sessionId:'wreck-pose',state:'running',t:5,ships:[own,{...dead,lifeId:1,x:1000}],wrecks:[{id:'moving-wreck',sunkAt:0,ship:dead,driftDrag:.35,sinkDepth:39.05,sinkSeconds:19,sinkSide:1}],ramHits:[],torpedoes:[],torpedoImpacts:[],flakHits:[],flakProjectiles:[],flakImpacts:[],bombs:[],bombImpacts:[],depthCharges:[],weaponShots:[],killsByPlayer:{},destroyedShipsByTeam:{}};
+ const state={instanceId:'wreck-pose',sessionId:'wreck-pose',state:'running',t:5,ships:[own,{...dead,lifeId:1,x:1000}],wrecks:[{id:'moving-wreck',sunkAt:0,ship:dead,sinkDepth:39.05,sinkSeconds:19,sinkSide:1}],ramHits:[],torpedoes:[],torpedoImpacts:[],flakHits:[],flakProjectiles:[],flakImpacts:[],bombs:[],bombImpacts:[],depthCharges:[],weaponShots:[],killsByPlayer:{},destroyedShipsByTeam:{}};
  await page.addInitScript(()=>{localStorage.setItem('accountId','test');window.EventSource=class{constructor(){window.testStream=this;setTimeout(()=>this.onopen?.(),50);}close(){}};});
  await page.route('**/game/**',async route=>{
   const path=new URL(route.request().url()).pathname;let body={};
@@ -76,7 +76,7 @@ test('a late-joined wreck coasts and sinks at the server-defined pose', async ({
  await page.waitForTimeout(300);
  const w=await page.evaluate(()=>window.seaBattleScenarioTest.wrecksForTest()[0]);
  const t=w.age/19,ease=t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
- expect(w.position.z).toBeCloseTo(35+17.5*(1-Math.exp(-.35*w.age))/.35,2);
+ expect(w.position.z).toBeCloseTo(35,2);
  expect(w.position.y).toBeCloseTo(-.6-ease*39.05,2);
  await page.screenshot({path:'/tmp/seabattle-physical-wreck.png'});
 });

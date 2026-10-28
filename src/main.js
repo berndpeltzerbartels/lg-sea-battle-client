@@ -7557,7 +7557,7 @@ function createWreckMotion(wreck, age) {
   motion.sunkAt = wreck.sunkAt;
   motion.wreckMotion = wreck;
   motion.wreckAge = age;
-  motion.speed = ship.speed;
+  motion.speed = isScoutPlaneMotion(motion) ? ship.speed : 0;
   motion.isServerControlled = false;
   motion.root.metadata = { ...motion.root.metadata, serverShipId: null, wreckId: wreck.id };
   motion.root.getChildMeshes().forEach(mesh => { mesh.isPickable = false; });
@@ -10010,11 +10010,8 @@ function updateEnemyShipCriticalHit(motion, dt, now) {
 
 function updateEnemySinking(motion, dt, time) {
   motion.sinkAge += dt;
-  motion.speed *= Math.exp(-dt * .35);
+  motion.speed = 0;
   motion.rollImpulse += (0 - motion.rollImpulse) * Math.min(1, dt * 1.8);
-
-  const forward = new Vector3(Math.sin(motion.heading), 0, Math.cos(motion.heading));
-  motion.root.position.addInPlace(forward.scale(motion.speed * dt));
 
   const t = clamp(motion.sinkAge / (motion.sinkDuration ?? 19), 0, 1);
   const ease = easeInOutCubic(t);
