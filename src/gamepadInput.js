@@ -29,14 +29,25 @@ export function nextGamepadStation(current, step, stations, members = [], player
   return null;
 }
 
-export function createGamepadInput({ getGamepads, direction, fire, cycleStation, action, status = () => {}, activity = () => {} }) {
+export function gamepadBridgeState(horizontal, vertical) {
+  const axis = value => Number.isFinite(value) && Math.abs(value) > .18
+    ? Math.sign(value) * Math.min(1, (Math.abs(value) - .18) / .82) : 0;
+  const rudder = axis(horizontal), throttle = -axis(vertical);
+  return { rudder, engineOrder: throttle > 0 ? 2 + Math.ceil(throttle * 6)
+    : throttle < 0 ? 2 - Math.ceil(-throttle * 2) : 2 };
+}
+
+export function createGamepadInput({ getGamepads, direction, fire, cycleStation, action, analog = () => {}, status = () => {}, activity = () => {} }) {
   let identity = null, context = null, armed = false, x = 0, y = 0, firing = false;
   let buttons = [];
+  let analogX = 0, analogY = 0, analogAxes = {};
   const pressed = (pad, index) => !!pad.buttons[index]?.pressed || pad.buttons[index]?.value > .55;
   function reset() {
     if (x) direction(x < 0 ? 'left' : 'right', false);
     if (y) direction(y < 0 ? 'up' : 'down', false);
     if (firing) fire(false);
+    if (analogX || analogY) analog(0, 0, analogAxes);
+    analogX = analogY = 0; analogAxes = {};
     x = y = 0; firing = false; armed = false; buttons = [];
   }
   function axis(value, previous) {
@@ -47,7 +58,7 @@ export function createGamepadInput({ getGamepads, direction, fire, cycleStation,
   }
   return {
     reset,
-    update(enabled, nextContext) {
+    update(enabled, nextContext, bridgeAxes = {}) {
       let pads;
       try { pads = getGamepads(); } catch { pads = []; }
       const pad = Array.from(pads ?? []).find(pad => pad?.connected !== false && pad?.mapping === 'standard');
@@ -60,17 +71,24 @@ export function createGamepadInput({ getGamepads, direction, fire, cycleStation,
       const horizontal = pad.axes[0] ?? 0, vertical = pad.axes[1] ?? 0;
       if (!armed) {
         // Reconnects, focus changes and station changes must never fire or steer by surprise.
-        armed = Math.abs(horizontal) <= .22 && Math.abs(vertical) <= .22
+        armed = Math.abs(horizontal) <= (bridgeAxes.x ? .18 : .22) && Math.abs(vertical) <= (bridgeAxes.y ? .18 : .22)
           && !pad.buttons.some((_, i) => pressed(pad, i));
         return;
       }
-      if (x || y || Math.abs(horizontal) >= .35 || Math.abs(vertical) >= .35 || pad.buttons.some((_, i) => pressed(pad, i))) activity();
+      if (x || y || Math.abs(horizontal) >= (bridgeAxes.x ? .18 : .35) || Math.abs(vertical) >= (bridgeAxes.y ? .18 : .35) || pad.buttons.some((_, i) => pressed(pad, i))) activity();
       const rising = index => pressed(pad, index) && !buttons[index];
       if (rising(4) !== rising(5)) {
         if (rising(4)) { reset(); cycleStation(-1); return; }
         if (rising(5)) { reset(); cycleStation(1); return; }
       }
-      const nx = axis(horizontal, x), ny = axis(vertical, y);
+      // Absolute bridge commands are separate from the digital aiming controls.
+      // A neutral connected controller never overwrites keyboard commands.
+      const clean = value => Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
+      const ax = bridgeAxes.x && Math.abs(horizontal) > .18 ? clean(horizontal) : 0;
+      const ay = bridgeAxes.y && Math.abs(vertical) > .18 ? clean(vertical) : 0;
+      if (ax !== analogX || ay !== analogY) analog(ax, ay, bridgeAxes);
+      analogX = ax; analogY = ay; analogAxes = bridgeAxes;
+      const nx = bridgeAxes.x ? 0 : axis(horizontal, x), ny = bridgeAxes.y ? 0 : axis(vertical, y);
       if (nx !== x) {
         if (x) direction(x < 0 ? 'left' : 'right', false);
         if (nx) direction(nx < 0 ? 'left' : 'right', true);

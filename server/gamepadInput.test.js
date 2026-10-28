@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGamepadInput, createHeldControls, nextGamepadStation } from '../src/gamepadInput.js';
+import { createGamepadInput, createHeldControls, nextGamepadStation, gamepadBridgeState } from '../src/gamepadInput.js';
 
 function fixture() {
   const pad = { id: 'DualSense Wireless Controller', index: 0, mapping: 'standard', connected: true,
@@ -94,4 +94,43 @@ test('extra controls use one-shot actions for zoom, depth charges and submarine 
     f.pad.buttons[button].pressed = false; f.tick();
   }
   assert.equal(f.events.length, 4);
+});
+
+
+test('bridge stick selects absolute gears and proportional rudder with drift protection', () => {
+  assert.deepEqual(gamepadBridgeState(.12, -.12), { rudder: 0, engineOrder: 2 });
+  assert.deepEqual(gamepadBridgeState(1, -1), { rudder: 1, engineOrder: 8 });
+  assert.deepEqual(gamepadBridgeState(-1, 1), { rudder: -1, engineOrder: 0 });
+  assert.equal(gamepadBridgeState(.59, -.59).engineOrder, 5);
+  assert.ok(Math.abs(gamepadBridgeState(.59, -.59).rudder - .5) < .001);
+  assert.equal(gamepadBridgeState(0, .4).engineOrder, 1);
+});
+
+for (const end of ['neutral', 'disconnect', 'focus', 'station']) test(`analog bridge returns to Stop/midships on ${end}`, () => {
+  const pad = { id: 'DualSense', mapping: 'standard', axes: [0, 0], buttons: [] };
+  let connected = true; const commands = [], directions = [];
+  const input = createGamepadInput({ getGamepads: () => connected ? [pad] : [],
+    analog: (x, y, axes) => commands.push([x, y, axes]), direction: (...args) => directions.push(args) });
+  const axes = { x: true, y: true };
+  input.update(true, 'bridge', axes);
+  input.update(true, 'bridge', axes);
+  assert.equal(commands.length, 0, 'idle controller must leave keyboard orders alone');
+  pad.axes = [.6, -.8]; input.update(true, 'bridge', axes);
+  for (let i = 0; i < 60; i++) input.update(true, 'bridge', axes);
+  assert.equal(commands.length, 1, 'holding a stick never steps up to full throttle');
+  assert.equal(directions.length, 0, 'bridge must not also receive arrow key holds');
+  if (end === 'neutral') pad.axes = [0, 0];
+  if (end === 'disconnect') connected = false;
+  input.update(end !== 'focus', end === 'station' ? 'cannon' : 'bridge', end === 'station' ? {} : axes);
+  assert.deepEqual(commands.at(-1), [0, 0, axes]);
+});
+
+test('360 degree periscope keeps digital view rotation but uses absolute throttle', () => {
+  const pad = { id: 'DualSense', mapping: 'standard', axes: [0, 0], buttons: [] };
+  const commands = [], directions = [];
+  const input = createGamepadInput({ getGamepads: () => [pad], analog: (...args) => commands.push(args), direction: (...args) => directions.push(args) });
+  input.update(true, 'scope', { y: true });
+  pad.axes = [.8, -.5]; input.update(true, 'scope', { y: true });
+  assert.deepEqual(directions, [['right', true]]);
+  assert.deepEqual(commands, [[0, -.5, { y: true }]]);
 });

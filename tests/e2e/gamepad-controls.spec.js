@@ -135,3 +135,32 @@ test('submarine diving and both periscope positions work without a second stick'
   await expect.poll(() => page.evaluate(() => window.seaBattleScenarioTest.stationState().depthState)).toBe('periscope');
   expect(errors).toEqual([]);
 });
+
+
+for (const [vehicle, halfRudder, fullRudder] of [['torpedo-boat', '18', '35'], ['submarine', '23', '45']])
+test(`${vehicle}: bridge stick controls absolute throttle and proportional rudder, neutral stops without breaking keyboard`, async ({ page }) => {
+  await controller(page);
+  await page.goto(`/app?vehicle=${vehicle}&sandbox=side-view&scenarioTest=1`);
+  await page.waitForFunction(() => window.seaBattleScenarioTest);
+  await page.locator('#renderCanvas').click({ position: { x: 300, y: 350 } });
+  await page.evaluate(() => window.seaBattleScenarioTest.setStation('bridge'));
+  await neutral(page);
+  await page.keyboard.press('ArrowUp');
+  const keyboardOrder = await page.locator('body').getAttribute('data-engine-order');
+  await page.waitForTimeout(300);
+  await expect(page.locator('body')).toHaveAttribute('data-engine-order', keyboardOrder);
+  expect(keyboardOrder).not.toBe('Stop');
+  await page.evaluate(() => { window.testPad.axes = [.6, -.6, 0, 0]; });
+  await expect(page.locator('body')).toHaveAttribute('data-rudder-degrees', halfRudder);
+  const halfOrder = await page.locator('body').getAttribute('data-engine-order');
+  await page.waitForTimeout(600);
+  await expect(page.locator('body')).toHaveAttribute('data-engine-order', halfOrder);
+  await page.evaluate(() => { window.testPad.axes = [1, -1, 0, 0]; });
+  await expect(page.locator('body')).toHaveAttribute('data-rudder-degrees', fullRudder);
+  await expect(page.locator('body')).not.toHaveAttribute('data-engine-order', halfOrder);
+  await neutral(page);
+  await expect(page.locator('body')).toHaveAttribute('data-rudder-degrees', '0');
+  await expect(page.locator('body')).toHaveAttribute('data-engine-order', /stop/i);
+  await page.keyboard.press('ArrowUp');
+  await expect(page.locator('body')).not.toHaveAttribute('data-engine-order', /stop/i);
+});

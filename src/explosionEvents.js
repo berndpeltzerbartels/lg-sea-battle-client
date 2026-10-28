@@ -19,7 +19,7 @@ export function createExplosionEvents(emit) {
         seen.add(key);
         if (seen.size > 2048) seen.delete(seen.values().next().value);
         if (Number.isFinite(hit.t) && snapshot.t - hit.t > 2) return;
-        const own = !!ownShipId && (target === ownShipId || hit.targetShipIds?.includes(ownShipId));
+        const own = !!ownShipId && !!(target === ownShipId || hit.targetShipIds?.includes(ownShipId));
         const v = variant(hit.id);
         let options;
         if (kind === 'underwater') {
@@ -88,7 +88,7 @@ export function createExplosionEvents(emit) {
         if (ship.vehicleType === 'submarine') play('sinking',
           { id: wreck.id, x: ship.x, z: ship.z, t: wreck.sunkAt }, 'submarine-destruction', ship.id);
       }
-      for (const hit of snapshot.ramHits ?? []) play('ram', hit, 'collision', hit.shipId === ownShipId ? ownShipId : hit.targetShipId);
+      for (const hit of snapshot.ramHits ?? []) play('ram', hit, 'collision', hit.reason !== 'wreck-collision' && hit.shipId === ownShipId ? ownShipId : hit.targetShipId);
       for (const hit of snapshot.bombImpacts ?? []) play('bomb', hit, hit.reason === 'sea-hit' ? 'water' : 'heavy');
       for (const charge of snapshot.depthCharges ?? []) if (charge.exploded) {
         play('depth-charge', { ...charge, t: charge.explodesAt }, 'heavy');

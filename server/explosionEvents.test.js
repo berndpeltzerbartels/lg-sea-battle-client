@@ -132,3 +132,9 @@ test('depth charges boost underwater listening especially when hitting the own s
   assert.equal(calls[1][2], true);
   assert.equal(calls[1][3].noDucking, true);
 });
+
+test('a wreck with a reused fleet id does not make its respawned controller hear a local collision', () => {
+  const calls=[];const events=createExplosionEvents((...args)=>calls.push(args));
+  events.consume({instanceId:'wreck-life',sessionId:'s',t:1,ramHits:[{id:'wreck-hit',shipId:'reused',targetShipId:'victim',reason:'wreck-collision',x:400,z:400,t:1}]},'reused');
+  assert.equal(calls.length,1);assert.equal(calls[0][2],false);
+});

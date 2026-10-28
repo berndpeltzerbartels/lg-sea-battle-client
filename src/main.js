@@ -8,8 +8,9 @@ import { createPeriscopeFoamState } from "./periscopeFoamState.js";
 import { createSternFoamState } from './sternFoamState.js';
 import { createSternFoam } from './sternFoam.js';
 import { createWreckVisuals } from './wreckVisuals.js';
+import { wreckPose } from './wreckMotion.js';
 import { createSinkingBubbles } from './sinkingBubbles.js';
-import { createGamepadInput, createHeldControls, nextGamepadStation } from './gamepadInput.js';
+import { createGamepadInput, createHeldControls, nextGamepadStation, gamepadBridgeState } from './gamepadInput.js';
 import depthChargeExplosionUrl1 from "./assets/audio/depth-charge-explosion-1.wav?url";
 import depthChargeExplosionUrl2 from "./assets/audio/depth-charge-explosion-2.wav?url";
 import depthChargeExplosionUrl3 from "./assets/audio/depth-charge-explosion-3.wav?url";
@@ -1364,6 +1365,7 @@ let playerAwaitingServerAssignment = false;
 let playerSinkStartTime = 0;
 let playerSinkStartY = 0;
 let playerSinkSide = -1;
+let playerPhysicalWreck = null;
 let lastFlakHitId = "";
 let flakHitAlertUntil = 0;
 let damageNotificationIds = new Set();
@@ -1391,6 +1393,13 @@ const gamepadInput = createGamepadInput({
   getGamepads: () => navigator.getGamepads?.() ?? [],
   direction: (direction, down) => { if (down) unlockGameAudio(); heldControls.set(direction, down, "gamepad"); },
   fire: down => { if (down) unlockGameAudio(); heldControls.set("fire", down, "gamepad"); },
+  analog: (horizontal, vertical, axes) => {
+    if (scoutPlaneMode || (crewState && crewState.station !== "bridge")) return;
+    const command = gamepadBridgeState(horizontal, vertical);
+    unlockGameAudio();
+    if (axes.y) { engineOrder = command.engineOrder; heldEngineDirection = 0; }
+    if (axes.x) { rudderDegrees = Math.round(command.rudder * getPlayerMaxRudderDegrees()); heldRudderDirection = 0; }
+  },
   cycleStation: cycleGamepadStation,
   action: gamepadAction,
   activity: () => {
@@ -1407,7 +1416,18 @@ document.addEventListener("visibilitychange", () => {
 });
 const wreckVisuals = createWreckVisuals({
   create: createWreckMotion,
-  update: (motion, dt, now) => updateEnemyMotion(motion, dt, now, boat.root.position, blockedWaters),
+  update: (motion, dt, now) => {
+    updateEnemyMotion(motion, dt, now, boat.root.position, blockedWaters);
+    if (motion.wreckMotion && !isScoutPlaneMotion(motion)) {
+      motion.wreckAge += dt;
+      const pose= wreckPose(motion.wreckMotion,motion.wreckAge);
+      motion.root.position.set(pose.x,pose.y,pose.z);
+      motion.root.rotationQuaternion=Quaternion.FromEulerAngles(pose.pitch,pose.yaw,pose.roll);
+      motion.root.setEnabled(!pose.finished);
+      if (pose.finished) motion.state="sunk";
+      else if (motion.state==="sunk") motion.state="sinking";
+    }
+  },
   dispose: disposeRemoteMotion
 });
 const sinkingBubbles = createSinkingBubbles(scene);
@@ -1655,7 +1675,12 @@ scene.onBeforeRenderObservable.add(() => {
   const dt = Math.min(rawFrameSeconds, maxSimulationFrameSeconds);
   gamepadInput.update(playerDamageState === "active" && !crewSwitchPending && !document.hidden
     && document.hasFocus() && !isTextEditingElement(document.activeElement) && !isStartupErrorVisible(),
-    `${flakViewActive}:${cannonViewActive}:${lookoutViewActive}:${torpedoScopeActive}:${submarinePeriscopeMode}:${playerSubmarineDepthState}:${crewState?.station}`);
+    `${flakViewActive}:${cannonViewActive}:${lookoutViewActive}:${torpedoScopeActive}:${submarinePeriscopeMode}:${playerSubmarineDepthState}:${crewState?.station}`, {
+      x: !scoutPlaneMode && !flakViewActive && !cannonViewActive && !lookoutViewActive
+        && (!crewState || crewState.station === "bridge") && !isPlayerSubmarineObservationPeriscopeActive(),
+      y: !scoutPlaneMode && !flakViewActive && !cannonViewActive && !lookoutViewActive
+        && (!crewState || crewState.station === "bridge")
+    });
   updateEngineAudio();
   const zoomActivityNow = performance.now();
   if (cannonViewActive && (heldCannonDirection || heldCannonPitchDirection)) weaponZoomIdleTimer.touch(zoomActivityNow);
@@ -6315,7 +6340,8 @@ function updateKillFeedFromSnapshot(snapshot) {
     ...collectKillFeedImpacts((snapshot.depthCharges ?? []).flatMap(c => c.targetShipIds.map(targetShipId =>
       ({ ...c, targetShipId, t: c.explodesAt, reason: "ship-hit" }))), "depth-charge", "Wasserbombe"),
     ...collectKillFeedImpacts(snapshot.flakHits, "flak", (impact) => isCannonServerProjectile(impact?.id) ? "Kanone" : "Flak", () => true),
-    ...collectKillFeedImpacts(snapshot.ramHits, "ram", "Rammen", () => true)
+    ...collectKillFeedImpacts(snapshot.ramHits, "ram", "Rammen", impact => impact.reason !== "wreck-collision"),
+    ...collectKillFeedImpacts(snapshot.ramHits, "wreck", "Sinkendes Schiff", impact => impact.reason === "wreck-collision")
   ].sort((left, right) => left.t - right.t);
 
   const crewSuccesses = [];
@@ -6968,6 +6994,10 @@ async function requestPlayerBombDrop() {
 }
 
 function applyServerGameSnapshot(snapshot) {
+  const ownWreck=(snapshot.wrecks ?? []).filter(w => w.ship.id === playerServerShipId
+    || w.ship.controlledBy === playerId).sort((a,b) => b.sunkAt-a.sunkAt)[0];
+  if (ownWreck && snapshot.t-ownWreck.sunkAt < 1) playerPhysicalWreck=ownWreck;
+  else if (playerDamageState === "active") playerPhysicalWreck=null;
   if (!snapshot || !Array.isArray(snapshot.ships)) return;
   if (sideViewSandboxMode) {
     document.body.dataset.playerStateSync = "sandbox-local";
@@ -7000,7 +7030,7 @@ function applyServerGameSnapshot(snapshot) {
   const previousOwnShip = snapshot.ships.find((ship) => ship.id === playerServerShipId);
   explosionEvents.consume(snapshot, playerServerShipId ?? ownShip?.id);
   for (const hit of snapshot.ramHits ?? []) {
-    if (!ownShip || ownShip.state !== "active" || hit.shipId !== ownShip.id || appliedServerRamStops.has(hit.id)) continue;
+    if (!ownShip || ownShip.state !== "active" || hit.reason === "wreck-collision" || hit.shipId !== ownShip.id || appliedServerRamStops.has(hit.id)) continue;
     appliedServerRamStops.add(hit.id);
     speed = 0;
     turnVelocity = 0;
@@ -7525,6 +7555,9 @@ function createWreckMotion(wreck, age) {
   motion.id = wreck.id;
   motion.originalShipId = ship.id;
   motion.sunkAt = wreck.sunkAt;
+  motion.wreckMotion = wreck;
+  motion.wreckAge = age;
+  motion.speed = ship.speed;
   motion.isServerControlled = false;
   motion.root.metadata = { ...motion.root.metadata, serverShipId: null, wreckId: wreck.id };
   motion.root.getChildMeshes().forEach(mesh => { mesh.isPickable = false; });
@@ -9977,7 +10010,7 @@ function updateEnemyShipCriticalHit(motion, dt, now) {
 
 function updateEnemySinking(motion, dt, time) {
   motion.sinkAge += dt;
-  motion.speed *= Math.max(0, 1 - dt * 1.55);
+  motion.speed *= Math.exp(-dt * .35);
   motion.rollImpulse += (0 - motion.rollImpulse) * Math.min(1, dt * 1.8);
 
   const forward = new Vector3(Math.sin(motion.heading), 0, Math.cos(motion.heading));
@@ -10083,9 +10116,14 @@ function updatePlayerSinking(playerBoat, now) {
     heading,
     playerSinkSide * (0.16 + ease * 1.18)
   );
+  if (playerPhysicalWreck) {
+    const pose=wreckPose(playerPhysicalWreck,age);
+    playerBoat.root.position.set(pose.x,pose.y,pose.z);
+    playerBoat.root.rotationQuaternion=Quaternion.FromEulerAngles(pose.pitch,pose.yaw,pose.roll);
+  }
   updateSinkingWaterOverlay(smoothstep(0.08, 0.92, t) * 0.96);
 
-  if (t >= 1) {
+  if (playerPhysicalWreck ? age >= (playerPhysicalWreck.sinkSeconds ?? 19) : t >= 1) {
     respawnPlayerBoat(playerBoat);
   }
 }
@@ -10712,7 +10750,7 @@ function installScenarioTestHooks() {
     underwaterShipAudioForTest() { return underwaterShipSound?.state() ?? null; },
     wrecksForTest() {
       return [...wreckVisuals.motions.values()].map(motion => ({ id: motion.id,
-        originalShipId: motion.originalShipId, state: motion.state,
+        originalShipId: motion.originalShipId, state: motion.state, age: motion.wreckAge,
         position: summarizeVector(motion.root.position) }));
     },
     sinkingBubblesForTest() { return sinkingBubbles.snapshot(); },

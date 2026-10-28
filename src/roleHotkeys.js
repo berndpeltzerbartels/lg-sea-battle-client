@@ -49,7 +49,8 @@ export function gamepadHotkeys(keys) {
     const mapped = { '↑ ↓': 'Stick ↑ / ↓', '← →': 'Stick ← / →', '↑ ↓ ← →': 'Linker Stick · auch diagonal',
       Leertaste: 'R2', Z: 'L2', W: '□', A: '△', '⇧↑': 'Steuerkreuz ↑', '⇧↓': 'Steuerkreuz ↓',
       '1': 'Steuerkreuz ←', '2': 'Steuerkreuz →', '3': '△' }[key];
-    if (mapped) hints.push([mapped, label]);
+    if (mapped) hints.push([mapped, label === 'Fahrt' ? 'Fahrt nach Ausschlag · loslassen: Stop'
+      : label === 'Ruder' ? 'Ruder nach Ausschlag · loslassen: mittschiffs' : label]);
   }
   return hints;
 }
