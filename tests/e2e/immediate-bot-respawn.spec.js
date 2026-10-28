@@ -61,11 +61,14 @@ test('active replacement and sinking wreck render independently even when the de
     if (i === 2) expect((await wrecks()).find(wreck => wreck.id === 'death-2').position.y).toBeLessThan(-19);
   }
   await page.screenshot({ path: '/tmp/seabattle-independent-wrecks.png' });
+  await expect.poll(() => page.evaluate(() => window.seaBattleScenarioTest.sinkingBubblesForTest().active)).toBeGreaterThan(0);
   await page.waitForTimeout(500);
   expect(errors).toEqual([]);
   await expect.poll(async () => (await wrecks()).length, { timeout: 35000 }).toBe(0);
   await send();
   expect(await wrecks()).toHaveLength(0);
+  await expect.poll(() => page.evaluate(() => window.seaBattleScenarioTest.sinkingBubblesForTest().active),
+    { timeout: 8000 }).toBe(0);
   expect((await remotes()).filter(ship => ship.id === 'enemy' && ship.state === 'active')).toHaveLength(1);
   expect(errors).toEqual([]);
 });

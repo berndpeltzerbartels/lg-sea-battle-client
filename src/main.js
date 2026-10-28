@@ -8,6 +8,7 @@ import { createPeriscopeFoamState } from "./periscopeFoamState.js";
 import { createSternFoamState } from './sternFoamState.js';
 import { createSternFoam } from './sternFoam.js';
 import { createWreckVisuals } from './wreckVisuals.js';
+import { createSinkingBubbles } from './sinkingBubbles.js';
 import depthChargeExplosionUrl1 from "./assets/audio/depth-charge-explosion-1.wav?url";
 import depthChargeExplosionUrl2 from "./assets/audio/depth-charge-explosion-2.wav?url";
 import depthChargeExplosionUrl3 from "./assets/audio/depth-charge-explosion-3.wav?url";
@@ -1387,6 +1388,7 @@ const wreckVisuals = createWreckVisuals({
   update: (motion, dt, now) => updateEnemyMotion(motion, dt, now, boat.root.position, blockedWaters),
   dispose: disposeRemoteMotion
 });
+const sinkingBubbles = createSinkingBubbles(scene);
 let radarTorpedoSnapshots = Array.isArray(gameState.torpedoes) ? gameState.torpedoes : [];
 let scoutPlaneFlakHitStartTime = 0;
 let scoutPlaneFlakHitExploded = false;
@@ -1472,6 +1474,7 @@ if (engineSoundToggle) {
 }
 document.addEventListener("visibilitychange", () => updateEngineAudio(true));
 window.addEventListener("pagehide", () => {
+  sinkingBubbles.dispose();
   wreckVisuals.clear();
   underwaterShipSound?.dispose();
   underwaterShipSound = null;
@@ -1890,6 +1893,9 @@ scene.onBeforeRenderObservable.add(() => {
   updateNavigationLights(navigationLights, time, boat.root.position);
   enemyMotions.forEach((enemyMotion) => updateEnemyMotion(enemyMotion, dt, time, boat.root.position, blockedWaters));
   wreckVisuals.tick(dt, time);
+  for (const motion of enemyMotions) sinkingBubbles.follow(motion);
+  for (const motion of wreckVisuals.motions.values()) sinkingBubbles.follow(motion);
+  sinkingBubbles.update(dt);
   enemyMotions.forEach((enemyMotion) => updateCannonBarrelRecoil(enemyMotion.boat?.bowCannon, time));
   updateScoutPlaneFlakDemo(enemyMotions.concat(flakDemoMotions), time);
   updateEnemyFireControl(torpedoSystem, enemyMotions, boat.root.position, blockedWaters, time);
@@ -10652,6 +10658,7 @@ function installScenarioTestHooks() {
         originalShipId: motion.originalShipId, state: motion.state,
         position: summarizeVector(motion.root.position) }));
     },
+    sinkingBubblesForTest() { return sinkingBubbles.snapshot(); },
     remoteShipsForTest() {
       return enemyMotions.map(motion => ({ id: motion.id, state: motion.state,
         lifeId: motion.lifeId, visible: motion.root.isEnabled(), position: summarizeVector(motion.root.position) }));
