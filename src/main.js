@@ -9,6 +9,7 @@ import { createSternFoamState } from './sternFoamState.js';
 import { createSternFoam } from './sternFoam.js';
 import { createWreckVisuals } from './wreckVisuals.js';
 import { createSinkingBubbles } from './sinkingBubbles.js';
+import { createGamepadInput, createHeldControls, nextGamepadStation } from './gamepadInput.js';
 import depthChargeExplosionUrl1 from "./assets/audio/depth-charge-explosion-1.wav?url";
 import depthChargeExplosionUrl2 from "./assets/audio/depth-charge-explosion-2.wav?url";
 import depthChargeExplosionUrl3 from "./assets/audio/depth-charge-explosion-3.wav?url";
@@ -840,7 +841,8 @@ camera.maxZ = 4200;
 camera.fov = scoutPlaneMode ? 1.02 : 0.78;
 scene.activeCamera = camera;
 
-window.addEventListener("keydown", (event) => {
+window.addEventListener("keydown", handleGameKeyDown);
+function handleGameKeyDown(event) {
   if (isStartupErrorVisible() || isSystemShortcutEvent(event)) return;
   if (!isTextEditingElement(event.target)) {
     const helpToggle = event.code === "KeyH" || event.key?.toLowerCase() === "h";
@@ -954,37 +956,26 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (playerActive && isInputKey(event, "up")) {
-    pressDirectionalInput("up", { repeat: event.repeat, shiftKey: event.shiftKey });
+    heldControls.set("up", true, "keyboard", { repeat: event.repeat, shiftKey: event.shiftKey });
     event.preventDefault();
   }
   if (playerActive && isInputKey(event, "down")) {
-    pressDirectionalInput("down", { repeat: event.repeat, shiftKey: event.shiftKey });
+    heldControls.set("down", true, "keyboard", { repeat: event.repeat, shiftKey: event.shiftKey });
     event.preventDefault();
   }
   if (playerActive && isInputKey(event, "left")) {
-    pressDirectionalInput("left", { repeat: event.repeat, shiftKey: event.shiftKey });
+    heldControls.set("left", true, "keyboard", { repeat: event.repeat, shiftKey: event.shiftKey });
     event.preventDefault();
   }
   if (playerActive && isInputKey(event, "right")) {
-    pressDirectionalInput("right", { repeat: event.repeat, shiftKey: event.shiftKey });
+    heldControls.set("right", true, "keyboard", { repeat: event.repeat, shiftKey: event.shiftKey });
     event.preventDefault();
   }
   if (playerActive && isTorpedoFireKey(event) && !event.repeat) {
-    if (flakViewActive) {
-      heldFlakFire = true;
-      firePlayerFlak();
-      event.preventDefault();
-      return;
-    }
-    if (cannonViewActive) {
-      firePlayerCannon();
-      event.preventDefault();
-      return;
-    }
-    requestPlayerWeaponFire();
+    heldControls.set("fire", true, "keyboard");
     event.preventDefault();
   }
-});
+}
 
 window.addEventListener("keyup", (event) => {
   if (isStartupErrorVisible() || isSystemShortcutEvent(event)) return;
@@ -998,11 +989,11 @@ window.addEventListener("keyup", (event) => {
   }
   for (const direction of ["up", "down", "left", "right"]) {
     if (!isInputKey(event, direction)) continue;
-    releaseDirectionalInput(direction);
+    heldControls.set(direction, false, "keyboard");
     event.preventDefault();
   }
-  if (isTorpedoFireKey(event) && heldFlakFire) {
-    heldFlakFire = false;
+  if (isTorpedoFireKey(event)) {
+    heldControls.set("fire", false, "keyboard");
     event.preventDefault();
   }
 });
@@ -1077,6 +1068,8 @@ window.addEventListener("pointercancel", () => {
 });
 
 window.addEventListener("blur", () => {
+  gamepadInput.reset();
+  heldControls.clear();
   lookoutHeldDirections.clear();
   mouseButtonMask = 0;
   debugOrbitDragActive = false;
@@ -1383,6 +1376,35 @@ let killSuccessTimer = null;
 let reportedLocalPlaneHitIds = new Set();
 let pendingCriticalFlakShipHitsByTarget = new Map();
 let pendingCannonShipHitsByTarget = new Map();
+const heldControls = createHeldControls((control, options) => {
+  if (control !== "fire") return pressDirectionalInput(control, options);
+  if (flakViewActive) { heldFlakFire = true; firePlayerFlak(); }
+  else if (cannonViewActive) firePlayerCannon();
+  else requestPlayerWeaponFire();
+}, control => {
+  if (control === "fire") heldFlakFire = false;
+  else releaseDirectionalInput(control);
+});
+let gamepadName = null;
+let playerActivityTracker = null;
+const gamepadInput = createGamepadInput({
+  getGamepads: () => navigator.getGamepads?.() ?? [],
+  direction: (direction, down) => { if (down) unlockGameAudio(); heldControls.set(direction, down, "gamepad"); },
+  fire: down => { if (down) unlockGameAudio(); heldControls.set("fire", down, "gamepad"); },
+  cycleStation: cycleGamepadStation,
+  action: gamepadAction,
+  activity: () => {
+    playerActivityTracker?.markActive();
+    const now = performance.now(); zoomIdleTimer.touch(now); weaponZoomIdleTimer.touch(now);
+  },
+  status: name => {
+    gamepadName = name; document.body.dataset.gamepad = name ? "connected" : "disconnected";
+    updateRoleHotkeys();
+  }
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { gamepadInput.reset(); heldControls.clear(); }
+});
 const wreckVisuals = createWreckVisuals({
   create: createWreckMotion,
   update: (motion, dt, now) => updateEnemyMotion(motion, dt, now, boat.root.position, blockedWaters),
@@ -1592,7 +1614,7 @@ const bombSystem = createBombSystem(scene, materials, world);
 const flakSystem = createFlakSystem(scene, materials, world);
 const cannonSystem = createCannonSystem(scene, materials, world);
 connectGameEventStream();
-if (!sideViewSandboxMode) trackPlayerActivity({
+if (!sideViewSandboxMode) playerActivityTracker = trackPlayerActivity({
   send: () => fetch(gameEndpoint("/game/crew/activity"), {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId })
@@ -1631,6 +1653,9 @@ scene.onBeforeRenderObservable.add(() => {
   const frameLogicStarted = performanceLoggingEnabled ? performance.now() : 0;
   const rawFrameSeconds = engine.getDeltaTime() / 1000;
   const dt = Math.min(rawFrameSeconds, maxSimulationFrameSeconds);
+  gamepadInput.update(playerDamageState === "active" && !crewSwitchPending && !document.hidden
+    && document.hasFocus() && !isTextEditingElement(document.activeElement) && !isStartupErrorVisible(),
+    `${flakViewActive}:${cannonViewActive}:${lookoutViewActive}:${torpedoScopeActive}:${submarinePeriscopeMode}:${playerSubmarineDepthState}:${crewState?.station}`);
   updateEngineAudio();
   const zoomActivityNow = performance.now();
   if (cannonViewActive && (heldCannonDirection || heldCannonPitchDirection)) weaponZoomIdleTimer.touch(zoomActivityNow);
@@ -2167,6 +2192,35 @@ function toggleFlakView() {
 
 function toggleCannonView() {
   setBattleStation("cannon");
+}
+
+function cycleGamepadStation(step) {
+  if (scoutPlaneMode) return;
+  const current = isPlayerSubmarineObservationPeriscopeActive() ? "observation"
+    : lookoutViewActive ? "lookout" : flakViewActive ? "flak" : cannonViewActive ? "cannon"
+    : torpedoScopeActive ? "torpedo" : "bridge";
+  const stations = submarineMode
+    ? canShowSubmarineTorpedoScope() ? ["torpedo", "observation"] : ["bridge", "flak"]
+    : ["bridge", "lookout", "flak", "cannon", "torpedo"];
+  const available = stations.filter(station => station !== "flak" || !flakViewButton?.disabled
+    && (!submarineMode || playerSubmarineDepthState === submarineDepthStates.surface));
+  const next = nextGamepadStation(current, step, available, crewState?.members, playerId);
+  if (!next) return;
+  if (next === "observation") setSubmarinePeriscopeMode(submarinePeriscopeModes.observationScope);
+  else if (submarineMode && next === "torpedo") setSubmarinePeriscopeMode(submarinePeriscopeModes.forwardScope);
+  else setBattleStation(next);
+}
+
+function gamepadAction(action) {
+  unlockGameAudio();
+  const shortcuts = { zoom: ["KeyZ", "z"], "depth-charge": ["KeyW", "w"],
+    align: submarineMode && canShowSubmarineTorpedoScope() ? ["Digit3", "3"] : ["KeyA", "a"],
+    help: ["KeyH", "h"], ascend: ["ArrowUp", "ArrowUp"], dive: ["ArrowDown", "ArrowDown"],
+    "forward-scope": ["Digit1", "1"], "observation-scope": ["Digit2", "2"] };
+  const [code, key] = shortcuts[action];
+  if (["ascend", "dive"].includes(action) && !submarineMode) return;
+  handleGameKeyDown({ code, key, shiftKey: action === "ascend" || action === "dive", repeat: false,
+    target: canvas, preventDefault() {} });
 }
 
 function setBattleStation(station, confirmed = false) {
@@ -3934,6 +3988,17 @@ function updateRoleHotkeys() {
     submarine: submarineMode, depth: playerSubmarineDepthState,
     periscopeAvailable: submarineMode && canShowSubmarineTorpedoScope(),
     observationScope: isPlayerSubmarineObservationPeriscopeActive() });
+  if (gamepadName) {
+    entries.unshift(["Linker Stick", "Wie Pfeiltasten · auch diagonal"], ["L1 / R1", "Freie Position wechseln"],
+      ["Options", "Hilfe"]);
+    if (entries.some(([key]) => key === "Leertaste")) entries.unshift(["R2", "Feuern"]);
+    if (entries.some(([key]) => key === "Z")) entries.unshift(["L2", "Zoom"]);
+    if (submarineMode) {
+      entries.push(["Steuerkreuz ↑ / ↓", "Auftauchen / Abtauchen"]);
+      if (canShowSubmarineTorpedoScope()) entries.push(["Steuerkreuz ← / →", "Sehrohr voraus / 360°"], ["△", "Boot auf Peilung"]);
+      else entries.push(["△", "Flak ausrichten"]);
+    } else entries.push(["□", "Wasserbomben"], ["△", "Geschütze ausrichten"]);
+  }
   const signature = JSON.stringify(entries);
   if (signature === hotkeySignature) return;
   hotkeySignature = signature;

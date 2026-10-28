@@ -24,5 +24,7 @@ export function trackPlayerActivity({ target = window, send, expired, schedule =
   };
   for (const name of events) target.addEventListener(name, input, { capture: true, passive: true });
   const timer = schedule(tick, 5000);
+  // Gamepad polling has no DOM isTrusted event; only actual controller input calls this.
+  stop.markActive = () => { if (!stopped) changed = true; };
   return stop;
 }
