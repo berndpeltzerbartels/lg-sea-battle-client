@@ -2,6 +2,30 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSternFoamState } from '../src/sternFoamState.js';
 
+for (const submarine of [false, true]) {
+  test(`reverse travel deposits shorter bow foam, anchored through a turn (${submarine ? 'submarine' : 'torpedo boat'})`, () => {
+    const reverse = createSternFoamState(3, 144, { submarine });
+    const forward = createSternFoamState(3, 144, { submarine });
+    for (const [state, speed] of [[reverse, -4], [forward, 4]]) {
+      state.update({ x: 0, z: 0 }, 0, speed, .4, .1);
+      state.update({ x: 0, z: Math.sign(speed) * 3 }, 0, speed, .4, .1);
+    }
+    const first = reverse.patches.slice(0, 3).map(p => ({ ...p }));
+    assert.ok(first.every(p => p.z > 9), 'foam is ahead of the reversing hull, at its bow');
+    assert.ok(first[0].life < forward.patches[0].life);
+    assert.ok(first[0].width < forward.patches[0].width);
+    reverse.update({ x: -3, z: -3 }, Math.PI / 2, -4, .4, .1);
+    for (let i = 0; i < 3; i++) assert.deepEqual(reverse.patches[i], first[i]);
+    const born = reverse.patches.map(p => p.born);
+    reverse.update({ x: -3, z: -3 }, Math.PI / 2, 0, 0, 7);
+    assert.deepEqual(reverse.patches.map(p => p.born), born);
+    assert.ok(reverse.patches.every(p => stateExpired(reverse, p)));
+    assert.equal(reverse.patches.length, 144);
+  });
+}
+
+function stateExpired(state, patch) { return patch.born === -Infinity || state.now - patch.born > patch.life; }
+
 test('deposits three lanes and leaves old foam anchored through a turn', () => {
   const state = createSternFoamState(3);
   state.update({x:0,z:0},0,17,1,.1);

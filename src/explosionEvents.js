@@ -41,14 +41,19 @@ export function createExplosionEvents(emit) {
         } else if (family === 'torpedo' && hit.reason === 'land-hit') {
           options = { variant: 6, rate: .8, gain: 1.1, rangeScale: 3, noDucking: true };
         } else if (family === 'torpedo') {
-          options = { variant: 11 + v, rate: 1, gain: 1.45, rangeScale: 3, noDucking: true };
+          options = { variant: 11 + v, rate: .92, gain: 1.45, rangeScale: 3, noDucking: true };
         } else if (family === 'depth-charge' || kind === 'submarine-destruction') {
           options = { variant: 14 + v, rate: .88, gain: 1.25, rangeScale: 3, noDucking: true };
         } else {
           options = { variant: v % 2 ? 7 : 6, rate: .72, gain: 1.1 };
         }
         if (family === 'depth-charge') options.underwaterGain = own ? 3 : 2;
-        if (family === 'torpedo') options.lowpassHz = hit.reason === 'land-hit' ? 1800 : 1000;
+        if (family === 'torpedo') {
+          options.lowpassHz = hit.reason === 'land-hit' ? 1800 : 750;
+          options.underwaterRate = .82;
+          options.underwaterLowpassHz = 650;
+          options.deepUnderwaterLowpassHz = 300;
+        }
         options.waterExplosion = kind === 'water' || kind === 'flak-water' || kind === 'underwater'
           || kind === 'submarine-destruction' || family === 'torpedo' || family === 'depth-charge'
           || kind === 'submerged-hit';

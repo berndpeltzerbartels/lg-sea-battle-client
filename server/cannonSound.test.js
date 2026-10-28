@@ -26,13 +26,18 @@ test('cannon plays once per event, preserves shot decay and releases bounded sou
     decodeAudioData: async () => ({ duration: 3.95 }),
     createGain: () => { const gain = node(); gains.push(gain); return gain; }, createBiquadFilter: node,
     createStereoPanner: node, createBufferSource: () => {
-      const source = { ...node(), start() {}, stop() { stops++; } }; sources.push(source); return source;
+      const source = { ...node(), playbackRate: param(), start() {}, stop() { stops++; } }; sources.push(source); return source;
     } };
   try {
     globalThis.fetch = async () => { loads++; return { ok: true, arrayBuffer: async () => new ArrayBuffer(2) }; };
     const sound = createCannonSound({ context, url: '/cannon.wav', maxVoices: 2 });
     await Promise.all([sound.unlock(), sound.unlock()]);
-    sound.shot('first', { x: 50, z: 0 });
+    sound.shot('first', { x: 50, z: 0 }, false, { rate: .92, underwaterRate: .82, waterExplosion: true });
+    assert.equal(sources[0].playbackRate.target, .92);
+    sound.update({ x: 0, z: 0, heading: 0, underwater: true, deepSubmerged: true }, true);
+    assert.equal(sources[0].playbackRate.target, .92 * .82);
+    sound.update({ x: 0, z: 0, heading: 0 }, true);
+    assert.equal(sources[0].playbackRate.target, .92, 'surfacing restores the original pitch');
     sound.shot('first', { x: 50, z: 0 });
     assert.equal(sources.length, 1);
     assert.equal(sources[0].loop, false);
@@ -94,13 +99,16 @@ test('heavy explosion distance profile is stronger at combat distance without in
 test('darker torpedo filtering retains gain and respects stronger deep-water filtering', () => {
   const listener = { x: 0, z: 0, heading: 0 };
   const position = { x: 50, z: 0 };
-  const options = { waterExplosion: true, lowpassHz: 1000 };
+  const options = { waterExplosion: true, lowpassHz: 750, underwaterLowpassHz: 650, deepUnderwaterLowpassHz: 300 };
   const normal = cannonSpatialMix(position, listener, 3);
   const dark = cannonSpatialMix(position, listener, 3, options);
   assert.equal(dark.gain, normal.gain);
-  assert.equal(dark.frequency, 1000);
+  assert.equal(dark.frequency, 750);
+  const periscope = cannonSpatialMix(position, { ...listener, underwater: true, deepSubmerged: false }, 3, options);
+  assert.equal(periscope.frequency, 650);
+  assert.equal(periscope.gain, dark.gain);
   const deep = cannonSpatialMix(position, { ...listener, underwater: true, deepSubmerged: true }, 3, options);
-  assert.equal(deep.frequency, 450);
+  assert.equal(deep.frequency, 300);
   assert.equal(deep.gain, dark.gain);
 });
 

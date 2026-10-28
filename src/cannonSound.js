@@ -12,6 +12,8 @@ export function cannonSpatialMix(position, listener, rangeScale = 1, options = {
   if (listener.underwater) mix.gain *= options.underwaterGain ?? 1;
   mix.frequency = Math.min(mix.frequency, options.lowpassHz ?? Infinity);
   if (listener.underwater) mix.frequency = Math.min(mix.frequency, listener.deepSubmerged ? 450 : 1400);
+  if (listener.underwater) mix.frequency = Math.min(mix.frequency,
+    (listener.deepSubmerged ? options.deepUnderwaterLowpassHz : options.underwaterLowpassHz) ?? Infinity);
   return { ...mix, gain: mix.gain * 1.6 };
 }
 
@@ -34,6 +36,8 @@ export function createCannonSound({ context, destination = context.destination, 
     v.gain.gain.setTargetAtTime(mix.gain / (v.own || v.noDucking ? 1 : Math.sqrt(voices.size)), context.currentTime, .015);
     v.filter.frequency.setTargetAtTime(mix.frequency, context.currentTime, .03);
     v.pan?.pan.setTargetAtTime(mix.pan, context.currentTime, .03);
+    if (v.underwaterRate !== undefined) v.source.playbackRate.setTargetAtTime(
+      v.baseRate * (listener.underwater ? v.underwaterRate : 1), context.currentTime, .03);
   }
   return {
     unlock() {
@@ -72,6 +76,8 @@ export function createCannonSound({ context, destination = context.destination, 
       if (pan) { gain.connect(pan); pan.connect(destination); }
       else gain.connect(destination);
       const voice = { source, filter, gain, pan, position: { x: position.x, z: position.z }, own, strength, underwaterGain: options.underwaterGain, lowpassHz: options.lowpassHz, waterExplosion: !!options.waterExplosion, underwaterOnly: !!options.underwaterOnly, rangeScale: options.rangeScale ?? 1, noDucking: !!options.noDucking };
+      Object.assign(voice, { baseRate: options.rate ?? 1, underwaterRate: options.underwaterRate,
+        underwaterLowpassHz: options.underwaterLowpassHz, deepUnderwaterLowpassHz: options.deepUnderwaterLowpassHz });
       voices.set(id, voice);
       gain.gain.value = mix.gain / (own || options.noDucking ? 1 : Math.sqrt(voices.size));
       filter.frequency.value = mix.frequency;

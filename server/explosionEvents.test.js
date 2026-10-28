@@ -63,7 +63,9 @@ test('torpedo ship and coast hits use distinct wet and dry attacks with reduced 
     assert.equal(options.noDucking, true);
   }
   assert.ok(calls[0][3].variant >= 11 && calls[0][3].variant <= 13);
-  assert.equal(calls[0][3].lowpassHz, 1000);
+  assert.equal(calls[0][3].lowpassHz, 750);
+  assert.equal(calls[0][3].rate, .92);
+  assert.equal(calls[0][3].underwaterRate, .82);
   assert.equal(calls[1][3].variant, 6);
   assert.equal(calls[1][3].lowpassHz, 1800);
   assert.ok(calls[1][3].gain < calls[0][3].gain);

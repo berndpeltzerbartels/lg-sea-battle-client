@@ -9613,7 +9613,9 @@ function updateServerEnemyMotion(motion, dt, time) {
     if (submarineWakeExposure <= 0.01) {
       hideEnemyWake(motion.bowWake);
     } else {
-      updateEnemyBowWake(motion.bowWake, Math.max(0, motion.speed, motion.serverSpeed ?? 0) * submarineWakeExposure, time, dt, motion.root.position, motion.heading);
+      const wakeSpeed = Math.abs(motion.serverSpeed ?? 0) > Math.abs(motion.speed)
+        ? motion.serverSpeed : motion.speed;
+      updateEnemyBowWake(motion.bowWake, wakeSpeed * submarineWakeExposure, time, dt, motion.root.position, motion.heading);
     }
     const periscopeWakeSpeed = Math.abs(motion.serverSpeed ?? 0) > Math.abs(motion.speed)
       ? motion.serverSpeed
@@ -10191,7 +10193,10 @@ function updateEnemyBowWake(wake, speed, time, dt = 1 / 60, sourcePosition = nul
   wake.strength += (targetStrength - wake.strength) * Math.min(1, dt * response);
   const wakeIntensity = wake.strength;
   const wakeLift = wakeIntensity * 0.018;
-  if (sourcePosition) wake.sternFoam?.update(sourcePosition, sourceHeading, forwardSpeed, wakeIntensity, dt);
+  const foamIntensity = speed < -.02
+    ? clamp(0.08 + smoothstep(0, enemyBowWakeFullSpeed, Math.abs(speed)) * .92, 0, 1)
+    : wakeIntensity;
+  if (sourcePosition) wake.sternFoam?.update(sourcePosition, sourceHeading, speed, foamIntensity, dt);
   wake.root.setEnabled(forwardSpeed > 0.02 || wakeIntensity > 0.025);
   if (sourcePosition) {
     wake.root.position.x = sourcePosition.x;
@@ -10597,7 +10602,7 @@ function installScenarioTestHooks() {
       const foam = boat.bowWake?.sternFoam;
       if (!foam) return null;
       foam.reset();
-      const strength = clamp(speedValue / enemyBowWakeFullSpeed, 0, 1);
+      const strength = clamp(Math.abs(speedValue) / enemyBowWakeFullSpeed, 0, 1);
       const origin = boat.root.position;
       const steps = Math.ceil(duration * 30);
       for (let i = 0; i <= steps; i++) {

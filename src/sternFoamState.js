@@ -8,13 +8,16 @@ export function createSternFoamState(scale, capacity = 144, { submarine = false 
     lastX = lastZ = NaN;
     distanceLeft = 0;
   }
-  function emit(x, z, heading, strength) {
+  function emit(x, z, heading, strength, reverse) {
     const sin = Math.sin(heading), cos = Math.cos(heading);
     for (const lane of [-1, 0, 1]) {
       const p = patches[cursor]; cursor = (cursor + 1) % capacity;
       const variation = ((serial++ * 37) % 101) / 100;
-      const localX = lane * (submarine ? .19 : .64) * scale + (variation - .5) * (submarine ? .05 : .12) * scale;
-      const localZ = ((submarine ? -4.62 : -4.06) - variation * .12) * scale;
+      // Astern motion leaves a narrower, shorter trail at the pointed bow.
+      const localX = lane * (reverse ? (submarine ? .12 : .22) : (submarine ? .19 : .64)) * scale
+        + (variation - .5) * (submarine ? .05 : .12) * scale;
+      const localZ = (reverse ? (submarine ? 4.65 : 4.15) + variation * .12
+        : (submarine ? -4.62 : -4.06) - variation * .12) * scale;
       p.x = x + cos * localX + sin * localZ;
       p.z = z - sin * localX + cos * localZ;
       p.heading = heading + lane * .12;
@@ -22,6 +25,7 @@ export function createSternFoamState(scale, capacity = 144, { submarine = false 
       p.life = (2.2 + strength * 3.2 + variation * .4) * (lane === 0 ? .3 : .5);
       p.width = scale * (submarine ? (lane === 0 ? .14 : .11) : (lane === 0 ? .31 : .21)) * (.5 + strength * .5);
       p.length = scale * (submarine ? .34 + variation * .16 : .48 + variation * .22);
+      if (reverse) { p.life *= .7; p.width *= .75; p.length *= .7; }
       p.strength = strength;
       p.seed = variation;
       p.lane = lane;
@@ -33,13 +37,13 @@ export function createSternFoamState(scale, capacity = 144, { submarine = false 
     const dx = position.x - lastX, dz = position.z - lastZ;
     const distance = Math.hypot(dx, dz);
     if (distance > scale * 30) { reset(); lastX = position.x; lastZ = position.z; return; }
-    if (speed > .3 && strength > .04 && distance > 0) {
+    if (Math.abs(speed) > .3 && strength > .04 && distance > 0) {
       // Keep deposition continuous through turns; never move old marks with the ship.
       let offset = spacing - distanceLeft;
       let count = 0;
       while (offset <= distance && count++ < 8) {
         const t = offset / distance;
-        emit(lastX + dx * t, lastZ + dz * t, heading, strength);
+        emit(lastX + dx * t, lastZ + dz * t, heading, strength, speed < 0);
         offset += spacing;
       }
       distanceLeft = (distanceLeft + distance) % spacing;
