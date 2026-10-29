@@ -1,3 +1,4 @@
+import { applyShipPaint, submarineFlakMaterials } from "./shipPaint.js";
 import { createAudioRecovery } from "./audioRecovery.js";
 import { createUnderwaterShipSound } from "./underwaterShipSound.js";
 import underwaterPropellerUrl from "./assets/audio/underwater-propeller-loop.wav?url";
@@ -348,10 +349,10 @@ const legacyTeamAliases = new Map([
 ]);
 const shipFleetMaterialPalettes = {
   light: {
-    body: { diffuse: [0.62, 0.63, 0.62], specular: [0.11, 0.12, 0.12] }
+    body: { diffuse: [.72, .72, .66], emissive: [.0936, .0936, .0858], specular: [.24, .27, .29], specularPower: 58, angularFleetPaint: true, shipFinish: true }
   },
   dark: {
-    body: { diffuse: [0.24, 0.31, 0.38], specular: [0.06, 0.085, 0.115] }
+    body: { diffuse: [.32, .43, .53], emissive: [.0416, .0559, .0689], specular: [.42, .46, .49], specularPower: 30, shipFinish: true }
   },
   green: {
     body: { diffuse: [0.2, 0.34, 0.25], specular: [0.06, 0.08, 0.06] }
@@ -781,7 +782,7 @@ if (scoutPlaneMode) {
   boat.root.position.y = getPlayerSubmarineWaterlineY();
 }
 if (submarineMode && !boat.sternFlak && boat.flakMount) {
-  boat.sternFlak = createSternFlak(scene, materials, boat.root, "player_submarine", getShipTeamMaterials(materials, playerTeamId), boat.flakMount.z, true, {
+  boat.sternFlak = createSternFlak(scene, materials, boat.root, "player_submarine", submarineFlakMaterials(scene, getShipTeamMaterials(materials, playerTeamId)), boat.flakMount.z, true, {
     shieldVariant: "open",
     deckY: boat.flakMount.deckY,
     scale: boat.flakMount.scale,
@@ -807,6 +808,7 @@ if (submarineMode && !boat.periscopeWake) {
     periscopeZ: 0.11
   });
 }
+if (!scoutPlaneMode) applyShipPaint(boat.root);
 if (sideViewSandboxMode && submarineMode) {
   createSubmarineCameraDebugMarker(scene, boat);
   window.__seaBattleSideView = { scene, boat };
@@ -9459,7 +9461,7 @@ function createRemoteVehicleModel(scene, materials, name, ship) {
     });
     if (!submarine.sternFlak && submarine.flakMount) {
       const teamMaterials = getShipTeamMaterials(materials, ship.teamId);
-      submarine.sternFlak = createSternFlak(scene, materials, submarine.root, name, teamMaterials, submarine.flakMount.z, false, {
+      submarine.sternFlak = createSternFlak(scene, materials, submarine.root, name, submarineFlakMaterials(scene, teamMaterials), submarine.flakMount.z, false, {
         shieldVariant: "open",
         deckY: submarine.flakMount.deckY,
         scale: submarine.flakMount.scale,
@@ -9469,6 +9471,7 @@ function createRemoteVehicleModel(scene, materials, name, ship) {
         pedestalHeightScale: 0.24
       });
     }
+    applyShipPaint(submarine.root);
     return submarine;
   }
   return createEnemyTorpedoBoat(
@@ -15817,6 +15820,8 @@ function createFleetPartMaterial(scene, fleetId, part, palette) {
   const material = new StandardMaterial(`${fleetId}_party_${part}_material`, scene);
   material.diffuseColor = new Color3(...palette.diffuse);
   material.specularColor = new Color3(...palette.specular);
+  material.specularPower = palette.specularPower ?? material.specularPower;
+  material.metadata = { angularFleetPaint: !!palette.angularFleetPaint, shipFinish: !!palette.shipFinish };
   if (palette.emissive) {
     material.emissiveColor = new Color3(...palette.emissive);
   }
@@ -17446,6 +17451,7 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = 
   const bowWake = createEnemyBowWake(scene, materials, root, name);
   const depthCharges = createDepthChargeRacks(scene, root, name, getTorpedoBoatDeckY, depthChargeLayout, teamMaterials.hull);
 
+  applyShipPaint(root);
   return { root, bowWake, bowCannon, sternFlak, depthCharges };
 }
 
