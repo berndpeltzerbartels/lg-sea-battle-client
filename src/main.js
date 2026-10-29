@@ -1,3 +1,4 @@
+import { createAudioRecovery } from "./audioRecovery.js";
 import { createUnderwaterShipSound } from "./underwaterShipSound.js";
 import underwaterPropellerUrl from "./assets/audio/underwater-propeller-loop.wav?url";
 import sonarPingUrl from "./assets/audio/sonar-ping.wav?url";
@@ -1515,9 +1516,7 @@ if (engineSoundToggle) {
   });
 }
 document.addEventListener("visibilitychange", () => updateEngineAudio(true));
-window.addEventListener("pagehide", () => {
-  sinkingBubbles.dispose();
-  wreckVisuals.clear();
+function disposeGameAudio() {
   underwaterShipSound?.dispose();
   underwaterShipSound = null;
   sinkingWaterSound?.dispose();
@@ -1536,7 +1535,26 @@ window.addEventListener("pagehide", () => {
   torpedoSound = null;
   gameAudioOutput?.disconnect();
   gameAudioOutput = null;
+}
+const audioRecovery = createAudioRecovery({
+  getContext: () => depthChargeAudio,
+  needsRebuild: () => !gameAudioOutput || (!scoutPlaneMode && !engineSound?.state().loaded),
+  recover: unlockGameAudio,
+  report: error => console.warn("[sea-battle] Audiowiederherstellung", error)
 });
+function restoreGameAudio() {
+  audioRecovery.check(true);
+  updateEngineAudio(true);
+}
+window.addEventListener("focus", restoreGameAudio);
+window.addEventListener("pageshow", restoreGameAudio);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) restoreGameAudio(); });
+window.addEventListener("pagehide", () => {
+  sinkingBubbles.dispose();
+  wreckVisuals.clear();
+  disposeGameAudio();
+});
+
 const hotkeyLayoutObserver = new ResizeObserver(placeRoleHotkeys);
 for (const element of document.querySelectorAll("#roleHotkeys, .player-list, #lookoutHud, .weapon-elevation")) hotkeyLayoutObserver.observe(element);
 window.addEventListener("resize", () => {
@@ -3653,6 +3671,10 @@ async function dropDepthCharges() {
 function unlockGameAudio() {
   const Audio = window.AudioContext || window.webkitAudioContext;
   if (!Audio) return;
+  if (depthChargeAudio?.state === "closed") {
+    disposeGameAudio();
+    depthChargeAudio = null;
+  }
   depthChargeAudio ??= new Audio();
   if (!gameAudioOutput) {
     // A single shared limiter prevents simultaneous nearby impacts from clipping.
@@ -3727,6 +3749,7 @@ function unlockGameAudio() {
 }
 
 function updateEngineAudio(force = false) {
+  audioRecovery.check();
   const sinking = playerDamageState === "sinking" || playerDamageState === "air-hit";
   currentListenerWaterState = listenerWaterState({ submarine: submarineMode, depthOffset: playerSubmarineDepthOffset,
     periscopeOffset: submarineDepthOffsets.periscope, sinking, cameraY: camera.position.y });

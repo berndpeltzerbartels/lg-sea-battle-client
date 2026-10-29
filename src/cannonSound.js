@@ -18,7 +18,7 @@ export function cannonSpatialMix(position, listener, rangeScale = 1, options = {
 }
 
 export function createCannonSound({ context, destination = context.destination, url, urls, report = () => {}, maxVoices = 6, spatialMix = cannonSpatialMix }) {
-  let buffers = [], pending, disposed = false, lastUpdate = -Infinity;
+  let buffers = [], pending, disposed = false, lastUpdate = -Infinity, retryAt = 0;
   let listener = { x: 0, z: 0, heading: 0, muted: false };
   const voices = new Map(), seen = new Set();
   function remove(id, stop = true) {
@@ -41,13 +41,13 @@ export function createCannonSound({ context, destination = context.destination, 
   }
   return {
     unlock() {
-      if (!pending && !disposed) pending = (async () => {
+      if (!pending && !disposed && Date.now() >= retryAt) pending = (async () => {
         buffers = await Promise.all((urls ?? [url]).map(async sampleUrl => {
           const response = await fetch(sampleUrl);
           if (!response.ok) throw new Error(`Effekt-Sample: HTTP ${response.status}`);
           return context.decodeAudioData(await response.arrayBuffer());
         }));
-      })().catch(report);
+      })().catch(error => { pending = null; retryAt = Date.now() + 5000; report(error); });
       return pending;
     },
     shot(id, position, own = false, options = {}) {
