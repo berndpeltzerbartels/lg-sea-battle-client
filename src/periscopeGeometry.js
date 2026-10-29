@@ -1,7 +1,8 @@
 // Model units; keep the matching server SubmarinePeriscopeGeometry in sync.
+export const periscopeSizeScale = 1.3; // Local visual trial: both mast height and diameter.
 export const periscopeMastBase = .66 + .64 * .9 - .012;
-export const periscopeMastTop = periscopeMastBase + .986 * .9;
-export const periscopeExtraLift = (periscopeMastTop - 1.86) * .2;
+export const periscopeMastTop = periscopeMastBase + .986 * .9 * periscopeSizeScale;
+export const periscopeExtraLift = (periscopeMastBase + .986 * .9 - 1.86) * .2 * periscopeSizeScale;
 export function periscopeLiftAtDepth(depthOffset) {
   const depth = Math.abs(depthOffset ?? 0);
   const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x-a)/(b-a))); return t*t*(3-2*t); };

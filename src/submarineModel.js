@@ -1,3 +1,5 @@
+import { applyShipPaint, getPeriscopePaintMaterial } from "./shipPaint.js";
+import { periscopeSizeScale } from "./periscopeGeometry.js";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
@@ -76,6 +78,7 @@ export function createSubmarineModel(scene, materials, {
   meshes.push(...createSternGear(scene, root, submarineMaterials, name));
   meshes.push(...createBowPlanes(scene, root, submarineMaterials, name));
 
+  applyShipPaint(root);
   return {
     root,
     meshes,
@@ -95,9 +98,11 @@ function createSubmarineMaterials(scene, materials, teamMaterials, name) {
   const specularColor = source?.specularColor?.clone?.() ?? new Color3(0.06, 0.085, 0.115);
   const makeBody = (suffix, factor, emissiveFactor = 0.09) => {
     const material = new StandardMaterial(`${name}_${suffix}_material`, scene);
-    material.diffuseColor = hullColor.scale(factor);
-    material.emissiveColor = hullColor.scale(emissiveFactor);
-    material.specularColor = specularColor.scale(0.85);
+    material.diffuseColor = hullColor.scale(source?.metadata?.shipFinish ? (suffix === "deck" ? .87 : 1) : factor);
+    material.emissiveColor = hullColor.scale(source?.metadata?.shipFinish ? .13 : emissiveFactor);
+    material.specularColor = specularColor.scale(source?.metadata?.shipFinish ? 1 : .85);
+    material.specularPower = source?.specularPower ?? material.specularPower;
+    material.metadata = { angularFleetPaint: !!source?.metadata?.angularFleetPaint };
     material.backFaceCulling = true;
     return material;
   };
@@ -106,6 +111,10 @@ function createSubmarineMaterials(scene, materials, teamMaterials, name) {
   const tower = makeBody("tower", 0.86, 0.12);
   const darkDetail = new StandardMaterial(`${name}_dark_detail_material`, scene);
   darkDetail.diffuseColor = new Color3(0.035, 0.043, 0.048);
+  if (source?.metadata?.shipFinish) {
+    darkDetail.diffuseColor = new Color3(.12, .15, .17);
+    darkDetail.emissiveColor = new Color3(.012, .018, .022);
+  }
   darkDetail.specularColor = new Color3(0.03, 0.035, 0.04);
   darkDetail.zOffset = -4;
   const brass = new StandardMaterial(`${name}_brass_material`, scene);
@@ -277,12 +286,12 @@ function createDeckDetails(scene, root, materials, name) {
   const masts = [];
   const mastBaseY = sailPositionY + sailFloorY * sailScale - 0.012;
   [0.02, 0.2].forEach((z, index) => {
-    const height = (index === 0 ? 0.986 : 0.816) * sailScale;
-    const mast = MeshBuilder.CreateCylinder(`${name}_periscope_${index}`, { diameter: 0.038, height, tessellation: 8 }, scene);
+    const height = (index === 0 ? 0.986 : 0.816) * sailScale * periscopeSizeScale;
+    const mast = MeshBuilder.CreateCylinder(`${name}_periscope_${index}`, { diameter: 0.038 * periscopeSizeScale, height, tessellation: 8 }, scene);
     mast.parent = root;
     mast.position.y = mastBaseY + height * 0.5;
     mast.position.z = sailPositionZ + (z - sailPositionZ) * sailScale;
-    mast.material = materials.tower;
+    mast.material = getPeriscopePaintMaterial(scene, materials.tower);
     mast.metadata = { baseY: mastBaseY, height };
     details.push(mast);
     masts.push({ mesh: mast, baseY: mastBaseY, height });

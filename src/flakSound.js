@@ -13,7 +13,7 @@ export function flakSpatialMix(position, listener) {
 
 // One continuous burst per firing ship, never one source per projectile.
 export function createFlakSound({ context, destination = context.destination, url, report = () => {}, maxVoices = 8, baseRate = 1, spatialMix = flakSpatialMix, sustainSeconds = .18, gainSmoothing = .025 }) {
-  let buffer, pending, disposed = false, lastUpdate = -Infinity;
+  let buffer, pending, disposed = false, lastUpdate = -Infinity, retryAt = 0;
   let listener = { x: 0, z: 0, heading: 0, muted: false };
   const voices = new Map();
   function remove(id) {
@@ -24,11 +24,11 @@ export function createFlakSound({ context, destination = context.destination, ur
   }
   return {
     unlock() {
-      if (!pending && !disposed) pending = (async () => {
+      if (!pending && !disposed && Date.now() >= retryAt) pending = (async () => {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Flak-Sample: HTTP ${response.status}`);
         buffer = await context.decodeAudioData(await response.arrayBuffer());
-      })().catch(error => { report(error); });
+      })().catch(error => { pending = null; retryAt = Date.now() + 5000; report(error); });
       return pending;
     },
     shot(id, position, own = false, options = {}) {

@@ -1,3 +1,5 @@
+import { applyShipPaint, submarineFlakMaterials } from "./shipPaint.js";
+import { createAudioRecovery } from "./audioRecovery.js";
 import { createUnderwaterShipSound } from "./underwaterShipSound.js";
 import underwaterPropellerUrl from "./assets/audio/underwater-propeller-loop.wav?url";
 import sonarPingUrl from "./assets/audio/sonar-ping.wav?url";
@@ -347,10 +349,10 @@ const legacyTeamAliases = new Map([
 ]);
 const shipFleetMaterialPalettes = {
   light: {
-    body: { diffuse: [0.62, 0.63, 0.62], specular: [0.11, 0.12, 0.12] }
+    body: { diffuse: [.72, .72, .66], emissive: [.0936, .0936, .0858], specular: [.24, .27, .29], specularPower: 58, angularFleetPaint: true, shipFinish: true }
   },
   dark: {
-    body: { diffuse: [0.24, 0.31, 0.38], specular: [0.06, 0.085, 0.115] }
+    body: { diffuse: [.32, .43, .53], emissive: [.0416, .0559, .0689], specular: [.42, .46, .49], specularPower: 30, shipFinish: true }
   },
   green: {
     body: { diffuse: [0.2, 0.34, 0.25], specular: [0.06, 0.08, 0.06] }
@@ -780,7 +782,7 @@ if (scoutPlaneMode) {
   boat.root.position.y = getPlayerSubmarineWaterlineY();
 }
 if (submarineMode && !boat.sternFlak && boat.flakMount) {
-  boat.sternFlak = createSternFlak(scene, materials, boat.root, "player_submarine", getShipTeamMaterials(materials, playerTeamId), boat.flakMount.z, true, {
+  boat.sternFlak = createSternFlak(scene, materials, boat.root, "player_submarine", submarineFlakMaterials(scene, getShipTeamMaterials(materials, playerTeamId)), boat.flakMount.z, true, {
     shieldVariant: "open",
     deckY: boat.flakMount.deckY,
     scale: boat.flakMount.scale,
@@ -806,6 +808,7 @@ if (submarineMode && !boat.periscopeWake) {
     periscopeZ: 0.11
   });
 }
+if (!scoutPlaneMode) applyShipPaint(boat.root);
 if (sideViewSandboxMode && submarineMode) {
   createSubmarineCameraDebugMarker(scene, boat);
   window.__seaBattleSideView = { scene, boat };
@@ -1515,9 +1518,7 @@ if (engineSoundToggle) {
   });
 }
 document.addEventListener("visibilitychange", () => updateEngineAudio(true));
-window.addEventListener("pagehide", () => {
-  sinkingBubbles.dispose();
-  wreckVisuals.clear();
+function disposeGameAudio() {
   underwaterShipSound?.dispose();
   underwaterShipSound = null;
   sinkingWaterSound?.dispose();
@@ -1536,7 +1537,26 @@ window.addEventListener("pagehide", () => {
   torpedoSound = null;
   gameAudioOutput?.disconnect();
   gameAudioOutput = null;
+}
+const audioRecovery = createAudioRecovery({
+  getContext: () => depthChargeAudio,
+  needsRebuild: () => !gameAudioOutput || (!scoutPlaneMode && !engineSound?.state().loaded),
+  recover: unlockGameAudio,
+  report: error => console.warn("[sea-battle] Audiowiederherstellung", error)
 });
+function restoreGameAudio() {
+  audioRecovery.check(true);
+  updateEngineAudio(true);
+}
+window.addEventListener("focus", restoreGameAudio);
+window.addEventListener("pageshow", restoreGameAudio);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) restoreGameAudio(); });
+window.addEventListener("pagehide", () => {
+  sinkingBubbles.dispose();
+  wreckVisuals.clear();
+  disposeGameAudio();
+});
+
 const hotkeyLayoutObserver = new ResizeObserver(placeRoleHotkeys);
 for (const element of document.querySelectorAll("#roleHotkeys, .player-list, #lookoutHud, .weapon-elevation")) hotkeyLayoutObserver.observe(element);
 window.addEventListener("resize", () => {
@@ -3653,6 +3673,10 @@ async function dropDepthCharges() {
 function unlockGameAudio() {
   const Audio = window.AudioContext || window.webkitAudioContext;
   if (!Audio) return;
+  if (depthChargeAudio?.state === "closed") {
+    disposeGameAudio();
+    depthChargeAudio = null;
+  }
   depthChargeAudio ??= new Audio();
   if (!gameAudioOutput) {
     // A single shared limiter prevents simultaneous nearby impacts from clipping.
@@ -3727,6 +3751,7 @@ function unlockGameAudio() {
 }
 
 function updateEngineAudio(force = false) {
+  audioRecovery.check();
   const sinking = playerDamageState === "sinking" || playerDamageState === "air-hit";
   currentListenerWaterState = listenerWaterState({ submarine: submarineMode, depthOffset: playerSubmarineDepthOffset,
     periscopeOffset: submarineDepthOffsets.periscope, sinking, cameraY: camera.position.y });
@@ -9436,7 +9461,7 @@ function createRemoteVehicleModel(scene, materials, name, ship) {
     });
     if (!submarine.sternFlak && submarine.flakMount) {
       const teamMaterials = getShipTeamMaterials(materials, ship.teamId);
-      submarine.sternFlak = createSternFlak(scene, materials, submarine.root, name, teamMaterials, submarine.flakMount.z, false, {
+      submarine.sternFlak = createSternFlak(scene, materials, submarine.root, name, submarineFlakMaterials(scene, teamMaterials), submarine.flakMount.z, false, {
         shieldVariant: "open",
         deckY: submarine.flakMount.deckY,
         scale: submarine.flakMount.scale,
@@ -9446,6 +9471,7 @@ function createRemoteVehicleModel(scene, materials, name, ship) {
         pedestalHeightScale: 0.24
       });
     }
+    applyShipPaint(submarine.root);
     return submarine;
   }
   return createEnemyTorpedoBoat(
@@ -11339,6 +11365,48 @@ function installScenarioTestHooks() {
         criticalHitAge: Number((motion.criticalHitAge ?? 0).toFixed(3)),
         damageAnchor: serializeShipDamageAnchor(motion.cannonHitAnchor ?? motion.criticalHitAnchor)
       };
+    },
+    async renderPeriscopeVisibilityForTest(distance, targetSpeed = 0, teamId = "dark") {
+      // Isolated still-image rendering; no game server or player session is needed.
+      engine.stopRenderLoop();
+      // Match the live game, not the side-view model sandbox's low fill light.
+      sun.direction = new Vector3(-0.45, -0.9, 0.32);
+      sun.position.set(35, 80, -45);
+      sun.intensity = 1.2;
+      sun.diffuse = new Color3(0.83, 0.85, 0.83);
+      sun.specular = new Color3(0.48, 0.55, 0.62);
+      ambient.intensity = 0.42;
+      ambient.diffuse = new Color3(0.5, 0.6, 0.7);
+      ambient.groundColor = new Color3(0.2, 0.24, 0.28);
+      scene.onBeforeRenderObservable.clear();
+      canvas.style.width = "100vw"; canvas.style.height = "100vh";
+      engine.setSize(1920, 1080);
+      for (const motion of enemyMotions) {
+        motion.root.setEnabled(false); hideEnemyWake(motion.bowWake); hideEnemyWake(motion.periscopeWake);
+      }
+      const id = "visibility-reference";
+      window.seaBattleScenarioTest.createRemoteSubmarineForTest({ id, teamId, x: 0, z: distance,
+        y: -5.58, heading: 0, depthState: "periscope", speed: targetSpeed, engineOrder: targetSpeed ? 8 : 2 });
+      const motion = enemyMotions.find(m => m.id === id);
+      motion.root.setEnabled(true);
+      motion.root.position.set(0, -5.58, distance);
+      motion.heading = 0;
+      updateRemoteSubmarineDiveMotion(motion, 10);
+      motion.root.rotationQuaternion = Quaternion.FromEulerAngles(0, 0, 0);
+      for (let frame = 0; frame < 150; frame++) {
+        const position = new Vector3(0, -5.58, distance - targetSpeed * (5 - frame / 30));
+        updateSubmarinePeriscopeWake(motion.periscopeWake, "periscope", targetSpeed, time + frame / 30, 1 / 30, position, 0);
+      }
+      boat.root.setEnabled(false);
+      camera.position.set(0, 3, 0);
+      camera.setTarget(new Vector3(0, .55, distance));
+      camera.fov = .78; camera.minZ = .03;
+      await scene.whenReadyAsync();
+      engine.setViewport(camera.viewport, 1920, 1080);
+      scene.render();
+      scene.render();
+      return { distance, speed: targetSpeed, cameraY: 3, fov: .78, heading: 0,
+        mast: motion.root.position.y, foam: motion.periscopeWake?.surfaceFoam?.snapshot() };
     },
     createRemoteSubmarineForTest(state = {}) {
       const id = String(state.id ?? "test-U1");
@@ -15752,6 +15820,8 @@ function createFleetPartMaterial(scene, fleetId, part, palette) {
   const material = new StandardMaterial(`${fleetId}_party_${part}_material`, scene);
   material.diffuseColor = new Color3(...palette.diffuse);
   material.specularColor = new Color3(...palette.specular);
+  material.specularPower = palette.specularPower ?? material.specularPower;
+  material.metadata = { angularFleetPaint: !!palette.angularFleetPaint, shipFinish: !!palette.shipFinish };
   if (palette.emissive) {
     material.emissiveColor = new Color3(...palette.emissive);
   }
@@ -17381,6 +17451,7 @@ function createEnemyTorpedoBoat(scene, materials, name = "enemy_boat", teamId = 
   const bowWake = createEnemyBowWake(scene, materials, root, name);
   const depthCharges = createDepthChargeRacks(scene, root, name, getTorpedoBoatDeckY, depthChargeLayout, teamMaterials.hull);
 
+  applyShipPaint(root);
   return { root, bowWake, bowCannon, sternFlak, depthCharges };
 }
 

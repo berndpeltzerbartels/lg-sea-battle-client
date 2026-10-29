@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { periscopeMastTop, periscopeLiftAtDepth, periscopeFoamStrength } from '../src/periscopeGeometry.js';
+import { periscopeMastTop, periscopeMastBase, periscopeSizeScale, periscopeLiftAtDepth, periscopeFoamStrength } from '../src/periscopeGeometry.js';
 import { createPeriscopeFoamState } from '../src/periscopeFoamState.js';
-test('twenty percent more exposed mast at actual periscope depth, retracted at surface and deep', () => {
-  assert.ok(Math.abs((periscopeMastTop - 1.86 + periscopeLiftAtDepth(-1.6)) / (periscopeMastTop - 1.86) - 1.2) < 1e-10);
+test('trial scales the complete mast height and extension by thirty percent, retracting at surface and deep', () => {
+  const previousHeight = .986 * .9 + (periscopeMastBase + .986 * .9 - 1.86) * .2;
+  assert.equal(periscopeSizeScale, 1.3);
+  assert.ok(Math.abs((periscopeMastTop - periscopeMastBase + periscopeLiftAtDepth(-1.6)) / previousHeight - 1.3) < 1e-10);
   assert.equal(periscopeLiftAtDepth(0), 0);
   assert.equal(periscopeLiftAtDepth(-6.16), 0);
 });
