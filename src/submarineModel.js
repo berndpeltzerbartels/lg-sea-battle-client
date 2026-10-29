@@ -1,3 +1,4 @@
+import { periscopeSizeScale } from "./periscopeGeometry.js";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
@@ -277,8 +278,8 @@ function createDeckDetails(scene, root, materials, name) {
   const masts = [];
   const mastBaseY = sailPositionY + sailFloorY * sailScale - 0.012;
   [0.02, 0.2].forEach((z, index) => {
-    const height = (index === 0 ? 0.986 : 0.816) * sailScale;
-    const mast = MeshBuilder.CreateCylinder(`${name}_periscope_${index}`, { diameter: 0.038, height, tessellation: 8 }, scene);
+    const height = (index === 0 ? 0.986 : 0.816) * sailScale * periscopeSizeScale;
+    const mast = MeshBuilder.CreateCylinder(`${name}_periscope_${index}`, { diameter: 0.038 * periscopeSizeScale, height, tessellation: 8 }, scene);
     mast.parent = root;
     mast.position.y = mastBaseY + height * 0.5;
     mast.position.z = sailPositionZ + (z - sailPositionZ) * sailScale;
