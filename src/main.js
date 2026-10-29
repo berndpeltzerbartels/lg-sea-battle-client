@@ -146,7 +146,6 @@ let engineSoundMuted = false;
 try { engineSoundMuted = localStorage.getItem("engineSoundMuted") === "true"; } catch {}
 let depthChargeUnderwater = null;
 let underwaterChargeTestView = false;
-let nextPeriscopeSpeedDiagnostic = 0; // Temporary diagnostic; remove after the pursuit check.
 let hotkeySignature = "";
 let hotkeysExpanded = false;
 const zoomIdleTimer = createZoomIdleTimer();
@@ -2026,7 +2025,6 @@ scene.onBeforeRenderObservable.add(() => {
     camera.rotation.x = -Math.abs(camera.rotation.x);
   }
   updateObservationPeriscopeViewState();
-  logCenteredPeriscopeSpeed();
   updateSteeringModifierHint();
   boat.flakDeckView?.setEnabled(flakViewActive);
   boat.flakViewHiddenMeshes?.forEach((mesh) => mesh.setEnabled(!flakViewActive));
@@ -5358,29 +5356,6 @@ function updatePlayerSubmarineDiveMotion(dt) {
       updateBattleStationButtons();
     }
   }
-}
-
-// Temporary pursuit diagnostic. No UI or switch: only a real mesh under the centre ray is reported.
-function logCenteredPeriscopeSpeed() {
-  if (!submarineMode || (!torpedoScopeActive && !isPlayerSubmarineObservationPeriscopeActive())) return;
-  const now = performance.now();
-  if (now < nextPeriscopeSpeedDiagnostic) return;
-  nextPeriscopeSpeedDiagnostic = now + 1000;
-  const ray = camera.getForwardRay(2000);
-  let centered = null, nearest = Infinity;
-  for (const motion of enemyMotions) {
-    if (motion.state !== "active" || !motion.root.isEnabled()) continue;
-    for (const mesh of motion.root.getChildMeshes()) {
-      if (!mesh.isEnabled() || !mesh.isVisible || mesh.visibility < .05 || !mesh.getTotalVertices()) continue;
-      const hit = ray.intersectsMesh(mesh, false);
-      if (hit.hit && hit.distance < nearest) { nearest = hit.distance; centered = motion; }
-    }
-  }
-  if (!centered) return;
-  const actual = Number.isFinite(centered.serverSpeed) ? centered.serverSpeed : centered.speed;
-  const lengths = distance2D(boat.root.position, centered.root.position) / ((3.68 + 4.2) * torpedoBoatVisualScale);
-  console.log(`*** SEHROHR-TEMPO *** ${centered.id} | Schiff ${Math.abs(actual).toFixed(1)} kn | Eigenfahrt ${Math.abs(speed).toFixed(1)} kn | Abstand ${lengths.toFixed(2)} Schiffslängen | Fahrstufe ${centered.engineOrder}`);
-  sendClientGameEvent("*** SEHROHR-TEMPO ***", { ziel: centered.id, geschwindigkeitKn: Number(actual.toFixed(2)), eigenfahrtKn: Number(speed.toFixed(2)), abstandSchiffslaengen: Number(lengths.toFixed(2)), fahrstufe: centered.engineOrder });
 }
 
 function isPlayerSubmarineObservationPeriscopeActive() {
