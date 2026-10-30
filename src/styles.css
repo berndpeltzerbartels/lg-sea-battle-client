@@ -1924,7 +1924,7 @@ body[data-underwater-view="true"][data-player-vehicle="submarine"] .torpedo-scop
 
 .observation-periscope-heading {
   position: absolute;
-  left: calc(var(--view-left) + 20px);
+  left: calc(var(--view-left) + 54px);
   top: 18px;
   z-index: 5;
   display: inline-flex;
@@ -5318,3 +5318,20 @@ body.debug-map-expanded .nav-instrument-map {
   letter-spacing: 0;
   white-space: nowrap;
 }
+
+.submarine-detection-eye {
+  display: none;
+  position: absolute;
+  top: 18px;
+  left: calc(var(--view-left, 0px) + 18px);
+  z-index: 6;
+  width: 24px;
+  height: 24px;
+  color: #e8c75b;
+}
+body[data-player-vehicle="submarine"][data-torpedo-view="active"]:not([data-underwater-view="true"]) .submarine-detection-eye:not([hidden]),
+body[data-player-vehicle="submarine"][data-observation-periscope="active"]:not([data-underwater-view="true"]) .submarine-detection-eye:not([hidden]) {
+  display: block;
+}
+.submarine-detection-eye svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.submarine-detection-eye circle { fill: currentColor; stroke: none; }

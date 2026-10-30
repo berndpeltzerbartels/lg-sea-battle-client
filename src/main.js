@@ -1,3 +1,4 @@
+import { isSubmarineDetectionVisible } from "./submarineDetection.js";
 import { applyShipPaint, submarineFlakMaterials } from "./shipPaint.js";
 import { createAudioRecovery } from "./audioRecovery.js";
 import { createUnderwaterShipSound } from "./underwaterShipSound.js";
@@ -7034,6 +7035,17 @@ async function requestPlayerBombDrop() {
   }
 }
 
+let submarineDetectionTimer;
+function updateSubmarineDetection(snapshot, ship) {
+  const indicator = document.getElementById("submarineDetectionEye");
+  clearTimeout(submarineDetectionTimer);
+  if (!indicator) return;
+  const detection = snapshot.submarineDetections?.[ship?.id];
+  indicator.hidden = !isSubmarineDetectionVisible(detection, ship, snapshot.t);
+  if (!indicator.hidden) submarineDetectionTimer = setTimeout(() => { indicator.hidden = true; },
+    Math.min(3, Math.max(0, detection.until - snapshot.t)) * 1000);
+}
+
 function applyServerGameSnapshot(snapshot) {
   const ownWreck=(snapshot.wrecks ?? []).filter(w => w.ship.id === playerServerShipId
     || w.ship.controlledBy === playerId).sort((a,b) => b.sunkAt-a.sunkAt)[0];
@@ -7069,6 +7081,7 @@ function applyServerGameSnapshot(snapshot) {
 
   const ownShip = snapshot.ships.find((ship) => ship.controlledBy === (crewState?.controller ?? playerId) && ship.teamId === playerTeamId);
   const previousOwnShip = snapshot.ships.find((ship) => ship.id === playerServerShipId);
+  updateSubmarineDetection(snapshot, ownShip);
   explosionEvents.consume(snapshot, playerServerShipId ?? ownShip?.id);
   for (const hit of snapshot.ramHits ?? []) {
     if (!ownShip || ownShip.state !== "active" || hit.reason === "wreck-collision" || hit.shipId !== ownShip.id || appliedServerRamStops.has(hit.id)) continue;
@@ -10909,6 +10922,10 @@ function installScenarioTestHooks() {
         x: effect.mesh.position.x, y: effect.mesh.position.y, z: effect.mesh.position.z,
         visibility: effect.mesh.visibility
       }));
+    },
+    submarineDetectionForTest(detection, depthState = "periscope", lifeId = 1, serverTime = 0) {
+      updateSubmarineDetection({ t: serverTime, submarineDetections: { test: detection } },
+        { id: "test", vehicleType: "submarine", state: "active", depthState, lifeId });
     },
     setSubmarineDepthState(depthState) {
       setPlayerSubmarineDepthState(depthState);
