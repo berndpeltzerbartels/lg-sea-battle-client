@@ -134,3 +134,81 @@ test('360 degree periscope keeps digital view rotation but uses absolute throttl
   assert.deepEqual(directions, [['right', true]]);
   assert.deepEqual(commands, [[0, -.5, { y: true }]]);
 });
+
+function helmFixture() {
+  const pad = { id: 'DualSense', index: 0, mapping: 'standard', connected: true,
+    axes: [0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false })) };
+  const state = { engineOrder: 2, rudder: 0, hold: false, stations: [], actions: [] };
+  const input = createGamepadInput({ getGamepads: () => [pad], direction() {},
+    analog(x, y, axes) { const c = gamepadBridgeState(x, y); if (axes.y) state.engineOrder = c.engineOrder; if (axes.x) state.rudder = c.rudder; },
+    throttleHold: held => { state.hold = held; },
+    cycleStation: step => state.stations.push(step), action: action => state.actions.push(action) });
+  const tick = (context = 'bridge') => input.update(true, context, context === 'bridge' ? { x: true, y: true } : {});
+  tick(); tick();
+  const button = (index, context = 'bridge') => { pad.buttons[index].pressed = true; tick(context); pad.buttons[index].pressed = false; tick(context); };
+  const lock = () => { pad.axes[1] = -1; tick(); button(10); };
+  return { pad, state, input, tick, button, lock };
+}
+
+test('L3 holds only throttle; releasing and horizontal steering leave it held', () => {
+  const f = helmFixture(); f.lock();
+  assert.equal(f.state.hold, true);
+  f.pad.axes = [0, 0]; f.tick();
+  assert.equal(f.state.engineOrder, 8);
+  f.pad.axes[0] = 1; f.tick();
+  assert.equal(f.state.rudder, 1); assert.equal(f.state.hold, true);
+  f.pad.axes[0] = 0; f.tick();
+  assert.equal(f.state.rudder, 0); assert.equal(f.state.engineOrder, 8);
+  f.pad.axes[1] = .59; f.tick();
+  assert.equal(f.state.hold, false); assert.equal(f.state.engineOrder, 1);
+  f.pad.axes[1] = 0; f.tick();
+  assert.equal(f.state.engineOrder, 2);
+});
+
+test('holding the original gas position or clicking L3 again does not release it', () => {
+  const f = helmFixture(); f.lock();
+  f.pad.axes[1] = -.8; f.tick();
+  assert.equal(f.state.hold, true); assert.equal(f.state.engineOrder, 8);
+  f.button(10); assert.equal(f.state.hold, true);
+  f.pad.axes[1] = 0; f.tick();
+  f.pad.axes[1] = -.59; f.tick();
+  assert.equal(f.state.hold, false); assert.equal(f.state.engineOrder, 5);
+});
+
+for (const locked of [false, true]) test(`triangle station change ${locked ? 'preserves held gas' : 'returns unlocked gas to Stop'}`, () => {
+  const f = helmFixture();
+  if (locked) f.lock(); else { f.pad.axes[1] = -1; f.tick(); }
+  f.button(3);
+  assert.deepEqual(f.state.stations, [1]);
+  assert.equal(f.state.engineOrder, locked ? 8 : 2);
+});
+
+test('weapon stations cannot set or release throttle hold; returning to bridge and moving vertically can', () => {
+  const f = helmFixture(); f.lock(); f.pad.axes = [0, 0]; f.tick('cannon'); f.tick('cannon');
+  f.pad.axes = [1, 1]; f.button(10, 'cannon');
+  assert.equal(f.state.hold, true); assert.equal(f.state.engineOrder, 8);
+  f.pad.axes = [0, 0]; f.tick('bridge'); f.tick('bridge');
+  assert.equal(f.state.hold, true);
+  f.pad.axes[0] = -1; f.tick();
+  assert.equal(f.state.hold, true); assert.equal(f.state.rudder, -1);
+  f.pad.axes[1] = 1; f.tick();
+  assert.equal(f.state.hold, false); assert.equal(f.state.engineOrder, 0);
+  f.pad.axes = [0, 0]; f.tick('cannon'); f.tick('cannon'); f.button(10, 'cannon');
+  assert.equal(f.state.hold, false);
+});
+
+test('temporary input resets preserve explicit throttle hold; a new life clears it', () => {
+  const f = helmFixture(); f.lock(); f.input.reset();
+  assert.equal(f.state.engineOrder, 8); assert.equal(f.state.hold, true);
+  f.input.clearThrottleHold();
+  assert.equal(f.state.hold, false);
+});
+
+test('triangle cycles once and circle retains the alignment action', () => {
+  const f = fixture();
+  f.pad.buttons[3].pressed = true; f.tick(); f.tick();
+  assert.deepEqual(f.events, [['station', 1]]);
+  f.pad.buttons[3].pressed = false; f.tick();
+  f.pad.buttons[1].pressed = true; f.tick(); f.tick();
+  assert.deepEqual(f.events.at(-1), ['action', 'align']);
+});
