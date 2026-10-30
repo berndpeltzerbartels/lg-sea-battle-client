@@ -43,7 +43,7 @@ export function periscopePaintFactor(u, v) {
   const lensX = (u - .75) / .075;
   const lensY = (v - .963) / .011;
   if (lensX * lensX + lensY * lensY <= 1) return .025;
-  return .55;
+  return .65;
 }
 
 export function getPeriscopePaintMaterial(scene, source) {
@@ -52,6 +52,9 @@ export function getPeriscopePaintMaterial(scene, source) {
   if (existing) return existing;
   const material = source.clone('light_periscope_dark_paint');
   material.metadata = { angularFleetPaint: false, darkPeriscopePaint: true };
+  // A restrained warm grey, still darker than the hull, without bright steel glints.
+  material.specularColor = new Color3(.07, .075, .08);
+  material.specularPower = 64;
   const width = 128, height = 256, data = new Uint8Array(width * height * 4);
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
     const color = Math.round(255 * periscopePaintFactor((x + .5) / width, (y + .5) / height));

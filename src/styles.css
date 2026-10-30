@@ -5308,3 +5308,13 @@ body.debug-map-expanded .nav-instrument-map {
   font: 12px system-ui, sans-serif;
   cursor: pointer;
 }
+
+.telegraph-title { display: flex; align-items: center; gap: 6px; }
+.throttle-hold-value:not([hidden]) {
+  color: #b9e6d3;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+}

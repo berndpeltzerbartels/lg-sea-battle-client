@@ -71,11 +71,11 @@ test('periscope is uniformly dark except for its small forward lens', async () =
     assert.equal(material.diffuseTexture.getSize().width, 128);
     assert.equal(material.diffuseTexture.getSize().height, 256);
     assert.equal(periscopePaintFactor(.75, .963), .025);
-    assert.equal(periscopePaintFactor(.5, .963), .55);
+    assert.equal(periscopePaintFactor(.5, .963), .65);
     const vertical = Array.from({ length: 100 }, (_, i) => periscopePaintFactor(0, (i + .5) / 100));
     assert.equal(new Set(vertical).size, 1);
-    assert.equal(periscopePaintFactor(0, 0), .55);
-    assert.equal(periscopePaintFactor(0, 1), .55);
+    assert.equal(periscopePaintFactor(0, 0), .65);
+    assert.equal(periscopePaintFactor(0, 1), .65);
     assert.equal(vertical.slice(1).filter((value, index) => value !== vertical[index]).length, 0);
     for (let v = 0; v < 1; v += .01) assert.equal(periscopePaintFactor(0, v), periscopePaintFactor(1, v));
     const black = submarineFlakMaterials(scene, { hull: source });

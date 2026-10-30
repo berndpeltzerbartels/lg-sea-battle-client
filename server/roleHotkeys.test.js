@@ -66,3 +66,12 @@ test('role hints exclude occupied posts and allow depth charges for flak but not
   assert.ok(occupiedLookout.some(([k, label]) => k === 'C' && label.includes('Zustimmung')));
   assert.ok(occupiedLookout.some(([k, label]) => k === 'F' && label.includes('Zustimmung')));
 });
+
+test('triangle always changes positions, circle aligns and L3 belongs only to the bridge', () => {
+  for (const submarine of [false, true]) for (const role of (submarine ? ['bridge', 'flak'] : ['bridge', 'flak', 'cannon', 'lookout'])) {
+    const keys = gamepadHotkeys(roleHotkeys({ role, submarine }));
+    assert.ok(keys.some(([key, label]) => key === '△' && label === 'Nächste freie Position'));
+    assert.equal(keys.some(([key]) => key === 'L3'), role === 'bridge');
+    assert.ok(!keys.some(([key, label]) => key === '△' && /ausricht|Peilung/i.test(label)));
+  }
+});

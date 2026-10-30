@@ -43,13 +43,15 @@ export function roleHotkeys({ role, members = [], playerId, depthChargesReady = 
 
 // Derive controller hints from the same position/depth/occupancy rules as keyboard hints.
 export function gamepadHotkeys(keys) {
-  const hints = [['L1 / R1', 'Freie Position wechseln'], ['Options', 'Hilfe']];
+  const hints = [['△', 'Nächste freie Position'], ['L1 / R1', 'Freie Position zurück / weiter'], ['Options', 'Hilfe']];
+  if (keys.some(([key, label]) => key === '↑ ↓' && label === 'Fahrt'))
+    hints.push(['L3', 'Gas festhalten · Stick ↑ / ↓ löst auf der Brücke']);
   for (const [key, label] of keys) {
     if (key === 'A' && keys.some(([key]) => key === '3')) continue;
     const mapped = { '↑ ↓': 'Stick ↑ / ↓', '← →': 'Stick ← / →', '↑ ↓ ← →': 'Linker Stick · auch diagonal',
-      Leertaste: 'R2', Z: 'L2', W: '□', A: '△', '⇧↑': 'Steuerkreuz ↑', '⇧↓': 'Steuerkreuz ↓',
-      '1': 'Steuerkreuz ←', '2': 'Steuerkreuz →', '3': '△' }[key];
-    if (mapped) hints.push([mapped, label === 'Fahrt' ? 'Fahrt nach Ausschlag · loslassen: Stop'
+      Leertaste: 'R2', Z: 'L2', W: '□', A: '○', '⇧↑': 'Steuerkreuz ↑', '⇧↓': 'Steuerkreuz ↓',
+      '1': 'Steuerkreuz ←', '2': 'Steuerkreuz →', '3': '○' }[key];
+    if (mapped) hints.push([mapped, label === 'Fahrt' ? 'Fahrt nach Ausschlag · ohne Feststellung: loslassen = Stop'
       : label === 'Ruder' ? 'Ruder nach Ausschlag · loslassen: mittschiffs' : label]);
   }
   return hints;

@@ -37,16 +37,23 @@ export function gamepadBridgeState(horizontal, vertical) {
     : throttle < 0 ? 2 - Math.ceil(-throttle * 2) : 2 };
 }
 
-export function createGamepadInput({ getGamepads, direction, fire, cycleStation, action, analog = () => {}, status = () => {}, activity = () => {} }) {
+export function createGamepadInput({ getGamepads, direction, fire, cycleStation, action, analog = () => {}, status = () => {}, activity = () => {}, throttleHold = () => {} }) {
   let identity = null, context = null, armed = false, x = 0, y = 0, firing = false;
   let buttons = [];
   let analogX = 0, analogY = 0, analogAxes = {};
+  let throttleHeld = false, throttleUnlockReady = false;
+  function setThrottleHold(held) {
+    if (held === throttleHeld) return;
+    throttleHeld = held;
+    throttleHold(held);
+  }
+  const commandAxes = axes => throttleHeld && axes.y ? { ...axes, y: false } : axes;
   const pressed = (pad, index) => !!pad.buttons[index]?.pressed || pad.buttons[index]?.value > .55;
   function reset() {
     if (x) direction(x < 0 ? 'left' : 'right', false);
     if (y) direction(y < 0 ? 'up' : 'down', false);
     if (firing) fire(false);
-    if (analogX || analogY) analog(0, 0, analogAxes);
+    if (analogX || analogY) analog(0, 0, commandAxes(analogAxes));
     analogX = analogY = 0; analogAxes = {};
     x = y = 0; firing = false; armed = false; buttons = [];
   }
@@ -58,6 +65,8 @@ export function createGamepadInput({ getGamepads, direction, fire, cycleStation,
   }
   return {
     reset,
+    clearThrottleHold() { setThrottleHold(false); throttleUnlockReady = false; },
+    get throttleHeld() { return throttleHeld; },
     update(enabled, nextContext, bridgeAxes = {}) {
       let pads;
       try { pads = getGamepads(); } catch { pads = []; }
@@ -73,10 +82,12 @@ export function createGamepadInput({ getGamepads, direction, fire, cycleStation,
         // Reconnects, focus changes and station changes must never fire or steer by surprise.
         armed = Math.abs(horizontal) <= (bridgeAxes.x ? .18 : .22) && Math.abs(vertical) <= (bridgeAxes.y ? .18 : .22)
           && !pad.buttons.some((_, i) => pressed(pad, i));
+        if (armed && throttleHeld && bridgeAxes.y) throttleUnlockReady = true;
         return;
       }
       if (x || y || Math.abs(horizontal) >= (bridgeAxes.x ? .18 : .35) || Math.abs(vertical) >= (bridgeAxes.y ? .18 : .35) || pad.buttons.some((_, i) => pressed(pad, i))) activity();
       const rising = index => pressed(pad, index) && !buttons[index];
+      if (rising(3)) { reset(); cycleStation(1); return; }
       if (rising(4) !== rising(5)) {
         if (rising(4)) { reset(); cycleStation(-1); return; }
         if (rising(5)) { reset(); cycleStation(1); return; }
@@ -86,7 +97,14 @@ export function createGamepadInput({ getGamepads, direction, fire, cycleStation,
       const clean = value => Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
       const ax = bridgeAxes.x && Math.abs(horizontal) > .18 ? clean(horizontal) : 0;
       const ay = bridgeAxes.y && Math.abs(vertical) > .18 ? clean(vertical) : 0;
-      if (ax !== analogX || ay !== analogY) analog(ax, ay, bridgeAxes);
+      // Only a fresh vertical movement at the helm releases held throttle.
+      // Horizontal steering, aiming and station-change neutralisation do not.
+      let resumedThrottle = false;
+      if (throttleHeld && bridgeAxes.y) {
+        if (Math.abs(vertical) <= .18) throttleUnlockReady = true;
+        else if (throttleUnlockReady) { setThrottleHold(false); resumedThrottle = true; }
+      }
+      if (ax !== analogX || ay !== analogY || resumedThrottle) analog(ax, ay, commandAxes(bridgeAxes));
       analogX = ax; analogY = ay; analogAxes = bridgeAxes;
       const nx = bridgeAxes.x ? 0 : axis(horizontal, x), ny = bridgeAxes.y ? 0 : axis(vertical, y);
       if (nx !== x) {
@@ -101,7 +119,11 @@ export function createGamepadInput({ getGamepads, direction, fire, cycleStation,
       const nextFire = pressed(pad, 7);
       if (nextFire !== firing) fire(nextFire);
       firing = nextFire;
-      for (const [button, command] of [[6, 'zoom'], [2, 'depth-charge'], [3, 'align'],
+      if (rising(10) && bridgeAxes.y && !throttleHeld) {
+        setThrottleHold(true);
+        throttleUnlockReady = Math.abs(vertical) <= .18;
+      }
+      for (const [button, command] of [[6, 'zoom'], [2, 'depth-charge'], [1, 'align'],
         [9, 'help'], [12, 'ascend'], [13, 'dive'], [14, 'forward-scope'], [15, 'observation-scope']]) {
         if (rising(button)) action(command);
       }

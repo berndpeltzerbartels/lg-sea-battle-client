@@ -232,6 +232,7 @@ const observationPeriscopeHorizonMarks = Array.from(document.querySelectorAll("[
 const engineValue = document.getElementById("engineValue");
 const telegraphSpeedValue = document.getElementById("telegraphSpeedValue");
 const telegraphOrderValue = document.getElementById("telegraphOrderValue");
+const throttleHoldValue = document.getElementById("throttleHoldValue");
 const telegraphScale = document.getElementById("telegraphScale");
 const compassPointer = document.getElementById("compassPointer");
 const compassHeading = document.getElementById("compassHeading");
@@ -1391,6 +1392,7 @@ const heldControls = createHeldControls((control, options) => {
   else releaseDirectionalInput(control);
 });
 let gamepadName = null;
+let gamepadShipId = playerServerShipId;
 let playerActivityTracker = null;
 const gamepadInput = createGamepadInput({
   getGamepads: () => navigator.getGamepads?.() ?? [],
@@ -1402,6 +1404,10 @@ const gamepadInput = createGamepadInput({
     unlockGameAudio();
     if (axes.y) { engineOrder = command.engineOrder; heldEngineDirection = 0; }
     if (axes.x) { rudderDegrees = Math.round(command.rudder * getPlayerMaxRudderDegrees()); heldRudderDirection = 0; }
+  },
+  throttleHold: held => {
+    document.body.dataset.gamepadThrottleHeld = String(held);
+    if (throttleHoldValue) throttleHoldValue.hidden = !held;
   },
   cycleStation: cycleGamepadStation,
   action: gamepadAction,
@@ -1693,6 +1699,11 @@ scene.onBeforeRenderObservable.add(() => {
   const frameLogicStarted = performanceLoggingEnabled ? performance.now() : 0;
   const rawFrameSeconds = engine.getDeltaTime() / 1000;
   const dt = Math.min(rawFrameSeconds, maxSimulationFrameSeconds);
+  if (gamepadShipId !== playerServerShipId || playerDamageState !== "active") {
+    gamepadInput.clearThrottleHold();
+    gamepadInput.reset();
+    gamepadShipId = playerServerShipId;
+  }
   gamepadInput.update(playerDamageState === "active" && !crewSwitchPending && !document.hidden
     && document.hasFocus() && !isTextEditingElement(document.activeElement) && !isStartupErrorVisible(),
     `${flakViewActive}:${cannonViewActive}:${lookoutViewActive}:${torpedoScopeActive}:${submarinePeriscopeMode}:${playerSubmarineDepthState}:${crewState?.station}`, {
@@ -2348,13 +2359,17 @@ function resetWeaponZoom() {
   cannonSightCycleDirection = 1;
 }
 
-function resetGameZooms() {
-  resetWeaponZoom();
+function resetSubmarinePeriscopeZoom() {
   submarinePeriscopeZoomLevelIndex = 0;
   submarinePeriscopeZoomCycleDirection = 1;
+  updateSubmarinePeriscopeZoomDisplays();
+}
+
+function resetGameZooms() {
+  resetWeaponZoom();
+  resetSubmarinePeriscopeZoom();
   torpedoBoatScopeZoomLevelIndex = 0;
   torpedoBoatScopeZoomCycleDirection = 1;
-  updateSubmarinePeriscopeZoomDisplays();
   updateTorpedoScopeZoomDisplay();
   if (lookoutBinocularsActive) toggleLookoutBinoculars();
   if (mapZoom) mapZoom.value = mapZoom.defaultValue;
@@ -5253,6 +5268,7 @@ function setPlayerSubmarineDepthState(depthState) {
   if (!submarineMode) return;
   const previousDepthState = playerSubmarineDepthState;
   playerSubmarineDepthState = sanitizeSubmarineDepthState(depthState);
+  if (playerSubmarineDepthState !== previousDepthState) resetSubmarinePeriscopeZoom();
   if (previousDepthState === submarineDepthStates.surface && playerSubmarineDepthState !== submarineDepthStates.surface) {
     submarineBridgeDiveHoldActive = true;
   }
