@@ -7170,8 +7170,7 @@ function applyServerGameSnapshot(snapshot) {
 
   enemyMotions.forEach((motion) => {
     if (!activeIds.has(motion.id) || motion.id === playerServerShipId || motion.id === pendingPlayerServerShip?.id) {
-      motion.root.setEnabled(false);
-      motion.state = motion.id === playerServerShipId || motion.id === pendingPlayerServerShip?.id ? "hidden-own-ship" : "sunk";
+      hideRemoteMotion(motion, motion.id === playerServerShipId || motion.id === pendingPlayerServerShip?.id ? "hidden-own-ship" : "sunk");
     }
   });
 
@@ -7661,6 +7660,16 @@ function updateOrCreateRemoteShip(ship) {
   updateRemoteVehicleObserverVisibility(motion);
   enemyMotions.push(motion);
   return motion;
+}
+
+function hideRemoteMotion(motion, state) {
+  // Deposited foam has independent world-space meshes. Hiding the ship does not hide or age them.
+  if (motion.state !== state) {
+    hideEnemyWake(motion.bowWake);
+    hideEnemyWake(motion.periscopeWake);
+  }
+  motion.root.setEnabled(false);
+  motion.state = state;
 }
 
 function disposeRemoteMotion(motion) {
@@ -10139,6 +10148,8 @@ function beginPlayerSinking(hitPosition, now, damageMessage = null) {
     pendingPlayerServerShipId: pendingPlayerServerShip?.id ?? ""
   });
   playerDamageState = "sinking";
+  hideEnemyWake(boat.bowWake);
+  hideEnemyWake(boat.periscopeWake);
   playerSinkStartTime = now;
   playerSinkStartY = boat.root.position.y;
   playerSinkSide = getPlayerSinkSide(hitPosition, boat.root.position, heading);
@@ -10272,6 +10283,7 @@ function respawnPlayerBoat(playerBoat) {
     playerDamageState = "active";
     resetPlayerSubmarineDepthAfterRespawn(playerBoat);
     resetWakeAtPosition(playerBoat.bowWake, playerBoat.root.position, heading);
+    resetWakeAtPosition(playerBoat.periscopeWake, playerBoat.root.position, heading);
     updateSinkingWaterOverlay(0);
     sendClientGameEvent("player-respawn-server-ship", {
       ship: summarizeShip(nextShip)
@@ -10298,6 +10310,7 @@ function respawnPlayerBoat(playerBoat) {
   document.body.dataset.playerShipId = "pending";
   playerBoat.root.rotationQuaternion = Quaternion.FromEulerAngles(0, heading, 0);
   resetWakeAtPosition(playerBoat.bowWake, playerBoat.root.position, heading);
+  resetWakeAtPosition(playerBoat.periscopeWake, playerBoat.root.position, heading);
   updateSinkingWaterOverlay(0);
   sendClientGameEvent("player-respawn-pending", {
     spawn: {
@@ -10813,6 +10826,32 @@ function installScenarioTestHooks() {
     engineAudioForTest(state) {
       if (state) engineSound?.update(state, true);
       return engineSound?.state() ?? null;
+    },
+    wakeCleanupForTest(mode = "handoff", speedValue = 17.5) {
+      const meshesBefore = scene.meshes.length;
+      const type = submarineMode ? "submarine" : "torpedo-boat";
+      const remote = mode === "handoff" ? updateOrCreateRemoteShip({ id: "foam-handoff", teamId: "dark", controlledBy: "bot",
+        vehicleType: type, state: "active", x: 300, z: 300, heading: 0, speed: speedValue, engineOrder: 8,
+        depthState: submarineMode ? "periscope" : "surface", y: submarineMode ? -5.58 : 0, lifeId: 1 }) : null;
+      const vehicle = remote ?? boat;
+      const sample = () => ({ bowActive: vehicle.bowWake?.sternFoam?.snapshot().active ?? 0,
+        periscopeActive: vehicle.periscopeWake?.surfaceFoam?.snapshot().active ?? 0,
+        bowEnabled: vehicle.bowWake?.sternFoam?.mesh.isEnabled() ?? false,
+        periscopeEnabled: vehicle.periscopeWake?.surfaceFoam?.mesh.isEnabled() ?? false });
+      for (let i = 0; i < 90; i++) {
+        const position = { x: 300, y: submarineMode ? -5.58 : 0, z: 300 + i * speedValue / 30 };
+        updateEnemyBowWake(vehicle.bowWake, speedValue, time + i / 30, 1 / 30, position, 0);
+        updateSubmarinePeriscopeWake(vehicle.periscopeWake, submarineMode ? "periscope" : "surface", speedValue,
+          time + i / 30, 1 / 30, position, 0);
+      }
+      const before = sample();
+      if (remote) {
+        hideRemoteMotion(remote, "hidden-own-ship");
+        for (let i = 0; i < 120; i++) updateEnemyMotion(remote, 1 / 30, time + i / 30, boat.root.position, blockedWaters);
+      } else respawnPlayerBoat(boat);
+      const after = sample();
+      if (remote) { disposeRemoteMotion(remote); enemyMotions.splice(enemyMotions.indexOf(remote), 1); }
+      return { before, after, meshesBefore, meshesAfter: scene.meshes.length };
     },
     previewSternFoamForTest(speedValue = 17.5, duration = 5) {
       const foam = boat.bowWake?.sternFoam;
