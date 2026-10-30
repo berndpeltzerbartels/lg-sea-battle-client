@@ -75,8 +75,8 @@ for (const weapon of ['Cannon', 'Critical']) {
 
 test('own surface ship creates foam once, deep submarine does not', () => {
   for (const [submarineMode, y, expected] of [[false, 0, 1], [true, 0, 1], [true, -5, 0]]) {
-    let calls = 0;
-    const begin = new Function('submarineMode', 'createGunfireSinkingFoam', `
+    let calls = 0, wakeResets = 0;
+    const begin = new Function('submarineMode', 'createGunfireSinkingFoam', 'hideEnemyWake', `
       let playerDamageState = 'active', playerSinkStartTime, playerSinkStartY, playerSinkSide;
       let engineOrder, heldRudderDirection, rudderDegrees, turnVelocity = 0, speed = 0;
       const submarineWaterlineY = 0, heading = 0, playerServerShipId = 'own', pendingPlayerServerShip = null;
@@ -85,9 +85,10 @@ test('own surface ship creates foam once, deep submarine does not', () => {
       const getPlayerSinkSide = () => 1, updateSinkingWaterOverlay = () => {};
       ${functionSource('beginPlayerSinking')}
       return beginPlayerSinking;
-    `)(submarineMode, (_system, _position, _heading, duration) => { calls++; assert.equal(duration, 18); });
+    `)(submarineMode, (_system, _position, _heading, duration) => { calls++; assert.equal(duration, 18); }, () => { wakeResets++; });
     begin(null, 0);
     begin(null, 1);
     assert.equal(calls, expected);
+    assert.equal(wakeResets, 2, "Both wakes are cleared once when sinking starts");
   }
 });
