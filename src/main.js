@@ -14,6 +14,9 @@ import { createWreckVisuals } from './wreckVisuals.js';
 import { wreckPose } from './wreckMotion.js';
 import { createSinkingBubbles } from './sinkingBubbles.js';
 import { createGamepadInput, createHeldControls, nextGamepadStation, gamepadBridgeState } from './gamepadInput.js';
+import depthChargePressureUrl1 from "./assets/audio/depth-charge-pressure-1.wav?url";
+import depthChargePressureUrl2 from "./assets/audio/depth-charge-pressure-2.wav?url";
+import depthChargePressureUrl3 from "./assets/audio/depth-charge-pressure-3.wav?url";
 import depthChargeExplosionUrl1 from "./assets/audio/depth-charge-explosion-1.wav?url";
 import depthChargeExplosionUrl2 from "./assets/audio/depth-charge-explosion-2.wav?url";
 import depthChargeExplosionUrl3 from "./assets/audio/depth-charge-explosion-3.wav?url";
@@ -3721,7 +3724,7 @@ function unlockGameAudio() {
   });
   void cannonSound.unlock();
   explosionSound ??= createCannonSound({ context: depthChargeAudio, destination: gameAudioOutput, maxVoices: 8,
-    urls: [explosionUrl0, explosionUrl1, explosionUrl2, explosionUrl3, explosionUrl4, explosionUrl5, explosionUrl6, explosionUrl7, underwaterExplosionUrl, collisionSoundUrl, waterEntrySoundUrl, torpedoWaterExplosionUrl1, torpedoWaterExplosionUrl2, torpedoWaterExplosionUrl3, depthChargeExplosionUrl1, depthChargeExplosionUrl2, depthChargeExplosionUrl3],
+    urls: [explosionUrl0, explosionUrl1, explosionUrl2, explosionUrl3, explosionUrl4, explosionUrl5, explosionUrl6, explosionUrl7, underwaterExplosionUrl, collisionSoundUrl, waterEntrySoundUrl, torpedoWaterExplosionUrl1, torpedoWaterExplosionUrl2, torpedoWaterExplosionUrl3, depthChargeExplosionUrl1, depthChargeExplosionUrl2, depthChargeExplosionUrl3, depthChargePressureUrl1, depthChargePressureUrl2, depthChargePressureUrl3],
     report: error => {
       console.warn("[sea-battle] Explosionston", error);
       sendClientGameEvent("explosion-audio-error", { message: error.message });

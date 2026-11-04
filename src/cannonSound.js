@@ -67,8 +67,12 @@ export function createCannonSound({ context, destination = context.destination, 
       }
       const source = context.createBufferSource(), filter = context.createBiquadFilter();
       const gain = context.createGain(), pan = context.createStereoPanner?.();
-      source.buffer = buffers[(options.variant ?? 0) % buffers.length];
-      if (options.rate !== undefined) source.playbackRate.value = options.rate;
+      // Choose the prepared listening-side variant once; actual depth controls the listener.
+      const deep = listener.underwater && listener.deepSubmerged;
+      const variant = deep ? options.deepVariant ?? options.variant : options.variant;
+      const rate = deep ? options.deepRate ?? options.rate : options.rate;
+      source.buffer = buffers[(variant ?? 0) % buffers.length];
+      if (rate !== undefined) source.playbackRate.value = rate;
       source.loop = false;
       filter.type = 'lowpass';
       gain.gain.value = 0;
@@ -76,7 +80,7 @@ export function createCannonSound({ context, destination = context.destination, 
       if (pan) { gain.connect(pan); pan.connect(destination); }
       else gain.connect(destination);
       const voice = { source, filter, gain, pan, position: { x: position.x, z: position.z }, own, strength, underwaterGain: options.underwaterGain, lowpassHz: options.lowpassHz, waterExplosion: !!options.waterExplosion, underwaterOnly: !!options.underwaterOnly, rangeScale: options.rangeScale ?? 1, noDucking: !!options.noDucking };
-      Object.assign(voice, { baseRate: options.rate ?? 1, underwaterRate: options.underwaterRate,
+      Object.assign(voice, { baseRate: rate ?? 1, underwaterRate: options.underwaterRate,
         underwaterLowpassHz: options.underwaterLowpassHz, deepUnderwaterLowpassHz: options.deepUnderwaterLowpassHz });
       voices.set(id, voice);
       gain.gain.value = mix.gain / (own || options.noDucking ? 1 : Math.sqrt(voices.size));
