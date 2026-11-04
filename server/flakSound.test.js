@@ -49,3 +49,51 @@ test('sustained fire reuses one source per ship with a strict voice cap and own-
     sound.dispose();
   } finally { globalThis.fetch = original; }
 });
+
+test('flak overlaps a natural final volley once and interrupts it when firing resumes', async () => {
+  const original = globalThis.fetch;
+  const sources = [], loads = [];
+  const param = () => ({ value: 0, setTargetAtTime(value) { this.value = value; } });
+  const node = () => ({ connect(target) { this.destination = target; }, disconnect() {}, gain: param(), pan: param(), frequency: param() });
+  const context = { currentTime: 0, state: 'running', destination: {},
+    decodeAudioData: async bytes => ({ tag: new TextDecoder().decode(bytes), duration: 1 }),
+    createGain: node, createBiquadFilter: node, createStereoPanner: node,
+    createBufferSource: () => {
+      const source = { ...node(), playbackRate: param(), start() {}, stop() {} };
+      sources.push(source); return source;
+    } };
+  try {
+    globalThis.fetch = async url => {
+      loads.push(url);
+      return { ok: true, arrayBuffer: async () => new TextEncoder().encode(url).buffer };
+    };
+    const sound = createFlakSound({ context, url: 'fire', endingUrl: 'ending', maxVoices: 1 });
+    await sound.unlock(); await sound.unlock();
+    assert.deepEqual(loads, ['fire', 'ending']);
+    const listener = { x: 0, z: 0, heading: 0 };
+    sound.update(listener);
+    for (let shot = 0; shot < 100; shot++) sound.shot('own', listener, true);
+    assert.equal(sources.length, 1, 'No source per projectile or separate air loop');
+    const fireGain = sources[0].destination.gain;
+    context.currentTime = .25; sound.update(listener, true);
+    assert.equal(sources.length, 2);
+    assert.equal(sources[1].buffer.tag, 'ending');
+    assert.equal(sources[1].loop, false, 'The natural air decay must never repeat');
+    assert.equal(fireGain.value, 0, 'Fade the sustained source while final recorded shots take over');
+    assert.equal(sound.state().voices, 1);
+    context.currentTime = .3; sound.update(listener, true);
+    assert.equal(sources.length, 2, 'One ending per completed burst');
+    sound.shot('own', listener, true);
+    assert.equal(sources.length, 2, 'Resume the original sustained source');
+    assert.equal(fireGain.value, 1);
+    context.currentTime = .55; sound.update(listener, true);
+    assert.equal(sources.length, 3, 'A new ending only after the next burst stops');
+    context.currentTime = 1.7; sound.update(listener, true);
+    assert.equal(sound.state().voices, 0);
+    sound.shot('own', listener, true);
+    context.currentTime = 10; sound.update(listener, true);
+    assert.equal(sound.state().voices, 0);
+    assert.equal(sources.length, 4, 'Returning from a hidden tab must not trigger an old ending');
+    sound.dispose();
+  } finally { globalThis.fetch = original; }
+});
