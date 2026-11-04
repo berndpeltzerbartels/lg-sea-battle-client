@@ -12,22 +12,35 @@ export function flakSpatialMix(position, listener) {
 }
 
 // One continuous burst per firing ship, never one source per projectile.
-export function createFlakSound({ context, destination = context.destination, url, report = () => {}, maxVoices = 8, baseRate = 1, spatialMix = flakSpatialMix, sustainSeconds = .18, gainSmoothing = .025 }) {
-  let buffer, pending, disposed = false, lastUpdate = -Infinity, retryAt = 0;
+export function createFlakSound({ context, destination = context.destination, url, endingUrl, report = () => {}, maxVoices = 8, baseRate = 1, spatialMix = flakSpatialMix, sustainSeconds = .18, gainSmoothing = .025 }) {
+  let buffer, endingBuffer, pending, disposed = false, lastUpdate = -Infinity, retryAt = 0;
   let listener = { x: 0, z: 0, heading: 0, muted: false };
   const voices = new Map();
   function remove(id) {
     const v = voices.get(id);
     v.source.stop();
-    for (const node of [v.source, v.filter, v.gain, v.pan]) node?.disconnect();
+    v.endingSource?.stop();
+    for (const node of [v.source, v.endingSource, v.fireGain, v.endingGain, v.filter, v.gain, v.pan]) node?.disconnect();
     voices.delete(id);
+  }
+  function startSource(v, ending = false) {
+    const source = context.createBufferSource();
+    source.buffer = ending ? endingBuffer : buffer;
+    source.loop = !ending;
+    if (v.rate !== 1) source.playbackRate.value = v.rate;
+    source.connect(ending ? v.endingGain : v.fireGain ?? v.filter);
+    source.start();
+    return source;
   }
   return {
     unlock() {
       if (!pending && !disposed && Date.now() >= retryAt) pending = (async () => {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`Flak-Sample: HTTP ${response.status}`);
-        buffer = await context.decodeAudioData(await response.arrayBuffer());
+        const load = async sampleUrl => {
+          const response = await fetch(sampleUrl);
+          if (!response.ok) throw new Error(`Flak-Sample: HTTP ${response.status}`);
+          return context.decodeAudioData(await response.arrayBuffer());
+        };
+        [buffer, endingBuffer] = await Promise.all([load(url), endingUrl ? load(endingUrl) : undefined]);
       })().catch(error => { pending = null; retryAt = Date.now() + 5000; report(error); });
       return pending;
     },
@@ -44,23 +57,39 @@ export function createFlakSound({ context, destination = context.destination, ur
           if (!weakest || (!own && mix.gain <= weakest[1].priority)) return;
           remove(weakest[0]);
         }
-        const source = context.createBufferSource(), filter = context.createBiquadFilter();
+        const filter = context.createBiquadFilter();
         const gain = context.createGain();
         const pan = context.createStereoPanner?.();
-        source.buffer = buffer;
-        source.loop = true;
-        if (options.rate !== undefined || baseRate !== 1) source.playbackRate.value = options.rate ?? baseRate;
         filter.type = 'lowpass';
         gain.gain.value = 0;
-        source.connect(filter); filter.connect(gain);
+        filter.frequency.value = mix.frequency;
+        filter.connect(gain);
         if (pan) { gain.connect(pan); pan.connect(destination); }
         else gain.connect(destination);
-        v = { source, filter, gain, pan, own };
+        v = { filter, gain, pan, own, rate: options.rate ?? baseRate };
+        if (endingBuffer) {
+          v.fireGain = context.createGain();
+          v.endingGain = context.createGain();
+          v.fireGain.gain.value = 1;
+          v.endingGain.gain.value = 0;
+          v.fireGain.connect(filter);
+          v.endingGain.connect(filter);
+        }
         voices.set(id, v);
-        source.start();
+        v.source = startSource(v);
       }
+      if (options.rate !== undefined) v.rate = options.rate;
+      // A resumed burst interrupts the previous natural ending.
+      if (v.endingSource) {
+        v.endingSource.stop();
+        v.endingSource.disconnect();
+        v.endingSource = null;
+      }
+      v.fireGain?.gain.setTargetAtTime(1, context.currentTime, .008);
       v.strength = options.gain ?? 1;
-      if (options.rate !== undefined) v.source.playbackRate.setTargetAtTime(options.rate, context.currentTime, .15);
+      if (options.rate !== undefined) {
+        v.source.playbackRate.setTargetAtTime(options.rate, context.currentTime, .15);
+      }
       v.position = { x: position.x, y: position.y, z: position.z };
       v.lastShot = context.currentTime;
       v.priority = mix.gain;
@@ -75,11 +104,25 @@ export function createFlakSound({ context, destination = context.destination, ur
       lastUpdate = now;
       for (const [id, v] of voices) {
         const age = now - v.lastShot;
-        if (age > Math.max(.5, sustainSeconds + .32)) { remove(id); continue; }
+        const releaseAge = Math.max(0, age - sustainSeconds);
+        if (endingBuffer && age > sustainSeconds + endingBuffer.duration / v.rate + .05) {
+          remove(id); continue; // Do not replay a stale ending after a suspended tab catches up.
+        }
+        if (endingBuffer && releaseAge > 0 && !v.endingSource) {
+          v.endingGain.gain.value = 1;
+          v.endingStarted = now;
+          v.endingSource = startSource(v, true);
+        }
+        const finished = v.endingSource
+          ? now - v.endingStarted > endingBuffer.duration / v.rate + .05
+          : !endingBuffer && age > Math.max(.5, sustainSeconds + .32);
+        if (finished) { remove(id); continue; }
+        // Overlap the final recorded shots with a 40 ms fade of sustained fire.
+        if (endingBuffer) v.fireGain.gain.setTargetAtTime(v.endingSource ? 0 : 1, now, .012);
         const mix = spatialMix(v.own ? listener : v.position, listener);
         mix.gain *= v.strength;
         v.priority = mix.gain;
-        const tail = Math.max(0, Math.min(1, (sustainSeconds + .14 - age) / .14));
+        const tail = endingBuffer ? 1 : Math.max(0, Math.min(1, (sustainSeconds + .14 - age) / .14));
         v.gain.gain.setTargetAtTime(mix.gain * tail / Math.sqrt(voices.size), now, gainSmoothing);
         v.filter.frequency.setTargetAtTime(mix.frequency, now, 0.05);
         v.pan?.pan.setTargetAtTime(mix.pan, now, 0.05);

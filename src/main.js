@@ -42,6 +42,7 @@ import { createCannonSound } from "./cannonSound.js";
 import cannonSoundUrl from "./assets/audio/cannon-shot.wav?url";
 import { createFlakSound } from "./flakSound.js";
 import flakSoundUrl from "./assets/audio/flak-burst-loop.wav?url";
+import flakEndingUrl from "./assets/audio/flak-ending.wav?url";
 import surfaceDieselUrl from "./assets/audio/surface-diesel-loop.wav?url";
 import submarineMotorUrl from "./assets/audio/submarine-electric-motor-loop.wav?url";
 import { createEngineSound } from "./engineSound.js";
@@ -3705,7 +3706,7 @@ function unlockGameAudio() {
     gameAudioOutput.connect(depthChargeAudio.destination);
   }
   sinkingWaterSound ??= createSinkingWaterSound({ context: depthChargeAudio, destination: gameAudioOutput });
-  flakSound ??= createFlakSound({ context: depthChargeAudio, destination: gameAudioOutput, url: flakSoundUrl, baseRate: .88,
+  flakSound ??= createFlakSound({ context: depthChargeAudio, destination: gameAudioOutput, url: flakSoundUrl, endingUrl: flakEndingUrl,
     report: error => {
       console.warn("[sea-battle] Flakton", error);
       sendClientGameEvent("flak-audio-error", { message: error.message });

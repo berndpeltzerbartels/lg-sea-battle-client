@@ -279,3 +279,31 @@ mono 48 kHz PCM, with 5 ms fade-in and 200 ms fade-out; match the preceding
 boat launch peak (about -11.2 dBFS). Original pitch and speed are preserved.
 No additional synthesized thump or splash is mixed over the supplied sound.
 Only `torpedo-boat-launch.wav` is replaced; submarine launches stay unchanged.
+
+
+## Gepard reference for both ship flak weapons (2026-11-04)
+
+User-selected reference: “Deutscher Gepard Panzer schießt russische Rakete ab |
+Ukraine-Krieg”, https://www.youtube.com/watch?v=Jg4gzEZXwiE, opening burst.
+This replaces the previously darkened Flak recording, for both torpedo boats
+and submarines. Convert to mono 48 kHz PCM at original pitch/speed.
+`flak-burst-loop.wav`: 0.765–0.945 s, circular 20 ms overlap gives a 160 ms
+continuous fire loop. The shorter period excludes the gap between the two
+opening volleys. Raise the previous loop RMS by 2 dB, retaining the original
+pitch and individual shot spacing.
+`flak-ending.wav`: one continuous excerpt 1.075–2.7 s, containing the final
+one or two shots together with their real airy decay. Original speed/pitch,
+gain approximately 0.627, 4 ms entrance fade and 150 ms final fade. There is
+no repeating air layer and no separately restarted shot remnant.
+
+On release, this ending overlaps the sustained fire loop, which fades out
+with a 12 ms time constant (about 40 ms effective transition). The ending
+plays once with its recorded, naturally falling level. A new burst interrupts
+it and restores the existing sustained source. The eight-emitter limit allows
+at most two sources per emitter during the ending; no source is created per
+projectile. Other loop consumers omit endingUrl and remain unchanged. Stale
+endings are not replayed when suspended tabs resume. Shared distance, mute,
+underwater filtering and priority still apply.
+The loop envelope test now measures overlapping 100 ms windows across circular
+joins: authentic individual cannon pulses must not be mistaken for dropouts
+by demanding uniform energy in every 40 ms MG-style window.
