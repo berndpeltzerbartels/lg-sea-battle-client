@@ -124,3 +124,34 @@ test('depth charge underwater boost preserves surface gain, deep filtering and m
   assert.equal(cannonSpatialMix(position, submerged, 3, options).frequency, 450);
   assert.equal(cannonSpatialMix(position, { ...submerged, muted: true }, 3, options).gain, 0);
 });
+
+test('depth charges choose new surface/periscope audio but preserve the deep sample, rate and filter', async () => {
+  const original = globalThis.fetch, sources = [], filters = [];
+  const param = () => ({ value: 0, setTargetAtTime(value) { this.target = value; } });
+  const node = () => ({ connect() {}, disconnect() {}, gain: param(), frequency: param(), pan: param() });
+  const context = { currentTime: 0, state: 'running', destination: {},
+    decodeAudioData: async bytes => ({ tag: new TextDecoder().decode(bytes) }),
+    createGain: node, createStereoPanner: node,
+    createBiquadFilter: () => { const n = node(); filters.push(n); return n; },
+    createBufferSource: () => { const n = { ...node(), playbackRate: param(), start() {}, stop() {} }; sources.push(n); return n; } };
+  try {
+    globalThis.fetch = async url => ({ ok: true, arrayBuffer: async () => new TextEncoder().encode(url).buffer });
+    const audio = createCannonSound({ context, urls: ['new-shallow-pressure', 'existing-deep'] });
+    await audio.unlock();
+    const options = { variant: 0, deepVariant: 1, rate: 1, deepRate: .88,
+      waterExplosion: true, underwaterGain: 2, lowpassHz: 650, underwaterLowpassHz: 500 };
+    for (const [index, listener] of [
+      { x: 0, z: 0, heading: 0, underwater: false, deepSubmerged: false },
+      { x: 0, z: 0, heading: 0, underwater: true, deepSubmerged: false },
+      { x: 0, z: 0, heading: 0, underwater: true, deepSubmerged: true }
+    ].entries()) {
+      audio.update(listener, true);
+      audio.shot(`charge-${index}`, { x: 0, z: 0 }, false, options);
+    }
+    assert.deepEqual(sources.map(s => s.buffer.tag), ['new-shallow-pressure', 'new-shallow-pressure', 'existing-deep']);
+    assert.deepEqual(sources.map(s => s.playbackRate.value), [1, 1, .88]);
+    assert.deepEqual(filters.map(f => f.frequency.value), [650, 500, 450]);
+    assert.ok(sources.every(s => s.loop === false));
+    audio.dispose();
+  } finally { globalThis.fetch = original; }
+});

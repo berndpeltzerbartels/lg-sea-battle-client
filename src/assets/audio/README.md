@@ -90,6 +90,22 @@ at 0.78 rate (gain 0.8), with Explosion1 3.01–6.00 seconds at 0.9 rate, low-pa
 limit peaks to 0.9, fade ending at 4.8 for 0.26 seconds. This gives a heavier
 body without allocating an additional runtime source per shot.
 
+2026-11-04 cannon correction: retain that composite and its 5.064-second
+duration, but reduce the boxy/bright "pang" in the prepared sample. Apply
+480 Hz EQ (-3 dB, one octave), 1350 Hz EQ (-8 dB, 1.4 octaves), and a
+two-pole 2200 Hz low-pass, in that order. No peak normalization or added
+reverb; the low pressure body and natural ending remain. Mono 48 kHz
+16-bit PCM, unchanged runtime gain, voice count and playback path.
+Further attack softening: use a 700 Hz two-pole low-pass for the first
+100 ms, then blend back to the above EQ over 180 ms. The complementary
+crossfade avoids a hard filter switch; the rest of the sample is unchanged.
+Final proximity adjustment: compress that softened sample at threshold 0.20,
+ratio 1.5:1, attack 30 ms, release 140 ms and makeup 1.15. The slower attack
+retains the initial impact; add 4 dB bass at 110 Hz (width 0.8) for a deep
+opening thump while retaining the softened high frequencies. Fade from 1.5 to
+2.2 seconds and trim there, shortening the distant tail without speeding up
+or raising the pitch of the shot.
+
 Flak sustain correction: use only original 2.80–3.70 seconds, circular 80 ms
 crossfade, resulting 0.82-second loop. The original ending after 3.70 seconds
 was already a release tail and caused a recurring pause during sustained fire.
@@ -307,3 +323,24 @@ underwater filtering and priority still apply.
 The loop envelope test now measures overlapping 100 ms windows across circular
 joins: authentic individual cannon pulses must not be mistaken for dropouts
 by demanding uniform energy in every 40 ms MG-style window.
+
+
+## Darker and longer shallow depth charges (2026-11-04)
+
+`depth-charge-pressure-1/2/3.wav` are dedicated 12.3-second mono 48 kHz
+variants for surface and periscope-depth listeners. Mix the existing matching
+depth-charge sample at 80% speed, 400 Hz low-pass and a 5 dB boost at 85 Hz
+with the supplied matching water-explosion recording at 72% speed, 1 kHz
+low-pass, 120 ms delay, plus a quiet layer of the supplied underwater explosion
+after its initial attack, at 82% speed, 500 Hz low-pass and 150 ms delay.
+Remove sub-35 Hz rumble, soften the initial edge over 8 ms, retain the long
+water/pressure decay and align peaks to -9.5 dBFS. All mixing is offline.
+
+Depth-charge events select these buffers at playback rate 1, capped at 650 Hz
+above water and 500 Hz at periscope depth. At actual deep-submerged listening
+depth, keep the previous buffers 14–16 at rate .88 and the existing 450 Hz
+filtering; underwater gain and distance behavior stay unchanged. A playing
+event is not restarted if the listener changes depth; filtering still follows
+listener updates. No changes to torpedo, submarine-destruction or submerged
+gun-hit sounds: those retain their existing families. The existing eight-voice
+limit and shared limiter remain, with one source and existing filter per event.

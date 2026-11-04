@@ -42,7 +42,10 @@ export function createExplosionEvents(emit) {
           options = { variant: 6, rate: .8, gain: 1.1, rangeScale: 3, noDucking: true };
         } else if (family === 'torpedo') {
           options = { variant: 11 + v, rate: .92, gain: 1.45, rangeScale: 3, noDucking: true };
-        } else if (family === 'depth-charge' || kind === 'submarine-destruction') {
+        } else if (family === 'depth-charge') {
+          options = { variant: 17 + v, deepVariant: 14 + v, rate: 1, deepRate: .88,
+            gain: 1.25, rangeScale: 3, noDucking: true, lowpassHz: 650, underwaterLowpassHz: 500 };
+        } else if (kind === 'submarine-destruction') {
           options = { variant: 14 + v, rate: .88, gain: 1.25, rangeScale: 3, noDucking: true };
         } else {
           options = { variant: v % 2 ? 7 : 6, rate: .72, gain: 1.1 };
