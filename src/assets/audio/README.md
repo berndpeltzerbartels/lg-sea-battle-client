@@ -255,3 +255,27 @@ Periscope interior level (2026-10-27): own submarine fan and electric motor
 both gain 1.25x (about +1.9 dB) at actual periscope depth 1.52–1.65 model units.
 Existing gain smoothing applies. Surface diesel, deep fan, screw/sonar,
 weapons and explosions retain their prior levels.
+
+
+## Darker flak timbre (2026-11-04)
+
+Retain the supplied Flak recording and the current 0.82-second circular loop.
+Offline processing lowers pitch by 18% while restoring the original burst tempo
+(asetrate 39360, aresample 48000, atempo 1.219512195), removes sub-45 Hz rumble,
+adds 6 dB around 160 Hz and rolls off the sharp upper frequencies above 2.8 kHz.
+A 20 ms circular overlap removes the processed loop seam. RMS is matched back
+to the original where peak headroom permits (peak capped at 0.88).
+The existing .88 playback rate, distances, voice budget and runtime audio graph
+stay unchanged. This is a heavier artistic treatment of the supplied recording,
+not a new authentic 37/40 mm gun recording.
+
+
+## User-selected torpedo-boat launch recording (2026-11-04)
+
+Replace the former prepared torpedo-boat launch with the supplied repository-root
+`torpedo.m4a`. Keep seconds 3.335–7.65 (4.315 seconds), removing the silent
+lead-in and very quiet ending while retaining the natural decay. Convert to
+mono 48 kHz PCM, with 5 ms fade-in and 200 ms fade-out; match the preceding
+boat launch peak (about -11.2 dBFS). Original pitch and speed are preserved.
+No additional synthesized thump or splash is mixed over the supplied sound.
+Only `torpedo-boat-launch.wav` is replaced; submarine launches stay unchanged.
