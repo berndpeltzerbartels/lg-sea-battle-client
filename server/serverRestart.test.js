@@ -33,6 +33,8 @@ test("new server instance sinks once even with identical ship IDs; old packets c
   const ctx = {
     gameState: { instanceId: "old" }, serverRestartPending: false,
     sideViewSandboxMode: false, playerDamageState: "active", time: 10,
+    showRoundResult: () => false, switchToAssignedVehicle: () => false,
+    crewState: null, playerId: "player-test",
     pendingPlayerServerShip: {}, playerServerTarget: {}, accepted: 0,
     document: { body: { dataset: {} } }, calls: 0
   };

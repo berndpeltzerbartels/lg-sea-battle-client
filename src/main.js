@@ -619,7 +619,10 @@ document.body.dataset.serverTorpedoes = String(gameState.torpedoes.length);
 document.body.dataset.serverBombs = String(Array.isArray(gameState.bombs) ? gameState.bombs.length : 0);
 const sideViewSandboxMode = directSideViewSandboxRequested || gameState.sessionId === "side-view-sandbox";
 const bridgeViewWidth = clamp(Number(urlParams.get("bridgeViewWidth") ?? "0.86"), 0.42, 0.9);
-const selectedVehicleType = normalizeClientVehicleType(urlParams.get("vehicle") ?? readStoredValue("vehicleType"));
+const initialCrewView = !sideViewSandboxMode
+  ? await fetch(gameEndpoint(`/game/crew/${encodeURIComponent(playerLogin.playerId)}`)).then(r => r.ok ? r.json() : null) : null;
+const initialAssignedVehicle = initialCrewView?.ship ?? gameState.ships.find(v => v.controlledBy === playerLogin.playerId && v.state === "active");
+const selectedVehicleType = normalizeClientVehicleType(initialAssignedVehicle?.vehicleType ?? urlParams.get("vehicle") ?? readStoredValue("vehicleType"));
 const submarineSandboxRequested = selectedVehicleType === "submarine" || urlParams.get("model") === "submarine";
 const sideViewCameraFovDefault = clamp(Number(urlParams.get("viewFov") ?? "0.78"), 0.28, 1.2);
 const sideViewCameraDistanceDefault = clamp(Number(urlParams.get("viewDistance") ?? (submarineSandboxRequested ? "19" : "11")), -32, 32);
@@ -629,7 +632,7 @@ const sideViewCameraXDefault = clamp(Number(urlParams.get("viewX") ?? "0"), -3.2
 const sideViewCameraZDefault = clamp(Number(urlParams.get("viewZ") ?? (submarineSandboxRequested ? "0" : "0.5")), -5.2, 5.2);
 const sideViewCameraYawDefault = clamp(Number(urlParams.get("viewYaw") ?? "0"), -180, 180);
 const botSubmarineMixRequested = urlParams.get("botSubmarines") === "1" || urlParams.get("bot-submarines") === "1";
-const scoutPlaneMode = gameState.sessionId === scoutPlaneSetupId || selectedVehicleType === "scout-plane";
+const scoutPlaneMode = (gameState.mode !== "BURN_DOWN" && gameState.sessionId === scoutPlaneSetupId) || selectedVehicleType === "scout-plane";
 const submarineMode = selectedVehicleType === "submarine";
 const playerVehicleType = scoutPlaneMode ? "scout-plane" : (submarineMode ? "submarine" : "torpedo-boat");
 let playerSubmarineDepthState = submarineDepthStates.surface;
@@ -642,8 +645,7 @@ if (sideViewSandboxMode) {
   scene.fogMode = Scene.FOGMODE_NONE;
 }
 const playerId = playerLogin.playerId;
-let crewState = !sideViewSandboxMode && playerVehicleType === "torpedo-boat"
-  ? await fetch(gameEndpoint(`/game/crew/${encodeURIComponent(playerId)}`)).then(r => r.json()) : null;
+let crewState = initialCrewView;
 let crewSwitchPending = false;
 if (!sideViewSandboxMode) mountCrewInbox(gameEndpoint("/crew-inbox.html"));
 const playerTeamId = getRequestedPlayerTeamId(gameState.ships, playerLogin.teamId);
@@ -2458,7 +2460,40 @@ function showCrewWarnings(submarine, aircraft) {
   submarineWarningTimer = setTimeout(() => { toast.hidden = true; }, 6000);
 }
 
+function switchToAssignedVehicle(ship) {
+  if (!ship || ship.state !== "active" || ship.vehicleType === playerVehicleType) return false;
+  localStorage.setItem("vehicleType", ship.vehicleType);
+  const next = new URL(location.href);
+  next.searchParams.set("vehicle", ship.vehicleType);
+  location.replace(next.href);
+  return true;
+}
+
+function showRoundResult(snapshot) {
+  if (snapshot.mode !== "BURN_DOWN" || snapshot.state !== "finished") return false;
+  playerMotionBlocked = true;
+  engineOrder = 2;
+  speed = 0;
+  if (!document.getElementById("round-result")) {
+    const panel = document.createElement("div");
+    panel.id = "round-result";
+    panel.style.cssText = "position:fixed;inset:0;z-index:10000;display:grid;place-content:center;text-align:center;gap:20px;background:#031923ed;color:white;font:24px system-ui;padding:32px";
+    const title = document.createElement("h1");
+    title.textContent = snapshot.winningTeam ? `Partei ${snapshot.winningTeam === "light" ? "Hell" : "Dunkel"} gewinnt` : "Runde beendet · Unentschieden";
+    const explanation = document.createElement("p");
+    explanation.textContent = "Es sind nicht mehr genug Torpedoboote und Besatzungsplätze übrig. Die nächste Runde startet die Spielleitung.";
+    const leave = document.createElement("a");
+    leave.href = startPageUrl();
+    leave.textContent = "Zur Anmeldung";
+    leave.style.color = "#a8eeed";
+    panel.append(title, explanation, leave);
+    document.body.append(panel);
+  }
+  return true;
+}
+
 function applyCrewView(view) {
+  if (!view || switchToAssignedVehicle(view.ship)) return;
   if (crewState && view.revision < crewState.revision) return;
   const changed = !crewState || crewState.station !== view.station;
   if (crewState && view.lookoutReset !== crewState.lookoutReset) {
@@ -7028,6 +7063,9 @@ function applyServerGameSnapshot(snapshot) {
     if (playerDamageState === "active") beginPlayerSinking(null, time);
     return;
   }
+  if (showRoundResult(snapshot)) return;
+  const assignedVehicle = snapshot.ships.find(v => v.controlledBy === (crewState?.controller ?? playerId) && v.state === "active");
+  if (switchToAssignedVehicle(assignedVehicle)) return;
   const snapshotClientTime = getSnapshotClientTime(snapshot);
   serverShipsById = indexShipsById(snapshot.ships);
   if (playerServerShipId && playerDamageState === "active") {
