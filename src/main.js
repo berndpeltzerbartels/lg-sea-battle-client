@@ -583,6 +583,8 @@ const lighthouseHeightOffsets = new Map([
 ]);
 let lastMapViewport = null;
 let debugRespawnCandidates = [];
+let debugWaterPoints = [];
+let debugWaterPointsLoaded = false;
 let debugRespawnCandidatesLoaded = false;
 let debugMapMarkers = [];
 let debugMapMarkersEdited = false;
@@ -5739,7 +5741,25 @@ function getWorldMapEndpoint() {
   return gameEndpoint("/game/world");
 }
 
+async function loadDebugWaterPoints() {
+  if (debugWaterPointsLoaded) return;
+  debugWaterPointsLoaded = true;
+  try {
+    const response = await fetch(gameEndpoint("/game/debug/water-points"), { cache: "no-store" });
+    if (!response.ok) throw new Error(`status ${response.status}`);
+    const payload = await response.json();
+    debugWaterPoints = Array.isArray(payload) ? payload.map((point) => ({ x: Number(point.x), z: Number(point.z) }))
+      .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.z)) : [];
+    document.body.dataset.debugWaterPoints = String(debugWaterPoints.length);
+  } catch (error) {
+    debugWaterPointsLoaded = false;
+    document.body.dataset.debugWaterPoints = "error";
+    console.warn("[sea-battle] water point debug layer unavailable", error);
+  }
+}
+
 async function loadDebugRespawnCandidates() {
+  loadDebugWaterPoints();
   if (debugRespawnCandidatesLoaded) return;
   debugRespawnCandidatesLoaded = true;
   const endpoint = getDebugRespawnCandidatesEndpoint();
@@ -6114,31 +6134,15 @@ function setupResetGameControl(button) {
 function openHostSpecialMenu() {
   const debugLabel = debugMapEnabled ? "Debug-Karte aus" : "Debug-Karte an";
   const markerLabel = debugMarkerMapEnabled ? "Marker-Karte aus" : "Marker-Karte an";
-  const choice = window.prompt(`Spezialmenue: 1 = ${debugLabel}, 2 = Spiel neu starten, 3 = ${markerLabel}, 8 = Seitenansicht Sandbox, 9 = Zwei Schiffe, 10 = Zwei Schiffe + Flugzeuge`, "1");
+  const choice = window.prompt(`Spezialmenue: 1 = ${debugLabel}, 3 = ${markerLabel}`, "1");
   if (choice === null) return;
   const normalized = choice.trim().toLowerCase();
   if (normalized === "1" || normalized === "debug" || normalized === "karte") {
     toggleDebugMap();
     return;
   }
-  if (normalized === "2" || normalized === "reset" || normalized === "restart" || normalized === "neu") {
-    requestHostGameReset();
-    return;
-  }
   if (normalized === "3" || normalized === "marker" || normalized === "punkte") {
     toggleDebugMarkerMap();
-    return;
-  }
-  if (normalized === "8" || normalized === "side-view-sandbox" || normalized === "sandbox" || normalized === "seitenansicht") {
-    requestHostGameReset("side-view-sandbox");
-    return;
-  }
-  if (normalized === "9" || normalized === "two-ship-duel" || normalized === "duel" || normalized === "zwei-schiffe") {
-    requestHostGameReset("two-ship-duel");
-    return;
-  }
-  if (normalized === "10" || normalized === "two-ship-duel-air" || normalized === "duel-air" || normalized === "zwei-schiffe-flugzeuge") {
-    requestHostGameReset("two-ship-duel-air");
   }
 }
 
@@ -6217,51 +6221,6 @@ function toggleDebugMarkerMap() {
   if (history.replaceState) {
     history.replaceState(null, "", url);
   }
-}
-
-async function requestHostGameReset(forcedSetupId = null) {
-  const adminKey = window.prompt("Host key");
-  if (!adminKey) return;
-  const setupId = forcedSetupId ?? promptGameSetupId();
-  if (setupId === null) return;
-
-  try {
-    const response = await fetch(getResetGameEndpoint(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ adminKey, setupId })
-    });
-    if (!response.ok) {
-      throw new Error(`Reset failed with ${response.status}`);
-    }
-    window.location.reload();
-  } catch (error) {
-    document.body.dataset.resetGameError = error.message;
-  }
-}
-
-function promptGameSetupId() {
-  const defaultChoice = "1";
-  const choice = window.prompt("World: 1 = Dense land, 2 = Islands, 3 = Escort debug, 4 = Landmark tour, 5 = Dense land crowded, 6 = Dense land crowded reverse, 7 = Scout plane, 8 = Seitenansicht Sandbox, 9 = Zwei Schiffe, 10 = Zwei Schiffe + Flugzeuge", defaultChoice);
-  if (choice === null) return null;
-  const normalized = choice.trim().toLowerCase();
-  if (normalized === "2" || normalized === "islands" || normalized === "island") return "islands";
-  if (normalized === "3" || normalized === "escort-debug" || normalized === "escort") return "escort-debug";
-  if (normalized === "4" || normalized === "landmark-tour" || normalized === "tour") return "landmark-tour";
-  if (normalized === "5" || normalized === "fleet-clash" || normalized === "clash" || normalized === "crowded") return "dense-land-crowded";
-  if (normalized === "6" || normalized === "fleet-clash-reverse" || normalized === "clash-reverse" || normalized === "crowded-reverse") return "dense-land-crowded-reverse";
-  if (normalized === "7" || normalized === "scout-plane" || normalized === "plane" || normalized === "flugzeug" || normalized === "aufklaerer") return scoutPlaneSetupId;
-  if (normalized === "8" || normalized === "side-view-sandbox" || normalized === "sandbox" || normalized === "seitenansicht") return "side-view-sandbox";
-  if (normalized === "9" || normalized === "two-ship-duel" || normalized === "duel" || normalized === "zwei-schiffe") return "two-ship-duel";
-  if (normalized === "10" || normalized === "two-ship-duel-air" || normalized === "duel-air" || normalized === "zwei-schiffe-flugzeuge") return "two-ship-duel-air";
-  return "dense-land";
-}
-
-function getResetGameEndpoint() {
-  if (location.protocol === "file:") {
-    return "http://127.0.0.1:9090/game/reset";
-  }
-  return gameEndpoint("/game/reset");
 }
 
 function getTeamShips(ships, teamId) {
@@ -8012,7 +7971,25 @@ function drawMapInstrument(canvas, playerPosition, landZones, zoomControl, headi
   updateMapGridEdgeLabels(bounds, width, height, scale);
 }
 
+function drawDebugWaterPoints(ctx, bounds, width, height, scale) {
+  if (!debugWaterPoints.length) return;
+  ctx.save();
+  ctx.fillStyle = "rgba(255, 185, 70, 0.8)";
+  let visible = 0;
+  for (const position of debugWaterPoints) {
+    if (position.x < bounds.minX || position.x > bounds.maxX || position.z < bounds.minZ || position.z > bounds.maxZ) continue;
+    const point = worldToMapPoint(position, bounds, width, height, scale);
+    ctx.fillRect(point.x - 1, point.y - 1, 2, 2);
+    visible++;
+  }
+  ctx.font = "11px sans-serif";
+  ctx.fillText("Orange: neue Wasserpunkte", 8, 16);
+  ctx.restore();
+  document.body.dataset.debugWaterPointsVisible = String(visible);
+}
+
 function drawDebugRespawnCandidates(ctx, bounds, width, height, scale) {
+  drawDebugWaterPoints(ctx, bounds, width, height, scale);
   if (!debugRespawnCandidates.length) return;
 
   let visibleCandidates = 0;
