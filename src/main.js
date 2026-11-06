@@ -1709,6 +1709,9 @@ if (crewState) {
   placeRoleHotkeys();
 }
 
+// A finished round may already be present in the initial state, before any stream message.
+showRoundResult(gameState);
+
 scene.onBeforeRenderObservable.add(() => {
   const frameLogicStarted = performanceLoggingEnabled ? performance.now() : 0;
   const rawFrameSeconds = engine.getDeltaTime() / 1000;
