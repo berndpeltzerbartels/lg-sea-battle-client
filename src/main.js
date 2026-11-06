@@ -625,7 +625,7 @@ document.body.dataset.serverBombs = String(Array.isArray(gameState.bombs) ? game
 const sideViewSandboxMode = directSideViewSandboxRequested || gameState.sessionId === "side-view-sandbox";
 const bridgeViewWidth = clamp(Number(urlParams.get("bridgeViewWidth") ?? "0.86"), 0.42, 0.9);
 const initialCrewView = !sideViewSandboxMode
-  ? await fetch(gameEndpoint(`/game/crew/${encodeURIComponent(playerLogin.playerId)}`)).then(r => r.ok ? r.json() : null) : null;
+  ? await loadInitialCrewView(playerLogin.playerId) : null;
 const initialAssignedVehicle = initialCrewView?.ship ?? gameState.ships.find(v => v.controlledBy === playerLogin.playerId && v.state === "active");
 const selectedVehicleType = normalizeClientVehicleType(initialAssignedVehicle?.vehicleType ?? urlParams.get("vehicle") ?? readStoredValue("vehicleType"));
 const submarineSandboxRequested = selectedVehicleType === "submarine" || urlParams.get("model") === "submarine";
@@ -6067,6 +6067,15 @@ async function requirePlayerLogin() {
 function redirectToStartPageForLogin() {
   window.location.replace(startPageUrl());
   return new Promise(() => {});
+}
+
+// Solo submarines and aircraft have no torpedo-boat crew. The endpoint may
+// represent that absence with an empty response instead of the JSON literal null.
+async function loadInitialCrewView(playerId) {
+  const response = await fetch(gameEndpoint(`/game/crew/${encodeURIComponent(playerId)}`));
+  if (!response.ok || response.status === 204) return null;
+  const body = await response.text();
+  return body.trim() ? JSON.parse(body) : null;
 }
 
 async function requireRegisteredGameSession(login) {

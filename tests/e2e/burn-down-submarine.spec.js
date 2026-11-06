@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 const dist = fileURLToPath(new URL('../../dist/', import.meta.url));
 test.use({ launchOptions: { args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] } });
 
-for (const initiallyFinished of [false, true]) test(`submarine burn-down: ${initiallyFinished ? 'already finished at startup' : 'last friendly bot boat destroyed'}`, async ({ page }) => {
+for (const crewResponse of ["empty-200", "empty-204", "json-null"])
+for (const initiallyFinished of [false, true]) test(`submarine burn-down (${crewResponse}): ${initiallyFinished ? 'already finished at startup' : 'last friendly bot boat destroyed'}`, async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   const vehicle = (id, teamId, vehicleType, controlledBy = 'bot') => ({ id, teamId, vehicleType, controlledBy,
@@ -25,7 +26,9 @@ for (const initiallyFinished of [false, true]) test(`submarine burn-down: ${init
     if (relative.includes('/game/')) {
       if (relative.includes('/session/')) return route.fulfill({ json: { playerId: 'player-SUB-test', initials: 'SUB', teamId: 'light' } });
       if (relative.endsWith('/world')) return route.fulfill({ json: { landmasses: [], instrumentMap: { version: 1, layers: [0, 50, 150].map(height => ({ height, contours: [] })) } } });
-      if (relative.includes('/crew/')) return route.fulfill({ json: null });
+      if (relative.includes('/crew/')) return crewResponse === 'json-null'
+        ? route.fulfill({ json: null })
+        : route.fulfill({ status: crewResponse === 'empty-204' ? 204 : 200, body: '' });
       return route.fulfill({ json: initiallyFinished ? finished : initial });
     }
     if (relative.endsWith('/crew-inbox.html')) return route.fulfill({ body: '' });
@@ -35,7 +38,7 @@ for (const initiallyFinished of [false, true]) test(`submarine burn-down: ${init
     await route.fulfill({ body: fs.readFileSync(file), contentType });
   });
   await page.goto('http://capture.invalid/sea-battle/app?vehicle=submarine');
-  await page.waitForFunction(() => window.testStream?.onmessage);
+  await page.waitForFunction(() => window.testStream?.onmessage, null, { timeout: 7000 });
   if (!initiallyFinished) await page.evaluate(state => window.testStream.onmessage({ data: JSON.stringify({ type: 'game-stream', state }) }), finished);
   await expect(page.locator('#round-result')).toContainText('Dunkel');
   expect(errors).toEqual([]);
