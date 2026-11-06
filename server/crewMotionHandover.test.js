@@ -42,6 +42,7 @@ test('station handover uses response motion rather than an old streamed position
   const apply = new Function('alignPlayerBoatToServerShip', `
     let crewState = { station: 'flak', revision: 1, lookoutReset: 0 };
     let playerServerTarget = { stale: true }, lookoutYaw, lookoutPitch;
+    const switchToAssignedVehicle = () => false;
     const showSubmarineWarning = () => {}, setBattleStation = () => {};
     const updateBattleStationButtons = () => {}, updateLookoutAimRequests = () => {};
     ${fn('applyCrewView')}
