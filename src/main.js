@@ -588,6 +588,7 @@ let nextDebugNavigationFetch = 0;
 let debugNavigationLoading = false;
 let debugRespawnCandidates = [];
 let debugWaterPoints = [];
+let debugSpawnWaterPoints = [];
 let debugWaterPointsLoaded = false;
 let debugRespawnCandidatesLoaded = false;
 let debugMapMarkers = [];
@@ -5756,9 +5757,12 @@ async function loadDebugWaterPoints() {
   if (debugWaterPointsLoaded) return;
   debugWaterPointsLoaded = true;
   try {
-    const response = await fetch(gameEndpoint("/game/debug/water-points"), { cache: "no-store" });
-    if (!response.ok) throw new Error(`status ${response.status}`);
-    const payload = await response.json();
+    const responses = await Promise.all(["/game/debug/water-points", "/game/debug/spawn-water-points"]
+      .map(path => fetch(gameEndpoint(path), { cache: "no-store" })));
+    if (responses.some(response => !response.ok)) throw new Error("Wasserpunkte nicht verfügbar");
+    const [payload, spawnPayload] = await Promise.all(responses.map(response => response.json()));
+    debugSpawnWaterPoints = Array.isArray(spawnPayload) ? spawnPayload : [];
+    document.body.dataset.debugSpawnWaterPoints = String(debugSpawnWaterPoints.length);
     debugWaterPoints = Array.isArray(payload) ? payload.map((point) => ({ x: Number(point.x), z: Number(point.z) }))
       .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.z)) : [];
     document.body.dataset.debugWaterPoints = String(debugWaterPoints.length);
@@ -7993,8 +7997,15 @@ function drawDebugWaterPoints(ctx, bounds, width, height, scale) {
     ctx.fillRect(point.x - 1, point.y - 1, 2, 2);
     visible++;
   }
+  ctx.fillStyle = "rgba(95, 240, 150, 0.95)";
+  for (const position of debugSpawnWaterPoints) {
+    if (position.x < bounds.minX || position.x > bounds.maxX || position.z < bounds.minZ || position.z > bounds.maxZ) continue;
+    const point = worldToMapPoint(position, bounds, width, height, scale);
+    ctx.fillRect(point.x - 1, point.y - 1, 2, 2);
+  }
   ctx.font = "11px sans-serif";
-  ctx.fillText("Orange: neue Wasserpunkte · Auf Boot zeigen: Ziel und Wegpunkte", 8, 16);
+  ctx.fillText("Grün: Einsetzpunkte · Orange: übrige Wasserpunkte", 8, 16);
+  ctx.fillText("Auf Boot zeigen: Ziel und Wegpunkte", 8, 30);
   ctx.restore();
   document.body.dataset.debugWaterPointsVisible = String(visible);
 }
