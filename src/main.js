@@ -582,6 +582,10 @@ const lighthouseHeightOffsets = new Map([
   ["eastern_delta_coast", -0.45]
 ]);
 let lastMapViewport = null;
+let debugMapPointer = null;
+let debugNavigationPlans = new Map();
+let nextDebugNavigationFetch = 0;
+let debugNavigationLoading = false;
 let debugRespawnCandidates = [];
 let debugWaterPoints = [];
 let debugWaterPointsLoaded = false;
@@ -4396,6 +4400,13 @@ function updateObservationPeriscopeZoomDisplay() {
 
 function setupDebugMapTeleport(canvas) {
   if (!canvas) return;
+  canvas.addEventListener("pointermove", (event) => {
+    if (!debugMapEnabled) return;
+    const rect = canvas.getBoundingClientRect();
+    debugMapPointer = { x: (event.clientX - rect.left) * canvas.clientWidth / rect.width,
+      y: (event.clientY - rect.top) * canvas.clientHeight / rect.height };
+  });
+  canvas.addEventListener("pointerleave", () => { debugMapPointer = null; });
 
   canvas.addEventListener("pointerdown", (event) => {
     if (!debugMapEnabled || event.button !== 0 || !lastMapViewport) return;
@@ -8021,7 +8032,7 @@ function drawDebugWaterPoints(ctx, bounds, width, height, scale) {
     visible++;
   }
   ctx.font = "11px sans-serif";
-  ctx.fillText("Orange: neue Wasserpunkte", 8, 16);
+  ctx.fillText("Orange: neue Wasserpunkte · Auf Boot zeigen: Ziel und Wegpunkte", 8, 16);
   ctx.restore();
   document.body.dataset.debugWaterPointsVisible = String(visible);
 }
@@ -8082,7 +8093,49 @@ function drawDebugMapMarkers(ctx, bounds, width, height, scale) {
   ctx.restore();
 }
 
+async function loadDebugNavigationPlans() {
+  const now = performance.now();
+  if (!debugMapEnabled || debugNavigationLoading || now < nextDebugNavigationFetch) return;
+  nextDebugNavigationFetch = now + 1000;
+  debugNavigationLoading = true;
+  try {
+    const response = await fetch(gameEndpoint("/game/debug/bot-navigation"), { cache: "no-store" });
+    if (!response.ok) throw new Error("Debugdaten nicht verfügbar");
+    const payload = await response.json();
+    if (payload.instanceId === gameState.instanceId) {
+      debugNavigationPlans = new Map((payload.plans ?? []).map(plan => [plan.shipId, plan]));
+    } else debugNavigationPlans.clear();
+  } catch {
+    debugNavigationPlans.clear();
+  } finally {
+    debugNavigationLoading = false;
+  }
+}
+
+function drawDebugNavigationPlan(ctx, ship, point, bounds, width, height, scale) {
+  const plan = debugNavigationPlans.get(ship.id);
+  const labels = { PATROL: "Kartenmitte", ENEMY: "Gegner", SEARCH: "U-Boot-Suche",
+    LAST_KNOWN_COURSE: "Letzte Sichtung", RETAINED_COURSE: "Letzter Kurs", NONE: "Kein Ziel" };
+  let label = `${ship.id} · ${labels[plan?.kind] ?? "Kein Bot-Plan"}`;
+  if (plan?.targetId) label += ` → ${plan.targetId}`;
+  ctx.save();
+  for (const [destination, color] of [[plan?.destination, "#ffffff"], [plan?.largeWaypoint, "#46e8ed"], [plan?.routeWaypoint, "#ffbf44"]]) {
+    if (!destination || !Number.isFinite(destination.x) || !Number.isFinite(destination.z)) continue;
+    const end = worldToMapPoint(destination, bounds, width, height, scale);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();ctx.moveTo(point.x, point.y);ctx.lineTo(end.x, end.y);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();ctx.arc(end.x, end.y, 4, 0, Math.PI * 2);ctx.stroke();
+  }
+  drawMapShipLabel(ctx, label, Math.min(width - 170, point.x + 12), Math.max(30, point.y - 14), "#ffffff");
+  ctx.restore();
+}
+
 function drawDebugMapShips(ctx, bounds, width, height, scale) {
+  loadDebugNavigationPlans();
+  let hovered = null, nearest = 18 * 18;
   let visibleShips = 0;
   for (const ship of serverShipsById.values()) {
     if (!ship || ship.state !== "active") continue;
@@ -8093,8 +8146,13 @@ function drawDebugMapShips(ctx, bounds, width, height, scale) {
     }
     const point = worldToMapPoint(position, bounds, width, height, scale);
     drawMapUnitMarker(ctx, point.x, point.y, ship, Number.isFinite(ship.heading) ? ship.heading : 0);
+    if (debugMapPointer) {
+      const distance = (point.x - debugMapPointer.x) ** 2 + (point.y - debugMapPointer.y) ** 2;
+      if (distance < nearest) { nearest = distance; hovered = { ship, point }; }
+    }
     visibleShips += 1;
   }
+  if (hovered) drawDebugNavigationPlan(ctx, hovered.ship, hovered.point, bounds, width, height, scale);
   document.body.dataset.debugMapShips = String(visibleShips);
 }
 
