@@ -33,7 +33,7 @@ test('native XIS redirect downloads the HTTP attachment and preserves the edited
     const pending = page.waitForEvent('download');
     await page.locator('#download-export').click();
     const download = await pending;
-    expect(download.suggestedFilename()).toBe('spielprofil.json');
+    expect(download.suggestedFilename()).toBe(fixture.fileName);
     expect(fs.readFileSync(await download.path(), 'utf8')).toBe(fixture.body);
     await expect(page.locator('#aimResponse')).toHaveValue('0.7');
     expect(new URL(page.url()).pathname).toBe('/admin/game-config.html');
