@@ -1249,8 +1249,8 @@ const engineOrders = engineOrderLabels.map((order, index) => ({
   speed: Number.isFinite(Number(engineSpeeds[index])) ? Number(engineSpeeds[index]) : defaultEngineSpeeds[index]
 }));
 const maxSubmarineForwardSpeed = 13.5;
-const maxSubmarinePeriscopeForwardSpeed = 10;
-const maxSubmarineSubmergedForwardSpeed = 7;
+const maxSubmarinePeriscopeForwardSpeed = 10.5;
+const maxSubmarineSubmergedForwardSpeed = 8;
 const submarinePeriscopeModes = {
   forwardScope: "forward-scope",
   alignToBearing: "align-to-bearing",
@@ -7068,7 +7068,7 @@ function updateSubmarineDetection(snapshot, ship) {
   const detection = snapshot.submarineDetections?.[ship?.id];
   indicator.hidden = !isSubmarineDetectionVisible(detection, ship, snapshot.t);
   if (!indicator.hidden) submarineDetectionTimer = setTimeout(() => { indicator.hidden = true; },
-    Math.min(3, Math.max(0, detection.until - snapshot.t)) * 1000);
+    Math.max(0, detection.until - snapshot.t) * 1000);
 }
 
 function applyServerGameSnapshot(snapshot) {

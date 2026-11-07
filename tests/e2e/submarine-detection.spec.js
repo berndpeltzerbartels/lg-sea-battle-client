@@ -41,20 +41,22 @@ async function press(page, index) {
   await page.waitForTimeout(150);
 }
 
-test('small detection eye appears in both periscope views and expires without another server message', async ({ page }, testInfo) => {
+test('hunt eye stays beyond three seconds, works at depth and expires without another server message', async ({ page }, testInfo) => {
   test.setTimeout(45000);
   await openGame(page, 'submarine');
   await page.evaluate(() => seaBattleScenarioTest.setSubmarineDepthState('periscope'));
   await expect(page.locator('body')).toHaveAttribute('data-torpedo-view', 'active', { timeout: 14000 });
   const eye = page.locator('#submarineDetectionEye');
   await expect(eye).toBeHidden();
-  await page.evaluate(() => seaBattleScenarioTest.submarineDetectionForTest({ lifeId: 1, until: 3 }));
+  await page.evaluate(() => seaBattleScenarioTest.submarineDetectionForTest({ lifeId: 1, until: 5 }));
   await expect(eye).toBeVisible();
   const box = await eye.boundingBox();
   expect(box.width).toBe(24);
   expect(box.y).toBe(18);
   await page.screenshot({ path: testInfo.outputPath('detection-forward.png') });
-  await expect(eye).toBeHidden({ timeout: 4500 });
+  await page.waitForTimeout(3200);
+  await expect(eye).toBeVisible();
+  await expect(eye).toBeHidden({ timeout: 3000 });
   await page.keyboard.press('2');
   await expect(page.locator('body')).toHaveAttribute('data-observation-periscope', 'active');
   await page.evaluate(() => seaBattleScenarioTest.submarineDetectionForTest({ lifeId: 1, until: 3 }));
@@ -64,7 +66,7 @@ test('small detection eye appears in both periscope views and expires without an
   expect(eyeBox.x + eyeBox.width).toBeLessThan(hintBox.x);
   await page.screenshot({ path: testInfo.outputPath('detection-observation.png') });
   await page.evaluate(() => seaBattleScenarioTest.submarineDetectionForTest({ lifeId: 1, until: 3 }, 'submerged'));
-  await expect(eye).toBeHidden();
+  await expect(eye).toBeVisible();
   await page.evaluate(() => seaBattleScenarioTest.submarineDetectionForTest({ lifeId: 1, until: 3 }, 'periscope', 2));
   await expect(eye).toBeHidden();
 });
