@@ -1,3 +1,5 @@
+import { controllerKey, resolveBindings, bindingValue, CONTROLLER_ACTIONS, isAnalogAction } from '../public/controller-bindings.js';
+
 // Standard Gamepad mapping: DualSense, DualShock and compatible browser mappings.
 export function createHeldControls(press, release) {
   const owners = new Map(), lastOptions = new Map();
@@ -37,9 +39,16 @@ export function gamepadBridgeState(horizontal, vertical) {
     : throttle < 0 ? 2 - Math.ceil(-throttle * 2) : 2 };
 }
 
-export function createGamepadInput({ getGamepads, direction, fire, cycleStation, action, analog = () => {}, status = () => {}, activity = () => {}, throttleHold = () => {} }) {
+export function createGamepadInput({ getGamepads, direction, fire, cycleStation, action, analog = () => {}, status = () => {}, activity = () => {}, throttleHold = () => {}, profiles = {}, contextActions = () => null }) {
   let identity = null, context = null, armed = false, x = 0, y = 0, firing = false;
-  let buttons = [];
+  let buttons = {}, activeActions = null;
+  const layouts = new Map();
+  function profileFor(pad) {
+    if (!pad || pad.connected === false) return null;
+    const key = controllerKey(pad);
+    if (!layouts.has(key)) layouts.set(key, resolveBindings(pad, profiles));
+    return layouts.get(key);
+  }
   let analogX = 0, analogY = 0, analogAxes = {};
   let throttleHeld = false, throttleUnlockReady = false;
   function setThrottleHold(held) {
@@ -48,14 +57,13 @@ export function createGamepadInput({ getGamepads, direction, fire, cycleStation,
     throttleHold(held);
   }
   const commandAxes = axes => throttleHeld && axes.y ? { ...axes, y: false } : axes;
-  const pressed = (pad, index) => !!pad.buttons[index]?.pressed || pad.buttons[index]?.value > .55;
   function reset() {
     if (x) direction(x < 0 ? 'left' : 'right', false);
     if (y) direction(y < 0 ? 'up' : 'down', false);
     if (firing) fire(false);
     if (analogX || analogY) analog(0, 0, commandAxes(analogAxes));
     analogX = analogY = 0; analogAxes = {};
-    x = y = 0; firing = false; armed = false; buttons = [];
+    x = y = 0; firing = false; armed = false; buttons = {};
   }
   function axis(value, previous) {
     if (!Number.isFinite(value)) return 0;
@@ -70,33 +78,52 @@ export function createGamepadInput({ getGamepads, direction, fire, cycleStation,
     update(enabled, nextContext, bridgeAxes = {}) {
       let pads;
       try { pads = getGamepads(); } catch { pads = []; }
-      const pad = Array.from(pads ?? []).find(pad => pad?.connected !== false && pad?.mapping === 'standard');
-      const nextIdentity = pad ? `${pad.index}:${pad.id}` : null;
+      const pad = Array.from(pads ?? []).find(pad => profileFor(pad));
+      const layout = profileFor(pad);
+      const nextIdentity = pad ? `${pad.index}:${controllerKey(pad)}` : null;
       if (nextIdentity !== identity) {
-        reset(); identity = nextIdentity; status(pad?.id ?? null);
+        reset(); identity = nextIdentity; status(pad?.id ?? null, pad ? { bindings: layout, custom: Object.hasOwn(profiles, controllerKey(pad)) } : null);
       }
-      if (!enabled || !pad) { reset(); context = nextContext; return; }
-      if (context !== nextContext) { reset(); context = nextContext; }
-      const horizontal = pad.axes[0] ?? 0, vertical = pad.axes[1] ?? 0;
+      if (!enabled || !pad) { reset(); context = null; return; }
+      if (context !== nextContext) { reset(); context = nextContext; activeActions = contextActions(); }
+      const horizontalAction = bridgeAxes.x ? 'directX' : 'aimX';
+      const verticalAction = bridgeAxes.y ? 'directY' : 'aimY';
+      const horizontal = !activeActions || activeActions.has(horizontalAction) ? bindingValue(pad, layout[horizontalAction]) : 0;
+      const vertical = !activeActions || activeActions.has(verticalAction) ? bindingValue(pad, layout[verticalAction]) : 0;
+      const left = bridgeAxes.x ? 'left' : 'aimLeft', right = bridgeAxes.x ? 'right' : 'aimRight';
+      const up = bridgeAxes.y ? 'up' : 'aimUp', down = bridgeAxes.y ? 'down' : 'aimDown';
+      const rawPressed = name => !!bindingValue(pad, layout[name]);
+      const pressed = name => (!activeActions || activeActions.has(name)) && rawPressed(name);
+      // Even a currently inactive held button must be released before a new station is armed.
+      const anyButton = CONTROLLER_ACTIONS.some(name => !isAnalogAction(name) && rawPressed(name));
+      const buttonX = Number(pressed(right)) - Number(pressed(left));
+      const buttonY = Number(pressed(down)) - Number(pressed(up));
       if (!armed) {
         // Reconnects, focus changes and station changes must never fire or steer by surprise.
         armed = Math.abs(horizontal) <= (bridgeAxes.x ? .18 : .22) && Math.abs(vertical) <= (bridgeAxes.y ? .18 : .22)
-          && !pad.buttons.some((_, i) => pressed(pad, i));
+          && !anyButton;
         if (armed && throttleHeld && bridgeAxes.y) throttleUnlockReady = true;
         return;
       }
-      if (x || y || Math.abs(horizontal) >= (bridgeAxes.x ? .18 : .35) || Math.abs(vertical) >= (bridgeAxes.y ? .18 : .35) || pad.buttons.some((_, i) => pressed(pad, i))) activity();
-      const rising = index => pressed(pad, index) && !buttons[index];
-      if (rising(3)) { reset(); cycleStation(1); return; }
-      if (rising(4) !== rising(5)) {
-        if (rising(4)) { reset(); cycleStation(-1); return; }
-        if (rising(5)) { reset(); cycleStation(1); return; }
+      if (x || y || Math.abs(horizontal) >= (bridgeAxes.x ? .18 : .35) || Math.abs(vertical) >= (bridgeAxes.y ? .18 : .35) || anyButton) activity();
+      const rising = name => pressed(name) && !buttons[name];
+      if (rising('stationPrevious') !== rising('stationNext')) {
+        const step = rising('stationPrevious') ? -1 : 1;
+        reset(); cycleStation(step); return;
       }
       // Absolute bridge commands are separate from the digital aiming controls.
       // A neutral connected controller never overwrites keyboard commands.
       const clean = value => Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
-      const ax = bridgeAxes.x && Math.abs(horizontal) > .18 ? clean(horizontal) : 0;
-      const ay = bridgeAxes.y && Math.abs(vertical) > .18 ? clean(vertical) : 0;
+      // C buttons are keyboard-style controls. Once used, neutral stick polling must
+      // leave their persistent gear/rudder setting alone until the stick moves again.
+      const usingButtonX = pressed(left) || pressed(right);
+      const usingButtonY = pressed(up) || pressed(down);
+      if (usingButtonX) analogX = 0;
+      if (usingButtonY) analogY = 0;
+      const effectiveAxes = usingButtonX || usingButtonY
+        ? { ...bridgeAxes, x: bridgeAxes.x && !usingButtonX, y: bridgeAxes.y && !usingButtonY } : bridgeAxes;
+      const ax = effectiveAxes.x && Math.abs(horizontal) > .18 ? clean(horizontal) : 0;
+      const ay = effectiveAxes.y && Math.abs(vertical) > .18 ? clean(vertical) : 0;
       // Only a fresh vertical movement at the helm releases held throttle.
       // Horizontal steering, aiming and station-change neutralisation do not.
       let resumedThrottle = false;
@@ -104,9 +131,9 @@ export function createGamepadInput({ getGamepads, direction, fire, cycleStation,
         if (Math.abs(vertical) <= .18) throttleUnlockReady = true;
         else if (throttleUnlockReady) { setThrottleHold(false); resumedThrottle = true; }
       }
-      if (ax !== analogX || ay !== analogY || resumedThrottle) analog(ax, ay, commandAxes(bridgeAxes));
-      analogX = ax; analogY = ay; analogAxes = bridgeAxes;
-      const nx = bridgeAxes.x ? 0 : axis(horizontal, x), ny = bridgeAxes.y ? 0 : axis(vertical, y);
+      if (ax !== analogX || ay !== analogY || resumedThrottle) analog(ax, ay, commandAxes(effectiveAxes));
+      analogX = ax; analogY = ay; analogAxes = effectiveAxes;
+      const nx = buttonX || (bridgeAxes.x ? 0 : axis(horizontal, x)), ny = buttonY || (bridgeAxes.y ? 0 : axis(vertical, y));
       if (nx !== x) {
         if (x) direction(x < 0 ? 'left' : 'right', false);
         if (nx) direction(nx < 0 ? 'left' : 'right', true);
@@ -116,18 +143,17 @@ export function createGamepadInput({ getGamepads, direction, fire, cycleStation,
         if (ny) direction(ny < 0 ? 'up' : 'down', true);
       }
       x = nx; y = ny;
-      const nextFire = pressed(pad, 7);
+      const nextFire = pressed('fire');
       if (nextFire !== firing) fire(nextFire);
       firing = nextFire;
-      if (rising(10) && bridgeAxes.y && !throttleHeld) {
+      if (rising('throttleHold') && bridgeAxes.y && !throttleHeld) {
         setThrottleHold(true);
         throttleUnlockReady = Math.abs(vertical) <= .18;
       }
-      for (const [button, command] of [[6, 'zoom'], [2, 'depth-charge'], [1, 'align'],
-        [9, 'help'], [12, 'ascend'], [13, 'dive'], [14, 'forward-scope'], [15, 'observation-scope']]) {
-        if (rising(button)) action(command);
+      for (const command of ['zoom', 'depth-charge', 'align', 'help', 'ascend', 'dive', 'forward-scope', 'observation-scope']) {
+        if (rising(command)) action(command);
       }
-      buttons = pad.buttons.map((_, i) => pressed(pad, i));
+      buttons = Object.fromEntries(CONTROLLER_ACTIONS.map(name => [name, pressed(name)]));
     }
   };
 }

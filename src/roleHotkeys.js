@@ -1,48 +1,32 @@
-export function roleHotkeys({ role, members = [], playerId, depthChargesReady = true, radarModes = false, torpedoScope = false,
-  submarine = false, depth = 'surface', periscopeAvailable = false, observationScope = false }) {
-  if (submarine) {
-    const keys = [];
-    if (role === 'flak') keys.push(['B', 'Brücke'], ['↑ ↓ ← →', 'Zielen'], ['Leertaste', 'Feuern'], ['A', 'Ausrichten'], ['⇧A', 'Flugabwehr']);
-    else {
-      if (depth === 'surface') keys.push(['F', 'Flak'], ['A', 'Flak ausrichten'], ['⇧A', 'Flugabwehr']);
-      keys.push(['↑ ↓', 'Fahrt'], ['← →', observationScope ? 'Blickrichtung' : 'Ruder']);
-      if (depth === 'surface' || depth === 'submerged' || torpedoScope)
-        keys.push(['Leertaste', observationScope ? 'Torpedo voraus' : 'Torpedo']);
-      if (periscopeAvailable) keys.push(['1', 'Sehrohr voraus'], ['2', '360°-Sehrohr'], ['3', 'Boot auf Peilung']);
-      if (torpedoScope || observationScope) keys.push(['Z', 'Vergrößerung']);
-    }
-    if (depth !== 'surface') keys.push(['⇧↑', 'Auftauchen']);
-    if (depth !== 'submerged') keys.push(['⇧↓', 'Abtauchen']);
-    if (radarModes) keys.push(['R', 'Radar wechseln']);
-    return keys;
-  }
-  const free = station => !members.some(m => m.station === station && m.playerId !== playerId);
-  const keys = [];
-  for (const [station, key, label] of [['bridge', 'B', 'Brücke'], ['lookout', 'O', 'Ausguck'], ['flak', 'F', 'Flak'], ['cannon', 'C', 'Kanone']]) {
-    if (role === 'lookout' && ['flak', 'cannon'].includes(station)) continue;
-    if (station !== role && free(station)) keys.push([key, label]);
-  }
-  if (role === 'bridge') {
-    keys.push(['↑ ↓', 'Fahrt'], ['← →', 'Ruder'], ['Leertaste', 'Torpedo'], ['T', 'Torpedo-Präzision']);
-    if (torpedoScope) keys.push(['Z', 'Vergrößerung']);
-    if (['flak', 'cannon', 'lookout'].some(free)) keys.push(['A', 'Geschütze ausrichten'], ['⇧A', 'Flugabwehr']);
-  } else {
-    keys.push(['↑ ↓ ← →', role === 'lookout' ? 'Blickrichtung' : 'Zielen'], ['A', 'Ausrichten']);
-    if (role === 'lookout') keys.push(['Z', 'Fernglas'],
-      ['C', free('cannon') ? 'Kanone ausrichten & übernehmen' : 'Kanone: Zustimmung anfragen'],
-      ['F', free('flak') ? 'Flak ausrichten & übernehmen' : 'Flak: Zustimmung anfragen']);
-    else {
-      keys.push(['Leertaste', 'Feuern'], ['⇧A', 'Flugabwehr']);
-      if (role === 'cannon') keys.push(['Z', 'Vergrößerung']);
-    }
-  }
-  if (depthChargesReady && ['bridge', 'lookout', 'flak'].includes(role)) keys.push(['W', 'Wasserbomben']);
-  if (radarModes) keys.push(['R', 'Radar wechseln']);
-  return keys;
-}
+import { describeBindings } from '../public/controller-bindings.js';
+
+import { roleHotkeys } from '../public/role-hotkeys.js';
+export { roleHotkeys };
 
 // Derive controller hints from the same position/depth/occupancy rules as keyboard hints.
-export function gamepadHotkeys(keys) {
+export function gamepadHotkeys(keys, controllerName = '', profile = null) {
+  if (profile?.custom) {
+    const b = profile.bindings, hints = [];
+    const add = (action, label) => { if (b[action]?.length) hints.push([describeBindings(b[action]), label]); };
+    add('stationPrevious', 'Vorherige freie Position'); add('stationNext', 'Nächste freie Position'); add('help', 'Hilfe');
+    for (const [key, label] of keys) {
+      const actions = { '↑ ↓': label === 'Fahrt' ? ['directY', 'up', 'down'] : ['aimY', 'aimUp', 'aimDown'], '← →': label === 'Ruder' ? ['directX', 'left', 'right'] : ['aimX', 'aimLeft', 'aimRight'],
+        '↑ ↓ ← →': ['aimX', 'aimY', 'aimLeft', 'aimRight', 'aimUp', 'aimDown'], Leertaste: ['fire'],
+        Z: ['zoom'], W: ['depth-charge'], A: ['align'], '3': ['align'], '⇧↑': ['ascend'], '⇧↓': ['dive'],
+        '1': ['forward-scope'], '2': ['observation-scope'] }[key] ?? [];
+      for (const action of actions) add(action, label);
+    }
+    if (keys.some(([key, label]) => key === '↑ ↓' && label === 'Fahrt')) add('throttleHold', 'Gas festhalten');
+    return hints;
+  }
+  if (/^057e-2019-N64 Controller$/i.test(controllerName)) {
+    const names = { '↑ ↓': 'Stick / C ↑ ↓', '← →': 'Stick / C ← →',
+      '↑ ↓ ← →': 'Stick / C-Tasten · auch diagonal', Leertaste: 'Gewählte Feuertaste' };
+    return [['Steuerkreuz ← / →', 'Freie Position zurück / weiter'],
+      ...keys.filter(([key]) => names[key]).map(([key, label]) => [names[key],
+        label === 'Fahrt' ? 'Stick direkt · C-Tasten halten die Gasstufe'
+          : label === 'Ruder' ? 'Stick direkt · C-Tasten halten den Ausschlag' : label])];
+  }
   const hints = [['△', 'Nächste freie Position'], ['L1 / R1', 'Freie Position zurück / weiter'], ['Options', 'Hilfe']];
   if (keys.some(([key, label]) => key === '↑ ↓' && label === 'Fahrt'))
     hints.push(['L3', 'Gas festhalten · Stick ↑ / ↓ löst auf der Brücke']);

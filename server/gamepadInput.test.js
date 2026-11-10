@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { controllerActionsFor } from '../public/controller-bindings.js';
 import assert from 'node:assert/strict';
 import { createGamepadInput, createHeldControls, nextGamepadStation, gamepadBridgeState } from '../src/gamepadInput.js';
 
@@ -211,4 +212,135 @@ test('triangle cycles once and circle retains the alignment action', () => {
   f.pad.buttons[3].pressed = false; f.tick();
   f.pad.buttons[1].pressed = true; f.tick(); f.tick();
   assert.deepEqual(f.events.at(-1), ['action', 'align']);
+});
+
+function n64Fixture() {
+  const pad = { id: '057e-2019-N64 Controller', mapping: '', index: 0, connected: true,
+    axes: [0, 0, 0, 0, 0], buttons: Array.from({ length: 16 }, () => ({ pressed: false, value: 0 })) };
+  const events = [];
+  const input = createGamepadInput({ getGamepads: () => [pad],
+    analog: (...args) => events.push(['analog', ...args]), direction: (...args) => events.push(['direction', ...args]),
+    fire: down => events.push(['fire', down]), cycleStation: step => events.push(['station', step]),
+    action: name => events.push(['action', name]) });
+  const tick = (axes = {}) => input.update(true, 'test', axes);
+  tick();
+  return { pad, events, input, tick };
+}
+
+test('measured N64 Firefox axes support diagonal aiming and button 1 fires without aligning', () => {
+  const f = n64Fixture();
+  f.pad.axes[1] = -.96; f.pad.axes[2] = -1; f.pad.buttons[1].pressed = true; f.tick();
+  assert.deepEqual(f.events, [['direction', 'left', true], ['direction', 'up', true], ['fire', true]]);
+  f.pad.axes.fill(0); f.pad.buttons[1].pressed = false; f.tick();
+  assert.deepEqual(f.events.slice(-3), [['direction', 'left', false], ['direction', 'up', false], ['fire', false]]);
+});
+
+test('N64 bridge uses proportional measured axes and stops on release', () => {
+  const f = n64Fixture(); const axes = { x: true, y: true };
+  f.pad.axes[1] = 1; f.pad.axes[2] = -1; f.tick(axes);
+  assert.deepEqual(f.events, [['analog', 1, -1, axes]]);
+  assert.deepEqual(gamepadBridgeState(1, -1), { rudder: 1, engineOrder: 8 });
+  f.pad.axes.fill(0); f.tick(axes);
+  assert.deepEqual(f.events.at(-1), ['analog', 0, 0, axes]);
+});
+
+test('unmeasured N64 buttons do not trigger PS actions and a different raw layout is ignored', () => {
+  const f = n64Fixture();
+  for (let i = 0; i < 16; i++) if (![1, 2, 3, 7, 8].includes(i)) {
+    f.pad.buttons[i].pressed = true; f.tick(); f.pad.buttons[i].pressed = false; f.tick();
+  }
+  assert.deepEqual(f.events, []);
+  f.pad.axes = Array(10).fill(0); f.pad.axes[1] = 1; f.pad.buttons[1].pressed = true; f.tick();
+  assert.deepEqual(f.events, []);
+});
+
+test('N64 disconnect releases held aim and fire', () => {
+  const f = n64Fixture(); f.pad.axes[1] = 1; f.pad.buttons[1].pressed = true; f.tick();
+  f.pad.connected = false; f.tick();
+  assert.deepEqual(f.events.slice(-2), [['direction', 'right', false], ['fire', false]]);
+});
+
+
+test('N64 C buttons use keyboard directions at the helm without resetting the analog commands', () => {
+  const f = n64Fixture(); const axes = { x: true, y: true };
+  f.pad.buttons[3].pressed = true; f.pad.buttons[2].pressed = true; f.tick(axes);
+  assert.deepEqual(f.events, [['direction', 'left', true], ['direction', 'up', true]]);
+  f.tick(axes); assert.equal(f.events.length, 2);
+  f.pad.buttons[3].pressed = false; f.pad.buttons[2].pressed = false; f.tick(axes);
+  assert.deepEqual(f.events.slice(-2), [['direction', 'left', false], ['direction', 'up', false]]);
+  assert.equal(f.events.some(e => e[0] === 'analog'), false, 'Neutral stick cannot reset the persistent keyboard setting');
+  f.pad.buttons[8].pressed = true; f.pad.buttons[7].pressed = true; f.tick(axes);
+  assert.deepEqual(f.events.slice(-2), [['direction', 'right', true], ['direction', 'down', true]]);
+});
+
+test('N64 C buttons take over a deflected stick and retain settings after both are released', () => {
+  const f = n64Fixture(); const axes = { x: true, y: true };
+  f.pad.axes[1] = .8; f.pad.axes[2] = -.7; f.tick(axes);
+  f.events.length = 0;
+  f.pad.buttons[8].pressed = true; f.pad.buttons[2].pressed = true; f.tick(axes);
+  f.pad.axes.fill(0); f.tick(axes);
+  f.pad.buttons[8].pressed = false; f.pad.buttons[2].pressed = false; f.tick(axes);
+  assert.equal(f.events.some(e => e[0] === 'analog'), false);
+  f.pad.axes[1] = -.8; f.tick(axes);
+  assert.deepEqual(f.events.at(-1), ['analog', -.8, 0, axes]);
+});
+
+for (const [hat, step] of [[5 / 7, -1], [-3 / 7, 1]]) test(`N64 hat ${hat} switches one free position and rearms only after release`, () => {
+  const f = n64Fixture(); f.pad.axes[0] = hat; f.tick(); f.tick(); f.tick();
+  assert.deepEqual(f.events, [['station', step]]);
+  f.pad.axes[0] = 9 / 7; f.tick();
+  f.pad.axes[0] = hat; f.tick();
+  assert.deepEqual(f.events, [['station', step], ['station', step]]);
+});
+
+test('N64 vertical hat directions do not change position', () => {
+  const f = n64Fixture(); for (const hat of [-1, 1 / 7, 9 / 7]) { f.pad.axes[0] = hat; f.tick(); }
+  assert.deepEqual(f.events, []);
+});
+
+test('saved custom buttons drive the same game input and neutralisation as standard defaults', () => {
+  const pad = { id: 'custom raw controller', index: 0, mapping: '', connected: true, axes: [0,0,0],
+    buttons: Array.from({length:4},()=>({pressed:false})) };
+  const key=JSON.stringify([pad.id,pad.mapping,3,4]), events=[];
+  const input=createGamepadInput({getGamepads:()=>[pad], profiles:{[key]:{
+    directX:[{kind:'axis',index:1,sign:1}], directY:[{kind:'axis',index:2,sign:1}],
+    fire:[{kind:'button',index:0}], zoom:[{kind:'button',index:1}],
+    stationNext:[{kind:'button',index:2}], up:[{kind:'button',index:3}]}},
+    direction:(...a)=>events.push(['direction',...a]),fire:down=>events.push(['fire',down]),
+    cycleStation:step=>events.push(['station',step]),action:name=>events.push(['action',name])});
+  input.update(true,'cannon'); pad.buttons[0].pressed=true;pad.buttons[1].pressed=true;input.update(true,'cannon');
+  assert.deepEqual(events,[['fire',true],['action','zoom']]);
+  input.update(true,'cannon');assert.equal(events.length,2);
+  pad.buttons[2].pressed=true;input.update(true,'cannon');
+  assert.deepEqual(events.slice(-2),[['fire',false],['station',1]]);
+});
+
+
+test('a shared torpedo-boat/U-boat button dispatches only its current vehicle function and requires release after switching', () => {
+  const pad={id:'Shared raw controller',index:0,mapping:'',connected:true,axes:[],buttons:[{pressed:false}]};
+  const key=JSON.stringify([pad.id,'',0,1]);
+  const shared=[{kind:'button',index:0}];
+  let context={role:'bridge',depthChargesReady:true};const events=[];
+  const input=createGamepadInput({getGamepads:()=>[pad],profiles:{[key]:{'depth-charge':shared,'forward-scope':shared}},
+    contextActions:()=>controllerActionsFor(context),action:name=>events.push(name)});
+  const tick=()=>input.update(true,JSON.stringify(context));
+  tick();pad.buttons[0].pressed=true;tick();
+  assert.deepEqual(events,['depth-charge']);
+  context={role:'bridge',submarine:true,depth:'periscope',torpedoScope:true,periscopeAvailable:true};tick();tick();
+  assert.deepEqual(events,['depth-charge'],'A held button cannot trigger an action when the context changes');
+  pad.buttons[0].pressed=false;tick();pad.buttons[0].pressed=true;tick();
+  assert.deepEqual(events,['depth-charge','forward-scope']);
+});
+
+test('the same button controls helm rudder or gun aiming according to the occupied position', () => {
+  const pad={id:'Position controller',index:0,mapping:'',connected:true,axes:[],buttons:[{pressed:false}]};
+  const key=JSON.stringify([pad.id,'',0,1]),shared=[{kind:'button',index:0}];
+  let role='bridge';const events=[];
+  const input=createGamepadInput({getGamepads:()=>[pad],profiles:{[key]:{left:shared,aimRight:shared}},
+    contextActions:()=>controllerActionsFor({role}),direction:(...args)=>events.push(args)});
+  const tick=()=>input.update(true,role,role==='bridge'?{x:true,y:true}:{});
+  tick();pad.buttons[0].pressed=true;tick();pad.buttons[0].pressed=false;tick();
+  assert.deepEqual(events,[['left',true],['left',false]]);
+  role='cannon';tick();pad.buttons[0].pressed=true;tick();pad.buttons[0].pressed=false;tick();
+  assert.deepEqual(events.slice(2),[['right',true],['right',false]]);
 });

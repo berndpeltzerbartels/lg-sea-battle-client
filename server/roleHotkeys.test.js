@@ -75,3 +75,8 @@ test('triangle always changes positions, circle aligns and L3 belongs only to th
     assert.ok(!keys.some(([key, label]) => key === '△' && /ausricht|Peilung/i.test(label)));
   }
 });
+
+test('N64 help only advertises its measured stick and fire controls', () => {
+  const hints = gamepadHotkeys([['↑ ↓', 'Fahrt'], ['← →', 'Ruder'], ['Leertaste', 'Feuern'], ['Z', 'Zoom']], '057e-2019-N64 Controller');
+  assert.deepEqual(hints, [['Steuerkreuz ← / →', 'Freie Position zurück / weiter'], ['Stick / C ↑ ↓', 'Stick direkt · C-Tasten halten die Gasstufe'], ['Stick / C ← →', 'Stick direkt · C-Tasten halten den Ausschlag'], ['Gewählte Feuertaste', 'Feuern']]);
+});

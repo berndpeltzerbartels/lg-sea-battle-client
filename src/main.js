@@ -1,3 +1,4 @@
+import { readControllerProfiles, controllerActionsFor } from '../public/controller-bindings.js';
 import { isSubmarineDetectionVisible } from "./submarineDetection.js";
 import { applyShipPaint, submarineFlakMaterials } from "./shipPaint.js";
 import { createAudioRecovery } from "./audioRecovery.js";
@@ -1406,9 +1407,12 @@ const heldControls = createHeldControls((control, options) => {
   else releaseDirectionalInput(control);
 });
 let gamepadName = null;
+let gamepadProfile = null;
 let gamepadShipId = playerServerShipId;
 let playerActivityTracker = null;
 const gamepadInput = createGamepadInput({
+  profiles: readControllerProfiles(window.localStorage),
+  contextActions: () => scoutPlaneMode ? null : controllerActionsFor({ ...playerControlContext(), depthChargesReady: true }),
   getGamepads: () => navigator.getGamepads?.() ?? [],
   direction: (direction, down) => { if (down) unlockGameAudio(); heldControls.set(direction, down, "gamepad"); },
   fire: down => { if (down) unlockGameAudio(); heldControls.set("fire", down, "gamepad"); },
@@ -1429,7 +1433,8 @@ const gamepadInput = createGamepadInput({
     playerActivityTracker?.markActive();
     const now = performance.now(); zoomIdleTimer.touch(now); weaponZoomIdleTimer.touch(now);
   },
-  status: name => {
+  status: (name, profile) => {
+    gamepadProfile = profile;
     gamepadName = name; document.body.dataset.gamepad = name ? "connected" : "disconnected";
     updateRoleHotkeys();
   }
@@ -1723,7 +1728,7 @@ scene.onBeforeRenderObservable.add(() => {
   }
   gamepadInput.update(playerDamageState === "active" && !crewSwitchPending && !document.hidden
     && document.hasFocus() && !isTextEditingElement(document.activeElement) && !isStartupErrorVisible(),
-    `${flakViewActive}:${cannonViewActive}:${lookoutViewActive}:${torpedoScopeActive}:${submarinePeriscopeMode}:${playerSubmarineDepthState}:${crewState?.station}`, {
+    `${playerVehicleType}:${flakViewActive}:${cannonViewActive}:${lookoutViewActive}:${torpedoScopeActive}:${submarinePeriscopeMode}:${playerSubmarineDepthState}:${submarineBridgeAscentHoldActive}:${crewState?.station}`, {
       x: !scoutPlaneMode && !flakViewActive && !cannonViewActive && !lookoutViewActive
         && (!crewState || crewState.station === "bridge") && !isPlayerSubmarineObservationPeriscopeActive(),
       y: !scoutPlaneMode && !flakViewActive && !cannonViewActive && !lookoutViewActive
@@ -4087,6 +4092,16 @@ function updateBattleStationButtons() {
   updateRoleHotkeys();
 }
 
+function playerControlContext() {
+  const role = crewState?.station ?? (lookoutViewActive ? "lookout" : cannonViewActive ? "cannon" : flakViewActive ? "flak" : "bridge");
+  return { role, members: crewState?.members, playerId,
+    depthChargesReady: canDropDepthCharges() && !depthChargeSalvoQueued,
+    radarModes: !singleRadarMode, torpedoScope: torpedoScopeActive,
+    submarine: submarineMode, depth: playerSubmarineDepthState,
+    periscopeAvailable: submarineMode && canShowSubmarineTorpedoScope(),
+    observationScope: isPlayerSubmarineObservationPeriscopeActive() };
+}
+
 function updateRoleHotkeys() {
   const panel = document.getElementById("roleHotkeys");
   if (!panel) return;
@@ -4096,15 +4111,9 @@ function updateRoleHotkeys() {
   toggle.setAttribute("aria-expanded", String(hotkeysExpanded));
   panel.hidden = unavailable || !hotkeysExpanded;
   if (panel.hidden) return;
-  const role = crewState?.station ?? (lookoutViewActive ? "lookout" : cannonViewActive ? "cannon" : flakViewActive ? "flak" : "bridge");
-  const entries = roleHotkeys({ role, members: crewState?.members, playerId,
-    depthChargesReady: canDropDepthCharges() && !depthChargeSalvoQueued,
-    radarModes: !singleRadarMode, torpedoScope: torpedoScopeActive,
-    submarine: submarineMode, depth: playerSubmarineDepthState,
-    periscopeAvailable: submarineMode && canShowSubmarineTorpedoScope(),
-    observationScope: isPlayerSubmarineObservationPeriscopeActive() });
+  const entries = roleHotkeys(playerControlContext());
   if (gamepadName) {
-    entries.unshift(...gamepadHotkeys(entries));
+    entries.unshift(...gamepadHotkeys(entries, gamepadName, gamepadProfile));
   }
   const signature = JSON.stringify(entries);
   if (signature === hotkeySignature) return;
