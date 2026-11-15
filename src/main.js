@@ -43,7 +43,7 @@ import explosionUrl5 from "./assets/audio/explosion-water-3.wav?url";
 import explosionUrl6 from "./assets/audio/explosion-heavy-1.wav?url";
 import explosionUrl7 from "./assets/audio/explosion-rumble-1.wav?url";
 import { createCannonSound } from "./cannonSound.js";
-import cannonSoundUrl from "./assets/audio/cannon-shot.wav?url";
+import cannonSoundUrl from "./assets/audio/cannon-shot-medium.wav?url";
 import { createFlakSound } from "./flakSound.js";
 import flakSoundUrl from "./assets/audio/flak-burst-loop.wav?url";
 import flakEndingUrl from "./assets/audio/flak-ending.wav?url";
