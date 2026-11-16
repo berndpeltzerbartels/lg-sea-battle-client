@@ -2494,7 +2494,7 @@ function showRoundResult(snapshot) {
     const title = document.createElement("h1");
     title.textContent = snapshot.winningTeam ? `Partei ${snapshot.winningTeam === "light" ? "Hell" : "Dunkel"} gewinnt` : "Runde beendet · Unentschieden";
     const explanation = document.createElement("p");
-    explanation.textContent = "Es sind nicht mehr genug Torpedoboote und Besatzungsplätze übrig. Die nächste Runde startet die Spielleitung.";
+    explanation.textContent = "Es sind nicht mehr genug Torpedoboote und Besatzungsplätze übrig. Die nächste Runde startet bei der nächsten Anmeldung.";
     const leave = document.createElement("a");
     leave.href = startPageUrl();
     leave.textContent = "Zur Anmeldung";
